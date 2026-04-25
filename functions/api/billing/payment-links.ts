@@ -1,5 +1,6 @@
 import {
   extractStripePriceIdFromPlanJson,
+  isValidStripePriceId,
 } from "../../_lib/planJson";
 import {
   stripeCreatePaymentLink,
@@ -39,14 +40,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 };
 
-type CreateBody = { planKey?: string };
+type CreateBody = { planKey?: string; stripePriceId?: string };
 
 /**
  * POST /api/billing/payment-links
  * Legt einen neuen Payment Link in Stripe an; Metadaten `price_id` = `planKey`.
- * Die Stripe-Preis-ID (`price_…`) muss im Plan-JSON im KV stehen, Feld `stripe_price_id`
- * (Preis in Stripe anlegen, ID ins JSON übernehmen).
- * Body: { "planKey": "plan_test" }
+ * Preis: entweder `stripePriceId` (z. B. aus API-Auswahl) oder im Plan-JSON `stripe_price_id`.
+ * Wird `stripePriceId` mitgeschickt, wird sie zusätzlich im Plan-KV gespeichert.
  */
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
   request,
@@ -81,6 +81,8 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 
   const planKey =
     typeof body.planKey === "string" ? body.planKey.trim() : "";
+  const fromBody =
+    typeof body.stripePriceId === "string" ? body.stripePriceId.trim() : "";
 
   if (!planKey || !PLAN_KEY_RE.test(planKey)) {
     return jsonResponse(
@@ -109,13 +111,25 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     );
   }
 
-  const stripePriceId = extractStripePriceIdFromPlanJson(parsed);
+  let stripePriceId: string | null = null;
+  if (fromBody) {
+    if (!isValidStripePriceId(fromBody)) {
+      return jsonResponse(
+        { error: "stripePriceId muss eine gültige Stripe-Preis-ID sein (price_…)" },
+        { status: 400 },
+      );
+    }
+    stripePriceId = fromBody;
+  } else {
+    stripePriceId = extractStripePriceIdFromPlanJson(parsed);
+  }
+
   if (!stripePriceId) {
     return jsonResponse(
       {
         error:
-          "Im Plan-JSON fehlt eine gültige Stripe-Preis-ID. In Stripe den Preis anlegen, dann im KV z. B. " +
-            '"stripe_price_id": "price_…" in diesen Plan eintragen.',
+          "Kein Preis gewählt: wähle einen Stripe-Preis in der Oberfläche oder trage im Plan-JSON " +
+            '"stripe_price_id": "price_…" ein.',
       },
       { status: 400 },
     );
@@ -126,6 +140,19 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       stripePriceId,
       planKey,
     });
+
+    if (
+      fromBody &&
+      isValidStripePriceId(fromBody) &&
+      typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
+    ) {
+      const next = { ...(parsed as Record<string, unknown>) };
+      next.stripe_price_id = fromBody;
+      await env.plans.put(planKey, JSON.stringify(next));
+    }
+
     return jsonResponse({ paymentLink }, { status: 201 });
   } catch (e) {
     return jsonResponse(

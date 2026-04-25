@@ -65,10 +65,73 @@ export async function stripeGetPaymentLink(
   return JSON.parse(text) as StripePaymentLink;
 }
 
+/** Eintrag für Preis-Dropdown (aktive Preise, Produkt-Name per expand). */
+export type StripePriceOption = {
+  id: string;
+  active: boolean;
+  currency: string;
+  type: string;
+  unitAmount: number | null;
+  nickname: string | null;
+  productName: string | null;
+  productId: string | null;
+  recurring: { interval: string; interval_count: number } | null;
+};
+
 /**
- * Setzt/merged Metadaten am Payment Link (trägt alle Werte, die in `metadata` stehen, ein;
- * leere Werte entfernen optional via Key nicht mitsenden – wir mergen zuerst mit dem aktuellen Stand).
+ * Listet aktive Preise; `data.product` expand für Anzeigename.
+ * @see https://stripe.com/docs/api/prices/list
  */
+export async function stripeListPricesWithProduct(
+  env: { STRIPE_SECRET_KEY?: string },
+  limit = 100,
+): Promise<StripePriceOption[]> {
+  const u = new URL(`${API}/prices`);
+  u.searchParams.set("active", "true");
+  u.searchParams.set("limit", String(Math.min(100, limit)));
+  u.searchParams.append("expand[]", "data.product");
+  const res = await fetch(u.toString(), {
+    headers: { Authorization: `Bearer ${getSecret(env)}` },
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Stripe list prices ${res.status}: ${text.slice(0, 500)}`);
+  }
+  const j = JSON.parse(text) as {
+    data: Array<{
+      id: string;
+      active: boolean;
+      currency: string;
+      type: string;
+      unit_amount: number | null;
+      nickname: string | null;
+      product: string | { id: string; name: string } | null;
+      recurring: { interval: string; interval_count: number } | null;
+    }>;
+  };
+  return (j.data ?? []).map((p) => {
+    let productName: string | null = null;
+    let productId: string | null = null;
+    if (p.product && typeof p.product === "object") {
+      productName = p.product.name ?? null;
+      productId = p.product.id ?? null;
+    } else if (typeof p.product === "string") {
+      productId = p.product;
+    }
+    return {
+      id: p.id,
+      active: p.active,
+      currency: p.currency,
+      type: p.type,
+      unitAmount: p.unit_amount,
+      nickname: p.nickname,
+      productName,
+      productId,
+      recurring: p.recurring ?? null,
+    };
+  });
+}
+
 /**
  * Neuen Payment Link anlegen: ein Line Item (Stripe-Preis) + Metadaten `price_id` = KV-Plan-Key.
  * @see https://stripe.com/docs/api/payment_links/create

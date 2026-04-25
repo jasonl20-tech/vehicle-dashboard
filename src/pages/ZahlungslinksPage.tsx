@@ -9,9 +9,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BILLING_PAYMENT_LINKS,
   BILLING_PLANS,
+  BILLING_STRIPE_PRICES,
   createPaymentLink,
   type PaymentLinksResponse,
   type PlansListResponse,
+  type StripePriceRow,
+  type StripePricesResponse,
   plansUrlOne,
   postPaymentLinkMetadata,
   putPlan,
@@ -64,12 +67,13 @@ export default function ZahlungslinksPage() {
         title="Zahlungslinks"
         description={
           <>
-            Den Stripe-Preis trägst du im Plan-JSON als{" "}
-            <span className="font-mono">stripe_price_id</span> (den Preis
-            zuerst in Stripe anlegen). Beim Klick legt das System den Payment
-            Link in Stripe an und setzt <span className="font-mono">metadata.price_id</span>{" "}
-            auf den Plan-Key. Archivierte Links erscheinen hier nicht. KV-Pläne
-            nur bearbeiten, nicht löschen.
+            Beim Anlegen wählst du einen <strong>aktiven Stripe-Preis</strong>{" "}
+            (per API aus deinem Konto geladen) und einen KV-Plan. Metadaten{" "}
+            <span className="font-mono">price_id</span> = Plan-Key. Archivierte
+            Links erscheinen nicht. KV-Pläne nur bearbeiten, nicht löschen.
+            Alternativ kann der Preis nur im JSON als{" "}
+            <span className="font-mono">stripe_price_id</span> stehen, wenn
+            keine Liste verfügbar ist.
           </>
         }
         rightSlot={
@@ -440,6 +444,27 @@ function PlanEditor({
   );
 }
 
+function formatStripePriceLabel(p: StripePriceRow): string {
+  const title = p.productName || p.nickname || "Preis";
+  if (p.unitAmount != null && p.currency) {
+    try {
+      const amount = p.unitAmount / 100;
+      const cur = p.currency.toUpperCase();
+      const money = new Intl.NumberFormat("de-DE", {
+        style: "currency",
+        currency: cur,
+      }).format(amount);
+      const intv = p.recurring
+        ? ` / ${p.recurring.interval_count > 1 ? p.recurring.interval_count + " " : ""}${p.recurring.interval}`
+        : "";
+      return `${title} – ${money}${intv} – ${p.id}`;
+    } catch {
+      // ignore
+    }
+  }
+  return `${title} – ${p.id}`;
+}
+
 function CreatePaymentLinkDialog({
   planKeys,
   onClose,
@@ -450,8 +475,45 @@ function CreatePaymentLinkDialog({
   onCreated: () => void;
 }) {
   const [planKey, setPlanKey] = useState(planKeys[0] ?? "");
+  const [prices, setPrices] = useState<StripePriceRow[] | null>(null);
+  const [pricesLoadErr, setPricesLoadErr] = useState<string | null>(null);
+  const [pricesLoading, setPricesLoading] = useState(true);
+  const [selectedPriceId, setSelectedPriceId] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPricesLoading(true);
+    setPricesLoadErr(null);
+    fetch(BILLING_STRIPE_PRICES, { credentials: "include" })
+      .then(async (res) => {
+        const j = (await res.json().catch(() => ({}))) as
+          | StripePricesResponse
+          | { error?: string };
+        if (!res.ok) {
+          throw new Error(
+            (j as { error?: string }).error || `HTTP ${res.status}`,
+          );
+        }
+        const list = (j as StripePricesResponse).prices ?? [];
+        setPrices(list);
+        if (list[0]) setSelectedPriceId(list[0].id);
+      })
+      .catch((e) => {
+        setPricesLoadErr(
+          e instanceof Error ? e.message : "Preise konnten nicht geladen werden.",
+        );
+        setPrices(null);
+      })
+      .finally(() => setPricesLoading(false));
+  }, []);
+
+  const canUsePricePicker = prices && prices.length > 0;
+  const canSubmit =
+    !!planKey &&
+    planKeys.length > 0 &&
+    !pricesLoading &&
+    (canUsePricePicker ? !!selectedPriceId : true);
 
   return (
     <div
@@ -462,7 +524,7 @@ function CreatePaymentLinkDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-lg border border-hair bg-paper p-5 shadow-2xl"
+        className="w-full max-w-lg rounded-lg border border-hair bg-paper p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h3
@@ -472,11 +534,11 @@ function CreatePaymentLinkDialog({
           Neuer Payment Link
         </h3>
         <p className="mt-1 text-[12.5px] text-ink-500">
-          Es wird ein Payment Link in&nbsp;Stripe per API erstellt. Die
-          Metadaten <span className="font-mono">price_id</span> werden
-          automatisch auf den Plan-Key gesetzt. Dafür muss im Plan-JSON die
-          Stripe-Preis-ID aus dem Produkte-Bereich stehen:{" "}
-          <span className="font-mono">stripe_price_id</span>.
+          Produkt/Preis kommen aus deinem <strong>Stripe-Konto</strong> (API).
+          <span className="font-mono"> metadata.price_id</span> = gewählter
+          Plan-Key. Bei Auswahl eines Preises wird{" "}
+          <span className="font-mono">stripe_price_id</span> im Plan-KV
+          mitgespeichert.
         </p>
         <div className="mt-4 space-y-3">
           <div>
@@ -499,6 +561,42 @@ function CreatePaymentLinkDialog({
               )}
             </select>
           </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">
+              Produkt & Preis (Stripe) *
+            </label>
+            {pricesLoading && (
+              <p className="text-[12.5px] text-ink-500">Lade Preise …</p>
+            )}
+            {pricesLoadErr && (
+              <p className="text-[12.5px] text-amber-800">
+                {pricesLoadErr} Du kannst stattdessen{" "}
+                <span className="font-mono">stripe_price_id</span> im
+                Plan-JSON setzen und ohne Liste speichern.
+              </p>
+            )}
+            {canUsePricePicker && (
+              <select
+                value={selectedPriceId}
+                onChange={(e) => setSelectedPriceId(e.target.value)}
+                className="w-full max-w-full rounded-md border border-hair bg-white px-2.5 py-2 text-[12.5px]"
+                size={Math.min(8, Math.max(3, prices.length))}
+              >
+                {prices.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {formatStripePriceLabel(p)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!pricesLoading && prices && prices.length === 0 && !pricesLoadErr && (
+              <p className="text-[12.5px] text-ink-500">
+                Keine aktiven Preise in Stripe. Lege in Stripe Produkte/Preise
+                an, oder nutze <span className="font-mono">stripe_price_id</span> im
+                Plan-JSON.
+              </p>
+            )}
+          </div>
         </div>
         {err && <p className="mt-2 text-[12px] text-accent-rose">{err}</p>}
         <div className="mt-4 flex justify-end gap-2">
@@ -511,7 +609,7 @@ function CreatePaymentLinkDialog({
           </button>
           <button
             type="button"
-            disabled={busy || !planKey || !planKeys.length}
+            disabled={busy || !canSubmit}
             onClick={async () => {
               setErr(null);
               if (!planKey) {
@@ -520,7 +618,11 @@ function CreatePaymentLinkDialog({
               }
               setBusy(true);
               try {
-                await createPaymentLink(planKey);
+                if (canUsePricePicker) {
+                  await createPaymentLink(planKey, selectedPriceId);
+                } else {
+                  await createPaymentLink(planKey);
+                }
                 onCreated();
               } catch (e) {
                 setErr(e instanceof Error ? e.message : String(e));

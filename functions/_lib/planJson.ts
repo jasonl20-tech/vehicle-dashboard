@@ -1,5 +1,9 @@
 const STRIPE_PRICE_RE = /^price_[a-zA-Z0-9]+$/;
 
+export function isValidStripePriceId(s: string): boolean {
+  return STRIPE_PRICE_RE.test(s.trim());
+}
+
 /**
  * Liest die Stripe-Preis-ID aus dem Plan-JSON (KV), die für den Payment Link genutzt wird.
  * Erwartet ein Feld, das du in Stripe angelegt hast, z. B. in die Plan-Konfiguration:

@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 export const BILLING_PAYMENT_LINKS = "/api/billing/payment-links";
 export const BILLING_PAYMENT_LINK = "/api/billing/payment-link";
 export const BILLING_PAYMENT_LINK_ARCHIVE = "/api/billing/payment-link-archive";
+export const BILLING_STRIPE_PRICES = "/api/billing/stripe-prices";
 export const BILLING_PLANS = "/api/billing/plans";
 
 export type StripePaymentLinkRow = {
@@ -15,6 +16,20 @@ export type StripePaymentLinkRow = {
 };
 
 export type PaymentLinksResponse = { paymentLinks: StripePaymentLinkRow[] };
+
+export type StripePriceRow = {
+  id: string;
+  active: boolean;
+  currency: string;
+  type: string;
+  unitAmount: number | null;
+  nickname: string | null;
+  productName: string | null;
+  productId: string | null;
+  recurring: { interval: string; interval_count: number } | null;
+};
+
+export type StripePricesResponse = { prices: StripePriceRow[] };
 
 export type PlansListResponse = { keys: string[] };
 
@@ -98,13 +113,22 @@ export async function putPlan(
   if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
 }
 
-/** Erstellt den Payment Link in Stripe; `stripe_price_id` kommt aus dem Plan-JSON im KV. */
-export async function createPaymentLink(planKey: string): Promise<void> {
+/**
+ * Erstellt den Payment Link in Stripe.
+ * Mit `stripePriceId`: aus Stripe-API-Liste; wird im KV unter `stripe_price_id` abgelegt.
+ * Ohne: es wird `stripe_price_id` aus dem Plan-JSON im KV gelesen.
+ */
+export async function createPaymentLink(
+  planKey: string,
+  stripePriceId?: string,
+): Promise<void> {
+  const body: { planKey: string; stripePriceId?: string } = { planKey };
+  if (stripePriceId) body.stripePriceId = stripePriceId;
   const res = await fetch(BILLING_PAYMENT_LINKS, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ planKey }),
+    body: JSON.stringify(body),
   });
   const j = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
