@@ -50,12 +50,13 @@ export function buildControllingFetchSql(
     toIso,
   )}`;
   const whereBlob = blob4FilterSql(options.blob4Mode);
+  // Workers AE: nur `index1`, kein `index2` (alias leer, UI-Namen kommen aus blob1/2).
   // Zeit als String: formatDateTime (AE: kein toString) — %H:%M:%S = Stunde/Minute/Sek.
   return `SELECT
   formatDateTime(timestamp, '%Y-%m-%d %H:%M:%S', 'Etc/UTC') AS ts,
   _sample_interval AS siv,
   index1 AS s_index1,
-  index2 AS s_index2,
+  '' AS s_index2,
   blob1 AS s_blob1,
   blob2 AS s_blob2,
   blob3 AS s_blob3,
