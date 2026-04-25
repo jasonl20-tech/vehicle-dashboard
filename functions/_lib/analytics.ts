@@ -45,15 +45,25 @@ function getToken(env: AuthEnv): string | null {
   return t ? t.trim() : null;
 }
 
-function getAccountId(env: AuthEnv): string | null {
-  const v = env.CF_ACCOUNT_ID;
-  if (!v) return null;
-  // Pages-Variablen kommen manchmal mit Whitespace/Quotes durch Copy-Paste.
-  return v.trim().replace(/^["']|["']$/g, "");
-}
-
+const HEX32_GLOBAL = /[0-9a-f]{32}/i;
 const HEX32 = /^[0-9a-f]{32}$/i;
 const KNOWN_NOT_AN_ACCOUNT_ID = new Set(["", "your-account-id"]);
+
+function getAccountId(env: AuthEnv): string | null {
+  const raw = env.CF_ACCOUNT_ID;
+  if (!raw) return null;
+  // Pages-Variablen kommen aus Copy-Paste oft mit Whitespace, Quotes,
+  // Slashes oder einer ganzen URL drumherum. Wir ziehen die erste 32-Hex-
+  // Sequenz raus – das ist die Cloudflare-Account-ID.
+  const cleaned = raw
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/^\/+|\/+$/g, "")
+    .trim();
+  const m = cleaned.match(HEX32_GLOBAL);
+  if (m) return m[0].toLowerCase();
+  return cleaned;
+}
 
 export function validateAccountId(id: string | null): string | null {
   if (!id) return "CF_ACCOUNT_ID ist leer.";
