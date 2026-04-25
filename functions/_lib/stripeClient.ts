@@ -79,7 +79,10 @@ export type StripePriceOption = {
 };
 
 /**
- * Listet aktive Preise; `data.product` expand für Anzeigename.
+ * Listet aktive Preise, bei denen das zugehörige Produkt nicht archiviert ist
+ * (`active: true` im Produkt, wie im Dashboard „nicht archiviert“).
+ * `data.product` expand für Namen/Status. Preise mit nur `product: id`-String
+ * ohne Expand werden weggelassen.
  * @see https://stripe.com/docs/api/prices/list
  */
 export async function stripeListPricesWithProduct(
@@ -105,20 +108,30 @@ export async function stripeListPricesWithProduct(
       type: string;
       unit_amount: number | null;
       nickname: string | null;
-      product: string | { id: string; name: string } | null;
+      product:
+        | string
+        | { id: string; name: string; active?: boolean; deleted?: boolean }
+        | null;
       recurring: { interval: string; interval_count: number } | null;
     }>;
   };
-  return (j.data ?? []).map((p) => {
+  const out: StripePriceOption[] = [];
+  for (const p of j.data ?? []) {
     let productName: string | null = null;
     let productId: string | null = null;
+    let productActive: boolean | null = null;
     if (p.product && typeof p.product === "object") {
-      productName = p.product.name ?? null;
-      productId = p.product.id ?? null;
+      const prod = p.product;
+      productName = prod.name ?? null;
+      productId = prod.id ?? null;
+      if (typeof prod.active === "boolean") productActive = prod.active;
+      if (prod.deleted) productActive = false;
     } else if (typeof p.product === "string") {
       productId = p.product;
     }
-    return {
+    // Nur Produkte, die in Stripe nicht archiviert sind (ohne expand: nicht verifizierbar → weglassen).
+    if (productActive !== true) continue;
+    out.push({
       id: p.id,
       active: p.active,
       currency: p.currency,
@@ -128,8 +141,9 @@ export async function stripeListPricesWithProduct(
       productName,
       productId,
       recurring: p.recurring ?? null,
-    };
-  });
+    });
+  }
+  return out;
 }
 
 /**
