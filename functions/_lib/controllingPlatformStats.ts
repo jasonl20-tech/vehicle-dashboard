@@ -1,10 +1,20 @@
 /**
- * Auswertung der Analytics-Engine-Dataset-Tabellen (z. B. controll_platform_logs).
- * Session-Erkennung, Kennzahlen double2–double5, Prognose – rein deterministische Logik
- * (keine DB, nur In-Memory nach fetch).
+ * Auswertung der Analytics-Engine (gleiches Muster wie Kunden-API: `key_analytics`).
+ * Export-Zeile: Spalte 3 = `controll_platform_logs` ist der Wert in **dataset**,
+ * nicht der Tabellenname. Daher: `FROM key_analytics` + `AND dataset = '…'`
+ * (ohne: „unable to find type of column: timestamp“ auf fälschlich angenommener
+ * Tabelle controll_platform_logs).
  */
 import type { AuthEnv } from "./auth";
-import { aeNumber, sqlDateTime, type AeRow } from "./analytics";
+import {
+  aeNumber,
+  API_ANALYTICS_DATASET,
+  KEY_ANALYTICS_DATASET,
+  sqlDateTime,
+  sqlString,
+  type AeAccountBinding,
+  type AeRow,
+} from "./analytics";
 
 export const DEFAULT_DATASET = "controll_platform_logs";
 /** 5 min ohne Event → Sessionsende. */
@@ -13,10 +23,26 @@ export const MAX_QUERY_ROWS = 150_000;
 
 export type ControllingBlob4Mode = "nonempty" | "hex32";
 
+/** Wert der Spalte `dataset` bzw. Tabellenname im dedicated-Mode. */
 export function getControllingDataset(env: AuthEnv): string {
   const raw = env.CONTROLLING_AE_DATASET?.trim() || DEFAULT_DATASET;
   if (!/^[a-zA-Z0-9_]+$/.test(raw)) return DEFAULT_DATASET;
   return raw;
+}
+
+function isDedicatedTableMode(env: AuthEnv): boolean {
+  const v = env.CONTROLLING_AE_DEDICATED?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+function controllingAeBinding(env: AuthEnv): AeAccountBinding {
+  return env.CONTROLLING_AE_ACCOUNT?.trim().toLowerCase() === "secondary"
+    ? "secondary"
+    : "primary";
+}
+
+function fromTableForFilterMode(binding: AeAccountBinding): string {
+  return binding === "secondary" ? API_ANALYTICS_DATASET : KEY_ANALYTICS_DATASET;
 }
 
 /**
@@ -35,24 +61,16 @@ function blob4FilterSql(mode: ControllingBlob4Mode): string {
   return "blob4 != '' AND NOT empty(blob4) AND lowerUTF8(blob4) != 'na'";
 }
 
-export function buildControllingFetchSql(
-  env: AuthEnv,
-  fromIso: string,
-  toIso: string,
-  options: { limit: number; blob4Mode: ControllingBlob4Mode },
-): string {
-  const dataset = getControllingDataset(env);
-  const limit = Math.min(
-    MAX_QUERY_ROWS,
-    Math.max(1, Math.min(options.limit, MAX_QUERY_ROWS)),
-  );
-  const whereTime = `timestamp >= ${sqlDateTime(fromIso)} AND timestamp < ${sqlDateTime(
-    toIso,
-  )}`;
-  const whereBlob = blob4FilterSql(options.blob4Mode);
-  // Workers AE: nur `index1`, kein `index2` (alias leer, UI-Namen kommen aus blob1/2).
-  // Zeit als String: formatDateTime (AE: kein toString) — %H:%M:%S = Stunde/Minute/Sek.
-  return `SELECT
+export type ControllingFetchPlan = {
+  sql: string;
+  binding: AeAccountBinding;
+  /** Wie in der Kunden-API: filter = key_analytics + Spalte dataset. */
+  fromMode: "key_analytics_filter" | "dedicated_table";
+  /** Physische Tabelle in FROM. */
+  fromTable: string;
+};
+
+const selectBody = `SELECT
   formatDateTime(timestamp, '%Y-%m-%d %H:%M:%S', 'Etc/UTC') AS ts,
   _sample_interval AS siv,
   index1 AS s_index1,
@@ -66,12 +84,56 @@ export function buildControllingFetchSql(
   double2 AS d2,
   double3 AS d3,
   double4 AS d4,
-  double5 AS d5
-FROM ${dataset}
+  double5 AS d5`;
+
+/**
+ * Baut die gleiche Controlling-Query wie bisher, aber:
+ * - Standard: `FROM key_analytics` + `AND dataset = 'controll_platform_logs'`
+ *   (wie /api/analytics/customer-keys auf key_analytics).
+ * - optional: dedicated `FROM` + `CONTROLLING_AE_DEDICATED=1`
+ */
+export function buildControllingFetchPlan(
+  env: AuthEnv,
+  fromIso: string,
+  toIso: string,
+  options: { limit: number; blob4Mode: ControllingBlob4Mode },
+): ControllingFetchPlan {
+  const name = getControllingDataset(env);
+  const limit = Math.min(
+    MAX_QUERY_ROWS,
+    Math.max(1, Math.min(options.limit, MAX_QUERY_ROWS)),
+  );
+  const whereTime = `timestamp >= ${sqlDateTime(fromIso)} AND timestamp < ${sqlDateTime(
+    toIso,
+  )}`;
+  const whereBlob = blob4FilterSql(options.blob4Mode);
+  const binding = controllingAeBinding(env);
+  if (isDedicatedTableMode(env)) {
+    return {
+      binding,
+      fromMode: "dedicated_table",
+      fromTable: name,
+      sql: `${selectBody}
+FROM ${name}
 WHERE ${whereTime} AND ${whereBlob}
 ORDER BY timestamp ASC
 LIMIT ${limit}
-FORMAT JSON`;
+FORMAT JSON`,
+    };
+  }
+  const fromTable = fromTableForFilterMode(binding);
+  const whereDataset = `AND dataset = ${sqlString(name)} `;
+  return {
+    binding,
+    fromMode: "key_analytics_filter",
+    fromTable,
+    sql: `${selectBody}
+FROM ${fromTable}
+WHERE ${whereTime} ${whereDataset}AND ${whereBlob}
+ORDER BY timestamp ASC
+LIMIT ${limit}
+FORMAT JSON`,
+  };
 }
 
 export type RawControllingRow = {

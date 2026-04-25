@@ -35,8 +35,15 @@ export interface AuthEnv {
   CF_ACCOUNT_ID_2?: string;
   CF_API_TOKEN_2?: string;
   CF_APi_TOKEN_2?: string;
-  /** Analytics-Engine-Dataset für Intern/Controlling (Standard: controll_platform_logs). */
+  /**
+   * Log-Stream: Wert der Spalte `dataset` bei Abfrage wie Kunden-API (`FROM key_analytics … AND dataset = …`).
+   * Standard: controll_platform_logs.
+   */
   CONTROLLING_AE_DATASET?: string;
+  /** Wenn 1: physische Tabelle `FROM ${CONTROLLING_AE_DATASET}` ohne Filter auf Spalte `dataset` (Sonderfall). */
+  CONTROLLING_AE_DEDICATED?: string;
+  /** primary = `key_analytics`, secondary = `api_analytics` (Zweitkonto). */
+  CONTROLLING_AE_ACCOUNT?: string;
   /**
    * Optional: zweiter Oneauto-API-Key (32 hex), falls abweichend von `ONEAUTO_KEY_ALT`.
    * Ohne Wert: fest definierter Alt-Key + Primär-Key fassen beide Accounts zusammen.

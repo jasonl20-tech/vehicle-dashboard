@@ -62,11 +62,14 @@ export default function ControllingPage() {
         title="Controlling"
         description={
           <>
-            Plattform-Logs (Analytics Engine, Dataset{" "}
+            Wie Kunden-API:{" "}
+            <code className="font-mono text-[12.5px] text-ink-700">
+              FROM {data?.ae?.fromTable ?? "key_analytics"} WHERE dataset =&nbsp;
+            </code>
             <code className="font-mono text-[12.5px] text-ink-700">
               {data?.dataset ?? "controll_platform_logs"}
             </code>
-            ). Auswertung nur, wenn{" "}
+            . Auswertung nur, wenn{" "}
             <span className="font-mono">blob4</span> belegt ist (oder optional
             nur 32-stellige Keys). Sessions enden nach{" "}
             {gapMinutes} min Pause; Nutzeranzeige aus index1/2 bzw. blob1/2

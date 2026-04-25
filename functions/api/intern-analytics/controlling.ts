@@ -21,7 +21,7 @@ import {
   type AuthEnv,
 } from "../../_lib/auth";
 import {
-  buildControllingFetchSql,
+  buildControllingFetchPlan,
   defaultControllingRange,
   MAX_QUERY_ROWS,
   parseControllingRow,
@@ -37,11 +37,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const user = await getCurrentUser(env, request);
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
-  }
-
-  const p = resolveAnalyticsBinding(env, "primary");
-  if (p.error) {
-    return jsonResponse({ error: p.error }, { status: 400 });
   }
 
   const url = new URL(request.url);
@@ -65,9 +60,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     Math.max(20, Number(url.searchParams.get("rawLimit") || 150)),
   );
 
-  let sql: string;
+  let plan: ReturnType<typeof buildControllingFetchPlan>;
   try {
-    sql = buildControllingFetchSql(env, from, to, {
+    plan = buildControllingFetchPlan(env, from, to, {
       limit,
       blob4Mode,
     });
@@ -78,9 +73,16 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     );
   }
 
+  const pRun = resolveAnalyticsBinding(env, plan.binding);
+  if (pRun.error) {
+    return jsonResponse({ error: pRun.error }, { status: 400 });
+  }
+
   let data: AeRow[];
   try {
-    const res = await runAeSql<AeRow>(env, sql, { binding: "primary" });
+    const res = await runAeSql<AeRow>(env, plan.sql, {
+      binding: plan.binding,
+    });
     data = res.data;
   } catch (e) {
     const err = e as AeSqlError;
@@ -104,6 +106,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   return jsonResponse({
     dataset: getControllingDataset(env),
+    ae: {
+      fromTable: plan.fromTable,
+      fromMode: plan.fromMode,
+      binding: plan.binding,
+    },
     range: { from, to },
     sessionGapMinutes: gapMinutes,
     blob4Mode,

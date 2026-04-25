@@ -89,6 +89,12 @@ export type ControllingRawRow = {
 
 export type ControllingResponse = {
   dataset: string;
+  /** Wie in der Kunden-API: z. B. key_analytics + Spalte dataset. */
+  ae?: {
+    fromTable: string;
+    fromMode: "key_analytics_filter" | "dedicated_table";
+    binding: "primary" | "secondary";
+  };
   range: { from: string; to: string };
   sessionGapMinutes: number;
   blob4Mode: ControllingBlob4Mode;
