@@ -19,12 +19,20 @@ export function getControllingDataset(env: AuthEnv): string {
   return raw;
 }
 
+/**
+ * Kein `toString`/`trim`: Cloudflare Analytics Engine SQL unterstützt
+ * `toString` nicht (422 unknown function). index/blob sind Strings; leere
+ * Werte per direktem Vergleich bzw. `empty()`.
+ */
 function blob4FilterSql(mode: ControllingBlob4Mode): string {
-  const b = "trim(toString(blob4))";
   if (mode === "hex32") {
-    return `${b} != '' AND ${b} != 'NA' AND match(lower(replaceAll(${b}, '-', '')), '^[0-9a-f]{32}$')`;
+    // Bindestriche/Leerzeichen entfernen; exakt 32 hex-Zeichen (replaceAll: AE SQL / CH).
+    return (
+      "blob4 != '' AND NOT empty(blob4) AND lowerUTF8(blob4) != 'na' AND " +
+      "match(lowerUTF8(replaceAll(replaceAll(blob4, '-', ''), ' ', '')), '^[0-9a-f]{32}$')"
+    );
   }
-  return `${b} != '' AND ${b} != 'NA'`;
+  return "blob4 != '' AND NOT empty(blob4) AND lowerUTF8(blob4) != 'na'";
 }
 
 export function buildControllingFetchSql(
@@ -42,16 +50,17 @@ export function buildControllingFetchSql(
     toIso,
   )}`;
   const whereBlob = blob4FilterSql(options.blob4Mode);
+  // Zeit als String: formatDateTime (AE: kein toString) — %H:%M:%S = Stunde/Minute/Sek.
   return `SELECT
-  toString(timestamp) AS ts,
-  toString(_sample_interval) AS siv,
-  toString(index1) AS s_index1,
-  toString(index2) AS s_index2,
-  toString(blob1) AS s_blob1,
-  toString(blob2) AS s_blob2,
-  toString(blob3) AS s_blob3,
-  toString(blob4) AS s_blob4,
-  toString(blob5) AS s_blob5,
+  formatDateTime(timestamp, '%Y-%m-%d %H:%M:%S', 'Etc/UTC') AS ts,
+  _sample_interval AS siv,
+  index1 AS s_index1,
+  index2 AS s_index2,
+  blob1 AS s_blob1,
+  blob2 AS s_blob2,
+  blob3 AS s_blob3,
+  blob4 AS s_blob4,
+  blob5 AS s_blob5,
   double1 AS d1,
   double2 AS d2,
   double3 AS d3,
@@ -59,7 +68,7 @@ export function buildControllingFetchSql(
   double5 AS d5
 FROM ${dataset}
 WHERE ${whereTime} AND ${whereBlob}
-ORDER BY ts ASC
+ORDER BY timestamp ASC
 LIMIT ${limit}
 FORMAT JSON`;
 }
@@ -84,7 +93,7 @@ export type RawControllingRow = {
 export function parseControllingRow(r: AeRow): RawControllingRow {
   return {
     ts: String(r.ts ?? ""),
-    siv: String(r.siv ?? ""),
+    siv: r.siv == null ? "" : String(r.siv),
     s_index1: String(r.s_index1 ?? ""),
     s_index2: String(r.s_index2 ?? ""),
     s_blob1: String(r.s_blob1 ?? ""),
