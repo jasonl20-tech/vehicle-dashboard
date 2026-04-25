@@ -4,7 +4,7 @@
  *   GET /api/analytics/oneauto-reports?months=12
  *
  * Liefert pro Monat (UTC, beginnend am 1.) die Anzahl der echten
- * Bild-Views (blob5 ist View-Name, kein list_*/check_views), den
+ * Bild-Views (blob5 ist View-Name, kein list_… und kein check_views), den
  * GBP-Betrag (views * 0.02) und den EUR-Gegenwert anhand des
  * Monatsend-Wechselkurses von frankfurter.app (ECB-Daten).
  *
