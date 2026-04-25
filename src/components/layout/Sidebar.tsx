@@ -1,6 +1,7 @@
 import {
   ArrowUpRight,
   BarChart3,
+  LineChart,
   Building2,
   ChevronDown,
   Command,
@@ -36,12 +37,19 @@ const NAV_PRIMARY: NavItem[] = [
   { label: "Anfragen", icon: Inbox, to: "/anfragen" },
   { label: "Logs", icon: ScrollText, to: "/logs" },
   {
-    label: "Analytics",
+    label: "API Analytics",
     icon: BarChart3,
     children: [
       { label: "Kunden API", to: "/analytics/kunden-api" },
       { label: "Oneauto API", to: "/analytics/oneauto-api" },
       { label: "Oneauto Reports", to: "/analytics/oneauto-reports" },
+    ],
+  },
+  {
+    label: "Intern Analytics",
+    icon: LineChart,
+    children: [
+      { label: "Controlling", to: "/intern-analytics/controlling" },
     ],
   },
   {

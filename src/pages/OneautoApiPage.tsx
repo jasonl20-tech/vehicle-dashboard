@@ -9,7 +9,7 @@ export default function OneautoApiPage() {
     <KundenApiPage
       mode="oneauto"
       title="Oneauto API"
-      eyebrow="Analytics · Oneauto API"
+      eyebrow="API Analytics · Oneauto API"
     />
   );
 }

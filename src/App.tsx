@@ -37,6 +37,11 @@ export default function App() {
           path="/analytics"
           element={<Navigate to="/analytics/kunden-api" replace />}
         />
+        <Route path="/intern-analytics/controlling" element={<ModulePage />} />
+        <Route
+          path="/intern-analytics"
+          element={<Navigate to="/intern-analytics/controlling" replace />}
+        />
         <Route path="/zahlungen" element={<Outlet />}>
           <Route
             index

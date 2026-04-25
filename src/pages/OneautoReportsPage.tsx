@@ -82,7 +82,7 @@ function Header({
   return (
     <header className="mb-8 border-b border-hair pb-6">
       <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
-        Analytics · Oneauto Reports
+        API Analytics · Oneauto Reports
       </p>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">

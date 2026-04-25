@@ -66,6 +66,12 @@ const META: Record<
     eyebrow: "Marketing",
     description: "Kampagnen, Abonnenten und Versand.",
   },
+  "/intern-analytics/controlling": {
+    title: "Controlling",
+    eyebrow: "Intern Analytics",
+    description:
+      "Interne Kennzahlen, Kosten und Deckungsbeiträge – Inhalte folgen.",
+  },
 };
 
 const DEFAULT_META = {

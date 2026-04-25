@@ -80,7 +80,7 @@ export default function KundenApiPage({
   mode = "customers",
   title = "Kunden API",
   description,
-  eyebrow = "Analytics · Kunden API",
+  eyebrow = "API Analytics · Kunden API",
 }: KundenApiPageProps = {}) {
   const [range, setRange] = useState<Range>(() => rangeFromPreset("7d"));
   const [openKey, setOpenKey] = useState<string | null>(null);
