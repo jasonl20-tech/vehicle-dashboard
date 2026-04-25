@@ -21,11 +21,6 @@ const META: Record<
     eyebrow: "System",
     description: "Ereignis- und Anwendungsprotokolle.",
   },
-  "/zahlungslinks": {
-    title: "Zahlungslinks",
-    eyebrow: "Zahlungen",
-    description: "Generierte Zahlungs- und Abo-Links verwalten.",
-  },
   "/website/blogs": {
     title: "Blogs",
     eyebrow: "Webseite",

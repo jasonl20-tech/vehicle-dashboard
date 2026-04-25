@@ -8,6 +8,7 @@ import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
+import ZahlungslinksPage from "./pages/ZahlungslinksPage";
 
 export default function App() {
   return (
@@ -35,7 +36,7 @@ export default function App() {
           path="/analytics"
           element={<Navigate to="/analytics/kunden-api" replace />}
         />
-        <Route path="/zahlungslinks" element={<ModulePage />} />
+        <Route path="/zahlungslinks" element={<ZahlungslinksPage />} />
         <Route path="/website/blogs" element={<ModulePage />} />
         <Route path="/website/landing-pages" element={<ModulePage />} />
         <Route path="/website/faq" element={<ModulePage />} />

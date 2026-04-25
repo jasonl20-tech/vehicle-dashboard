@@ -254,7 +254,7 @@ export function mergeTopPaths(
     arrs as Array<Record<string, unknown>[]>,
     "path",
     resultLimit,
-  ) as { path: string; requests: number }[];
+  ) as unknown as { path: string; requests: number }[];
 }
 
 export function mergeStatusCodes(

@@ -40,6 +40,13 @@ export interface AuthEnv {
    * Ohne Wert: fest definierter Alt-Key + Primär-Key fassen beide Accounts zusammen.
    */
   ONEAUTO_KEY_2?: string;
+  /** Stripe Secret Key (`sk_…`, nur serverseitig). */
+  STRIPE_SECRET_KEY?: string;
+  /**
+   * KV-Binding: Plan-JSON pro Key (z. B. `plan_test`), koppelbar an Payment Links via Metadaten `price_id`.
+   * Im Cloudflare-Dashboard: Variable-Name muss exakt `plans` lauten (wie im Code: `env.plans`).
+   */
+  plans?: KVNamespace;
 }
 
 // ---------- base64url helpers ----------

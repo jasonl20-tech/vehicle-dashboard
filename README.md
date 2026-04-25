@@ -19,7 +19,9 @@ Repository: [`jasonl20-tech/vehicle-dashboard`](https://github.com/jasonl20-tech
 ### Bindings (im Pages-Dashboard)
 
 - **D1-Database-Binding:** `user`  ← Variable-Name in den Functions: `env.user`
+- **KV-Namespace-Binding (Zahlungslinks / Pläne):** Variable **`plans`** → verweist auf `env.plans` in den Functions (Plan-JSON pro Key, Koppelung an Stripe Payment Link Metadaten `price_id`)
 - **Environment Variable (Production + Preview):** `SESSION_SECRET` (mind. 16 Zeichen, am besten 64 zufällige Bytes hex)
+- **Secret (ebenfalls Production + Preview):** `STRIPE_SECRET_KEY` = `sk_live_…` bzw. `sk_test_…` (nur serverseitig; kein `pk_` im Frontend nötig für diese Seite)
 
 ### Tabelle `user`
 
@@ -48,6 +50,11 @@ CREATE TABLE user (
 | `POST`  | `/api/login` | Body `{benutzername, password}` → setzt Session-Cookie |
 | `POST`  | `/api/logout`| Cookie löschen                                         |
 | `GET`   | `/api/me`    | Aktuellen Benutzer holen (oder `401`)                  |
+| `GET`   | `/api/billing/payment-links` | (Login) Stripe Payment Links listen |
+| `POST`  | `/api/billing/payment-link`   | (Login) Metadaten am Payment Link setzen (`price_id` → KV-Key) |
+| `GET`   | `/api/billing/plans`         | (Login) alle KV-Keys; `?key=…` liefert JSON |
+| `PUT`   | `/api/billing/plans`         | (Login) Plan-JSON speichern |
+| `DELETE`| `/api/billing/plans?key=…`     | (Login) KV-Eintrag löschen |
 
 Session-Cookie: `vh_session`, `HttpOnly; Secure; SameSite=Lax`, 7 Tage Laufzeit.
 
@@ -63,8 +70,10 @@ In Cloudflare:
    - **Environment variable:** `NODE_VERSION=22`
 3. Im Pages-Projekt unter **Settings → Functions → Bindings**:
    - D1 Binding: Variable `user` → deine D1-Database
+   - Optional KV: Variable **`plans`** → Namespace für Zahlungslink-/Pläne (siehe oben)
 4. Unter **Settings → Environment variables**:
    - `SESSION_SECRET = <zufälliger String, ≥16 Zeichen>` (für Production **und** Preview)
+   - `STRIPE_SECRET_KEY` (Secret) für `/zahlungslinks`
 5. **Save → Deployment startet automatisch.**
 
 > Wrangler-Konfiguration (`wrangler.toml`) gibt es im Repo bewusst nicht – du verwaltest Bindings vollständig im Cloudflare-Dashboard.

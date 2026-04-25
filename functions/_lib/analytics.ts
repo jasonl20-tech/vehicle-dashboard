@@ -356,7 +356,27 @@ export async function diagnoseAe(
   const token = binding === "secondary" ? getToken2(env) : getToken(env);
   const accErr = validateAccountId(accountId, idLabel);
 
-  const result = {
+  const result: {
+    ok: boolean;
+    binding: AeAccountBinding;
+    dataset: string;
+    accountId: {
+      present: boolean;
+      masked: string | null;
+      valid: boolean;
+      error: string | null;
+    };
+    token: { present: boolean; length: number };
+    endpoint: string | null;
+    test?: {
+      status: number;
+      cfRay: string | null;
+      bodyPreview: string;
+      rowsReturned?: number;
+    };
+    hint?: string;
+    error?: string;
+  } = {
     ok: false,
     binding,
     dataset,
