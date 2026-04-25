@@ -22,6 +22,15 @@ export type SessionUser = {
 export interface AuthEnv {
   user: D1Database;
   SESSION_SECRET?: string;
+  /** Cloudflare-Account-ID für Analytics-Engine-SQL-API */
+  CF_ACCOUNT_ID?: string;
+  /** API-Token mit Account.Analytics:Read */
+  CF_API_TOKEN?: string;
+  /**
+   * Akzeptiere alternative Schreibweise (Tippfehler-Toleranz),
+   * Cloudflare unterscheidet Variablennamen case-sensitive.
+   */
+  CF_APi_TOKEN?: string;
 }
 
 // ---------- base64url helpers ----------

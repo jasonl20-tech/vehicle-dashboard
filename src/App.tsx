@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import KundenApiPage from "./pages/KundenApiPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
 import OverviewPage from "./pages/OverviewPage";
@@ -23,7 +24,7 @@ export default function App() {
         <Route path="/crm" element={<ModulePage />} />
         <Route path="/anfragen" element={<ModulePage />} />
         <Route path="/logs" element={<ModulePage />} />
-        <Route path="/analytics/kunden-api" element={<ModulePage />} />
+        <Route path="/analytics/kunden-api" element={<KundenApiPage />} />
         <Route path="/analytics/oneauto-api" element={<ModulePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/zahlungslinks" element={<ModulePage />} />
