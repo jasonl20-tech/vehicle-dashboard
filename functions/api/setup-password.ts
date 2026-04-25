@@ -1,0 +1,94 @@
+import {
+  buildSessionCookie,
+  createSessionToken,
+  jsonResponse,
+  verifySetupToken,
+  type AuthEnv,
+} from "../_lib/auth";
+
+const MIN_LENGTH = 8;
+
+export const onRequestPost: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  let body: { setupToken?: unknown; password?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "Ungültige Anfrage" }, { status: 400 });
+  }
+
+  const setupToken =
+    typeof body?.setupToken === "string" ? body.setupToken : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+
+  if (!setupToken) {
+    return jsonResponse({ error: "Setup-Token fehlt" }, { status: 400 });
+  }
+  if (!password || password.length < MIN_LENGTH) {
+    return jsonResponse(
+      {
+        error: `Passwort muss mindestens ${MIN_LENGTH} Zeichen lang sein`,
+      },
+      { status: 400 },
+    );
+  }
+
+  const session = await verifySetupToken(env, setupToken);
+  if (!session) {
+    return jsonResponse(
+      { error: "Setup-Link ist abgelaufen, bitte erneut anmelden" },
+      { status: 401 },
+    );
+  }
+
+  const row = await env.user
+    .prepare(
+      "SELECT id, password, active FROM user WHERE id = ?1 LIMIT 1",
+    )
+    .bind(session.sub)
+    .first<{ id: number; password: string | null; active: number }>();
+
+  if (!row || row.active !== 1) {
+    return jsonResponse({ error: "Account nicht verfügbar" }, { status: 401 });
+  }
+
+  // Doppel-Check: nur setzen, wenn Passwort tatsächlich noch leer ist.
+  // Verhindert, dass ein abgefangener Setup-Token später ein gesetztes
+  // Passwort überschreiben kann.
+  if ((row.password ?? "").trim().length > 0) {
+    return jsonResponse(
+      {
+        error:
+          "Für diesen Account ist bereits ein Passwort gesetzt. Bitte normal anmelden.",
+      },
+      { status: 409 },
+    );
+  }
+
+  try {
+    await env.user
+      .prepare(
+        "UPDATE user SET password = ?1, last_login = ?2 WHERE id = ?3",
+      )
+      .bind(password, new Date().toISOString(), row.id)
+      .run();
+  } catch (err) {
+    console.error("[setup-password] DB-Update fehlgeschlagen:", err);
+    return jsonResponse(
+      { error: "Passwort konnte nicht gespeichert werden" },
+      { status: 500 },
+    );
+  }
+
+  const token = await createSessionToken(env, row.id);
+
+  return jsonResponse(
+    { ok: true },
+    {
+      status: 200,
+      headers: { "Set-Cookie": buildSessionCookie(token) },
+    },
+  );
+};

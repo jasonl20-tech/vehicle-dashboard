@@ -16,11 +16,22 @@ export type SessionUser = {
   bannerfarbe: string | null;
 };
 
+/**
+ * Ergebnis eines `login`-Aufrufs.
+ * - `ok`: Anmeldung war erfolgreich, der User ist im Context.
+ * - `needs-setup`: Der Account existiert, hat aber noch kein Passwort.
+ *   Mit `setupToken` muss anschließend `setupPassword` aufgerufen werden.
+ */
+export type LoginResult =
+  | { kind: "ok" }
+  | { kind: "needs-setup"; setupToken: string; benutzername: string };
+
 type AuthState = {
   user: SessionUser | null;
   loading: boolean;
   refresh: () => Promise<void>;
-  login: (benutzername: string, password: string) => Promise<void>;
+  login: (benutzername: string, password: string) => Promise<LoginResult>;
+  setupPassword: (setupToken: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -46,17 +57,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(
-    async (benutzername: string, password: string) => {
+  const login = useCallback<AuthState["login"]>(
+    async (benutzername, password) => {
       const res = await fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ benutzername, password }),
       });
+
+      const data = (await res
+        .json()
+        .catch(() => ({}))) as Partial<{
+        ok: boolean;
+        needsPasswordSetup: boolean;
+        setupToken: string;
+        benutzername: string;
+        error: string;
+      }>;
+
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}) as { error?: string });
         throw new Error(data.error || "Anmeldung fehlgeschlagen");
+      }
+
+      if (data.needsPasswordSetup && data.setupToken) {
+        return {
+          kind: "needs-setup",
+          setupToken: data.setupToken,
+          benutzername: data.benutzername || benutzername,
+        };
+      }
+
+      await refresh();
+      return { kind: "ok" };
+    },
+    [refresh],
+  );
+
+  const setupPassword = useCallback<AuthState["setupPassword"]>(
+    async (setupToken, password) => {
+      const res = await fetch("/api/setup-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ setupToken, password }),
+      });
+      if (!res.ok) {
+        const data = (await res
+          .json()
+          .catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "Passwort konnte nicht gesetzt werden");
       }
       await refresh();
     },
@@ -79,7 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, refresh, login, setupPassword, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -87,6 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth muss innerhalb von <AuthProvider> genutzt werden");
+  if (!ctx)
+    throw new Error("useAuth muss innerhalb von <AuthProvider> genutzt werden");
   return ctx;
 }

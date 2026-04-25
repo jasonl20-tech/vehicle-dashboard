@@ -8,6 +8,7 @@
 
 export const SESSION_COOKIE = "vh_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 Tage
+export const SETUP_TOKEN_TTL_SECONDS = 60 * 10; // 10 Minuten
 
 export type SessionUser = {
   id: number;
@@ -111,6 +112,67 @@ export async function verifySessionToken(
     }
     if (json.exp < Math.floor(Date.now() / 1000)) return null;
     return { sub: json.sub, exp: json.exp };
+  } catch {
+    return null;
+  }
+}
+
+// ---------- Setup-Token (für initiales Passwort-Setzen) ----------
+//
+// Eigener Token mit `intent: "pw-setup"` damit ein normales Session-Cookie
+// nicht versehentlich als Setup-Token akzeptiert wird (und umgekehrt).
+
+export async function createSetupToken(
+  env: AuthEnv,
+  userId: number,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    sub: userId,
+    iat: now,
+    exp: now + SETUP_TOKEN_TTL_SECONDS,
+    intent: "pw-setup",
+  };
+  const payloadB64 = base64UrlEncode(
+    new TextEncoder().encode(JSON.stringify(payload)),
+  );
+  const key = await importKey(getSecret(env));
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(payloadB64),
+  );
+  return `${payloadB64}.${base64UrlEncode(sig)}`;
+}
+
+export async function verifySetupToken(
+  env: AuthEnv,
+  token: string,
+): Promise<{ sub: number } | null> {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, sigB64] = parts;
+  try {
+    const key = await importKey(getSecret(env));
+    const ok = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      base64UrlDecode(sigB64),
+      new TextEncoder().encode(payloadB64),
+    );
+    if (!ok) return null;
+    const json = JSON.parse(
+      new TextDecoder().decode(base64UrlDecode(payloadB64)),
+    );
+    if (
+      json?.intent !== "pw-setup" ||
+      typeof json?.exp !== "number" ||
+      typeof json?.sub !== "number"
+    ) {
+      return null;
+    }
+    if (json.exp < Math.floor(Date.now() / 1000)) return null;
+    return { sub: json.sub };
   } catch {
     return null;
   }
