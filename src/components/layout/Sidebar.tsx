@@ -263,9 +263,25 @@ function UserRow() {
     .join("")
     .toUpperCase();
 
-  // Bannerfarbe 1:1 aus der DB, mit Fallback falls leer/ungültig.
-  const banner = sanitizeColor(user.bannerfarbe) ?? "#1f232c";
+  // Profilhintergrund: `bannerfarbe` füllt die ganze User-Zeile (kein getrennter
+  // „Banner“-Streifen – es ist der Hintergrund hinter Name, Titel, Stufe & Avatar.
+  const profileBg = sanitizeColor(user.bannerfarbe) ?? "#1f232c";
   const stufe = user.sicherheitsstufe ?? 0;
+  const onLight = isLightBackground(profileBg);
+  const nameCls = onLight
+    ? "text-ink-900"
+    : "text-white";
+  const subCls = onLight
+    ? "text-ink-600"
+    : "text-night-200/80";
+  const sepCls = onLight ? "text-ink-400" : "text-white/35";
+  const avatarRing = onLight
+    ? "ring-2 ring-ink-900/12"
+    : "ring-2 ring-night-900/90";
+  const dotRing = onLight ? "ring-2 ring-white" : "ring-2 ring-night-900";
+  const logoutBtn = onLight
+    ? "bg-ink-900/8 text-ink-800 hover:bg-ink-900/14"
+    : "bg-white/10 text-white/95 hover:bg-white/18";
 
   const handleLogout = async () => {
     await logout();
@@ -273,71 +289,78 @@ function UserRow() {
   };
 
   return (
-    <div className="relative border-t border-white/[0.06]">
-      {/* Banner (full color aus user.bannerfarbe) */}
+    <div className="border-t border-white/[0.06]">
       <div
-        aria-hidden
-        className="h-12 w-full"
-        style={{ backgroundColor: banner }}
-      />
-      {/* Subtiler Innenschatten am unteren Banner-Rand für Tiefe */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-12 shadow-[inset_0_-12px_18px_-12px_rgba(0,0,0,0.35)]"
-      />
-
-      {/* Logout: floating top-right, eigene dunkle Pille damit es auf jeder
-          Bannerfarbe lesbar bleibt (auch auf #ffffff). */}
-      <button
-        type="button"
-        onClick={handleLogout}
-        title="Abmelden"
-        className="absolute right-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-md bg-night-900/55 text-white/90 backdrop-blur-md transition-colors hover:bg-night-900/80"
+        className="px-4 py-3.5"
+        style={{ backgroundColor: profileBg }}
       >
-        <LogOut className="h-3.5 w-3.5" />
-      </button>
-
-      {/* Content: Avatar überlappt das Banner */}
-      <div className="px-4 pb-3.5 pt-2">
-        <div className="-mt-7 flex items-end gap-3">
+        <div className="flex items-center gap-3">
           <div className="relative shrink-0">
             {user.profilbild ? (
               <img
                 src={user.profilbild}
                 alt={user.benutzername}
-                className="h-12 w-12 rounded-full object-cover ring-2 ring-night-900"
+                className={`h-11 w-11 rounded-full object-cover ${avatarRing}`}
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-accent-rose text-[12.5px] font-semibold text-white ring-2 ring-night-900">
+              <div
+                className={`grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-accent-rose text-[12px] font-semibold text-white ${avatarRing}`}
+              >
                 {initials}
               </div>
             )}
-            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent-mint ring-2 ring-night-900" />
+            <span
+              className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent-mint ${dotRing}`}
+            />
           </div>
-          <div className="min-w-0 flex-1 pb-0.5">
-            <p className="truncate text-[12.5px] font-medium text-white">
+          <div className="min-w-0 flex-1">
+            <p
+              className={`truncate text-[12.5px] font-medium ${nameCls}`}
+            >
               {user.benutzername}
             </p>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-night-400">
-              <span className="truncate">{user.titel || "Mitglied"}</span>
-              <span className="opacity-40">·</span>
-              <SecurityBadge level={stufe} />
+            <div
+              className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-[10.5px] ${subCls}`}
+            >
+              <span className="truncate">
+                {user.titel || "Mitglied"}
+              </span>
+              <span className={`shrink-0 opacity-60 ${sepCls}`}>·</span>
+              <SecurityBadge level={stufe} onLight={onLight} />
             </div>
           </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Abmelden"
+            className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition-colors ${logoutBtn}`}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function SecurityBadge({ level }: { level: number }) {
+function SecurityBadge({ level, onLight }: { level: number; onLight: boolean }) {
   return (
     <span
       title={`Sicherheitsstufe ${level}`}
-      className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-white/[0.07] px-1.5 py-[1px] text-[10px] font-medium leading-none text-night-200 ring-1 ring-inset ring-white/10"
+      className={
+        onLight
+          ? "inline-flex shrink-0 items-center gap-1 rounded-sm bg-ink-900/[0.08] px-1.5 py-[1px] text-[10px] font-medium leading-none text-ink-700 ring-1 ring-inset ring-ink-900/12"
+          : "inline-flex shrink-0 items-center gap-1 rounded-sm bg-white/[0.07] px-1.5 py-[1px] text-[10px] font-medium leading-none text-night-200 ring-1 ring-inset ring-white/10"
+      }
     >
-      <ShieldCheck className="h-2.5 w-2.5 text-brand-300" />
+      <ShieldCheck
+        className={
+          onLight
+            ? "h-2.5 w-2.5 text-brand-600"
+            : "h-2.5 w-2.5 text-brand-300"
+        }
+      />
       Stufe {level}
     </span>
   );
@@ -352,4 +375,28 @@ function sanitizeColor(input: string | null | undefined): string | null {
   const s = input.trim();
   if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s)) return s;
   return null;
+}
+
+/** Rel. Helligkeit (sRGB) → helle Hintergründe brauchen dunkle Schrift. */
+function isLightBackground(hex: string): boolean {
+  let h = hex.replace("#", "").toLowerCase();
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  if (h.length === 8) h = h.slice(0, 6);
+  if (h.length !== 6) return false;
+  const n = parseInt(h, 16);
+  if (Number.isNaN(n)) return false;
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const lin = (c: number) => {
+    c /= 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return L > 0.55;
 }
