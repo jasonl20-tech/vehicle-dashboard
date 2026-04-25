@@ -1,6 +1,17 @@
 import { AlertCircle, Download, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   type OneautoReportsResponse,
   fmtCurrency,
   fmtMonthLong,
@@ -37,6 +48,10 @@ export default function OneautoReportsPage() {
           <span className="text-ink-700">{error}</span>
         </div>
       )}
+
+      <Section title="Entwicklung Monat für Monat" meta="Chronologisch, älteste Monate links">
+        <MonthlyTrend data={data} loading={loading} />
+      </Section>
 
       <Totals data={data} loading={loading} />
 
@@ -138,16 +153,18 @@ function Totals({
   loading: boolean;
 }) {
   const t = data?.totals ?? { views: 0, gbp: 0, eur: null };
+  const viewsTotal = safeNum(t.views);
+  const gbpTotal = safeNum(t.gbp);
   return (
     <div className="mb-12 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0">
       <Tile
         label="Bild-Views gesamt"
-        value={loading ? "…" : fmtNumber(t.views)}
+        value={loading ? "…" : fmtNumber(viewsTotal)}
         sub={loading ? "" : `letzte ${data?.months.length ?? 0} Monate`}
       />
       <Tile
         label="Brutto (GBP)"
-        value={loading ? "…" : fmtCurrency(t.gbp, "GBP")}
+        value={loading ? "…" : fmtCurrency(gbpTotal, "GBP")}
         sub={loading ? "" : `${data?.pricePerViewGbp ?? 0.02} £ pro View`}
       />
       <Tile
@@ -164,6 +181,13 @@ function Totals({
       />
     </div>
   );
+}
+
+function safeNum(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function Tile({
@@ -184,11 +208,11 @@ function Tile({
         ? "text-accent-amber"
         : "text-ink-400";
   return (
-    <div className="px-5 py-6 first:pl-0 sm:px-6 lg:px-8 lg:first:pl-0">
+    <div className="min-w-0 overflow-hidden px-5 py-6 first:pl-0 sm:px-6 lg:px-8 lg:first:pl-0">
       <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
         {label}
       </p>
-      <p className="mt-3 font-display text-[40px] leading-none tracking-tighter2 text-ink-900">
+      <p className="mt-3 min-w-0 break-words font-display text-[40px] leading-none tracking-tighter2 text-ink-900">
         {value}
       </p>
       {sub && (
@@ -203,17 +227,178 @@ function Tile({
 function Section({
   title,
   children,
+  meta,
 }: {
   title: string;
   children: React.ReactNode;
+  meta?: string;
 }) {
   return (
     <section className="mb-12 border-t border-hair pt-10 first:border-t-0 first:pt-0">
-      <h2 className="mb-5 font-display text-[20px] tracking-tightish text-ink-900">
-        {title}
-      </h2>
+      <div className="mb-5">
+        <h2 className="font-display text-[20px] tracking-tightish text-ink-900">
+          {title}
+        </h2>
+        {meta && (
+          <p className="mt-1.5 text-[12.5px] text-ink-500">{meta}</p>
+        )}
+      </div>
       {children}
     </section>
+  );
+}
+
+// ---------- Entwicklungs-Chart ----------
+
+function monthShortUtc(iso: string): string {
+  const d = new Date(
+    iso.length === 7
+      ? `${iso}-01T00:00:00.000Z`
+      : /^\d{4}-\d{2}-\d{2}$/.test(iso)
+        ? `${iso}T00:00:00.000Z`
+        : iso,
+  );
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 7);
+  return new Intl.DateTimeFormat("de-DE", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  }).format(d);
+}
+
+function MonthlyTrend({
+  data,
+  loading,
+}: {
+  data: OneautoReportsResponse | null;
+  loading: boolean;
+}) {
+  const rows = useMemo(() => {
+    if (!data?.months?.length) return [];
+    return [...data.months]
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map((m) => ({
+        key: m.month,
+        label: monthShortUtc(m.month),
+        views: safeNum(m.views),
+        eur: m.eur != null && Number.isFinite(m.eur) ? m.eur : 0,
+        gbp: safeNum(m.gbp),
+      }));
+  }, [data]);
+
+  if (loading && !data) {
+    return <div className="h-[300px] animate-pulse rounded-md bg-ink-100/50" />;
+  }
+  if (!rows.length) {
+    return (
+      <div className="rounded-md border border-dashed border-hair px-4 py-12 text-center text-[13px] text-ink-500">
+        Keine Monatsdaten für die Statistik.
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-[300px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart
+          data={rows}
+          margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+        >
+          <CartesianGrid
+            strokeDasharray="3 3"
+            vertical={false}
+            stroke="rgba(15,23,42,0.08)"
+          />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
+            tickLine={false}
+            axisLine={false}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            yAxisId="left"
+            tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            width={48}
+            label={{
+              value: "Views",
+              angle: -90,
+              position: "insideLeft",
+              style: { fontSize: 10, fill: "#94a3b8" },
+            }}
+          />
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+            label={{
+              value: "€",
+              angle: 90,
+              position: "insideRight",
+              style: { fontSize: 10, fill: "#94a3b8" },
+            }}
+          />
+          <Tooltip
+            content={({ active, payload, label: lbl }) => {
+              if (!active || !payload?.length) return null;
+              const p = payload[0].payload as {
+                views: number;
+                eur: number;
+                gbp: number;
+              };
+              return (
+                <div className="rounded-md border border-hair bg-white px-3 py-2.5 text-[12px] shadow-lg">
+                  <p className="mb-1.5 font-medium text-ink-800">{String(lbl)}</p>
+                  <p className="text-ink-600">
+                    Bild-Views:{" "}
+                    <span className="font-medium text-ink-900">
+                      {fmtNumber(p.views)}
+                    </span>
+                  </p>
+                  <p className="text-ink-600">
+                    Brutto:{" "}
+                    <span className="font-medium text-ink-900">
+                      {fmtCurrency(p.gbp, "GBP")} / {fmtCurrency(
+                        p.eur > 0 ? p.eur : null,
+                        "EUR",
+                      )}
+                    </span>
+                  </p>
+                </div>
+              );
+            }}
+          />
+          <Legend
+            wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+            formatter={(value) => String(value)}
+          />
+          <Bar
+            yAxisId="left"
+            dataKey="views"
+            name="Bild-Views"
+            fill="#5a3df0"
+            radius={[4, 4, 0, 0]}
+            maxBarSize={48}
+          />
+          <Line
+            yAxisId="right"
+            type="monotone"
+            dataKey="eur"
+            name="Brutto (EUR)"
+            stroke="#3ecf8e"
+            strokeWidth={2}
+            dot={{ r: 2.5, fill: "#3ecf8e" }}
+            activeDot={{ r: 4 }}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 

@@ -94,6 +94,16 @@ interface FxRate {
 
 const FX_FALLBACK = 1.16; // grober Notnagel, falls API nicht erreichbar
 
+/** Analytics Engine liefert Aggregatfelder in JSON manchmal als String;
+ *  `+=` würde sonst String-Konkatenation erzeugen (Bug: riesige „Zahlen“). */
+function aeNum(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() === "") return 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * Holt einen GBP→EUR-Wechselkurs zu einem Datum. frankfurter.app
  * verwendet automatisch den letzten Werktag, falls das Datum auf
@@ -193,7 +203,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       viewsOk: number;
       viewsErr: number;
     }>(env, sql);
-    aeRows = r.data;
+    aeRows = r.data.map((row) => ({
+      month: row.month,
+      requests: aeNum(row.requests),
+      views: aeNum(row.views),
+      viewsOk: aeNum(row.viewsOk),
+      viewsErr: aeNum(row.viewsErr),
+    }));
   } catch (err) {
     return jsonResponse(
       { error: err instanceof Error ? err.message : String(err) },
@@ -227,11 +243,15 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       viewsErr: 0,
     };
     const fx = fxResults[i];
-    const gbp = Math.round(data.views * PRICE_GBP_PER_VIEW * 100) / 100;
+    const viewsN = aeNum(data.views);
+    const reqN = aeNum(data.requests);
+    const okN = aeNum(data.viewsOk);
+    const errN = aeNum(data.viewsErr);
+    const gbp = Math.round(viewsN * PRICE_GBP_PER_VIEW * 100) / 100;
     const eur =
       fx.rate != null ? Math.round(gbp * fx.rate * 100) / 100 : null;
 
-    totalViews += data.views;
+    totalViews += viewsN;
     totalGbp += gbp;
     if (eur != null) totalEur += eur;
     else totalEurMissing = true;
@@ -241,10 +261,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       fromIso: b.fromIso,
       toIso: b.toIso,
       closed: b.closed,
-      requests: data.requests,
-      views: data.views,
-      viewsOk: data.viewsOk,
-      viewsErr: data.viewsErr,
+      requests: reqN,
+      views: viewsN,
+      viewsOk: okN,
+      viewsErr: errN,
       gbp,
       eur,
       fx: {
