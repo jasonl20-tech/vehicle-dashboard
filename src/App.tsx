@@ -2,13 +2,10 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AnalyticsPage from "./pages/AnalyticsPage";
-import DriversPage from "./pages/DriversPage";
-import FleetPage from "./pages/FleetPage";
 import LoginPage from "./pages/LoginPage";
-import MaintenancePage from "./pages/MaintenancePage";
+import ModulePage from "./pages/ModulePage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
-import TripsPage from "./pages/TripsPage";
 
 export default function App() {
   return (
@@ -21,16 +18,25 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/analytics" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<OverviewPage />} />
+        <Route path="/crm" element={<ModulePage />} />
+        <Route path="/anfragen" element={<ModulePage />} />
+        <Route path="/logs" element={<ModulePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/fleet" element={<FleetPage />} />
-        <Route path="/trips" element={<TripsPage />} />
-        <Route path="/maintenance" element={<MaintenancePage />} />
-        <Route path="/drivers" element={<DriversPage />} />
+        <Route path="/zahlungslinks" element={<ModulePage />} />
+        <Route path="/website/blogs" element={<ModulePage />} />
+        <Route path="/website/landing-pages" element={<ModulePage />} />
+        <Route path="/website/faq" element={<ModulePage />} />
+        <Route path="/website/tutorials" element={<ModulePage />} />
+        <Route path="/website/whitepaper" element={<ModulePage />} />
+        <Route path="/website/company" element={<ModulePage />} />
+        <Route path="/website/changelog" element={<ModulePage />} />
+        <Route path="/databases/production" element={<ModulePage />} />
+        <Route path="/newsletter" element={<ModulePage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
-      <Route path="*" element={<Navigate to="/analytics" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

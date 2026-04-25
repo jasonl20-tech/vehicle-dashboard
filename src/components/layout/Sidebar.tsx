@@ -1,18 +1,21 @@
 import {
   ArrowUpRight,
   BarChart3,
-  Car,
+  Building2,
   ChevronDown,
   Command,
+  Database,
+  Globe,
+  Inbox,
   LayoutDashboard,
+  Link2,
   LogOut,
   type LucideIcon,
-  MapPinned,
+  Mails,
+  ScrollText,
   Search,
   Settings,
   ShieldCheck,
-  Users,
-  Wrench,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -29,18 +32,30 @@ type NavItem = {
 
 const NAV_PRIMARY: NavItem[] = [
   { label: "Übersicht", icon: LayoutDashboard, to: "/dashboard" },
+  { label: "CRM", icon: Building2, to: "/crm" },
+  { label: "Anfragen", icon: Inbox, to: "/anfragen" },
+  { label: "Logs", icon: ScrollText, to: "/logs" },
+  { label: "Analytics", icon: BarChart3, to: "/analytics" },
+  { label: "Zahlungslinks", icon: Link2, to: "/zahlungslinks" },
   {
-    label: "Analytics",
-    icon: BarChart3,
+    label: "Webseite",
+    icon: Globe,
     children: [
-      { label: "Fahrzeug-Analytics", to: "/analytics" },
-      { label: "Touren-Analytics", to: "/trips" },
+      { label: "Blogs", to: "/website/blogs" },
+      { label: "Landing Pages", to: "/website/landing-pages" },
+      { label: "FAQ", to: "/website/faq" },
+      { label: "Tutorials", to: "/website/tutorials" },
+      { label: "Whitepaper", to: "/website/whitepaper" },
+      { label: "Company Info", to: "/website/company" },
+      { label: "Changelog", to: "/website/changelog" },
     ],
   },
-  { label: "Flotte", icon: Car, to: "/fleet" },
-  { label: "Fahrten", icon: MapPinned, to: "/trips" },
-  { label: "Fahrer", icon: Users, to: "/drivers" },
-  { label: "Wartung", icon: Wrench, to: "/maintenance" },
+  {
+    label: "Datenbanken",
+    icon: Database,
+    children: [{ label: "Produktions Datenbank", to: "/databases/production" }],
+  },
+  { label: "Newsletter", icon: Mails, to: "/newsletter" },
 ];
 
 const NAV_FOOTER: NavItem[] = [
