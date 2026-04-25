@@ -13,6 +13,12 @@ export type StripePaymentLinkRow = {
   metadata: Record<string, string>;
   created: number;
   livemode: boolean;
+  /** Erstes Line-Item, wenn die API line_items expandiert. */
+  firstPrice?: {
+    id: string;
+    unitAmount: number | null;
+    currency: string;
+  } | null;
 };
 
 export type PaymentLinksResponse = { paymentLinks: StripePaymentLinkRow[] };

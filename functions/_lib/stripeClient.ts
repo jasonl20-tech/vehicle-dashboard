@@ -5,6 +5,13 @@
 
 const API = "https://api.stripe.com/v1";
 
+/** Erstes Line-Item (Checkout-Preis), für Tabelle & Sortierung. */
+export type StripePaymentLinkFirstPrice = {
+  id: string;
+  unitAmount: number | null;
+  currency: string;
+};
+
 export type StripePaymentLink = {
   id: string;
   object: "payment_link";
@@ -13,6 +20,8 @@ export type StripePaymentLink = {
   metadata: Record<string, string>;
   created: number;
   livemode: boolean;
+  /** Gesetzt, wenn List-Antwort line_items/price expandiert. */
+  firstPrice?: StripePaymentLinkFirstPrice | null;
 };
 
 type StripeList<T> = { data: T[]; has_more: boolean; object: "list" };
@@ -32,21 +41,110 @@ function formEncodeMetadata(meta: Record<string, string>): URLSearchParams {
   return p;
 }
 
+function parseListWithLineItemPrices(
+  j: StripeList<{
+    id: string;
+    object: "payment_link";
+    url: string | null;
+    active: boolean;
+    metadata: Record<string, string> | null;
+    created: number;
+    livemode: boolean;
+    line_items?: {
+      data: Array<{
+        price: string | { id: string; unit_amount: number | null; currency: string } | null;
+      }>;
+    };
+  }>,
+): StripePaymentLink[] {
+  return (j.data ?? []).map((p) => {
+    const li = p.line_items?.data?.[0];
+    let firstPrice: StripePaymentLinkFirstPrice | null = null;
+    if (li?.price) {
+      if (typeof li.price === "string") {
+        firstPrice = { id: li.price, unitAmount: null, currency: "" };
+      } else {
+        firstPrice = {
+          id: li.price.id,
+          unitAmount: li.price.unit_amount,
+          currency: li.price.currency,
+        };
+      }
+    }
+    return {
+      id: p.id,
+      object: "payment_link" as const,
+      url: p.url,
+      active: p.active,
+      metadata: p.metadata ?? {},
+      created: p.created,
+      livemode: p.livemode,
+      firstPrice,
+    };
+  });
+}
+
+/**
+ * Listet Payment Links, optional mit erstem Preis (Line Items) für Anzeige/Sortierung.
+ * @see https://stripe.com/docs/api/payment-link/list
+ */
 export async function stripeListPaymentLinks(
   env: { STRIPE_SECRET_KEY?: string },
   limit = 100,
 ): Promise<StripePaymentLink[]> {
   const u = new URL(`${API}/payment_links`);
   u.searchParams.set("limit", String(Math.min(100, limit)));
+  u.searchParams.append("expand[]", "data.line_items");
+  u.searchParams.append("expand[]", "data.line_items.data.price");
   const res = await fetch(u.toString(), {
     headers: { Authorization: `Bearer ${getSecret(env)}` },
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Stripe list payment_links ${res.status}: ${text.slice(0, 400)}`);
+    const u2 = new URL(`${API}/payment_links`);
+    u2.searchParams.set("limit", String(Math.min(100, limit)));
+    const res2 = await fetch(u2.toString(), {
+      headers: { Authorization: `Bearer ${getSecret(env)}` },
+    });
+    const text2 = await res2.text();
+    if (!res2.ok) {
+      throw new Error(`Stripe list payment_links ${res.status}: ${text.slice(0, 400)}`);
+    }
+    const j2 = JSON.parse(text2) as StripeList<{
+      id: string;
+      object: "payment_link";
+      url: string | null;
+      active: boolean;
+      metadata: Record<string, string> | null;
+      created: number;
+      livemode: boolean;
+    }>;
+    return (j2.data ?? []).map((p) => ({
+      id: p.id,
+      object: "payment_link" as const,
+      url: p.url,
+      active: p.active,
+      metadata: p.metadata ?? {},
+      created: p.created,
+      livemode: p.livemode,
+      firstPrice: null,
+    }));
   }
-  const j = JSON.parse(text) as StripeList<StripePaymentLink>;
-  return j.data ?? [];
+  const j = JSON.parse(text) as StripeList<{
+    id: string;
+    object: "payment_link";
+    url: string | null;
+    active: boolean;
+    metadata: Record<string, string> | null;
+    created: number;
+    livemode: boolean;
+    line_items?: {
+      data: Array<{
+        price: string | { id: string; unit_amount: number | null; currency: string } | null;
+      }>;
+    };
+  }>;
+  return parseListWithLineItemPrices(j);
 }
 
 export async function stripeGetPaymentLink(

@@ -1,10 +1,4 @@
-import {
-  Archive,
-  ExternalLink,
-  Pencil,
-  Plus,
-  RefreshCw,
-} from "lucide-react";
+import { Copy, ExternalLink, Pencil, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BILLING_PAYMENT_LINKS,
@@ -13,15 +7,51 @@ import {
   createPaymentLink,
   type PaymentLinksResponse,
   type PlansListResponse,
+  type StripePaymentLinkRow,
   type StripePriceRow,
   type StripePricesResponse,
-  plansUrlOne,
   postPaymentLinkMetadata,
-  putPlan,
-  setPaymentLinkActive,
   useJsonApi,
 } from "../lib/billingApi";
 import PageHeader from "../components/ui/PageHeader";
+
+type PriceColumnSort = "off" | "asc" | "desc";
+
+function formatPaymentLinkPrice(
+  row: Pick<StripePaymentLinkRow, "firstPrice">,
+): string {
+  const fp = row.firstPrice;
+  if (!fp) return "–";
+  if (fp.unitAmount != null && fp.currency) {
+    try {
+      return `${new Intl.NumberFormat("de-DE", {
+        style: "currency",
+        currency: fp.currency.toUpperCase(),
+      }).format(fp.unitAmount / 100)} · ${fp.id}`;
+    } catch {
+      // ignore
+    }
+  }
+  return fp.id;
+}
+
+function rowMatchesQuery(row: StripePaymentLinkRow, q: string): boolean {
+  if (!q) return true;
+  const s = q.toLowerCase();
+  const hay = [
+    row.id,
+    row.metadata?.price_id,
+    row.url,
+    row.livemode ? "live" : "test",
+    row.firstPrice?.id,
+    String(row.firstPrice?.unitAmount ?? ""),
+    row.firstPrice?.currency,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(s);
+}
 
 export default function ZahlungslinksPage() {
   const pl = useJsonApi<PaymentLinksResponse>(BILLING_PAYMENT_LINKS);
@@ -32,33 +62,42 @@ export default function ZahlungslinksPage() {
     priceId: string;
   } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [priceColSort, setPriceColSort] = useState<PriceColumnSort>("off");
 
-  const [planKey, setPlanKey] = useState<string | null>(null);
-  const { data: planOne, error: planErr, loading: planLoading, reload: planReload } =
-    useJsonApi<{ key: string; value: unknown; raw: string }>(
-      planKey ? plansUrlOne(planKey) : null,
+  const displayedLinks = useMemo(() => {
+    const rows = [...(pl.data?.paymentLinks ?? [])];
+    const q = search.trim();
+    const filtered = q
+      ? rows.filter((r) => rowMatchesQuery(r, q))
+      : rows;
+    if (priceColSort === "off") {
+      filtered.sort((a, b) => b.created - a.created);
+    } else {
+      const mult = priceColSort === "asc" ? 1 : -1;
+      filtered.sort((a, b) => {
+        const au = a.firstPrice?.unitAmount;
+        const bu = b.firstPrice?.unitAmount;
+        if (au == null && bu == null) return b.created - a.created;
+        if (au == null) return 1;
+        if (bu == null) return -1;
+        if (au !== bu) return (au - bu) * mult;
+        return b.created - a.created;
+      });
+    }
+    return filtered;
+  }, [pl.data?.paymentLinks, search, priceColSort]);
+
+  const cyclePriceSort = useCallback(() => {
+    setPriceColSort((prev) =>
+      prev === "off" ? "asc" : prev === "asc" ? "desc" : "off",
     );
-
-  const [newKeyError, setNewKeyError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [newKey, setNewKey] = useState("");
-
-  const keySet = useMemo(
-    () => new Set(kvs.data?.keys ?? []),
-    [kvs.data?.keys],
-  );
-
-  /** API liefert nur aktive Links; neueste zuerst. */
-  const orderedLinks = useMemo(() => {
-    const rows = pl.data?.paymentLinks ?? [];
-    return [...rows].sort((a, b) => b.created - a.created);
-  }, [pl.data?.paymentLinks]);
+  }, []);
 
   const reloadAll = useCallback(() => {
     pl.reload();
     kvs.reload();
-    if (planKey) planReload();
-  }, [pl, kvs, planKey, planReload]);
+  }, [pl, kvs]);
 
   return (
     <>
@@ -67,13 +106,10 @@ export default function ZahlungslinksPage() {
         title="Zahlungslinks"
         description={
           <>
-            Beim Anlegen wählst du einen <strong>aktiven Stripe-Preis</strong>{" "}
-            (per API aus deinem Konto geladen) und einen KV-Plan. Metadaten{" "}
-            <span className="font-mono">price_id</span> = Plan-Key. Archivierte
-            Links erscheinen nicht. KV-Pläne nur bearbeiten, nicht löschen.
-            Alternativ kann der Preis nur im JSON als{" "}
-            <span className="font-mono">stripe_price_id</span> stehen, wenn
-            keine Liste verfügbar ist.
+            <strong>Neu anlegen</strong> mit Stripe-Preis und Plan-Key;{" "}
+            <span className="font-mono">metadata.price_id</span> verweist auf
+            den Key im KV. Es werden nur{" "}
+            <strong>aktive</strong> Payment Links aufgelistet.
           </>
         }
         rightSlot={
@@ -113,235 +149,140 @@ export default function ZahlungslinksPage() {
         <p className="mb-4 text-[13px] text-accent-rose">{kvs.error}</p>
       )}
 
-      <section className="mb-12 border-b border-hair pb-10">
+      <section className="mb-6">
         <h2 className="mb-3 font-display text-[18px] tracking-tightish text-ink-900">
-          Stripe Payment Links
+          Übersicht
         </h2>
-        <p className="mb-4 text-[12.5px] text-ink-500">
-          Es werden nur <strong>aktive</strong> Payment Links aufgelistet.
-        </p>
         {pl.loading && !pl.data ? (
           <p className="text-[13px] text-ink-400">Lade …</p>
         ) : (
-          <div className="overflow-x-auto rounded-md border border-hair">
-            <table className="w-full min-w-[860px] text-left text-[12.5px]">
-              <thead>
-                <tr className="border-b border-hair bg-ink-50/80">
-                  <th className="px-3 py-2 font-medium text-ink-600">Modus</th>
-                  <th className="px-3 py-2 font-medium text-ink-600">
-                    price_id (KV-Key)
-                  </th>
-                  <th className="px-3 py-2 font-medium text-ink-600">KV</th>
-                  <th className="px-3 py-2 font-medium text-ink-600">URL</th>
-                  <th className="px-3 py-2 font-medium text-ink-600">Aktionen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orderedLinks.map((row) => {
-                  const pid = row.metadata?.price_id ?? "–";
-                  const inKv = pid && pid !== "–" && keySet.has(pid);
-                  return (
-                    <tr
-                      key={row.id}
-                      className="border-b border-hair/80 last:border-0"
-                    >
-                      <td className="px-3 py-2">
-                        {row.livemode ? "Live" : "Test"}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-[11.5px] text-ink-800">
-                        {pid}
-                      </td>
-                      <td className="px-3 py-2">
-                        {inKv ? (
-                          <span className="text-emerald-700">ok</span>
-                        ) : pid === "–" || !pid ? (
-                          "–"
-                        ) : (
-                          <span className="text-amber-700">fehlt</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {row.url ? (
-                          <a
-                            href={row.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-brand-600 hover:underline"
-                          >
-                            Link
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        ) : (
-                          "–"
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setEditPl({
-                                id: row.id,
-                                priceId: row.metadata?.price_id ?? "",
-                              })
-                            }
-                            className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
-                          >
-                            <Pencil className="h-3 w-3" />
-                            Metadaten
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  "Payment Link archivieren? Er erscheint danach nicht mehr in dieser Liste; in Stripe bleibt er inaktiv.",
-                                )
-                              ) {
-                                return;
-                              }
-                              void (async () => {
-                                try {
-                                  await setPaymentLinkActive(row.id, false);
-                                  pl.reload();
-                                } catch (e) {
-                                  window.alert(
-                                    e instanceof Error ? e.message : String(e),
-                                  );
-                                }
-                              })();
-                            }}
-                            className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
-                          >
-                            <Archive className="h-3 w-3" />
-                            Archivieren
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {orderedLinks.length === 0 && !pl.error && (
-              <p className="p-4 text-[13px] text-ink-500">
-                Keine Payment Links in Stripe gefunden.
-              </p>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <h2 className="mb-3 font-display text-[18px] tracking-tightish text-ink-900">
-          Pläne (KV: <span className="font-mono">plans</span>)
-        </h2>
-        <p className="mb-4 text-[12.5px] text-ink-500">
-          Im JSON den Preis in Stripe anlegen, dann{" "}
-          <span className="font-mono">stripe_price_id: &quot;price_…&quot;</span>{" "}
-          setzen. Bearbeiten möglich, kein Löschen.
-        </p>
-        {kvs.loading && !kvs.data ? (
-          <p className="text-[13px] text-ink-400">Lade …</p>
-        ) : (
-          <div className="grid gap-6 lg:grid-cols-12">
-            <div className="lg:col-span-4">
-              <p className="mb-2 text-[11.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
-                Keys
-              </p>
-              <ul className="max-h-[320px] space-y-0.5 overflow-y-auto rounded-md border border-hair p-1">
-                {(kvs.data?.keys ?? []).map((k) => (
-                  <li key={k}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPlanKey(k);
-                        setNewKeyError(null);
-                      }}
-                      className={`w-full rounded px-2.5 py-1.5 text-left font-mono text-[12px] ${
-                        planKey === k
-                          ? "bg-brand-500/10 text-ink-900"
-                          : "text-ink-600 hover:bg-ink-50"
-                      }`}
-                    >
-                      {k}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <form
-                className="mt-3 flex flex-wrap items-end gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const k = newKey.trim();
-                  if (!k) return;
-                  setSaving(true);
-                  setNewKeyError(null);
-                  try {
-                    await putPlan(k, {
-                      plan_name: k,
-                      stripe_price_id: "",
-                      expires_in_seconds: 604800,
-                      features: {},
-                      asset_rules: {},
-                      content_restrictions: {},
-                      infrastructure: {},
-                    });
-                    setNewKey("");
-                    kvs.reload();
-                    setPlanKey(k);
-                    planReload();
-                  } catch (er) {
-                    setNewKeyError(
-                      er instanceof Error ? er.message : String(er),
-                    );
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-              >
-                <input
-                  value={newKey}
-                  onChange={(e) => setNewKey(e.target.value)}
-                  placeholder="neuer_key"
-                  className="min-w-0 flex-1 rounded-md border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
-                />
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-600 hover:border-ink-300"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Neu
-                </button>
-              </form>
-            </div>
-            <div className="lg:col-span-8">
-              <p className="mb-2 text-[11.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
-                JSON
-              </p>
-              {planKey ? (
-                <PlanEditor
-                  key={planKey}
-                  planKey={planKey}
-                  planOne={planOne}
-                  planLoading={planLoading}
-                  planErr={planErr}
-                  onAfterSave={() => {
-                    kvs.reload();
-                    planReload();
-                  }}
-                />
-              ) : (
-                <p className="text-[13px] text-ink-500">
-                  Wähle einen Key oder lege einen neuen an.
+          <>
+            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Suchen (ID, Key, Preis, URL, Modus) …"
+                className="w-full max-w-md rounded-md border border-hair bg-white px-3 py-2 text-[13px] text-ink-800 shadow-sm placeholder:text-ink-400"
+                aria-label="Zahlungslinks durchsuchen"
+              />
+              {search.trim() && (
+                <p className="text-[12.5px] text-ink-500">
+                  {displayedLinks.length} Treffer
                 </p>
               )}
-              {newKeyError && (
-                <p className="mt-2 text-[12.5px] text-accent-rose">{newKeyError}</p>
-              )}
             </div>
-          </div>
+            <div className="overflow-x-auto rounded-md border border-hair">
+              <table className="w-full min-w-[720px] text-left text-[12.5px]">
+                <thead>
+                  <tr className="border-b border-hair bg-ink-50/80">
+                    <th className="px-3 py-2 font-medium text-ink-600">Modus</th>
+                    <th className="px-3 py-2 font-medium text-ink-600">
+                      Plan-Key <span className="font-mono">(metadata.price_id)</span>
+                    </th>
+                    <th className="px-3 py-2 font-medium text-ink-600">
+                      <button
+                        type="button"
+                        onClick={cyclePriceSort}
+                        className="inline-flex items-center gap-1 text-left text-ink-600 hover:text-ink-900"
+                        title="Klick: nach Betrag sortieren (auf / ab) oder Standard (neueste zuerst)"
+                      >
+                        Preis
+                        {priceColSort === "asc" && (
+                          <span className="text-[10px] text-ink-400">▲</span>
+                        )}
+                        {priceColSort === "desc" && (
+                          <span className="text-[10px] text-ink-400">▼</span>
+                        )}
+                      </button>
+                    </th>
+                    <th className="px-3 py-2 font-medium text-ink-600">Aktionen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedLinks.map((row) => {
+                    const pid = row.metadata?.price_id ?? "–";
+                    return (
+                      <tr
+                        key={row.id}
+                        className="border-b border-hair/80 last:border-0"
+                      >
+                        <td className="px-3 py-2">
+                          {row.livemode ? "Live" : "Test"}
+                        </td>
+                        <td className="max-w-[200px] truncate px-3 py-2 font-mono text-[11.5px] text-ink-800" title={pid}>
+                          {pid}
+                        </td>
+                        <td className="px-3 py-2 text-ink-800">
+                          {formatPaymentLinkPrice(row)}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {row.url ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      await navigator.clipboard.writeText(
+                                        row.url!,
+                                      );
+                                    } catch {
+                                      window.alert(
+                                        "Kopieren nicht möglich (Berechtigung/HTTPS).",
+                                      );
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
+                                >
+                                  <Copy className="h-3 w-3" />
+                                  Link kopieren
+                                </button>
+                                <a
+                                  href={row.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Öffnen
+                                </a>
+                              </>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditPl({
+                                  id: row.id,
+                                  priceId: row.metadata?.price_id ?? "",
+                                })
+                              }
+                              className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              Bearbeiten
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {(pl.data?.paymentLinks?.length ?? 0) === 0 && !pl.error && (
+                <p className="p-4 text-[13px] text-ink-500">
+                  Keine Payment Links in Stripe gefunden.
+                </p>
+              )}
+              {(pl.data?.paymentLinks?.length ?? 0) > 0 &&
+                displayedLinks.length === 0 &&
+                !pl.error && (
+                  <p className="p-4 text-[13px] text-ink-500">
+                    Keine Treffer für diese Suche.
+                  </p>
+                )}
+            </div>
+          </>
         )}
       </section>
 
@@ -354,7 +295,6 @@ export default function ZahlungslinksPage() {
             await postPaymentLinkMetadata(editPl.id, { price_id: priceId });
             setEditPl(null);
             pl.reload();
-            kvs.reload();
           }}
         />
       )}
@@ -371,76 +311,6 @@ export default function ZahlungslinksPage() {
         />
       )}
     </>
-  );
-}
-
-function PlanEditor({
-  planKey,
-  planOne,
-  planLoading,
-  planErr,
-  onAfterSave,
-}: {
-  planKey: string;
-  planOne: { key: string; value: unknown; raw: string } | null;
-  planLoading: boolean;
-  planErr: string | null;
-  onAfterSave: () => void;
-}) {
-  const [text, setText] = useState("");
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (planOne?.key === planKey && planOne.raw && !dirty) {
-      setText(planOne.raw);
-    }
-  }, [planKey, planOne, dirty]);
-
-  if (planLoading && !planOne) {
-    return <p className="text-[13px] text-ink-400">Lade Plan …</p>;
-  }
-  if (planErr) {
-    return <p className="text-[13px] text-accent-rose">{planErr}</p>;
-  }
-
-  return (
-    <div>
-      <textarea
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setDirty(true);
-        }}
-        spellCheck={false}
-        className="h-[min(60vh,420px)] w-full rounded-md border border-hair bg-white p-3 font-mono text-[12px] leading-relaxed"
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={saving}
-          onClick={async () => {
-            setErr(null);
-            setSaving(true);
-            try {
-              const parsed: unknown = JSON.parse(text) as unknown;
-              await putPlan(planKey, parsed);
-              setDirty(false);
-              onAfterSave();
-            } catch (e) {
-              setErr(e instanceof Error ? e.message : String(e));
-            } finally {
-              setSaving(false);
-            }
-          }}
-          className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-800 hover:border-ink-300"
-        >
-          {saving ? "…" : "Speichern"}
-        </button>
-      </div>
-      {err && <p className="mt-2 text-[12.5px] text-accent-rose">{err}</p>}
-    </div>
   );
 }
 
@@ -666,9 +536,12 @@ function MetadataDialog({
         className="w-full max-w-md rounded-lg border border-hair bg-paper p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-display text-[18px] text-ink-900">Metadaten</h3>
+        <h3 className="font-display text-[18px] text-ink-900">
+          Payment Link bearbeiten
+        </h3>
         <p className="mt-1 text-[12.5px] text-ink-500">
-          Feld <span className="font-mono">price_id</span> = KV-Key
+          <span className="font-mono">metadata.price_id</span> = Plan-Key
+          (KV-Referenz)
         </p>
         <div className="mt-3">
           <input
