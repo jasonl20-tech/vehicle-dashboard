@@ -9,6 +9,7 @@ import {
  * Diagnose-Endpoint für die Analytics-Engine-Anbindung.
  *
  *   GET /api/analytics/_diag
+ *   GET /api/analytics/_diag?binding=secondary
  *
  * Zeigt (maskiert) ob CF_ACCOUNT_ID und CF_API_TOKEN gesetzt sind, ob die
  * Account-ID syntaktisch valide ist und ob ein einfacher Probe-Call gegen
@@ -26,6 +27,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
-  const result = await diagnoseAe(env);
+  const url = new URL(request.url);
+  const bindingRaw = (url.searchParams.get("binding") || "primary").toLowerCase();
+  const binding =
+    bindingRaw === "secondary" ? "secondary" : "primary";
+
+  const result = await diagnoseAe(env, { binding });
   return jsonResponse(result, { status: result.ok ? 200 : 500 });
 };

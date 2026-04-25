@@ -41,6 +41,7 @@ const NAV_PRIMARY: NavItem[] = [
     children: [
       { label: "Fahrzeug-Analytics", to: "/analytics", end: true },
       { label: "Kunden API", to: "/analytics/kunden-api" },
+      { label: "API Analytics", to: "/analytics/api-analytics" },
       { label: "Oneauto API", to: "/analytics/oneauto-api" },
       { label: "Oneauto Reports", to: "/analytics/oneauto-reports" },
     ],

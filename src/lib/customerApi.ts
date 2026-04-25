@@ -270,15 +270,20 @@ export interface KeyDetailResponse {
 
 export type AnalyticsMode = "customers" | "oneauto";
 
+/** `primary` = Konto 1, Dataset key_analytics. `secondary` = Konto 2, api_analytics. */
+export type AnalyticsBinding = "primary" | "secondary";
+
 function build(
   kind: string,
   range: Range,
   mode: AnalyticsMode,
+  binding: AnalyticsBinding,
   extra: Record<string, string> = {},
 ) {
   const qs = new URLSearchParams({
     kind,
     mode,
+    binding,
     from: range.from,
     to: range.to,
     ...extra,
@@ -287,37 +292,39 @@ function build(
 }
 
 /**
- * Erstellt einen Satz URL-Builder für einen bestimmten Mode (Kunden vs.
- * Oneauto). Beide Seiten teilen denselben Backend-Endpoint und unter-
- * scheiden sich nur in der WHERE-Bedingung.
+ * Erstellt URL-Builder für Mode (Kunden vs. Oneauto) und optionales
+ * zweites CF-Konto (api_analytics).
  */
-export function makeApiUrls(mode: AnalyticsMode) {
+export function makeApiUrls(
+  mode: AnalyticsMode,
+  binding: AnalyticsBinding = "primary",
+) {
   return {
-    overview: (r: Range) => build("overview", r, mode),
-    timeseries: (r: Range) => build("timeseries", r, mode),
+    overview: (r: Range) => build("overview", r, mode, binding),
+    timeseries: (r: Range) => build("timeseries", r, mode, binding),
     topKeys: (r: Range, limit = 20) =>
-      build("top-keys", r, mode, { limit: String(limit) }),
+      build("top-keys", r, mode, binding, { limit: String(limit) }),
     topBrands: (r: Range, limit = 8) =>
-      build("top-brands", r, mode, { limit: String(limit) }),
+      build("top-brands", r, mode, binding, { limit: String(limit) }),
     topModels: (r: Range, limit = 8) =>
-      build("top-models", r, mode, { limit: String(limit) }),
+      build("top-models", r, mode, binding, { limit: String(limit) }),
     topActions: (r: Range, limit = 8) =>
-      build("top-actions", r, mode, { limit: String(limit) }),
+      build("top-actions", r, mode, binding, { limit: String(limit) }),
     topPaths: (r: Range, limit = 10) =>
-      build("top-paths", r, mode, { limit: String(limit) }),
+      build("top-paths", r, mode, binding, { limit: String(limit) }),
     topViews: (r: Range, limit = 12) =>
-      build("top-views", r, mode, { limit: String(limit) }),
+      build("top-views", r, mode, binding, { limit: String(limit) }),
     statusCodes: (r: Range, limit = 10) =>
-      build("status-codes", r, mode, { limit: String(limit) }),
+      build("status-codes", r, mode, binding, { limit: String(limit) }),
     recent: (r: Range, limit = 100) =>
-      build("recent", r, mode, { limit: String(limit) }),
+      build("recent", r, mode, binding, { limit: String(limit) }),
     keyDetail: (r: Range, key: string) =>
-      build("key-detail", r, mode, { key }),
+      build("key-detail", r, mode, binding, { key }),
   };
 }
 
-/** Bestehende URLs (Kunden-Modus). Bleibt für Abwärtskompatibilität. */
-export const apiUrls = makeApiUrls("customers");
+/** Bestehende URLs (Kunden-Modus, primäres Konto). */
+export const apiUrls = makeApiUrls("customers", "primary");
 
 // ---------- Oneauto-Reports ----------
 

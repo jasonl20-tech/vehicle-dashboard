@@ -5,6 +5,7 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import KundenApiPage from "./pages/KundenApiPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
+import ApiAnalyticsPage from "./pages/ApiAnalyticsPage";
 import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
 import OverviewPage from "./pages/OverviewPage";
@@ -27,6 +28,10 @@ export default function App() {
         <Route path="/anfragen" element={<ModulePage />} />
         <Route path="/logs" element={<ModulePage />} />
         <Route path="/analytics/kunden-api" element={<KundenApiPage />} />
+        <Route
+          path="/analytics/api-analytics"
+          element={<ApiAnalyticsPage />}
+        />
         <Route path="/analytics/oneauto-api" element={<OneautoApiPage />} />
         <Route
           path="/analytics/oneauto-reports"

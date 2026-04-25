@@ -31,6 +31,10 @@ export interface AuthEnv {
    * Cloudflare unterscheidet Variablennamen case-sensitive.
    */
   CF_APi_TOKEN?: string;
+  /** Zweites CF-Konto für Analytics Engine (Dataset z. B. `api_analytics`). */
+  CF_ACCOUNT_ID_2?: string;
+  CF_API_TOKEN_2?: string;
+  CF_APi_TOKEN_2?: string;
 }
 
 // ---------- base64url helpers ----------

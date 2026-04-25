@@ -15,7 +15,6 @@ import {
   useMemo,
   useState,
 } from "react";
-// useMemo + ReactNode sind oben bereits importiert.
 import {
   Area,
   AreaChart,
@@ -33,6 +32,7 @@ import {
 } from "recharts";
 import {
   type AnalyticsMode,
+  type AnalyticsBinding,
   type KeyDetailResponse,
   type OverviewRow,
   PRESETS,
@@ -69,6 +69,8 @@ type TimeseriesResp = {
 interface KundenApiPageProps {
   /** Datenquelle: alle Kunden (Standard) oder nur der Oneauto-Key. */
   mode?: AnalyticsMode;
+  /** Primäres CF-Konto (key_analytics) oder zweites (api_analytics + CF_*_2). */
+  binding?: AnalyticsBinding;
   /** Wird im Header angezeigt – z. B. „Kunden API" oder „Oneauto API". */
   title?: string;
   /** Optionaler Subtitel/Header-Beschreibung. */
@@ -79,6 +81,7 @@ interface KundenApiPageProps {
 
 export default function KundenApiPage({
   mode = "customers",
+  binding = "primary",
   title = "Kunden API",
   description,
   eyebrow = "Analytics · Kunden API",
@@ -86,7 +89,7 @@ export default function KundenApiPage({
   const [range, setRange] = useState<Range>(() => rangeFromPreset("7d"));
   const [openKey, setOpenKey] = useState<string | null>(null);
 
-  const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
+  const apiUrls = useMemo(() => makeApiUrls(mode, binding), [mode, binding]);
 
   const overview = useApi<{ row: OverviewRow }>(apiUrls.overview(range));
   const timeseries = useApi<TimeseriesResp>(apiUrls.timeseries(range));
@@ -124,6 +127,7 @@ export default function KundenApiPage({
         eyebrow={eyebrow}
         description={description}
         mode={mode}
+        binding={binding}
       />
 
       <ErrorBanner
@@ -137,6 +141,7 @@ export default function KundenApiPage({
       />
 
       <DiagPanel
+        binding={binding}
         autoOpen={Boolean(
           overview.error &&
             (overview.error.includes("404") ||
@@ -255,6 +260,7 @@ export default function KundenApiPage({
           keyId={openKey}
           range={range}
           mode={mode}
+          binding={binding}
           onClose={() => setOpenKey(null)}
         />
       )}
@@ -272,6 +278,7 @@ function Header({
   eyebrow,
   description,
   mode,
+  binding,
 }: {
   range: Range;
   onRange: (r: Range) => void;
@@ -280,6 +287,7 @@ function Header({
   eyebrow: string;
   description?: ReactNode;
   mode: AnalyticsMode;
+  binding: AnalyticsBinding;
 }) {
   const defaultDescription =
     mode === "oneauto" ? (
@@ -291,6 +299,20 @@ function Header({
           e6dd0c88…ac31
         </span>
         ) gegen die API laufen.
+      </>
+    ) : binding === "secondary" ? (
+      <>
+        Statistik aus dem{" "}
+        <span className="font-mono text-[12.5px] text-ink-700">
+          api_analytics
+        </span>{" "}
+        -Dataset (zweites Cloudflare-Konto, Umgebungsvariablen{" "}
+        <span className="font-mono text-[11px] text-ink-700">
+          CF_ACCOUNT_ID_2
+        </span>{" "}
+        / <span className="font-mono text-[11px] text-ink-700">CF_API_TOKEN_2</span>
+        ). Gleiche Spalten wie das primäre Dataset; Key-Format z. B.{" "}
+        <span className="font-mono text-[11px] text-ink-700">vi_…</span>.
       </>
     ) : (
       <>
@@ -621,6 +643,8 @@ function SubSection({
 
 type DiagResp = {
   ok: boolean;
+  binding?: string;
+  dataset?: string;
   accountId: {
     present: boolean;
     masked: string | null;
@@ -639,20 +663,32 @@ type DiagResp = {
   error?: string;
 };
 
-function DiagPanel({ autoOpen }: { autoOpen?: boolean }) {
+function DiagPanel({
+  binding,
+  autoOpen,
+}: {
+  binding: AnalyticsBinding;
+  autoOpen?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<DiagResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [autoTriggered, setAutoTriggered] = useState(false);
 
+  const idLabel = binding === "secondary" ? "CF_ACCOUNT_ID_2" : "CF_ACCOUNT_ID";
+  const tokenLabel = binding === "secondary" ? "CF_API_TOKEN_2" : "CF_API_TOKEN";
+
   async function run() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch("/api/analytics/_diag", {
+      const res = await fetch(
+        `/api/analytics/_diag?binding=${encodeURIComponent(binding)}`,
+        {
         credentials: "include",
-      });
+        },
+      );
       const j = (await res.json().catch(() => ({}))) as DiagResp;
       setData(j);
     } catch (e) {
@@ -668,7 +704,7 @@ function DiagPanel({ autoOpen }: { autoOpen?: boolean }) {
       setOpen(true);
       run();
     }
-  }, [autoOpen, autoTriggered]);
+  }, [autoOpen, autoTriggered, binding]);
 
   return (
     <div className="mb-8">
@@ -714,8 +750,16 @@ function DiagPanel({ autoOpen }: { autoOpen?: boolean }) {
           )}
           {data && (
             <div className="grid gap-3 text-[12.5px] sm:grid-cols-2">
+              {data.dataset && (
+                <DiagRow
+                  label="Binding / Dataset"
+                  ok
+                  value={`${data.binding ?? binding} · ${data.dataset}`}
+                  mono
+                />
+              )}
               <DiagRow
-                label="CF_ACCOUNT_ID"
+                label={idLabel}
                 ok={data.accountId.valid && data.accountId.present}
                 value={
                   data.accountId.present
@@ -726,7 +770,7 @@ function DiagPanel({ autoOpen }: { autoOpen?: boolean }) {
                 detail={data.accountId.error || undefined}
               />
               <DiagRow
-                label="CF_API_TOKEN"
+                label={tokenLabel}
                 ok={data.token.present}
                 value={
                   data.token.present
@@ -1573,14 +1617,19 @@ function KeyDetailDrawer({
   keyId,
   range,
   mode,
+  binding,
   onClose,
 }: {
   keyId: string;
   range: Range;
   mode: AnalyticsMode;
+  binding: AnalyticsBinding;
   onClose: () => void;
 }) {
-  const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
+  const apiUrls = useMemo(
+    () => makeApiUrls(mode, binding),
+    [mode, binding],
+  );
   const detail = useApi<KeyDetailResponse>(apiUrls.keyDetail(range, keyId));
 
   useEffect(() => {

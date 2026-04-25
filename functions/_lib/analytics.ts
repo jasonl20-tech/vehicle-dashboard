@@ -25,6 +25,12 @@ import type { AuthEnv } from "./auth";
 
 export const KEY_ANALYTICS_DATASET = "key_analytics";
 
+/** Zweites Analytics-Engine-Dataset (anderes Konto, gleiches Schema). */
+export const API_ANALYTICS_DATASET = "api_analytics";
+
+/** Welches Cloudflare-Konto + Token für `runAeSql` genutzt wird. */
+export type AeAccountBinding = "primary" | "secondary";
+
 /** Spezieller Key, der zur Oneauto-Abrechnung gehört. */
 export const ONEAUTO_KEY = "e6dd0c88a1486d7aeb2d0e7a6423ac31";
 
@@ -45,16 +51,17 @@ function getToken(env: AuthEnv): string | null {
   return t ? t.trim() : null;
 }
 
+function getToken2(env: AuthEnv): string | null {
+  const t = env.CF_API_TOKEN_2 || env.CF_APi_TOKEN_2;
+  return t ? t.trim() : null;
+}
+
 const HEX32_GLOBAL = /[0-9a-f]{32}/i;
 const HEX32 = /^[0-9a-f]{32}$/i;
 const KNOWN_NOT_AN_ACCOUNT_ID = new Set(["", "your-account-id"]);
 
-function getAccountId(env: AuthEnv): string | null {
-  const raw = env.CF_ACCOUNT_ID;
+function parseAccountIdRaw(raw: string | undefined): string | null {
   if (!raw) return null;
-  // Pages-Variablen kommen aus Copy-Paste oft mit Whitespace, Quotes,
-  // Slashes oder einer ganzen URL drumherum. Wir ziehen die erste 32-Hex-
-  // Sequenz raus – das ist die Cloudflare-Account-ID.
   const cleaned = raw
     .trim()
     .replace(/^["']|["']$/g, "")
@@ -65,16 +72,65 @@ function getAccountId(env: AuthEnv): string | null {
   return cleaned;
 }
 
-export function validateAccountId(id: string | null): string | null {
-  if (!id) return "CF_ACCOUNT_ID ist leer.";
+function getAccountId(env: AuthEnv): string | null {
+  return parseAccountIdRaw(env.CF_ACCOUNT_ID);
+}
+
+function getAccountId2(env: AuthEnv): string | null {
+  return parseAccountIdRaw(env.CF_ACCOUNT_ID_2);
+}
+
+export function validateAccountId(
+  id: string | null,
+  label = "CF_ACCOUNT_ID",
+): string | null {
+  if (!id) return `${label} ist leer.`;
   if (KNOWN_NOT_AN_ACCOUNT_ID.has(id.toLowerCase())) {
-    return "CF_ACCOUNT_ID ist offensichtlich ein Platzhalter.";
+    return `${label} ist offensichtlich ein Platzhalter.`;
   }
   if (!HEX32.test(id)) {
-    return `CF_ACCOUNT_ID '${id.slice(0, 6)}…' sieht nicht wie eine Cloudflare-Account-ID aus (32 Hex-Zeichen erwartet).`;
+    return `${label} '${id.slice(0, 6)}…' sieht nicht wie eine Cloudflare-Account-ID aus (32 Hex-Zeichen erwartet).`;
   }
   return null;
 }
+
+/** Dataset + optionale Fehlermeldung, wenn Creds für das Binding fehlen. */
+export function resolveAnalyticsBinding(
+  env: AuthEnv,
+  binding: AeAccountBinding,
+): { dataset: string; error: string | null } {
+  if (binding === "primary") {
+    const acc = getAccountId(env);
+    const tok = getToken(env);
+    if (!acc || !tok) {
+      return {
+        dataset: KEY_ANALYTICS_DATASET,
+        error:
+          "CF_ACCOUNT_ID und CF_API_TOKEN müssen im Pages-Environment gesetzt sein.",
+      };
+    }
+    const ve = validateAccountId(acc, "CF_ACCOUNT_ID");
+    if (ve) return { dataset: KEY_ANALYTICS_DATASET, error: ve };
+    return { dataset: KEY_ANALYTICS_DATASET, error: null };
+  }
+  const acc = getAccountId2(env);
+  const tok = getToken2(env);
+  if (!acc || !tok) {
+    return {
+      dataset: API_ANALYTICS_DATASET,
+      error:
+        "Für binding=secondary müssen CF_ACCOUNT_ID_2 und CF_API_TOKEN_2 im Pages-Environment gesetzt sein.",
+    };
+  }
+  const ve = validateAccountId(acc, "CF_ACCOUNT_ID_2");
+  if (ve) return { dataset: API_ANALYTICS_DATASET, error: ve };
+  return { dataset: API_ANALYTICS_DATASET, error: null };
+}
+
+export type RunAeSqlOptions = {
+  /** Standard: primäres Konto (key_analytics). Secondary: Konto 2 (api_analytics). */
+  binding?: AeAccountBinding;
+};
 
 /**
  * Führt eine SQL-Query gegen die Analytics-Engine SQL-API aus.
@@ -98,18 +154,28 @@ function maskId(id: string): string {
 export async function runAeSql<T extends AeRow = AeRow>(
   env: AuthEnv,
   sql: string,
+  options?: RunAeSqlOptions,
 ): Promise<AeResponse<T>> {
-  const accountId = getAccountId(env);
-  const token = getToken(env);
+  const binding = options?.binding ?? "primary";
+  const accountId =
+    binding === "secondary" ? getAccountId2(env) : getAccountId(env);
+  const token = binding === "secondary" ? getToken2(env) : getToken(env);
+  const idLabel =
+    binding === "secondary" ? "CF_ACCOUNT_ID_2" : "CF_ACCOUNT_ID";
+  const tokLabel =
+    binding === "secondary" ? "CF_API_TOKEN_2" : "CF_API_TOKEN";
 
   if (!accountId || !token) {
     throw new Error(
-      "CF_ACCOUNT_ID oder CF_API_TOKEN fehlt im Pages-Environment. " +
-        "Bitte beide Variablen im Cloudflare-Dashboard setzen.",
+      binding === "secondary"
+        ? `${idLabel} oder ${tokLabel} fehlt im Pages-Environment. ` +
+            "Beide im Cloudflare-Dashboard setzen (Zweitkonto für api_analytics)."
+        : "CF_ACCOUNT_ID oder CF_API_TOKEN fehlt im Pages-Environment. " +
+            "Bitte beide Variablen im Cloudflare-Dashboard setzen.",
     );
   }
 
-  const accErr = validateAccountId(accountId);
+  const accErr = validateAccountId(accountId, idLabel);
   if (accErr) {
     const err = new Error(accErr) as AeSqlError;
     err.hint =
@@ -181,11 +247,23 @@ export async function runAeSql<T extends AeRow = AeRow>(
   return json;
 }
 
+export type DiagnoseAeOptions = { binding?: AeAccountBinding };
+
 /** Sicherer Diagnose-Helper – ruft eine triviale Query und liefert
  *  detaillierte Infos für das Debugging zurück (ohne Token). */
-export async function diagnoseAe(env: AuthEnv): Promise<{
+export async function diagnoseAe(
+  env: AuthEnv,
+  options?: DiagnoseAeOptions,
+): Promise<{
   ok: boolean;
-  accountId: { present: boolean; masked: string | null; valid: boolean; error: string | null };
+  binding: AeAccountBinding;
+  dataset: string;
+  accountId: {
+    present: boolean;
+    masked: string | null;
+    valid: boolean;
+    error: string | null;
+  };
   token: { present: boolean; length: number };
   endpoint: string | null;
   test?: {
@@ -197,12 +275,21 @@ export async function diagnoseAe(env: AuthEnv): Promise<{
   hint?: string;
   error?: string;
 }> {
-  const accountId = getAccountId(env);
-  const token = getToken(env);
-  const accErr = validateAccountId(accountId);
+  const binding: AeAccountBinding = options?.binding ?? "primary";
+  const idLabel = binding === "secondary" ? "CF_ACCOUNT_ID_2" : "CF_ACCOUNT_ID";
+  const tokLabel = binding === "secondary" ? "CF_API_TOKEN_2" : "CF_API_TOKEN";
+  const dataset =
+    binding === "secondary" ? API_ANALYTICS_DATASET : KEY_ANALYTICS_DATASET;
+
+  const accountId =
+    binding === "secondary" ? getAccountId2(env) : getAccountId(env);
+  const token = binding === "secondary" ? getToken2(env) : getToken(env);
+  const accErr = validateAccountId(accountId, idLabel);
 
   const result = {
     ok: false,
+    binding,
+    dataset,
     accountId: {
       present: !!accountId,
       masked: accountId ? maskId(accountId) : null,
@@ -213,10 +300,10 @@ export async function diagnoseAe(env: AuthEnv): Promise<{
     endpoint: accountId
       ? `https://api.cloudflare.com/client/v4/accounts/${maskId(accountId)}/analytics_engine/sql`
       : null,
-  } as Awaited<ReturnType<typeof diagnoseAe>>;
+  };
 
   if (!accountId || !token) {
-    result.error = "CF_ACCOUNT_ID oder CF_API_TOKEN fehlt.";
+    result.error = `${idLabel} oder ${tokLabel} fehlt.`;
     return result;
   }
   if (accErr) {
@@ -227,7 +314,11 @@ export async function diagnoseAe(env: AuthEnv): Promise<{
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(
     accountId,
   )}/analytics_engine/sql`;
-  const sql = `SELECT 1 AS one FROM ${KEY_ANALYTICS_DATASET} LIMIT 1 FORMAT JSON`;
+  const sql = `SELECT 1 AS one FROM ${dataset} LIMIT 1 FORMAT JSON`;
+  const datasetHint =
+    binding === "secondary"
+      ? "Dataset existiert evtl. nicht – heißt er wirklich 'api_analytics'?"
+      : "Dataset existiert evtl. nicht – heißt er wirklich 'key_analytics'?";
 
   try {
     const res = await fetch(url, {
@@ -256,11 +347,11 @@ export async function diagnoseAe(env: AuthEnv): Promise<{
     } else {
       if (res.status === 404) {
         result.hint =
-          "404 → CF_ACCOUNT_ID gehört nicht zum Token, Token hat keine 'Account Analytics: Read'-Permission, oder AE ist nicht aktiv (Workers Paid nötig).";
+          "404 → Account-ID gehört nicht zum Token, Token hat keine 'Account Analytics: Read'-Permission, oder AE ist nicht aktiv (Workers Paid nötig).";
       } else if (res.status === 401 || res.status === 403) {
         result.hint = "Token ungültig oder ohne Analytics-Permission.";
       } else if (res.status === 400) {
-        result.hint = "Dataset existiert evtl. nicht – heißt er wirklich 'key_analytics'?";
+        result.hint = datasetHint;
       }
     }
   } catch (e) {
