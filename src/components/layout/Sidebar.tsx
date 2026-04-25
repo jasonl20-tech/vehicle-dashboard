@@ -44,7 +44,14 @@ const NAV_PRIMARY: NavItem[] = [
       { label: "Oneauto Reports", to: "/analytics/oneauto-reports" },
     ],
   },
-  { label: "Zahlungen", icon: Wallet, to: "/zahlungen" },
+  {
+    label: "Zahlungen",
+    icon: Wallet,
+    children: [
+      { label: "Zahlungslinks", to: "/zahlungen/zahlungslinks" },
+      { label: "Pläne", to: "/zahlungen/plaene" },
+    ],
+  },
   {
     label: "Webseite",
     icon: Globe,

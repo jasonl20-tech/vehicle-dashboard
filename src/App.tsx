@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import KundenApiPage from "./pages/KundenApiPage";
@@ -8,7 +8,8 @@ import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
-import ZahlungenPage from "./pages/ZahlungenPage";
+import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
+import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
 export default function App() {
   return (
@@ -36,10 +37,20 @@ export default function App() {
           path="/analytics"
           element={<Navigate to="/analytics/kunden-api" replace />}
         />
-        <Route path="/zahlungen" element={<ZahlungenPage />} />
+        <Route path="/zahlungen" element={<Outlet />}>
+          <Route
+            index
+            element={<Navigate to="zahlungslinks" replace />}
+          />
+          <Route
+            path="zahlungslinks"
+            element={<ZahlungenZahlungslinksPage />}
+          />
+          <Route path="plaene" element={<ZahlungenPlaenePage />} />
+        </Route>
         <Route
           path="/zahlungslinks"
-          element={<Navigate to="/zahlungen" replace />}
+          element={<Navigate to="/zahlungen/zahlungslinks" replace />}
         />
         <Route path="/website/blogs" element={<ModulePage />} />
         <Route path="/website/landing-pages" element={<ModulePage />} />
