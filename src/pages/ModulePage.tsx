@@ -36,6 +36,11 @@ const META: Record<
     eyebrow: "Systeme",
     description: "System-Prompts und Vorlagen – Inhalte folgen.",
   },
+  "/systeme/mapping": {
+    title: "Mapping",
+    eyebrow: "Systeme",
+    description: "Feld- und Quell-Mappings, Transformationen – Inhalte folgen.",
+  },
   "/logs": {
     title: "Logs",
     eyebrow: "System",

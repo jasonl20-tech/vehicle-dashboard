@@ -89,7 +89,10 @@ const NAV_PRIMARY: NavItem[] = [
   {
     label: "Systeme",
     icon: Server,
-    children: [{ label: "Prompts", to: "/systeme/prompts" }],
+    children: [
+      { label: "Prompts", to: "/systeme/prompts" },
+      { label: "Mapping", to: "/systeme/mapping" },
+    ],
   },
 ];
 

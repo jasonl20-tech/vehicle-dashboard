@@ -44,6 +44,7 @@ export default function App() {
           element={<Navigate to="/kunden/newsletter" replace />}
         />
         <Route path="/systeme/prompts" element={<ModulePage />} />
+        <Route path="/systeme/mapping" element={<ModulePage />} />
         <Route
           path="/systeme"
           element={<Navigate to="/systeme/prompts" replace />}
