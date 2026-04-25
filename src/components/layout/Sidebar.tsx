@@ -8,7 +8,6 @@ import {
   Globe,
   Inbox,
   LayoutDashboard,
-  Link2,
   LogOut,
   type LucideIcon,
   Mails,
@@ -16,6 +15,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Wallet,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -44,7 +44,7 @@ const NAV_PRIMARY: NavItem[] = [
       { label: "Oneauto Reports", to: "/analytics/oneauto-reports" },
     ],
   },
-  { label: "Zahlungslinks", icon: Link2, to: "/zahlungslinks" },
+  { label: "Zahlungen", icon: Wallet, to: "/zahlungen" },
   {
     label: "Webseite",
     icon: Globe,

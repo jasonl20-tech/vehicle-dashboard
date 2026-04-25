@@ -147,12 +147,21 @@ export async function stripeListPaymentLinks(
   return parseListWithLineItemPrices(j);
 }
 
+function firstPriceIdFromExpandedPlBody(o: {
+  line_items?: { data: Array<{ price?: string | { id: string } }> };
+}): string | null {
+  const pr = o.line_items?.data?.[0]?.price;
+  if (!pr) return null;
+  return typeof pr === "string" ? pr : pr.id;
+}
+
 export async function stripeGetPaymentLink(
   env: { STRIPE_SECRET_KEY?: string },
   id: string,
 ): Promise<StripePaymentLink> {
   const u = new URL(`${API}/payment_links/${encodeURIComponent(id)}`);
-  u.searchParams.set("expand[]", "line_items");
+  u.searchParams.append("expand[]", "line_items");
+  u.searchParams.append("expand[]", "line_items.data.price");
   const res = await fetch(u.toString(), {
     headers: { Authorization: `Bearer ${getSecret(env)}` },
   });
@@ -161,6 +170,31 @@ export async function stripeGetPaymentLink(
     throw new Error(`Stripe get payment_link ${res.status}: ${text.slice(0, 400)}`);
   }
   return JSON.parse(text) as StripePaymentLink;
+}
+
+/**
+ * Ob bereits ein aktiver Payment Link mit gleichem Plan-Key (metadata.price_id)
+ * und gleicher Stripe-Preis-ID existiert.
+ */
+export async function stripePaymentLinkPairExists(
+  env: { STRIPE_SECRET_KEY?: string },
+  planKey: string,
+  stripePriceId: string,
+): Promise<boolean> {
+  const links = await stripeListPaymentLinks(env, 100);
+  for (const link of links) {
+    if (!link.active) continue;
+    if (link.metadata?.price_id !== planKey) continue;
+    let pid = link.firstPrice?.id ?? null;
+    if (!pid) {
+      const raw = await stripeGetPaymentLink(env, link.id);
+      pid = firstPriceIdFromExpandedPlBody(
+        raw as { line_items?: { data: Array<{ price?: string | { id: string } }> } },
+      );
+    }
+    if (pid === stripePriceId) return true;
+  }
+  return false;
 }
 
 /** Eintrag für Preis-Dropdown (aktive Preise, Produkt-Name per expand). */

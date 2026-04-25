@@ -7,6 +7,8 @@ type Props = {
   description?: ReactNode;
   rightSlot?: ReactNode;
   primaryAction?: { label: string; onClick?: () => void };
+  /** Versteckt Zeitraum-Dropdown („Letzte 7 Tage“ …) und Benachrichtigungs-Glocke. */
+  hideCalendarAndNotifications?: boolean;
 };
 
 const RANGES = [
@@ -22,6 +24,7 @@ export default function PageHeader({
   description,
   rightSlot,
   primaryAction,
+  hideCalendarAndNotifications = false,
 }: Props) {
   const [range, setRange] = useState(RANGES[1]);
   const [open, setOpen] = useState(false);
@@ -45,47 +48,51 @@ export default function PageHeader({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {rightSlot}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="inline-flex items-center gap-2 rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:border-ink-300"
-          >
-            <Calendar className="h-3.5 w-3.5 text-ink-400" />
-            {range}
-            <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
-          </button>
-          {open && (
-            <div
-              role="menu"
-              className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-lg border border-hair bg-white py-1 shadow-[0_10px_30px_-12px_rgba(13,13,15,0.18)]"
-            >
-              {RANGES.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => {
-                    setRange(r);
-                    setOpen(false);
-                  }}
-                  className={`block w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-50 ${
-                    r === range ? "text-ink-900 font-medium" : "text-ink-600"
-                  }`}
+        {!hideCalendarAndNotifications && (
+          <>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:border-ink-300"
+              >
+                <Calendar className="h-3.5 w-3.5 text-ink-400" />
+                {range}
+                <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
+              </button>
+              {open && (
+                <div
+                  role="menu"
+                  className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-lg border border-hair bg-white py-1 shadow-[0_10px_30px_-12px_rgba(13,13,15,0.18)]"
                 >
-                  {r}
-                </button>
-              ))}
+                  {RANGES.map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => {
+                        setRange(r);
+                        setOpen(false);
+                      }}
+                      className={`block w-full px-3 py-1.5 text-left text-[12.5px] hover:bg-ink-50 ${
+                        r === range ? "text-ink-900 font-medium" : "text-ink-600"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        <button
-          type="button"
-          title="Benachrichtigungen"
-          className="relative rounded-md border border-hair bg-white p-1.5 text-ink-500 hover:border-ink-300 hover:text-ink-800"
-        >
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent-rose" />
-        </button>
+            <button
+              type="button"
+              title="Benachrichtigungen"
+              className="relative rounded-md border border-hair bg-white p-1.5 text-ink-500 hover:border-ink-300 hover:text-ink-800"
+            >
+              <Bell className="h-4 w-4" />
+              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-accent-rose" />
+            </button>
+          </>
+        )}
         {primaryAction && (
           <button
             type="button"

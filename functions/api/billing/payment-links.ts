@@ -5,6 +5,7 @@ import {
 import {
   stripeCreatePaymentLink,
   stripeListPaymentLinks,
+  stripePaymentLinkPairExists,
 } from "../../_lib/stripeClient";
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -132,6 +133,21 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
             '"stripe_price_id": "price_…" ein.',
       },
       { status: 400 },
+    );
+  }
+
+  const duplicate = await stripePaymentLinkPairExists(
+    env,
+    planKey,
+    stripePriceId,
+  );
+  if (duplicate) {
+    return jsonResponse(
+      {
+        error:
+          "Diese Kombination aus Stripe-Preis und Plan-Key existiert bereits (aktiver Payment Link).",
+      },
+      { status: 409 },
     );
   }
 
