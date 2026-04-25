@@ -1,6 +1,6 @@
 # Vehicle Dashboard
 
-Modernes Fleet-/Fahrzeug-Analytics-Dashboard auf Basis von **Vite + React + TypeScript + TailwindCSS + Recharts**.
+Modernes Fleet-Dashboard auf Basis von **Vite + React + TypeScript + TailwindCSS + Recharts**.
 Backend (Auth + DB-Zugriff) läuft als **Cloudflare Pages Functions** mit einer **D1-Datenbank**.
 
 Repository: [`jasonl20-tech/vehicle-dashboard`](https://github.com/jasonl20-tech/vehicle-dashboard)
@@ -11,7 +11,6 @@ Repository: [`jasonl20-tech/vehicle-dashboard`](https://github.com/jasonl20-tech
 - Dunkle Sidebar mit ⌘K-Suche und User-Profil (Profilbild, Titel, Banner, Sicherheitsstufe)
 - Login-Flow mit signierter Session (HMAC-SHA256, HttpOnly-Cookie)
 - Geschützte Routen via `<ProtectedRoute>`
-- Fahrzeug-Analytics-Seite mit Sparklines, Linien- und Bar-Chart
 - Sortier-/such-/exportierbare Performance-Tabelle
 - Übersicht, Flotte, Fahrten, Fahrer, Wartung, Einstellungen
 
@@ -85,14 +84,13 @@ npm run build
 src/
   components/
     auth/          ProtectedRoute
-    charts/        Sparkline / Area / Bar
     layout/        Sidebar + Layout
     tables/        Performance-Tabelle
     ui/            PageHeader
   lib/
     auth.tsx       AuthProvider, useAuth
   pages/
-    AnalyticsPage  ·  OverviewPage  ·  FleetPage
+    OverviewPage  ·  FleetPage
     LoginPage      ·  TripsPage     ·  DriversPage
     MaintenancePage ·  SettingsPage
   App.tsx
