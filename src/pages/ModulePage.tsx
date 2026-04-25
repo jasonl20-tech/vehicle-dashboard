@@ -81,12 +81,6 @@ const META: Record<
     eyebrow: "Datenbanken",
     description: "Verbindung und Schema-Überblick (Produktivumgebung).",
   },
-  "/intern-analytics/controlling": {
-    title: "Controlling",
-    eyebrow: "Intern Analytics",
-    description:
-      "Interne Kennzahlen, Kosten und Deckungsbeiträge – Inhalte folgen.",
-  },
 };
 
 const DEFAULT_META = {
