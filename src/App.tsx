@@ -23,6 +23,8 @@ export default function App() {
         <Route path="/crm" element={<ModulePage />} />
         <Route path="/anfragen" element={<ModulePage />} />
         <Route path="/logs" element={<ModulePage />} />
+        <Route path="/analytics/kunden-api" element={<ModulePage />} />
+        <Route path="/analytics/oneauto-api" element={<ModulePage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/zahlungslinks" element={<ModulePage />} />
         <Route path="/website/blogs" element={<ModulePage />} />

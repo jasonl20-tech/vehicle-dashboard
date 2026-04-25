@@ -22,7 +22,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Logo } from "../brand/Logo";
 
-type NavChild = { label: string; to: string };
+type NavChild = { label: string; to: string; end?: boolean };
 type NavItem = {
   label: string;
   icon: LucideIcon;
@@ -35,7 +35,15 @@ const NAV_PRIMARY: NavItem[] = [
   { label: "CRM", icon: Building2, to: "/crm" },
   { label: "Anfragen", icon: Inbox, to: "/anfragen" },
   { label: "Logs", icon: ScrollText, to: "/logs" },
-  { label: "Analytics", icon: BarChart3, to: "/analytics" },
+  {
+    label: "Analytics",
+    icon: BarChart3,
+    children: [
+      { label: "Fahrzeug-Analytics", to: "/analytics", end: true },
+      { label: "Kunden API", to: "/analytics/kunden-api" },
+      { label: "Oneauto API", to: "/analytics/oneauto-api" },
+    ],
+  },
   { label: "Zahlungslinks", icon: Link2, to: "/zahlungslinks" },
   {
     label: "Webseite",
@@ -194,6 +202,7 @@ function Nav({
                       <li key={child.to + child.label}>
                         <NavLink
                           to={child.to}
+                          end={child.end}
                           onClick={onNavigate}
                           className={({ isActive }) =>
                             `block rounded-md px-2.5 py-1 text-[12.5px] transition-colors ${

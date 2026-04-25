@@ -21,6 +21,16 @@ const META: Record<
     eyebrow: "System",
     description: "Ereignis- und Anwendungsprotokolle.",
   },
+  "/analytics/kunden-api": {
+    title: "Kunden API",
+    eyebrow: "Analytics",
+    description: "API-Übersicht, Keys und Nutzung für Kunden-Integrationen.",
+  },
+  "/analytics/oneauto-api": {
+    title: "Oneauto API",
+    eyebrow: "Analytics",
+    description: "Oneauto-Schnittstelle – Endpunkte, Authentifizierung und Quoten.",
+  },
   "/zahlungslinks": {
     title: "Zahlungslinks",
     eyebrow: "Zahlungen",
