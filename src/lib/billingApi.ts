@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 
 export const BILLING_PAYMENT_LINKS = "/api/billing/payment-links";
 export const BILLING_PAYMENT_LINK = "/api/billing/payment-link";
+export const BILLING_PAYMENT_LINK_ARCHIVE = "/api/billing/payment-link-archive";
 export const BILLING_PLANS = "/api/billing/plans";
 
 export type StripePaymentLinkRow = {
@@ -97,14 +98,31 @@ export async function putPlan(
   if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
 }
 
-export async function deletePlanKey(key: string): Promise<void> {
-  const res = await fetch(
-    `${BILLING_PLANS}?key=${encodeURIComponent(key)}`,
-    {
-      method: "DELETE",
-      credentials: "include",
-    },
-  );
+export async function createPaymentLink(
+  planKey: string,
+  stripePriceId: string,
+): Promise<void> {
+  const res = await fetch(BILLING_PAYMENT_LINKS, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ planKey, stripePriceId }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+}
+
+/** `active: false` = archivieren, `true` = wieder aktivieren. */
+export async function setPaymentLinkActive(
+  paymentLinkId: string,
+  active: boolean,
+): Promise<void> {
+  const res = await fetch(BILLING_PAYMENT_LINK_ARCHIVE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ paymentLinkId, active }),
+  });
   const j = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
 }

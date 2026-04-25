@@ -1,5 +1,11 @@
-import { stripeListPaymentLinks } from "../../_lib/stripeClient";
+import {
+  stripeCreatePaymentLink,
+  stripeListPaymentLinks,
+} from "../../_lib/stripeClient";
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+
+const PLAN_KEY_RE = /^[a-zA-Z0-9_.-]{1,200}$/;
+const STRIPE_PRICE_RE = /^price_[a-zA-Z0-9]+$/;
 
 /**
  * GET /api/billing/payment-links
@@ -22,6 +28,89 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   try {
     const paymentLinks = await stripeListPaymentLinks(env, 100);
     return jsonResponse({ paymentLinks }, { status: 200 });
+  } catch (e) {
+    return jsonResponse(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
+};
+
+type CreateBody = { planKey?: string; stripePriceId?: string };
+
+/**
+ * POST /api/billing/payment-links
+ * Legt einen neuen Payment Link an; `price_id` (Metadaten) = vorhandener KV-Plan-Key.
+ * Body: { "planKey": "plan_test", "stripePriceId": "price_…" }
+ */
+export const onRequestPost: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  if (!env.STRIPE_SECRET_KEY?.trim()) {
+    return jsonResponse(
+      { error: "STRIPE_SECRET_KEY ist nicht gesetzt" },
+      { status: 503 },
+    );
+  }
+  if (!env.plans) {
+    return jsonResponse(
+      {
+        error:
+          "KV-Binding `plans` fehlt – ohne Plan-Speicher kann kein Payment Link verknüpft werden.",
+      },
+      { status: 503 },
+    );
+  }
+
+  let body: CreateBody;
+  try {
+    body = (await request.json()) as CreateBody;
+  } catch {
+    return jsonResponse({ error: "Ungültige JSON-Anfrage" }, { status: 400 });
+  }
+
+  const planKey =
+    typeof body.planKey === "string" ? body.planKey.trim() : "";
+  const stripePriceId =
+    typeof body.stripePriceId === "string" ? body.stripePriceId.trim() : "";
+
+  if (!planKey || !PLAN_KEY_RE.test(planKey)) {
+    return jsonResponse(
+      { error: "planKey fehlt oder ist ungültig" },
+      { status: 400 },
+    );
+  }
+  if (!stripePriceId || !STRIPE_PRICE_RE.test(stripePriceId)) {
+    return jsonResponse(
+      {
+        error:
+          "stripePriceId muss eine Stripe-Preis-ID sein (beginnt mit price_)",
+      },
+      { status: 400 },
+    );
+  }
+
+  const exists = await env.plans.get(planKey, "text");
+  if (exists == null) {
+    return jsonResponse(
+      {
+        error: `Kein Plan im KV unter „${planKey}“ – zuerst anlegen oder anderen Key wählen.`,
+      },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const paymentLink = await stripeCreatePaymentLink(env, {
+      stripePriceId,
+      planKey,
+    });
+    return jsonResponse({ paymentLink }, { status: 201 });
   } catch (e) {
     return jsonResponse(
       { error: e instanceof Error ? e.message : String(e) },

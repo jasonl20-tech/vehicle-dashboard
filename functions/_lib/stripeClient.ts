@@ -69,6 +69,57 @@ export async function stripeGetPaymentLink(
  * Setzt/merged Metadaten am Payment Link (trägt alle Werte, die in `metadata` stehen, ein;
  * leere Werte entfernen optional via Key nicht mitsenden – wir mergen zuerst mit dem aktuellen Stand).
  */
+/**
+ * Neuen Payment Link anlegen: ein Line Item (Stripe-Preis) + Metadaten `price_id` = KV-Plan-Key.
+ * @see https://stripe.com/docs/api/payment_links/create
+ */
+export async function stripeCreatePaymentLink(
+  env: { STRIPE_SECRET_KEY?: string },
+  params: { stripePriceId: string; planKey: string },
+): Promise<StripePaymentLink> {
+  const p = new URLSearchParams();
+  p.set("line_items[0][price]", params.stripePriceId);
+  p.set("line_items[0][quantity]", "1");
+  p.set("metadata[price_id]", params.planKey);
+
+  const res = await fetch(`${API}/payment_links`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getSecret(env)}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: p.toString(),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Stripe create payment_link ${res.status}: ${text.slice(0, 600)}`);
+  }
+  return JSON.parse(text) as StripePaymentLink;
+}
+
+/** Archivieren = in Stripe deaktivieren (`active: false`). */
+export async function stripeSetPaymentLinkActive(
+  env: { STRIPE_SECRET_KEY?: string },
+  id: string,
+  active: boolean,
+): Promise<StripePaymentLink> {
+  const p = new URLSearchParams();
+  p.set("active", active ? "true" : "false");
+  const res = await fetch(`${API}/payment_links/${encodeURIComponent(id)}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getSecret(env)}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: p.toString(),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Stripe set payment_link active ${res.status}: ${text.slice(0, 500)}`);
+  }
+  return JSON.parse(text) as StripePaymentLink;
+}
+
 export async function stripeUpdatePaymentLinkMetadata(
   env: { STRIPE_SECRET_KEY?: string },
   id: string,

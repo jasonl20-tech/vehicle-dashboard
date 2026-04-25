@@ -118,28 +118,3 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
   await kv.put(key, text);
   return jsonResponse({ ok: true, key }, { status: 200 });
 };
-
-/**
- * DELETE /api/billing/plans?key=plan_test
- */
-export const onRequestDelete: PagesFunction<AuthEnv> = async ({
-  request,
-  env,
-}) => {
-  const user = await getCurrentUser(env, request);
-  if (!user) {
-    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
-  }
-
-  const kv = requirePlans(env);
-  if (kv instanceof Response) return kv;
-
-  const url = new URL(request.url);
-  const key = (url.searchParams.get("key") || "").trim();
-  if (!key || !KEY_RE.test(key)) {
-    return jsonResponse({ error: "Query key fehlt oder ungültig" }, { status: 400 });
-  }
-
-  await kv.delete(key);
-  return jsonResponse({ ok: true, key }, { status: 200 });
-};

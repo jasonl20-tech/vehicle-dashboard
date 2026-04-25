@@ -1,14 +1,22 @@
-import { ExternalLink, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ExternalLink,
+  Pencil,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BILLING_PAYMENT_LINKS,
   BILLING_PLANS,
-  deletePlanKey,
+  createPaymentLink,
   type PaymentLinksResponse,
   type PlansListResponse,
   plansUrlOne,
   postPaymentLinkMetadata,
   putPlan,
+  setPaymentLinkActive,
   useJsonApi,
 } from "../lib/billingApi";
 import PageHeader from "../components/ui/PageHeader";
@@ -21,6 +29,7 @@ export default function ZahlungslinksPage() {
     id: string;
     priceId: string;
   } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const [planKey, setPlanKey] = useState<string | null>(null);
   const { data: planOne, error: planErr, loading: planLoading, reload: planReload } =
@@ -37,13 +46,20 @@ export default function ZahlungslinksPage() {
     [kvs.data?.keys],
   );
 
+  const sortedLinks = useMemo(() => {
+    const rows = pl.data?.paymentLinks ?? [];
+    return [...rows].sort((a, b) => {
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      return b.created - a.created;
+    });
+  }, [pl.data?.paymentLinks]);
+
   const reloadAll = useCallback(() => {
     pl.reload();
     kvs.reload();
     if (planKey) planReload();
   }, [pl, kvs, planKey, planReload]);
 
-  // Sync editor from loaded plan
   return (
     <>
       <PageHeader
@@ -51,23 +67,38 @@ export default function ZahlungslinksPage() {
         title="Zahlungslinks"
         description={
           <>
-            Stripe Payment Links mit deinem KV-Plan koppeln: Metadaten
-            <span className="font-mono text-[12px] text-ink-700"> price_id</span>{" "}
-            = Key im KV <span className="font-mono text-ink-700">plans</span>
-            (z. B. <span className="font-mono">plan_test</span>).
+            Neue Payment Links legst du hier an und verknüpfst sie mit einem
+            bestehenden KV-Plan. Archivieren deaktiviert den Link in Stripe
+            (kein Löschen). KV-Pläne werden nicht gelöscht, nur bearbeitet.
           </>
         }
         rightSlot={
-          <button
-            type="button"
-            onClick={reloadAll}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
-            title="Aktualisieren"
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${pl.loading || kvs.loading ? "animate-spin" : ""}`}
-            />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              disabled={!kvs.data?.keys?.length}
+              title={
+                !kvs.data?.keys?.length
+                  ? "Zuerst mindestens einen Plan im KV anlegen"
+                  : undefined
+              }
+              className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-ink-900 px-2.5 py-1.5 text-[11.5px] font-medium text-white transition-colors hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Neuer Payment Link
+            </button>
+            <button
+              type="button"
+              onClick={reloadAll}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
+              title="Aktualisieren"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${pl.loading || kvs.loading ? "animate-spin" : ""}`}
+              />
+            </button>
+          </div>
         }
       />
 
@@ -83,36 +114,45 @@ export default function ZahlungslinksPage() {
           Stripe Payment Links
         </h2>
         <p className="mb-4 text-[12.5px] text-ink-500">
-          <span className="font-mono">price_id</span> in den Metadaten muss
-          exakt dem KV-Key deines Plans entsprechen.
+          <span className="font-mono">price_id</span> verweist auf den KV-Key.
+          Archivierte Links sind in Stripe deaktiviert, bleiben aber sichtbar.
         </p>
         {pl.loading && !pl.data ? (
           <p className="text-[13px] text-ink-400">Lade …</p>
         ) : (
           <div className="overflow-x-auto rounded-md border border-hair">
-            <table className="w-full min-w-[720px] text-left text-[12.5px]">
+            <table className="w-full min-w-[860px] text-left text-[12.5px]">
               <thead>
                 <tr className="border-b border-hair bg-ink-50/80">
-                  <th className="px-3 py-2 font-medium text-ink-600">Aktiv</th>
+                  <th className="px-3 py-2 font-medium text-ink-600">Status</th>
                   <th className="px-3 py-2 font-medium text-ink-600">
                     price_id (KV-Key)
                   </th>
                   <th className="px-3 py-2 font-medium text-ink-600">KV</th>
                   <th className="px-3 py-2 font-medium text-ink-600">URL</th>
-                  <th className="px-3 py-2 font-medium text-ink-600">Aktion</th>
+                  <th className="px-3 py-2 font-medium text-ink-600">Aktionen</th>
                 </tr>
               </thead>
               <tbody>
-                {(pl.data?.paymentLinks ?? []).map((row) => {
+                {sortedLinks.map((row) => {
                   const pid = row.metadata?.price_id ?? "–";
                   const inKv = pid && pid !== "–" && keySet.has(pid);
                   return (
                     <tr
                       key={row.id}
-                      className="border-b border-hair/80 last:border-0"
+                      className={`border-b border-hair/80 last:border-0 ${
+                        !row.active ? "bg-ink-50/60 text-ink-500" : ""
+                      }`}
                     >
                       <td className="px-3 py-2">
-                        {row.active ? "Ja" : "Nein"}
+                        {row.active ? (
+                          <span className="text-emerald-800">Aktiv</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-ink-500">
+                            <Archive className="h-3 w-3" />
+                            Archiviert
+                          </span>
+                        )}
                         {row.livemode ? " · live" : " · Test"}
                       </td>
                       <td className="px-3 py-2 font-mono text-[11.5px] text-ink-800">
@@ -143,26 +183,76 @@ export default function ZahlungslinksPage() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditPl({
-                              id: row.id,
-                              priceId: row.metadata?.price_id ?? "",
-                            })
-                          }
-                          className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
-                        >
-                          <Pencil className="h-3 w-3" />
-                          Metadaten
-                        </button>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditPl({
+                                id: row.id,
+                                priceId: row.metadata?.price_id ?? "",
+                              })
+                            }
+                            className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
+                          >
+                            <Pencil className="h-3 w-3" />
+                            Metadaten
+                          </button>
+                          {row.active ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (
+                                  !window.confirm(
+                                    "Payment Link archivieren? Er ist danach inaktiv (nicht gelöscht).",
+                                  )
+                                ) {
+                                  return;
+                                }
+                                void (async () => {
+                                  try {
+                                    await setPaymentLinkActive(row.id, false);
+                                    pl.reload();
+                                  } catch (e) {
+                                    window.alert(
+                                      e instanceof Error ? e.message : String(e),
+                                    );
+                                  }
+                                })();
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
+                            >
+                              <Archive className="h-3 w-3" />
+                              Archivieren
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void (async () => {
+                                  try {
+                                    await setPaymentLinkActive(row.id, true);
+                                    pl.reload();
+                                  } catch (e) {
+                                    window.alert(
+                                      e instanceof Error ? e.message : String(e),
+                                    );
+                                  }
+                                })();
+                              }}
+                              className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                              Aktivieren
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            {(pl.data?.paymentLinks?.length ?? 0) === 0 && !pl.error && (
+            {sortedLinks.length === 0 && !pl.error && (
               <p className="p-4 text-[13px] text-ink-500">
                 Keine Payment Links in Stripe gefunden.
               </p>
@@ -175,6 +265,9 @@ export default function ZahlungslinksPage() {
         <h2 className="mb-3 font-display text-[18px] tracking-tightish text-ink-900">
           Pläne (KV: <span className="font-mono">plans</span>)
         </h2>
+        <p className="mb-4 text-[12.5px] text-ink-500">
+          Einträge können bearbeitet werden, nicht gelöscht.
+        </p>
         {kvs.loading && !kvs.data ? (
           <p className="text-[13px] text-ink-400">Lade …</p>
         ) : (
@@ -264,7 +357,6 @@ export default function ZahlungslinksPage() {
                     kvs.reload();
                     planReload();
                   }}
-                  onDeleted={() => setPlanKey(null)}
                 />
               ) : (
                 <p className="text-[13px] text-ink-500">
@@ -292,6 +384,18 @@ export default function ZahlungslinksPage() {
           }}
         />
       )}
+
+      {createOpen && (
+        <CreatePaymentLinkDialog
+          planKeys={kvs.data?.keys ?? []}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
+            pl.reload();
+            kvs.reload();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -302,14 +406,12 @@ function PlanEditor({
   planLoading,
   planErr,
   onAfterSave,
-  onDeleted,
 }: {
   planKey: string;
   planOne: { key: string; value: unknown; raw: string } | null;
   planLoading: boolean;
   planErr: string | null;
   onAfterSave: () => void;
-  onDeleted: () => void;
 }) {
   const [text, setText] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -362,32 +464,122 @@ function PlanEditor({
         >
           {saving ? "…" : "Speichern"}
         </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (
-              !window.confirm(
-                `Plan „${planKey}“ wirklich aus dem KV löschen?`,
-              )
-            ) {
-              return;
-            }
-            setErr(null);
-            try {
-              await deletePlanKey(planKey);
-              onDeleted();
-              onAfterSave();
-            } catch (e) {
-              setErr(e instanceof Error ? e.message : String(e));
-            }
-          }}
-          className="inline-flex items-center gap-1 rounded-md border border-accent-rose/30 bg-white px-3 py-1.5 text-[12.5px] text-accent-rose hover:border-accent-rose"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Löschen
-        </button>
       </div>
       {err && <p className="mt-2 text-[12.5px] text-accent-rose">{err}</p>}
+    </div>
+  );
+}
+
+function CreatePaymentLinkDialog({
+  planKeys,
+  onClose,
+  onCreated,
+}: {
+  planKeys: string[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [planKey, setPlanKey] = useState(planKeys[0] ?? "");
+  const [stripePriceId, setStripePriceId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-night-900/50 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-pl-title"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-lg border border-hair bg-paper p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3
+          id="create-pl-title"
+          className="font-display text-[18px] text-ink-900"
+        >
+          Neuer Payment Link
+        </h3>
+        <p className="mt-1 text-[12.5px] text-ink-500">
+          Verknüpfung mit einem <strong>bestehenden</strong> Plan im KV und dem
+          Stripe-Preis (Preis muss in Stripe existieren, z. B. Abo-Preis).
+        </p>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">
+              Plan (KV-Key) *
+            </label>
+            <select
+              value={planKey}
+              onChange={(e) => setPlanKey(e.target.value)}
+              className="w-full rounded-md border border-hair bg-white px-2.5 py-2 font-mono text-[12.5px]"
+            >
+              {planKeys.length === 0 ? (
+                <option value="">— zuerst Plan anlegen —</option>
+              ) : (
+                planKeys.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">
+              Stripe Price ID *
+            </label>
+            <input
+              value={stripePriceId}
+              onChange={(e) => setStripePriceId(e.target.value.trim())}
+              className="w-full rounded-md border border-hair bg-white px-2.5 py-2 font-mono text-[12.5px]"
+              placeholder="price_…"
+            />
+            <p className="mt-1 text-[11.5px] text-ink-500">
+              Aus dem Stripe-Dashboard: Produkt → Preis, oder API.
+            </p>
+          </div>
+        </div>
+        {err && <p className="mt-2 text-[12px] text-accent-rose">{err}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px]"
+          >
+            Abbrechen
+          </button>
+          <button
+            type="button"
+            disabled={busy || !planKey || !planKeys.length}
+            onClick={async () => {
+              setErr(null);
+              if (!planKey) {
+                setErr("Wähle einen Plan.");
+                return;
+              }
+              if (!/^price_[a-zA-Z0-9]+$/.test(stripePriceId)) {
+                setErr("Stripe Price ID muss mit price_ beginnen.");
+                return;
+              }
+              setBusy(true);
+              try {
+                await createPaymentLink(planKey, stripePriceId);
+                onCreated();
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : String(e));
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="rounded-md border border-hair bg-ink-900 px-3 py-1.5 text-[12.5px] text-white disabled:opacity-50"
+          >
+            {busy ? "…" : "Erstellen & verknüpfen"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
