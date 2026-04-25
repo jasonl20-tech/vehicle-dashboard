@@ -15,6 +15,7 @@ import {
   useMemo,
   useState,
 } from "react";
+// useMemo + ReactNode sind oben bereits importiert.
 import {
   Area,
   AreaChart,
@@ -31,6 +32,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  type AnalyticsMode,
   type KeyDetailResponse,
   type OverviewRow,
   PRESETS,
@@ -45,11 +47,11 @@ import {
   type TopPath,
   type TopView,
   aeTimestampToDate,
-  apiUrls,
   fmtCompact,
   fmtDateTime,
   fmtNumber,
   fmtRelative,
+  makeApiUrls,
   parsePath,
   rangeFromPreset,
   statusClass,
@@ -64,9 +66,27 @@ type TimeseriesResp = {
   bucket: "minute" | "hour" | "day";
 };
 
-export default function KundenApiPage() {
+interface KundenApiPageProps {
+  /** Datenquelle: alle Kunden (Standard) oder nur der Oneauto-Key. */
+  mode?: AnalyticsMode;
+  /** Wird im Header angezeigt – z. B. „Kunden API" oder „Oneauto API". */
+  title?: string;
+  /** Optionaler Subtitel/Header-Beschreibung. */
+  description?: ReactNode;
+  /** Eyebrow-Label (klein, oben). */
+  eyebrow?: string;
+}
+
+export default function KundenApiPage({
+  mode = "customers",
+  title = "Kunden API",
+  description,
+  eyebrow = "Analytics · Kunden API",
+}: KundenApiPageProps = {}) {
   const [range, setRange] = useState<Range>(() => rangeFromPreset("7d"));
   const [openKey, setOpenKey] = useState<string | null>(null);
+
+  const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
 
   const overview = useApi<{ row: OverviewRow }>(apiUrls.overview(range));
   const timeseries = useApi<TimeseriesResp>(apiUrls.timeseries(range));
@@ -96,7 +116,15 @@ export default function KundenApiPage() {
 
   return (
     <>
-      <Header range={range} onRange={setRange} onReload={reloadAll} />
+      <Header
+        range={range}
+        onRange={setRange}
+        onReload={reloadAll}
+        title={title}
+        eyebrow={eyebrow}
+        description={description}
+        mode={mode}
+      />
 
       <ErrorBanner
         msg={
@@ -226,6 +254,7 @@ export default function KundenApiPage() {
         <KeyDetailDrawer
           keyId={openKey}
           range={range}
+          mode={mode}
           onClose={() => setOpenKey(null)}
         />
       )}
@@ -239,31 +268,54 @@ function Header({
   range,
   onRange,
   onReload,
+  title,
+  eyebrow,
+  description,
+  mode,
 }: {
   range: Range;
   onRange: (r: Range) => void;
   onReload: () => void;
+  title: string;
+  eyebrow: string;
+  description?: ReactNode;
+  mode: AnalyticsMode;
 }) {
+  const defaultDescription =
+    mode === "oneauto" ? (
+      <>
+        Live-Statistik der Anfragen, die unter dem{" "}
+        <span className="font-mono text-[12px] text-ink-700">Oneauto</span>
+        -Key (
+        <span className="font-mono text-[11.5px] text-ink-700">
+          e6dd0c88…ac31
+        </span>
+        ) gegen die API laufen.
+      </>
+    ) : (
+      <>
+        Live-Statistik aus der Cloudflare Analytics Engine –{" "}
+        <span className="font-mono text-[12.5px] text-ink-700">
+          key_analytics
+        </span>
+        . Anfragen mit Key{" "}
+        <span className="font-mono text-[12px] text-ink-700">anonymous</span>{" "}
+        und der Oneauto-Key sind herausgefiltert.
+      </>
+    );
+
   return (
     <header className="mb-8 border-b border-hair pb-6">
       <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
-        Analytics · Kunden API
+        {eyebrow}
       </p>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <h1 className="font-display text-[34px] leading-[1.05] tracking-tighter2 text-ink-900">
-            Kunden API
+            {title}
           </h1>
           <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-500">
-            Live-Statistik aus der Cloudflare Analytics Engine –{" "}
-            <span className="font-mono text-[12.5px] text-ink-700">
-              key_analytics
-            </span>
-            . Anfragen mit Key{" "}
-            <span className="font-mono text-[12px] text-ink-700">
-              anonymous
-            </span>{" "}
-            oder dem internen Test-Hash sind herausgefiltert.
+            {description ?? defaultDescription}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1520,12 +1572,15 @@ function labelForBucket(b: "minute" | "hour" | "day"): string {
 function KeyDetailDrawer({
   keyId,
   range,
+  mode,
   onClose,
 }: {
   keyId: string;
   range: Range;
+  mode: AnalyticsMode;
   onClose: () => void;
 }) {
+  const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
   const detail = useApi<KeyDetailResponse>(apiUrls.keyDetail(range, keyId));
 
   useEffect(() => {

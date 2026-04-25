@@ -268,9 +268,17 @@ export interface KeyDetailResponse {
 
 // ---------- URL-Builder ----------
 
-function build(kind: string, range: Range, extra: Record<string, string> = {}) {
+export type AnalyticsMode = "customers" | "oneauto";
+
+function build(
+  kind: string,
+  range: Range,
+  mode: AnalyticsMode,
+  extra: Record<string, string> = {},
+) {
   const qs = new URLSearchParams({
     kind,
+    mode,
     from: range.from,
     to: range.to,
     ...extra,
@@ -278,16 +286,93 @@ function build(kind: string, range: Range, extra: Record<string, string> = {}) {
   return `/api/analytics/customer-keys?${qs.toString()}`;
 }
 
-export const apiUrls = {
-  overview: (r: Range) => build("overview", r),
-  timeseries: (r: Range) => build("timeseries", r),
-  topKeys: (r: Range, limit = 20) => build("top-keys", r, { limit: String(limit) }),
-  topBrands: (r: Range, limit = 8) => build("top-brands", r, { limit: String(limit) }),
-  topModels: (r: Range, limit = 8) => build("top-models", r, { limit: String(limit) }),
-  topActions: (r: Range, limit = 8) => build("top-actions", r, { limit: String(limit) }),
-  topPaths: (r: Range, limit = 10) => build("top-paths", r, { limit: String(limit) }),
-  topViews: (r: Range, limit = 12) => build("top-views", r, { limit: String(limit) }),
-  statusCodes: (r: Range, limit = 10) => build("status-codes", r, { limit: String(limit) }),
-  recent: (r: Range, limit = 100) => build("recent", r, { limit: String(limit) }),
-  keyDetail: (r: Range, key: string) => build("key-detail", r, { key }),
-};
+/**
+ * Erstellt einen Satz URL-Builder für einen bestimmten Mode (Kunden vs.
+ * Oneauto). Beide Seiten teilen denselben Backend-Endpoint und unter-
+ * scheiden sich nur in der WHERE-Bedingung.
+ */
+export function makeApiUrls(mode: AnalyticsMode) {
+  return {
+    overview: (r: Range) => build("overview", r, mode),
+    timeseries: (r: Range) => build("timeseries", r, mode),
+    topKeys: (r: Range, limit = 20) =>
+      build("top-keys", r, mode, { limit: String(limit) }),
+    topBrands: (r: Range, limit = 8) =>
+      build("top-brands", r, mode, { limit: String(limit) }),
+    topModels: (r: Range, limit = 8) =>
+      build("top-models", r, mode, { limit: String(limit) }),
+    topActions: (r: Range, limit = 8) =>
+      build("top-actions", r, mode, { limit: String(limit) }),
+    topPaths: (r: Range, limit = 10) =>
+      build("top-paths", r, mode, { limit: String(limit) }),
+    topViews: (r: Range, limit = 12) =>
+      build("top-views", r, mode, { limit: String(limit) }),
+    statusCodes: (r: Range, limit = 10) =>
+      build("status-codes", r, mode, { limit: String(limit) }),
+    recent: (r: Range, limit = 100) =>
+      build("recent", r, mode, { limit: String(limit) }),
+    keyDetail: (r: Range, key: string) =>
+      build("key-detail", r, mode, { key }),
+  };
+}
+
+/** Bestehende URLs (Kunden-Modus). Bleibt für Abwärtskompatibilität. */
+export const apiUrls = makeApiUrls("customers");
+
+// ---------- Oneauto-Reports ----------
+
+export interface OneautoMonthRow {
+  month: string; // YYYY-MM-01
+  fromIso: string;
+  toIso: string;
+  closed: boolean;
+  requests: number;
+  views: number;
+  viewsOk: number;
+  viewsErr: number;
+  gbp: number;
+  eur: number | null;
+  fx: {
+    rate: number | null;
+    date: string;
+    source: "frankfurter" | "fallback";
+    error: string | null;
+  };
+}
+
+export interface OneautoReportsResponse {
+  pricePerViewGbp: number;
+  key: string;
+  months: OneautoMonthRow[];
+  totals: { views: number; gbp: number; eur: number | null };
+  generatedAt: string;
+}
+
+export function reportsUrl(months = 12): string {
+  return `/api/analytics/oneauto-reports?months=${months}`;
+}
+
+export function fmtMonthLong(s: string): string {
+  try {
+    const d = new Date(s.length === 10 ? s + "T00:00:00Z" : s);
+    return new Intl.DateTimeFormat("de-DE", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(d);
+  } catch {
+    return s;
+  }
+}
+
+export function fmtCurrency(
+  n: number | null,
+  currency: "GBP" | "EUR",
+): string {
+  if (n == null || Number.isNaN(n)) return "–";
+  return new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(n);
+}

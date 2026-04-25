@@ -3,8 +3,9 @@ import {
   pickBucket,
   runAeSql,
   sqlString,
-  whereCustomerWindow,
+  whereForMode,
   type AeSqlError,
+  type AnalyticsMode,
 } from "../../_lib/analytics";
 import {
   getCurrentUser,
@@ -81,9 +82,19 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   );
   const key = (url.searchParams.get("key") || "").trim();
 
+  const modeRaw = (url.searchParams.get("mode") || "customers").toLowerCase();
+  if (modeRaw !== "customers" && modeRaw !== "oneauto") {
+    return jsonResponse(
+      { error: `Unbekannter mode=${modeRaw}. Erlaubt: customers, oneauto` },
+      { status: 400 },
+    );
+  }
+  const mode = modeRaw as AnalyticsMode;
+
   let where: string;
   try {
-    where = whereCustomerWindow(
+    where = whereForMode(
+      mode,
       from,
       to,
       key && kind === "key-detail" ? `index1 = ${sqlString(key)}` : undefined,
@@ -106,6 +117,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     const result = await dispatch(env, kind, { where, from, to, limit, key });
     return jsonResponse({
       kind,
+      mode,
       from,
       to,
       ...result,

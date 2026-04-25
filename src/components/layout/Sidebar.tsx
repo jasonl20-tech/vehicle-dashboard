@@ -42,6 +42,7 @@ const NAV_PRIMARY: NavItem[] = [
       { label: "Fahrzeug-Analytics", to: "/analytics", end: true },
       { label: "Kunden API", to: "/analytics/kunden-api" },
       { label: "Oneauto API", to: "/analytics/oneauto-api" },
+      { label: "Oneauto Reports", to: "/analytics/oneauto-reports" },
     ],
   },
   { label: "Zahlungslinks", icon: Link2, to: "/zahlungslinks" },

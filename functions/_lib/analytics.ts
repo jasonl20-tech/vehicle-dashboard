@@ -25,11 +25,11 @@ import type { AuthEnv } from "./auth";
 
 export const KEY_ANALYTICS_DATASET = "key_analytics";
 
-/** Keys, die NICHT als Kunden zählen sollen. */
-export const EXCLUDED_KEYS: ReadonlyArray<string> = [
-  "anonymous",
-  "e6dd0c88a1486d7aeb2d0e7a6423ac31",
-];
+/** Spezieller Key, der zur Oneauto-Abrechnung gehört. */
+export const ONEAUTO_KEY = "e6dd0c88a1486d7aeb2d0e7a6423ac31";
+
+/** Keys, die NICHT als Kunden zählen sollen (anonymous + Oneauto-Test-Key). */
+export const EXCLUDED_KEYS: ReadonlyArray<string> = ["anonymous", ONEAUTO_KEY];
 
 export type AeRow = Record<string, unknown>;
 
@@ -301,7 +301,7 @@ export function sqlDateTime(input: string): string {
   return `toDateTime(${sqlString(normalised)})`;
 }
 
-/** Liefert ein WHERE-Snippet mit Zeit-Range + Excluded-Keys. */
+/** Liefert ein WHERE-Snippet mit Zeit-Range + Excluded-Keys (Kunden-Modus). */
 export function whereCustomerWindow(
   fromIso: string,
   toIso: string,
@@ -316,6 +316,34 @@ export function whereCustomerWindow(
   ];
   if (extra) parts.push(extra);
   return "WHERE " + parts.join(" AND ");
+}
+
+/** WHERE-Snippet, das nur Anfragen des Oneauto-Keys einschließt. */
+export function whereOneautoWindow(
+  fromIso: string,
+  toIso: string,
+  extra?: string,
+): string {
+  const parts = [
+    `timestamp >= ${sqlDateTime(fromIso)}`,
+    `timestamp <  ${sqlDateTime(toIso)}`,
+    `index1 = ${sqlString(ONEAUTO_KEY)}`,
+  ];
+  if (extra) parts.push(extra);
+  return "WHERE " + parts.join(" AND ");
+}
+
+export type AnalyticsMode = "customers" | "oneauto";
+
+export function whereForMode(
+  mode: AnalyticsMode,
+  fromIso: string,
+  toIso: string,
+  extra?: string,
+): string {
+  return mode === "oneauto"
+    ? whereOneautoWindow(fromIso, toIso, extra)
+    : whereCustomerWindow(fromIso, toIso, extra);
 }
 
 /**
