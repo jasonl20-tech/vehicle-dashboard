@@ -263,8 +263,7 @@ function UserRow() {
     .join("")
     .toUpperCase();
 
-  // Profilhintergrund: `bannerfarbe` füllt die ganze User-Zeile (kein getrennter
-  // „Banner“-Streifen – es ist der Hintergrund hinter Name, Titel, Stufe & Avatar.
+  // `bannerfarbe` als gefüllte „Bubble“ um Avatar + Name (nicht die ganze Ecke).
   const profileBg = sanitizeColor(user.bannerfarbe) ?? "#1f232c";
   const stufe = user.sicherheitsstufe ?? 0;
   const onLight = isLightBackground(profileBg);
@@ -282,6 +281,9 @@ function UserRow() {
   const logoutBtn = onLight
     ? "bg-ink-900/8 text-ink-800 hover:bg-ink-900/14"
     : "bg-white/10 text-white/95 hover:bg-white/18";
+  const bubbleRing = onLight
+    ? "ring-1 ring-ink-900/10 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset]"
+    : "ring-1 ring-white/[0.08] shadow-[0_1px_2px_rgba(0,0,0,0.2)]";
 
   const handleLogout = async () => {
     await logout();
@@ -289,12 +291,12 @@ function UserRow() {
   };
 
   return (
-    <div className="border-t border-white/[0.06]">
+    <div className="border-t border-white/[0.06] px-3 pb-3.5 pt-3">
       <div
-        className="px-4 py-3.5"
+        className={`rounded-2xl px-2.5 py-2 ${bubbleRing}`}
         style={{ backgroundColor: profileBg }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <div className="relative shrink-0">
             {user.profilbild ? (
               <img
