@@ -24,8 +24,29 @@ export default function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<OverviewPage />} />
-        <Route path="/crm" element={<ModulePage />} />
-        <Route path="/anfragen" element={<ModulePage />} />
+        <Route path="/kunden/crm" element={<ModulePage />} />
+        <Route path="/kunden/anfragen" element={<ModulePage />} />
+        <Route path="/kunden/keys" element={<ModulePage />} />
+        <Route path="/kunden/test-keys" element={<ModulePage />} />
+        <Route path="/kunden/newsletter" element={<ModulePage />} />
+        <Route
+          path="/kunden"
+          element={<Navigate to="/kunden/anfragen" replace />}
+        />
+        <Route path="/crm" element={<Navigate to="/kunden/crm" replace />} />
+        <Route
+          path="/anfragen"
+          element={<Navigate to="/kunden/anfragen" replace />}
+        />
+        <Route
+          path="/newsletter"
+          element={<Navigate to="/kunden/newsletter" replace />}
+        />
+        <Route path="/systeme/prompts" element={<ModulePage />} />
+        <Route
+          path="/systeme"
+          element={<Navigate to="/systeme/prompts" replace />}
+        />
         <Route path="/logs" element={<ModulePage />} />
         <Route path="/analytics/kunden-api" element={<KundenApiPage />} />
         <Route path="/analytics/oneauto-api" element={<OneautoApiPage />} />
@@ -65,7 +86,6 @@ export default function App() {
         <Route path="/website/company" element={<ModulePage />} />
         <Route path="/website/changelog" element={<ModulePage />} />
         <Route path="/databases/production" element={<ModulePage />} />
-        <Route path="/newsletter" element={<ModulePage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

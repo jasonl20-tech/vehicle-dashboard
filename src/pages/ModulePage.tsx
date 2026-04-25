@@ -5,16 +5,36 @@ const META: Record<
   string,
   { title: string; eyebrow: string; description: string }
 > = {
-  "/crm": {
+  "/kunden/crm": {
     title: "CRM",
-    eyebrow: "Kunden & Kontakte",
+    eyebrow: "Kundenmanagement",
     description:
       "Kundenstammdaten, Pipeline und Kommunikation – Inhalte folgen.",
   },
-  "/anfragen": {
+  "/kunden/anfragen": {
     title: "Anfragen",
-    eyebrow: "Eingang",
+    eyebrow: "Kundenmanagement",
     description: "Eingehende Anfragen und Angebote an einem Ort.",
+  },
+  "/kunden/keys": {
+    title: "Kunden keys",
+    eyebrow: "Kundenmanagement",
+    description: "Produktive API-Schlüssel und Kundenbindung – Inhalte folgen.",
+  },
+  "/kunden/test-keys": {
+    title: "Kundentest keys",
+    eyebrow: "Kundenmanagement",
+    description: "Test- und Staging-Keys, getrennt von Produktion – Inhalte folgen.",
+  },
+  "/kunden/newsletter": {
+    title: "Newsletter",
+    eyebrow: "Kundenmanagement",
+    description: "Kampagnen, Abonnenten und Versand.",
+  },
+  "/systeme/prompts": {
+    title: "Prompts",
+    eyebrow: "Systeme",
+    description: "System-Prompts und Vorlagen – Inhalte folgen.",
   },
   "/logs": {
     title: "Logs",
@@ -60,11 +80,6 @@ const META: Record<
     title: "Produktions-Datenbank",
     eyebrow: "Datenbanken",
     description: "Verbindung und Schema-Überblick (Produktivumgebung).",
-  },
-  "/newsletter": {
-    title: "Newsletter",
-    eyebrow: "Marketing",
-    description: "Kampagnen, Abonnenten und Versand.",
   },
   "/intern-analytics/controlling": {
     title: "Controlling",

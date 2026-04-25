@@ -2,20 +2,19 @@ import {
   ArrowUpRight,
   BarChart3,
   LineChart,
-  Building2,
   ChevronDown,
   Command,
   Database,
   Globe,
-  Inbox,
   LayoutDashboard,
   LogOut,
   type LucideIcon,
-  Mails,
   ScrollText,
   Search,
+  Server,
   Settings,
   ShieldCheck,
+  Users,
   Wallet,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -33,8 +32,17 @@ type NavItem = {
 
 const NAV_PRIMARY: NavItem[] = [
   { label: "Übersicht", icon: LayoutDashboard, to: "/dashboard" },
-  { label: "CRM", icon: Building2, to: "/crm" },
-  { label: "Anfragen", icon: Inbox, to: "/anfragen" },
+  {
+    label: "Kundenmanagement",
+    icon: Users,
+    children: [
+      { label: "Anfragen", to: "/kunden/anfragen" },
+      { label: "CRM", to: "/kunden/crm" },
+      { label: "Kunden keys", to: "/kunden/keys" },
+      { label: "Kundentest keys", to: "/kunden/test-keys" },
+      { label: "Newsletter", to: "/kunden/newsletter" },
+    ],
+  },
   { label: "Logs", icon: ScrollText, to: "/logs" },
   {
     label: "API Analytics",
@@ -78,7 +86,11 @@ const NAV_PRIMARY: NavItem[] = [
     icon: Database,
     children: [{ label: "Produktions Datenbank", to: "/databases/production" }],
   },
-  { label: "Newsletter", icon: Mails, to: "/newsletter" },
+  {
+    label: "Systeme",
+    icon: Server,
+    children: [{ label: "Prompts", to: "/systeme/prompts" }],
+  },
 ];
 
 const NAV_FOOTER: NavItem[] = [
