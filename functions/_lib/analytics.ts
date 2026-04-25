@@ -31,6 +31,12 @@ export const API_ANALYTICS_DATASET = "api_analytics";
 /** Welches Cloudflare-Konto + Token für `runAeSql` genutzt wird. */
 export type AeAccountBinding = "primary" | "secondary";
 
+/**
+ * Präfix aller `index1`-Werte, die als Oneauto zählen (Kunden-Modus: strikt
+ * ausschließen; Oneauto-Modus: einschließen). Besser als vereinzelte 32-Hex-Keys.
+ */
+export const ONEAUTO_KEY_PREFIX = "e6dd0c88";
+
 /** Spezieller Key, der zur Oneauto-Abrechnung gehört (primäres Konto / key_analytics). */
 export const ONEAUTO_KEY = "e6dd0c88a1486d7aeb2d0e7a6423ac31";
 
@@ -58,9 +64,9 @@ export function getOneautoKeys(env: AuthEnv): string[] {
   return [ONEAUTO_KEY, second].filter((k, i, a) => a.indexOf(k) === i);
 }
 
-/** Kunden-Modus: filtert anonymous + alle Oneauto-Key-Varianten. */
-export function getExcludedForCustomers(env: AuthEnv): string[] {
-  return ["anonymous", ...getOneautoKeys(env)];
+/** Kunden-Modus: explizit ausgeschlossene exakte Werte (Oneauto laufen über `ONEAUTO_KEY_PREFIX`). */
+export function getExcludedForCustomers(_env: AuthEnv): string[] {
+  return ["anonymous"];
 }
 
 export type AeRow = Record<string, unknown>;
@@ -431,6 +437,20 @@ export function sqlString(input: string): string {
   return "'" + String(input).replace(/'/g, "''") + "'";
 }
 
+/** `index1` zählt nicht als Oneauto (Kunden-Modus). */
+export function sqlIndex1NotOneautoByPrefix(
+  column: string = "index1",
+): string {
+  return `lower(${column}) NOT LIKE ${sqlString(`${ONEAUTO_KEY_PREFIX}%`)}`;
+}
+
+/** `index1` zählt als Oneauto (Präfix-Familie). */
+export function sqlIndex1IsOneautoByPrefix(
+  column: string = "index1",
+): string {
+  return `lower(${column}) LIKE ${sqlString(`${ONEAUTO_KEY_PREFIX}%`)}`;
+}
+
 /**
  * Akzeptiert:
  *   "YYYY-MM-DD"
@@ -469,23 +489,23 @@ export function whereCustomerWindow(
     `timestamp <  ${sqlDateTime(toIso)}`,
     `index1 NOT IN (${excluded})`,
     `index1 != ''`,
+    sqlIndex1NotOneautoByPrefix(),
   ];
   if (extra) parts.push(extra);
   return "WHERE " + parts.join(" AND ");
 }
 
-/** WHERE-Snippet, das alle Oneauto-Key-Instanzen (Konto 1 + 2) einschließt. */
+/** WHERE-Snippet: alle Oneauto-`index1`-Werte (Präfix e6dd0c88), über Datasets additiv gemerged. */
 export function whereOneautoWindow(
-  env: AuthEnv,
+  _env: AuthEnv,
   fromIso: string,
   toIso: string,
   extra?: string,
 ): string {
-  const inList = getOneautoKeys(env).map(sqlString).join(", ");
   const parts = [
     `timestamp >= ${sqlDateTime(fromIso)}`,
     `timestamp <  ${sqlDateTime(toIso)}`,
-    `index1 IN (${inList})`,
+    sqlIndex1IsOneautoByPrefix(),
   ];
   if (extra) parts.push(extra);
   return "WHERE " + parts.join(" AND ");

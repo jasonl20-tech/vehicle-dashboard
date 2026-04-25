@@ -344,6 +344,8 @@ export interface OneautoReportsResponse {
   key: string;
   /** Alle API-Key-Hashes, deren Events einfließen (Konto 1 + 2). */
   keys?: string[];
+  /** `index1` beginnt damit; SQL filtert per Präfix, nicht nur einzelne Keys. */
+  oneautoKeyPrefix?: string;
   mergedSources?: string[];
   months: OneautoMonthRow[];
   totals: { views: number; gbp: number; eur: number | null };
