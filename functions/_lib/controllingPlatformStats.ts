@@ -70,8 +70,11 @@ export type ControllingFetchPlan = {
   fromTable: string;
 };
 
+// Nicht `formatDateTime(timestamp,…)` im SELECT: 422 "unable to find type
+// of column: timestamp" auf manchen AE-Konten. Roh-Spalte wie in
+// customer-keys recent/… (dort: `SELECT timestamp, … FROM …`).
 const selectBody = `SELECT
-  formatDateTime(timestamp, '%Y-%m-%d %H:%M:%S', 'Etc/UTC') AS ts,
+  timestamp AS ts,
   _sample_interval AS siv,
   index1 AS s_index1,
   '' AS s_index2,
@@ -154,8 +157,15 @@ export type RawControllingRow = {
 };
 
 export function parseControllingRow(r: AeRow): RawControllingRow {
+  const tsVal = r.ts;
+  const tsStr =
+    tsVal == null
+      ? ""
+      : typeof tsVal === "number" || typeof tsVal === "bigint"
+        ? String(tsVal)
+        : String(tsVal);
   return {
-    ts: String(r.ts ?? ""),
+    ts: tsStr,
     siv: r.siv == null ? "" : String(r.siv),
     s_index1: String(r.s_index1 ?? ""),
     s_index2: String(r.s_index2 ?? ""),
@@ -215,6 +225,12 @@ export function progressFromDoubles(
 }
 
 function parseTs(s: string): number {
+  if (!s) return 0;
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const n = Number(s);
+    if (n > 1e12) return n;
+    if (n > 1e9) return n * 1000;
+  }
   const t = Date.parse(s.replace(" ", "T") + "Z");
   return Number.isFinite(t) ? t : 0;
 }
