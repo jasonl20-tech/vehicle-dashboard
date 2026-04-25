@@ -20,11 +20,21 @@ const KIND_VALUES = [
   "top-models",
   "top-actions",
   "top-paths",
+  "top-views",
   "status-codes",
   "recent",
   "key-detail",
 ] as const;
 type Kind = (typeof KIND_VALUES)[number];
+
+/**
+ * Bedingung für "echte Bild-Views" (im Gegensatz zu Metadaten-Calls
+ * wie list_brands / list_models / list_years / list_variants /
+ * list_trims / check_views). blob5 enthält dabei den View-Namen
+ * (z. B. "front_left", "right", "rear").
+ */
+const VIEW_FILTER_SQL =
+  "blob5 != 'NA' AND blob5 != '' AND blob5 NOT LIKE 'list_%' AND blob5 != 'check_views'";
 
 function defaultRange(): { from: string; to: string } {
   const now = new Date();
@@ -141,6 +151,8 @@ async function dispatch(env: AuthEnv, kind: Kind, ctx: Ctx) {
       return topActions(env, ctx);
     case "top-paths":
       return topPaths(env, ctx);
+    case "top-views":
+      return topViews(env, ctx);
     case "status-codes":
       return statusCodes(env, ctx);
     case "recent":
@@ -157,6 +169,8 @@ async function overview(env: AuthEnv, { where }: Ctx) {
       count(DISTINCT index1) AS uniqueKeys,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS okRequests,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS errRequests,
+      SUM(_sample_interval * if(${VIEW_FILTER_SQL}, 1, 0)) AS viewRequests,
+      SUM(_sample_interval * if(${VIEW_FILTER_SQL} AND double1 < 400, 1, 0)) AS viewOkRequests,
       MIN(timestamp) AS firstSeen,
       MAX(timestamp) AS lastSeen
     FROM ${KEY_ANALYTICS_DATASET}
@@ -167,6 +181,8 @@ async function overview(env: AuthEnv, { where }: Ctx) {
     uniqueKeys: number;
     okRequests: number;
     errRequests: number;
+    viewRequests: number;
+    viewOkRequests: number;
     firstSeen: string | null;
     lastSeen: string | null;
   }>(env, sql);
@@ -175,6 +191,8 @@ async function overview(env: AuthEnv, { where }: Ctx) {
     uniqueKeys: 0,
     okRequests: 0,
     errRequests: 0,
+    viewRequests: 0,
+    viewOkRequests: 0,
     firstSeen: null,
     lastSeen: null,
   };
@@ -297,6 +315,30 @@ async function topPaths(env: AuthEnv, { where, limit }: Ctx) {
   return { rows: r.data };
 }
 
+async function topViews(env: AuthEnv, { where, limit }: Ctx) {
+  const sql = `
+    SELECT
+      blob5 AS view,
+      SUM(_sample_interval) AS requests,
+      SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
+      SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
+      count(DISTINCT index1) AS keys
+    FROM ${KEY_ANALYTICS_DATASET}
+    ${where} AND ${VIEW_FILTER_SQL}
+    GROUP BY blob5
+    ORDER BY requests DESC
+    LIMIT ${limit}
+  `;
+  const r = await runAeSql<{
+    view: string;
+    requests: number;
+    ok: number;
+    err: number;
+    keys: number;
+  }>(env, sql);
+  return { rows: r.data };
+}
+
 async function statusCodes(env: AuthEnv, { where, limit }: Ctx) {
   const sql = `
     SELECT
@@ -345,13 +387,13 @@ async function recent(env: AuthEnv, { where, limit }: Ctx) {
 }
 
 async function keyDetail(env: AuthEnv, ctx: Ctx) {
-  // overview + timeseries + top brands/actions + recent für genau diesen Key
-  const [ov, ts, brands, actions, paths, rec] = await Promise.all([
+  const [ov, ts, brands, actions, paths, views, rec] = await Promise.all([
     overview(env, ctx),
     timeseries(env, ctx),
     topBrands(env, { ...ctx, limit: 10 }),
     topActions(env, { ...ctx, limit: 10 }),
     topPaths(env, { ...ctx, limit: 10 }),
+    topViews(env, { ...ctx, limit: 10 }),
     recent(env, { ...ctx, limit: 100 }),
   ]);
   return {
@@ -361,6 +403,7 @@ async function keyDetail(env: AuthEnv, ctx: Ctx) {
     topBrands: brands.rows,
     topActions: actions.rows,
     topPaths: paths.rows,
+    topViews: views.rows,
     recent: rec.rows,
   };
 }

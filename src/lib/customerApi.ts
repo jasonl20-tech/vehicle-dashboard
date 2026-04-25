@@ -189,6 +189,10 @@ export interface OverviewRow {
   uniqueKeys: number;
   okRequests: number;
   errRequests: number;
+  /** Echte Bild-Aufrufe (blob5 ist ein View-Name, kein list_X/check_views). */
+  viewRequests: number;
+  /** Erfolgreiche Bild-Aufrufe (200/300). */
+  viewOkRequests: number;
   firstSeen: string | null;
   lastSeen: string | null;
 }
@@ -227,6 +231,13 @@ export interface TopPath {
   path: string;
   requests: number;
 }
+export interface TopView {
+  view: string;
+  requests: number;
+  ok: number;
+  err: number;
+  keys: number;
+}
 export interface StatusCount {
   status: number;
   requests: number;
@@ -251,6 +262,7 @@ export interface KeyDetailResponse {
   topBrands: TopBrand[];
   topActions: TopAction[];
   topPaths: TopPath[];
+  topViews: TopView[];
   recent: RecentRow[];
 }
 
@@ -274,6 +286,7 @@ export const apiUrls = {
   topModels: (r: Range, limit = 8) => build("top-models", r, { limit: String(limit) }),
   topActions: (r: Range, limit = 8) => build("top-actions", r, { limit: String(limit) }),
   topPaths: (r: Range, limit = 10) => build("top-paths", r, { limit: String(limit) }),
+  topViews: (r: Range, limit = 12) => build("top-views", r, { limit: String(limit) }),
   statusCodes: (r: Range, limit = 10) => build("status-codes", r, { limit: String(limit) }),
   recent: (r: Range, limit = 100) => build("recent", r, { limit: String(limit) }),
   keyDetail: (r: Range, key: string) => build("key-detail", r, { key }),

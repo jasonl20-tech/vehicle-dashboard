@@ -43,6 +43,7 @@ import {
   type TopKey,
   type TopModel,
   type TopPath,
+  type TopView,
   aeTimestampToDate,
   apiUrls,
   fmtCompact,
@@ -74,6 +75,7 @@ export default function KundenApiPage() {
   const topActions = useApi<{ rows: TopAction[] }>(apiUrls.topActions(range));
   const topModels = useApi<{ rows: TopModel[] }>(apiUrls.topModels(range, 8));
   const topPaths = useApi<{ rows: TopPath[] }>(apiUrls.topPaths(range, 10));
+  const topViews = useApi<{ rows: TopView[] }>(apiUrls.topViews(range, 12));
   const statusCodes = useApi<{ rows: StatusCount[] }>(
     apiUrls.statusCodes(range),
   );
@@ -87,6 +89,7 @@ export default function KundenApiPage() {
     topActions.reload();
     topModels.reload();
     topPaths.reload();
+    topViews.reload();
     statusCodes.reload();
     recent.reload();
   }
@@ -156,6 +159,16 @@ export default function KundenApiPage() {
           />
         </SubSection>
       </div>
+
+      <Section
+        title="Top Bild-Views"
+        meta="Welche Ansicht (front_left, right, …) wird wie oft abgerufen?"
+      >
+        <TopViewsGrid
+          rows={topViews.data?.rows ?? []}
+          loading={topViews.loading}
+        />
+      </Section>
 
       <div className="grid gap-12 border-t border-hair pt-10 lg:grid-cols-3">
         <SubSection
@@ -396,15 +409,31 @@ function KpiGrid({
   const total = row?.requests ?? 0;
   const ok = row?.okRequests ?? 0;
   const err = row?.errRequests ?? 0;
+  const views = row?.viewRequests ?? 0;
+  const viewsOk = row?.viewOkRequests ?? 0;
   const successRate =
     total > 0 ? Math.round((ok / total) * 1000) / 10 : null;
+  const viewShare =
+    total > 0 ? Math.round((views / total) * 1000) / 10 : null;
 
   return (
-    <div className="mb-12 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
+    <div className="mb-12 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
       <KpiTile
         label="Anfragen gesamt"
         value={loading ? "…" : fmtNumber(total)}
         sub="im Zeitraum"
+      />
+      <KpiTile
+        label="Bild-Views"
+        value={loading ? "…" : fmtNumber(views)}
+        sub={
+          loading
+            ? ""
+            : viewShare != null
+              ? `${fmtNumber(viewShare)} % aller Anfragen · ${fmtNumber(viewsOk)} ok`
+              : `${fmtNumber(viewsOk)} ok`
+        }
+        tone={views > 0 ? "ok" : "neutral"}
       />
       <KpiTile
         label="Aktive Kunden-Keys"
@@ -1026,6 +1055,52 @@ function TopModelsList({
   );
 }
 
+function TopViewsGrid({
+  rows,
+  loading,
+}: {
+  rows: TopView[];
+  loading: boolean;
+}) {
+  if (loading && rows.length === 0) return <ChartSkeleton h={220} />;
+  if (rows.length === 0)
+    return <EmptyChart h={220} text="Keine Bild-Views im gewählten Zeitraum." />;
+  const max = Math.max(...rows.map((r) => r.requests), 1);
+  return (
+    <div className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2 lg:grid-cols-3">
+      {rows.map((r, i) => {
+        const okShare =
+          r.requests > 0 ? Math.round((r.ok / r.requests) * 100) : 0;
+        return (
+          <div key={i} className="grid grid-cols-[1fr_auto] gap-3 py-1.5">
+            <div className="min-w-0">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="truncate text-[13px] text-ink-800">
+                  <span className="font-mono text-[12.5px] text-ink-900">
+                    {r.view}
+                  </span>
+                </p>
+                <span className="shrink-0 text-[11px] tabular-nums text-ink-400">
+                  {okShare}% ok · {fmtNumber(r.keys)} Keys
+                </span>
+              </div>
+              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-ink-50">
+                <div
+                  className="h-full rounded-full bg-brand-500"
+                  style={{ width: `${(r.requests / max) * 100}%` }}
+                />
+              </div>
+            </div>
+            <div className="self-center text-right text-[12.5px] tabular-nums text-ink-700">
+              {fmtNumber(r.requests)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---------- Tables ----------
 
 function TopKeysTable({
@@ -1525,12 +1600,18 @@ function KeyDetailBody({ data }: { data: KeyDetailResponse }) {
   const total = r.requests || 0;
   const ok = r.okRequests || 0;
   const err = r.errRequests || 0;
+  const views = r.viewRequests || 0;
   const success = total > 0 ? Math.round((ok / total) * 1000) / 10 : null;
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <MiniKpi label="Anfragen" value={fmtNumber(total)} />
+        <MiniKpi
+          label="Bild-Views"
+          value={fmtNumber(views)}
+          tone={views > 0 ? "ok" : "neutral"}
+        />
         <MiniKpi
           label="Erfolgsrate"
           value={success != null ? `${fmtNumber(success)} %` : "–"}
@@ -1602,6 +1683,45 @@ function KeyDetailBody({ data }: { data: KeyDetailResponse }) {
             )}
           </ul>
         </div>
+      </div>
+
+      <div className="mt-8">
+        <h3 className="font-display text-[14px] tracking-tightish text-ink-900">
+          Bild-Views dieses Keys
+        </h3>
+        {data.topViews.length === 0 ? (
+          <p className="mt-3 text-[12.5px] text-ink-400">
+            Dieser Key hat im Zeitraum keine echten Bild-Views (nur
+            Metadaten-Calls) gemacht.
+          </p>
+        ) : (
+          <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
+            {data.topViews.map((v, i) => {
+              const max = Math.max(
+                ...data.topViews.map((x) => x.requests),
+                1,
+              );
+              return (
+                <li key={i} className="py-1.5 text-[12.5px]">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <code className="font-mono text-[11.5px] text-ink-800">
+                      {v.view}
+                    </code>
+                    <span className="tabular-nums text-ink-500">
+                      {fmtNumber(v.requests)}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-ink-50">
+                    <div
+                      className="h-full rounded-full bg-brand-500"
+                      style={{ width: `${(v.requests / max) * 100}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="mt-8">
