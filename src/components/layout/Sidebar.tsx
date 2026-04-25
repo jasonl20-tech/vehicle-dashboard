@@ -17,6 +17,7 @@ import {
 import { useMemo, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
+import { Logo } from "../brand/Logo";
 
 type NavChild = { label: string; to: string };
 type NavItem = {
@@ -83,23 +84,11 @@ export default function Sidebar({ mobileOpen, onClose }: Props) {
 function Brand() {
   return (
     <div className="flex items-center justify-between px-5 pt-6 pb-5">
-      <div className="flex items-center gap-2.5">
-        <div className="relative grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-brand-500 via-brand-600 to-night-700 ring-1 ring-white/10">
-          <Car className="h-[14px] w-[14px] text-white" />
-        </div>
-        <div className="leading-tight">
-          <p className="text-[14px] font-semibold tracking-tight text-white">
-            vehiclehub
-          </p>
-          <p className="text-[10.5px] uppercase tracking-[0.14em] text-night-400">
-            Fleet OS
-          </p>
-        </div>
-      </div>
+      <Logo className="h-[22px] w-auto text-white" />
       <button
         type="button"
         title="Workspace wechseln"
-        className="text-night-400 hover:text-white"
+        className="text-night-400 transition-colors hover:text-white"
       >
         <ArrowUpRight className="h-4 w-4" />
       </button>
