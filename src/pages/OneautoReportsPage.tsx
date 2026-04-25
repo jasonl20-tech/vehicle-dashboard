@@ -90,8 +90,9 @@ function Header({
             Oneauto Reports
           </h1>
           <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-500">
-            Monatliche Abrechnung der Bild-Views des Oneauto-Keys
-            (e6dd0c88…ac31). Pro View berechnen wir{" "}
+            Monatliche Abrechnung der Bild-Views aller Oneauto-API-Keys
+            (Kontoübergreifend: z. B. e6dd0c88…ac31 und e6dd0c88…9c76b). Pro
+            View berechnen wir{" "}
             <span className="font-mono text-[12.5px] text-ink-700">£0,02</span>{" "}
             und rechnen mit dem ECB-Wechselkurs zum Monatsende in Euro um.
           </p>

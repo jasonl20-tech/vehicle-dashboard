@@ -115,6 +115,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   let where: string;
   try {
     where = whereForMode(
+      env,
       mode,
       from,
       to,

@@ -31,11 +31,37 @@ export const API_ANALYTICS_DATASET = "api_analytics";
 /** Welches Cloudflare-Konto + Token für `runAeSql` genutzt wird. */
 export type AeAccountBinding = "primary" | "secondary";
 
-/** Spezieller Key, der zur Oneauto-Abrechnung gehört. */
+/** Spezieller Key, der zur Oneauto-Abrechnung gehört (primäres Konto / key_analytics). */
 export const ONEAUTO_KEY = "e6dd0c88a1486d7aeb2d0e7a6423ac31";
 
-/** Keys, die NICHT als Kunden zählen sollen (anonymous + Oneauto-Test-Key). */
-export const EXCLUDED_KEYS: ReadonlyArray<string> = ["anonymous", ONEAUTO_KEY];
+/**
+ * Zweiter Oneauto-Key (z. B. anderes Konto, Dataset api_analytics).
+ * Kurz: e6dd0c88…9c76b. Überschreibbar mit env `ONEAUTO_KEY_2`.
+ */
+export const ONEAUTO_KEY_ALT = "e6dd0c88a1486d7aeb2d0e7a0009c76b";
+
+function parseOneautoKey2FromEnv(env: AuthEnv): string | null {
+  const raw = env.ONEAUTO_KEY_2?.trim();
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (!/^[0-9a-f]{32}$/i.test(lower)) return null;
+  return lower;
+}
+
+/**
+ * Alle `index1`-Werte, die logisch Oneauto zählen (beide Cloudflare-Keys, Reports + Oneauto-API-Modus).
+ */
+export function getOneautoKeys(env: AuthEnv): string[] {
+  const fromEnv = parseOneautoKey2FromEnv(env);
+  const second =
+    fromEnv && fromEnv !== ONEAUTO_KEY ? fromEnv : ONEAUTO_KEY_ALT;
+  return [ONEAUTO_KEY, second].filter((k, i, a) => a.indexOf(k) === i);
+}
+
+/** Kunden-Modus: filtert anonymous + alle Oneauto-Key-Varianten. */
+export function getExcludedForCustomers(env: AuthEnv): string[] {
+  return ["anonymous", ...getOneautoKeys(env)];
+}
 
 export type AeRow = Record<string, unknown>;
 
@@ -432,11 +458,12 @@ export function sqlDateTime(input: string): string {
 
 /** Liefert ein WHERE-Snippet mit Zeit-Range + Excluded-Keys (Kunden-Modus). */
 export function whereCustomerWindow(
+  env: AuthEnv,
   fromIso: string,
   toIso: string,
   extra?: string,
 ): string {
-  const excluded = EXCLUDED_KEYS.map(sqlString).join(", ");
+  const excluded = getExcludedForCustomers(env).map(sqlString).join(", ");
   const parts = [
     `timestamp >= ${sqlDateTime(fromIso)}`,
     `timestamp <  ${sqlDateTime(toIso)}`,
@@ -447,16 +474,18 @@ export function whereCustomerWindow(
   return "WHERE " + parts.join(" AND ");
 }
 
-/** WHERE-Snippet, das nur Anfragen des Oneauto-Keys einschließt. */
+/** WHERE-Snippet, das alle Oneauto-Key-Instanzen (Konto 1 + 2) einschließt. */
 export function whereOneautoWindow(
+  env: AuthEnv,
   fromIso: string,
   toIso: string,
   extra?: string,
 ): string {
+  const inList = getOneautoKeys(env).map(sqlString).join(", ");
   const parts = [
     `timestamp >= ${sqlDateTime(fromIso)}`,
     `timestamp <  ${sqlDateTime(toIso)}`,
-    `index1 = ${sqlString(ONEAUTO_KEY)}`,
+    `index1 IN (${inList})`,
   ];
   if (extra) parts.push(extra);
   return "WHERE " + parts.join(" AND ");
@@ -465,14 +494,15 @@ export function whereOneautoWindow(
 export type AnalyticsMode = "customers" | "oneauto";
 
 export function whereForMode(
+  env: AuthEnv,
   mode: AnalyticsMode,
   fromIso: string,
   toIso: string,
   extra?: string,
 ): string {
   return mode === "oneauto"
-    ? whereOneautoWindow(fromIso, toIso, extra)
-    : whereCustomerWindow(fromIso, toIso, extra);
+    ? whereOneautoWindow(env, fromIso, toIso, extra)
+    : whereCustomerWindow(env, fromIso, toIso, extra);
 }
 
 /**

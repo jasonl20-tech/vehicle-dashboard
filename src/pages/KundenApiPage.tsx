@@ -283,15 +283,10 @@ function Header({
   const defaultDescription =
     mode === "oneauto" ? (
       <>
-        Live-Statistik der Anfragen, die unter dem{" "}
-        <span className="font-mono text-[12px] text-ink-700">Oneauto</span>
-        -Key (
-        <span className="font-mono text-[11.5px] text-ink-700">
-          e6dd0c88…ac31
-        </span>
-        ) gegen die API laufen. Kommt derselbe Key aus mehreren
-        Analytics-Datasets vor, fließen die Werte in den Gesamtzahlen
-        zusammen.
+        Live-Statistik für beide Oneauto-API-Key-Instanzen (z. B.{" "}
+        <span className="font-mono text-[11.5px] text-ink-700">e6dd0c88…ac31</span> und{" "}
+        <span className="font-mono text-[11.5px] text-ink-700">e6dd0c88…9c76b</span>
+        ) – auch über mehrere Analytics-Datasets hinweg additiv zusammengeführt.
       </>
     ) : (
       <>
@@ -304,7 +299,7 @@ function Header({
         <span className="font-mono text-[12.5px] text-ink-700">api_analytics</span>{" "}
         werden additiv zusammengeführt. Anfragen mit Key{" "}
         <span className="font-mono text-[12px] text-ink-700">anonymous</span> und
-        der Oneauto-Key sind herausgefiltert.
+        alle Oneauto-Key-Instanzen sind herausgefiltert.
       </>
     );
 

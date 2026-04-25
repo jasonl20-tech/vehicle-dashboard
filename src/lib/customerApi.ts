@@ -340,7 +340,11 @@ export interface OneautoMonthRow {
 
 export interface OneautoReportsResponse {
   pricePerViewGbp: number;
+  /** Erster / primärer Oneauto-Key (Rückwärtskompatibilität). */
   key: string;
+  /** Alle API-Key-Hashes, deren Events einfließen (Konto 1 + 2). */
+  keys?: string[];
+  mergedSources?: string[];
   months: OneautoMonthRow[];
   totals: { views: number; gbp: number; eur: number | null };
   generatedAt: string;

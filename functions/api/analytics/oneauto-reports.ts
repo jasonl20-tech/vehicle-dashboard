@@ -16,6 +16,7 @@
 import {
   aeNumber,
   getMergedAnalyticsSources,
+  getOneautoKeys,
   ONEAUTO_KEY,
   runAeSql,
   sqlDateTime,
@@ -171,6 +172,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     );
   }
 
+  const oneautoKeyList = getOneautoKeys(env).map(sqlString).join(", ");
   const buildSql = (dataset: string) => `
     SELECT
       toStartOfMonth(timestamp) AS month,
@@ -181,7 +183,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     FROM ${dataset}
     WHERE timestamp >= ${sqlDateTime(minFrom)}
       AND timestamp <  ${sqlDateTime(maxTo)}
-      AND index1 = ${sqlString(ONEAUTO_KEY)}
+      AND index1 IN (${oneautoKeyList})
     GROUP BY month
     ORDER BY month DESC
     LIMIT 100
@@ -277,6 +279,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   return jsonResponse({
     pricePerViewGbp: PRICE_GBP_PER_VIEW,
     key: ONEAUTO_KEY,
+    keys: getOneautoKeys(env),
     mergedSources: sources.map((s) => s.dataset),
     months,
     totals: {

@@ -35,6 +35,11 @@ export interface AuthEnv {
   CF_ACCOUNT_ID_2?: string;
   CF_API_TOKEN_2?: string;
   CF_APi_TOKEN_2?: string;
+  /**
+   * Optional: zweiter Oneauto-API-Key (32 hex), falls abweichend von `ONEAUTO_KEY_ALT`.
+   * Ohne Wert: fest definierter Alt-Key + Primär-Key fassen beide Accounts zusammen.
+   */
+  ONEAUTO_KEY_2?: string;
 }
 
 // ---------- base64url helpers ----------
