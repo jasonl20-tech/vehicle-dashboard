@@ -4,6 +4,7 @@ import {
   runAeSql,
   sqlString,
   whereCustomerWindow,
+  type AeSqlError,
 } from "../../_lib/analytics";
 import {
   getCurrentUser,
@@ -100,9 +101,19 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       ...result,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const aeErr = err as AeSqlError;
+    const msg = aeErr instanceof Error ? aeErr.message : String(aeErr);
     console.error("[customer-keys] failed:", msg);
-    return jsonResponse({ error: msg }, { status: 500 });
+    return jsonResponse(
+      {
+        error: msg,
+        status: aeErr.status ?? null,
+        cfRay: aeErr.cfRay ?? null,
+        hint: aeErr.hint ?? null,
+        body: aeErr.body ?? null,
+      },
+      { status: 500 },
+    );
   }
 };
 

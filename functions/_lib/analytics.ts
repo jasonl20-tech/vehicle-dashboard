@@ -41,7 +41,29 @@ export interface AeResponse<T extends AeRow = AeRow> {
 }
 
 function getToken(env: AuthEnv): string | null {
-  return env.CF_API_TOKEN || env.CF_APi_TOKEN || null;
+  const t = env.CF_API_TOKEN || env.CF_APi_TOKEN;
+  return t ? t.trim() : null;
+}
+
+function getAccountId(env: AuthEnv): string | null {
+  const v = env.CF_ACCOUNT_ID;
+  if (!v) return null;
+  // Pages-Variablen kommen manchmal mit Whitespace/Quotes durch Copy-Paste.
+  return v.trim().replace(/^["']|["']$/g, "");
+}
+
+const HEX32 = /^[0-9a-f]{32}$/i;
+const KNOWN_NOT_AN_ACCOUNT_ID = new Set(["", "your-account-id"]);
+
+export function validateAccountId(id: string | null): string | null {
+  if (!id) return "CF_ACCOUNT_ID ist leer.";
+  if (KNOWN_NOT_AN_ACCOUNT_ID.has(id.toLowerCase())) {
+    return "CF_ACCOUNT_ID ist offensichtlich ein Platzhalter.";
+  }
+  if (!HEX32.test(id)) {
+    return `CF_ACCOUNT_ID '${id.slice(0, 6)}…' sieht nicht wie eine Cloudflare-Account-ID aus (32 Hex-Zeichen erwartet).`;
+  }
+  return null;
 }
 
 /**
@@ -49,11 +71,25 @@ function getToken(env: AuthEnv): string | null {
  * Die Query MUSS bereits sicher gebaut sein (alle User-Inputs escaped),
  * dieser Helper macht keine eigene Validierung.
  */
+export interface AeSqlError extends Error {
+  status?: number;
+  cfRay?: string | null;
+  body?: string;
+  url?: string;
+  hint?: string;
+  sql?: string;
+}
+
+function maskId(id: string): string {
+  if (id.length <= 8) return "***";
+  return `${id.slice(0, 4)}…${id.slice(-4)}`;
+}
+
 export async function runAeSql<T extends AeRow = AeRow>(
   env: AuthEnv,
   sql: string,
 ): Promise<AeResponse<T>> {
-  const accountId = env.CF_ACCOUNT_ID;
+  const accountId = getAccountId(env);
   const token = getToken(env);
 
   if (!accountId || !token) {
@@ -63,34 +99,164 @@ export async function runAeSql<T extends AeRow = AeRow>(
     );
   }
 
+  const accErr = validateAccountId(accountId);
+  if (accErr) {
+    const err = new Error(accErr) as AeSqlError;
+    err.hint =
+      "Die Account-ID findest du im Cloudflare-Dashboard rechts in der Sidebar als 32-stelliger Hex-String.";
+    throw err;
+  }
+
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(
     accountId,
   )}/analytics_engine/sql`;
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "text/plain;charset=UTF-8",
-      Accept: "application/json",
-    },
-    body: sql,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(
-      `Analytics Engine SQL fehlgeschlagen (${res.status}): ${text.slice(
-        0,
-        500,
-      )}\n--- Query ---\n${sql}`,
-    );
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "text/plain;charset=UTF-8",
+        Accept: "application/json",
+      },
+      body: sql,
+    });
+  } catch (e) {
+    const err = new Error(
+      `Analytics Engine SQL: Netzwerkfehler – ${(e as Error).message}`,
+    ) as AeSqlError;
+    err.url = url;
+    err.sql = sql;
+    throw err;
   }
 
-  // AE liefert standardmäßig JSON nach diesem Schema:
-  // { meta: [...], data: [...], rows, rows_before_limit_at_least }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const cfRay = res.headers.get("cf-ray");
+    let hint = "";
+    if (res.status === 404) {
+      hint =
+        "404 von api.cloudflare.com bedeutet meistens: " +
+        "(1) CF_ACCOUNT_ID gehört nicht zu diesem API-Token, " +
+        "(2) der Token hat keine Permission 'Account → Account Analytics → Read' für diesen Account, " +
+        "oder (3) Analytics Engine ist auf diesem Account nicht aktiv (Workers Paid nötig).";
+    } else if (res.status === 401 || res.status === 403) {
+      hint =
+        "Auth-Fehler: API-Token ungültig, abgelaufen oder ohne Analytics-Permission.";
+    } else if (res.status === 400) {
+      hint =
+        "SQL- oder Schema-Fehler. Prüfe Spaltennamen, Quoting und Funktionen.";
+    }
+    const err = new Error(
+      `Analytics Engine SQL fehlgeschlagen (${res.status}${
+        cfRay ? `, CF-Ray ${cfRay}` : ""
+      })` +
+        (text ? `: ${text.slice(0, 500)}` : " [leerer Response-Body]") +
+        (hint ? `\nHinweis: ${hint}` : "") +
+        `\nAccount: ${maskId(accountId)}` +
+        `\nURL: ${url}` +
+        `\n--- Query ---\n${sql}`,
+    ) as AeSqlError;
+    err.status = res.status;
+    err.cfRay = cfRay;
+    err.body = text;
+    err.url = url;
+    err.sql = sql;
+    err.hint = hint;
+    throw err;
+  }
+
   const json = (await res.json()) as AeResponse<T>;
   return json;
+}
+
+/** Sicherer Diagnose-Helper – ruft eine triviale Query und liefert
+ *  detaillierte Infos für das Debugging zurück (ohne Token). */
+export async function diagnoseAe(env: AuthEnv): Promise<{
+  ok: boolean;
+  accountId: { present: boolean; masked: string | null; valid: boolean; error: string | null };
+  token: { present: boolean; length: number };
+  endpoint: string | null;
+  test?: {
+    status: number;
+    cfRay: string | null;
+    bodyPreview: string;
+    rowsReturned?: number;
+  };
+  hint?: string;
+  error?: string;
+}> {
+  const accountId = getAccountId(env);
+  const token = getToken(env);
+  const accErr = validateAccountId(accountId);
+
+  const result = {
+    ok: false,
+    accountId: {
+      present: !!accountId,
+      masked: accountId ? maskId(accountId) : null,
+      valid: !accErr,
+      error: accErr,
+    },
+    token: { present: !!token, length: token ? token.length : 0 },
+    endpoint: accountId
+      ? `https://api.cloudflare.com/client/v4/accounts/${maskId(accountId)}/analytics_engine/sql`
+      : null,
+  } as Awaited<ReturnType<typeof diagnoseAe>>;
+
+  if (!accountId || !token) {
+    result.error = "CF_ACCOUNT_ID oder CF_API_TOKEN fehlt.";
+    return result;
+  }
+  if (accErr) {
+    result.error = accErr;
+    return result;
+  }
+
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(
+    accountId,
+  )}/analytics_engine/sql`;
+  const sql = `SELECT 1 AS one FROM ${KEY_ANALYTICS_DATASET} LIMIT 1 FORMAT JSON`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "text/plain;charset=UTF-8",
+        Accept: "application/json",
+      },
+      body: sql,
+    });
+    const text = await res.text().catch(() => "");
+    result.test = {
+      status: res.status,
+      cfRay: res.headers.get("cf-ray"),
+      bodyPreview: text.slice(0, 600),
+    };
+    if (res.ok) {
+      try {
+        const j = JSON.parse(text) as AeResponse;
+        result.test.rowsReturned = j.rows;
+      } catch {
+        // ignore
+      }
+      result.ok = true;
+    } else {
+      if (res.status === 404) {
+        result.hint =
+          "404 → CF_ACCOUNT_ID gehört nicht zum Token, Token hat keine 'Account Analytics: Read'-Permission, oder AE ist nicht aktiv (Workers Paid nötig).";
+      } else if (res.status === 401 || res.status === 403) {
+        result.hint = "Token ungültig oder ohne Analytics-Permission.";
+      } else if (res.status === 400) {
+        result.hint = "Dataset existiert evtl. nicht – heißt er wirklich 'key_analytics'?";
+      }
+    }
+  } catch (e) {
+    result.error = `Fetch fehlgeschlagen: ${(e as Error).message}`;
+  }
+  return result;
 }
 
 // ---------- SQL-Building Helpers ----------

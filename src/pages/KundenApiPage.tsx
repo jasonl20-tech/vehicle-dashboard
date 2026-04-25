@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Search,
+  Stethoscope,
   X,
 } from "lucide-react";
 import {
@@ -103,6 +104,15 @@ export default function KundenApiPage() {
           null
         }
       />
+
+      <DiagPanel
+        autoOpen={Boolean(
+          overview.error &&
+            (overview.error.includes("404") ||
+              overview.error.includes("CF_ACCOUNT_ID")),
+        )}
+      />
+
 
       <KpiGrid row={overview.data?.row} loading={overview.loading} />
 
@@ -522,6 +532,204 @@ function SubSection({
         {meta && <p className="mt-0.5 text-[11.5px] text-ink-400">{meta}</p>}
       </div>
       {children}
+    </div>
+  );
+}
+
+// ---------- Diagnose-Panel ----------
+
+type DiagResp = {
+  ok: boolean;
+  accountId: {
+    present: boolean;
+    masked: string | null;
+    valid: boolean;
+    error: string | null;
+  };
+  token: { present: boolean; length: number };
+  endpoint: string | null;
+  test?: {
+    status: number;
+    cfRay: string | null;
+    bodyPreview: string;
+    rowsReturned?: number;
+  };
+  hint?: string;
+  error?: string;
+};
+
+function DiagPanel({ autoOpen }: { autoOpen?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<DiagResp | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [autoTriggered, setAutoTriggered] = useState(false);
+
+  async function run() {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/analytics/_diag", {
+        credentials: "include",
+      });
+      const j = (await res.json().catch(() => ({}))) as DiagResp;
+      setData(j);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (autoOpen && !autoTriggered) {
+      setAutoTriggered(true);
+      setOpen(true);
+      run();
+    }
+  }, [autoOpen, autoTriggered]);
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => {
+            const next = !open;
+            setOpen(next);
+            if (next && !data && !loading) run();
+          }}
+          className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[11.5px] font-medium text-ink-600 transition-colors hover:border-ink-300 hover:text-ink-900"
+        >
+          <Stethoscope className="h-3.5 w-3.5" />
+          {open ? "Diagnose schließen" : "Verbindung diagnostizieren"}
+        </button>
+        {open && (
+          <button
+            type="button"
+            onClick={run}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[11.5px] font-medium text-ink-600 transition-colors hover:border-ink-300 hover:text-ink-900 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+            />
+            Erneut prüfen
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-3 rounded-md border border-hair bg-white p-4">
+          {loading && (
+            <p className="text-[12.5px] text-ink-500">
+              Prüfe Cloudflare-API …
+            </p>
+          )}
+          {err && (
+            <p className="text-[12.5px] text-accent-rose">
+              Diagnose fehlgeschlagen: {err}
+            </p>
+          )}
+          {data && (
+            <div className="grid gap-3 text-[12.5px] sm:grid-cols-2">
+              <DiagRow
+                label="CF_ACCOUNT_ID"
+                ok={data.accountId.valid && data.accountId.present}
+                value={
+                  data.accountId.present
+                    ? data.accountId.masked +
+                      (data.accountId.valid ? " (valide)" : " (invalide)")
+                    : "fehlt"
+                }
+                detail={data.accountId.error || undefined}
+              />
+              <DiagRow
+                label="CF_API_TOKEN"
+                ok={data.token.present}
+                value={
+                  data.token.present
+                    ? `gesetzt (${data.token.length} Zeichen)`
+                    : "fehlt"
+                }
+              />
+              <DiagRow
+                label="API-Endpoint"
+                ok={!!data.endpoint}
+                value={data.endpoint || "–"}
+                mono
+              />
+              {data.test && (
+                <DiagRow
+                  label="Probe-Call (SELECT 1)"
+                  ok={data.test.status >= 200 && data.test.status < 300}
+                  value={`HTTP ${data.test.status}${
+                    data.test.cfRay ? ` · CF-Ray ${data.test.cfRay}` : ""
+                  }`}
+                  detail={
+                    data.test.bodyPreview
+                      ? `Body: ${data.test.bodyPreview}`
+                      : undefined
+                  }
+                  mono
+                />
+              )}
+              {data.hint && (
+                <div className="sm:col-span-2 rounded border border-amber-200 bg-amber-50/60 px-3 py-2 text-[12px] text-amber-900">
+                  Hinweis: {data.hint}
+                </div>
+              )}
+              {data.error && (
+                <div className="sm:col-span-2 rounded border border-accent-rose/40 bg-accent-rose/[0.06] px-3 py-2 text-[12px] text-accent-rose">
+                  {data.error}
+                </div>
+              )}
+              {data.ok && (
+                <div className="sm:col-span-2 rounded border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-800">
+                  Verbindung zur Analytics Engine OK – Schema/Dataset und
+                  Permissions passen.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DiagRow({
+  label,
+  value,
+  ok,
+  detail,
+  mono,
+}: {
+  label: string;
+  value: string;
+  ok: boolean;
+  detail?: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5 rounded border border-hair px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">
+          {label}
+        </span>
+        <span
+          className={`inline-flex h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-500" : "bg-accent-rose"}`}
+          aria-hidden
+        />
+      </div>
+      <span
+        className={`break-all text-ink-800 ${mono ? "font-mono text-[11.5px]" : ""}`}
+      >
+        {value}
+      </span>
+      {detail && (
+        <span className="break-all text-[11.5px] text-ink-500">{detail}</span>
+      )}
     </div>
   );
 }

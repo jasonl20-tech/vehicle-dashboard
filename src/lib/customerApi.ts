@@ -152,10 +152,17 @@ export function useApi<T>(url: string | null): FetchState<T> {
       .then(async (res) => {
         const json = (await res.json().catch(() => ({}))) as Partial<{
           error: string;
+          hint: string;
+          status: number;
+          cfRay: string;
         }> &
           T;
         if (!res.ok) {
-          throw new Error(json.error || `HTTP ${res.status}`);
+          const parts: string[] = [];
+          parts.push(json.error || `HTTP ${res.status}`);
+          if (json.hint) parts.push(`Hinweis: ${json.hint}`);
+          if (json.cfRay) parts.push(`CF-Ray: ${json.cfRay}`);
+          throw new Error(parts.join(" • "));
         }
         setData(json as T);
       })
