@@ -1,5 +1,6 @@
 import { Plus, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import PlanFormEditor from "../components/billing/PlanFormEditor";
 import {
   BILLING_PLANS,
   plansUrlOne,
@@ -7,6 +8,7 @@ import {
   useJsonApi,
   type PlansListResponse,
 } from "../lib/billingApi";
+import { defaultPlanValue, planValueToKvJson } from "../lib/planFormTypes";
 import PageHeader from "../components/ui/PageHeader";
 
 export default function ZahlungenPlaenePage() {
@@ -35,10 +37,9 @@ export default function ZahlungenPlaenePage() {
         hideCalendarAndNotifications
         description={
           <>
-            KV-Namespace <span className="font-mono">plans</span>. Preis in
-            Stripe anlegen, dann{" "}
-            <span className="font-mono">stripe_price_id: &quot;price_…&quot;</span>{" "}
-            im JSON. Bearbeiten möglich, kein Löschen.
+            KV <span className="font-mono">plans</span>: Pläne per Formular
+            bearbeiten (Werte aus D1-Fahrzeugkatalog &amp; Stripe). Kein
+            Löschen.
           </>
         }
         rightSlot={
@@ -96,15 +97,7 @@ export default function ZahlungenPlaenePage() {
                 setSaving(true);
                 setNewKeyError(null);
                 try {
-                  await putPlan(k, {
-                    plan_name: k,
-                    stripe_price_id: "",
-                    expires_in_seconds: 604800,
-                    features: {},
-                    asset_rules: {},
-                    content_restrictions: {},
-                    infrastructure: {},
-                  });
+                  await putPlan(k, planValueToKvJson(defaultPlanValue(k)));
                   setNewKey("");
                   kvs.reload();
                   setPlanKey(k);
@@ -136,10 +129,10 @@ export default function ZahlungenPlaenePage() {
           </div>
           <div className="lg:col-span-8">
             <p className="mb-2 text-[11.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
-              JSON
+              Plan-Editor
             </p>
             {planKey ? (
-              <PlanEditor
+              <PlanFormEditor
                 key={planKey}
                 planKey={planKey}
                 planOne={planOne}
@@ -162,75 +155,5 @@ export default function ZahlungenPlaenePage() {
         </div>
       )}
     </>
-  );
-}
-
-function PlanEditor({
-  planKey,
-  planOne,
-  planLoading,
-  planErr,
-  onAfterSave,
-}: {
-  planKey: string;
-  planOne: { key: string; value: unknown; raw: string } | null;
-  planLoading: boolean;
-  planErr: string | null;
-  onAfterSave: () => void;
-}) {
-  const [text, setText] = useState("");
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (planOne?.key === planKey && planOne.raw && !dirty) {
-      setText(planOne.raw);
-    }
-  }, [planKey, planOne, dirty]);
-
-  if (planLoading && !planOne) {
-    return <p className="text-[13px] text-ink-400">Lade Plan …</p>;
-  }
-  if (planErr) {
-    return <p className="text-[13px] text-accent-rose">{planErr}</p>;
-  }
-
-  return (
-    <div>
-      <textarea
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setDirty(true);
-        }}
-        spellCheck={false}
-        className="h-[min(60vh,420px)] w-full rounded-md border border-hair bg-white p-3 font-mono text-[12px] leading-relaxed"
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={saving}
-          onClick={async () => {
-            setErr(null);
-            setSaving(true);
-            try {
-              const parsed: unknown = JSON.parse(text) as unknown;
-              await putPlan(planKey, parsed);
-              setDirty(false);
-              onAfterSave();
-            } catch (e) {
-              setErr(e instanceof Error ? e.message : String(e));
-            } finally {
-              setSaving(false);
-            }
-          }}
-          className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-800 hover:border-ink-300"
-        >
-          {saving ? "…" : "Speichern"}
-        </button>
-      </div>
-      {err && <p className="mt-2 text-[12.5px] text-accent-rose">{err}</p>}
-    </div>
   );
 }

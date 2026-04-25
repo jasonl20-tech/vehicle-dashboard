@@ -47,6 +47,11 @@ export interface AuthEnv {
    * Im Cloudflare-Dashboard: Variable-Name muss exakt `plans` lauten (wie im Code: `env.plans`).
    */
   plans?: KVNamespace;
+  /**
+   * D1: Fahrzeug-/Bild-Metadaten (z. B. Tabelle `vehicleimagery_public_storage`). Nur SELECT im Code.
+   * Binding-Name im Dashboard: `vehicledatabase` → `env.vehicledatabase`
+   */
+  vehicledatabase?: D1Database;
 }
 
 // ---------- base64url helpers ----------
