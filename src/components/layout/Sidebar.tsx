@@ -248,9 +248,9 @@ function UserRow() {
     .join("")
     .toUpperCase();
 
-  const banner = user.bannerfarbe && user.bannerfarbe !== "#ffffff"
-    ? user.bannerfarbe
-    : null;
+  // Bannerfarbe 1:1 aus der DB, mit Fallback falls leer/ungültig.
+  const banner = sanitizeColor(user.bannerfarbe) ?? "#1f232c";
+  const stufe = user.sicherheitsstufe ?? 0;
 
   const handleLogout = async () => {
     await logout();
@@ -259,51 +259,82 @@ function UserRow() {
 
   return (
     <div className="relative border-t border-white/[0.06]">
-      {banner && (
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-7"
-          style={{
-            background: `linear-gradient(to bottom, ${banner}33, transparent)`,
-          }}
-        />
-      )}
-      <div className="relative flex items-center gap-2.5 px-4 py-3">
-        <div className="relative">
-          {user.profilbild ? (
-            <img
-              src={user.profilbild}
-              alt={user.benutzername}
-              className="h-8 w-8 rounded-full object-cover ring-1 ring-white/10"
-              referrerPolicy="no-referrer"
-            />
-          ) : (
-            <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-accent-rose text-[11px] font-semibold text-white">
-              {initials}
-            </div>
-          )}
-          <span className="absolute -bottom-0 -right-0 h-2 w-2 rounded-full bg-accent-mint ring-2 ring-night-900" />
-        </div>
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-[12.5px] font-medium text-white">
-            {user.benutzername}
-          </p>
-          <p className="flex items-center gap-1 truncate text-[10.5px] text-night-400">
-            {user.titel || "Mitglied"}
-            {user.sicherheitsstufe >= 5 && (
-              <ShieldCheck className="h-3 w-3 text-brand-300" />
+      {/* Banner (full color aus user.bannerfarbe) */}
+      <div
+        aria-hidden
+        className="h-12 w-full"
+        style={{ backgroundColor: banner }}
+      />
+      {/* Subtiler Innenschatten am unteren Banner-Rand für Tiefe */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-12 shadow-[inset_0_-12px_18px_-12px_rgba(0,0,0,0.35)]"
+      />
+
+      {/* Logout: floating top-right, eigene dunkle Pille damit es auf jeder
+          Bannerfarbe lesbar bleibt (auch auf #ffffff). */}
+      <button
+        type="button"
+        onClick={handleLogout}
+        title="Abmelden"
+        className="absolute right-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-md bg-night-900/55 text-white/90 backdrop-blur-md transition-colors hover:bg-night-900/80"
+      >
+        <LogOut className="h-3.5 w-3.5" />
+      </button>
+
+      {/* Content: Avatar überlappt das Banner */}
+      <div className="px-4 pb-3.5 pt-2">
+        <div className="-mt-7 flex items-end gap-3">
+          <div className="relative shrink-0">
+            {user.profilbild ? (
+              <img
+                src={user.profilbild}
+                alt={user.benutzername}
+                className="h-12 w-12 rounded-full object-cover ring-2 ring-night-900"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="grid h-12 w-12 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-accent-rose text-[12.5px] font-semibold text-white ring-2 ring-night-900">
+                {initials}
+              </div>
             )}
-          </p>
+            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent-mint ring-2 ring-night-900" />
+          </div>
+          <div className="min-w-0 flex-1 pb-0.5">
+            <p className="truncate text-[12.5px] font-medium text-white">
+              {user.benutzername}
+            </p>
+            <div className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-night-400">
+              <span className="truncate">{user.titel || "Mitglied"}</span>
+              <span className="opacity-40">·</span>
+              <SecurityBadge level={stufe} />
+            </div>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          title="Abmelden"
-          className="rounded-md p-1 text-night-400 hover:bg-white/[0.05] hover:text-white"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-        </button>
       </div>
     </div>
   );
+}
+
+function SecurityBadge({ level }: { level: number }) {
+  return (
+    <span
+      title={`Sicherheitsstufe ${level}`}
+      className="inline-flex shrink-0 items-center gap-1 rounded-sm bg-white/[0.07] px-1.5 py-[1px] text-[10px] font-medium leading-none text-night-200 ring-1 ring-inset ring-white/10"
+    >
+      <ShieldCheck className="h-2.5 w-2.5 text-brand-300" />
+      Stufe {level}
+    </span>
+  );
+}
+
+/**
+ * Akzeptiert nur Strings die wie eine CSS-Farbe aussehen
+ * (#rgb, #rrggbb, #rrggbbaa). Sonst null → Fallback.
+ */
+function sanitizeColor(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const s = input.trim();
+  if (/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(s)) return s;
+  return null;
 }
