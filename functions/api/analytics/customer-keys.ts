@@ -154,7 +154,7 @@ async function overview(env: AuthEnv, { where }: Ctx) {
   const sql = `
     SELECT
       SUM(_sample_interval) AS requests,
-      uniq(index1) AS uniqueKeys,
+      count(DISTINCT index1) AS uniqueKeys,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS okRequests,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS errRequests,
       MIN(timestamp) AS firstSeen,
@@ -189,7 +189,7 @@ async function timeseries(env: AuthEnv, { where, from, to }: Ctx) {
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
-      uniq(index1) AS keys
+      count(DISTINCT index1) AS keys
     FROM ${KEY_ANALYTICS_DATASET}
     ${where}
     GROUP BY bucket
@@ -213,7 +213,7 @@ async function topKeys(env: AuthEnv, { where, limit }: Ctx) {
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
-      uniq(blob3) AS brands,
+      count(DISTINCT blob3) AS brands,
       MAX(timestamp) AS lastSeen
     FROM ${KEY_ANALYTICS_DATASET}
     ${where}
