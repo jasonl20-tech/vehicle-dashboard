@@ -32,7 +32,6 @@ import {
 } from "recharts";
 import {
   type AnalyticsMode,
-  type AnalyticsBinding,
   type KeyDetailResponse,
   type OverviewRow,
   PRESETS,
@@ -69,8 +68,6 @@ type TimeseriesResp = {
 interface KundenApiPageProps {
   /** Datenquelle: alle Kunden (Standard) oder nur der Oneauto-Key. */
   mode?: AnalyticsMode;
-  /** Primäres CF-Konto (key_analytics) oder zweites (api_analytics + CF_*_2). */
-  binding?: AnalyticsBinding;
   /** Wird im Header angezeigt – z. B. „Kunden API" oder „Oneauto API". */
   title?: string;
   /** Optionaler Subtitel/Header-Beschreibung. */
@@ -81,7 +78,6 @@ interface KundenApiPageProps {
 
 export default function KundenApiPage({
   mode = "customers",
-  binding = "primary",
   title = "Kunden API",
   description,
   eyebrow = "Analytics · Kunden API",
@@ -89,7 +85,7 @@ export default function KundenApiPage({
   const [range, setRange] = useState<Range>(() => rangeFromPreset("7d"));
   const [openKey, setOpenKey] = useState<string | null>(null);
 
-  const apiUrls = useMemo(() => makeApiUrls(mode, binding), [mode, binding]);
+  const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
 
   const overview = useApi<{ row: OverviewRow }>(apiUrls.overview(range));
   const timeseries = useApi<TimeseriesResp>(apiUrls.timeseries(range));
@@ -127,7 +123,6 @@ export default function KundenApiPage({
         eyebrow={eyebrow}
         description={description}
         mode={mode}
-        binding={binding}
       />
 
       <ErrorBanner
@@ -141,7 +136,6 @@ export default function KundenApiPage({
       />
 
       <DiagPanel
-        binding={binding}
         autoOpen={Boolean(
           overview.error &&
             (overview.error.includes("404") ||
@@ -260,7 +254,6 @@ export default function KundenApiPage({
           keyId={openKey}
           range={range}
           mode={mode}
-          binding={binding}
           onClose={() => setOpenKey(null)}
         />
       )}
@@ -278,7 +271,6 @@ function Header({
   eyebrow,
   description,
   mode,
-  binding,
 }: {
   range: Range;
   onRange: (r: Range) => void;
@@ -287,7 +279,6 @@ function Header({
   eyebrow: string;
   description?: ReactNode;
   mode: AnalyticsMode;
-  binding: AnalyticsBinding;
 }) {
   const defaultDescription =
     mode === "oneauto" ? (
@@ -298,31 +289,22 @@ function Header({
         <span className="font-mono text-[11.5px] text-ink-700">
           e6dd0c88…ac31
         </span>
-        ) gegen die API laufen.
-      </>
-    ) : binding === "secondary" ? (
-      <>
-        Statistik aus dem{" "}
-        <span className="font-mono text-[12.5px] text-ink-700">
-          api_analytics
-        </span>{" "}
-        -Dataset (zweites Cloudflare-Konto, Umgebungsvariablen{" "}
-        <span className="font-mono text-[11px] text-ink-700">
-          CF_ACCOUNT_ID_2
-        </span>{" "}
-        / <span className="font-mono text-[11px] text-ink-700">CF_API_TOKEN_2</span>
-        ). Gleiche Spalten wie das primäre Dataset; Key-Format z. B.{" "}
-        <span className="font-mono text-[11px] text-ink-700">vi_…</span>.
+        ) gegen die API laufen. Kommt derselbe Key aus mehreren
+        Analytics-Datasets vor, fließen die Werte in den Gesamtzahlen
+        zusammen.
       </>
     ) : (
       <>
-        Live-Statistik aus der Cloudflare Analytics Engine –{" "}
+        Live-Statistik:{" "}
         <span className="font-mono text-[12.5px] text-ink-700">
           key_analytics
-        </span>
-        . Anfragen mit Key{" "}
-        <span className="font-mono text-[12px] text-ink-700">anonymous</span>{" "}
-        und der Oneauto-Key sind herausgefiltert.
+        </span>{" "}
+        und, falls <span className="font-mono text-[11px] text-ink-700">CF_*_2</span>{" "}
+        gesetzt ist,{" "}
+        <span className="font-mono text-[12.5px] text-ink-700">api_analytics</span>{" "}
+        werden additiv zusammengeführt. Anfragen mit Key{" "}
+        <span className="font-mono text-[12px] text-ink-700">anonymous</span> und
+        der Oneauto-Key sind herausgefiltert.
       </>
     );
 
@@ -641,7 +623,7 @@ function SubSection({
 
 // ---------- Diagnose-Panel ----------
 
-type DiagResp = {
+type DiagBlock = {
   ok: boolean;
   binding?: string;
   dataset?: string;
@@ -663,33 +645,29 @@ type DiagResp = {
   error?: string;
 };
 
-function DiagPanel({
-  binding,
-  autoOpen,
-}: {
-  binding: AnalyticsBinding;
-  autoOpen?: boolean;
-}) {
+type MergedDiagResp = {
+  ok: boolean;
+  mergedSources?: string[];
+  error?: string;
+  primary?: DiagBlock;
+  secondary?: DiagBlock | null;
+};
+
+function DiagPanel({ autoOpen }: { autoOpen?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<DiagResp | null>(null);
+  const [data, setData] = useState<MergedDiagResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [autoTriggered, setAutoTriggered] = useState(false);
-
-  const idLabel = binding === "secondary" ? "CF_ACCOUNT_ID_2" : "CF_ACCOUNT_ID";
-  const tokenLabel = binding === "secondary" ? "CF_API_TOKEN_2" : "CF_API_TOKEN";
 
   async function run() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch(
-        `/api/analytics/_diag?binding=${encodeURIComponent(binding)}`,
-        {
+      const res = await fetch("/api/analytics/_diag", {
         credentials: "include",
-        },
-      );
-      const j = (await res.json().catch(() => ({}))) as DiagResp;
+      });
+      const j = (await res.json().catch(() => ({}))) as MergedDiagResp;
       setData(j);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -704,7 +682,7 @@ function DiagPanel({
       setOpen(true);
       run();
     }
-  }, [autoOpen, autoTriggered, binding]);
+  }, [autoOpen, autoTriggered]);
 
   return (
     <div className="mb-8">
@@ -749,76 +727,131 @@ function DiagPanel({
             </p>
           )}
           {data && (
-            <div className="grid gap-3 text-[12.5px] sm:grid-cols-2">
-              {data.dataset && (
-                <DiagRow
-                  label="Binding / Dataset"
-                  ok
-                  value={`${data.binding ?? binding} · ${data.dataset}`}
-                  mono
-                />
-              )}
-              <DiagRow
-                label={idLabel}
-                ok={data.accountId.valid && data.accountId.present}
-                value={
-                  data.accountId.present
-                    ? data.accountId.masked +
-                      (data.accountId.valid ? " (valide)" : " (invalide)")
-                    : "fehlt"
-                }
-                detail={data.accountId.error || undefined}
-              />
-              <DiagRow
-                label={tokenLabel}
-                ok={data.token.present}
-                value={
-                  data.token.present
-                    ? `gesetzt (${data.token.length} Zeichen)`
-                    : "fehlt"
-                }
-              />
-              <DiagRow
-                label="API-Endpoint"
-                ok={!!data.endpoint}
-                value={data.endpoint || "–"}
-                mono
-              />
-              {data.test && (
-                <DiagRow
-                  label="Probe-Call (SELECT 1)"
-                  ok={data.test.status >= 200 && data.test.status < 300}
-                  value={`HTTP ${data.test.status}${
-                    data.test.cfRay ? ` · CF-Ray ${data.test.cfRay}` : ""
-                  }`}
-                  detail={
-                    data.test.bodyPreview
-                      ? `Body: ${data.test.bodyPreview}`
-                      : undefined
-                  }
-                  mono
-                />
-              )}
-              {data.hint && (
-                <div className="sm:col-span-2 rounded border border-amber-200 bg-amber-50/60 px-3 py-2 text-[12px] text-amber-900">
-                  Hinweis: {data.hint}
-                </div>
-              )}
-              {data.error && (
-                <div className="sm:col-span-2 rounded border border-accent-rose/40 bg-accent-rose/[0.06] px-3 py-2 text-[12px] text-accent-rose">
+            <div className="space-y-6">
+              {data.error && !data.primary && (
+                <div className="rounded border border-accent-rose/40 bg-accent-rose/[0.06] px-3 py-2 text-[12.5px] text-accent-rose">
                   {data.error}
                 </div>
               )}
-              {data.ok && (
-                <div className="sm:col-span-2 rounded border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-800">
-                  Verbindung zur Analytics Engine OK – Schema/Dataset und
-                  Permissions passen.
+              {data.mergedSources && data.mergedSources.length > 0 && (
+                <p className="text-[12px] text-ink-500">
+                  Zusammengeführte Datasets:{" "}
+                  <span className="font-mono text-ink-700">
+                    {data.mergedSources.join(" + ")}
+                  </span>
+                </p>
+              )}
+              {data.primary && (
+                <DiagSourceBlock
+                  title="Primär (CF_ACCOUNT_ID / key_analytics)"
+                  idLabel="CF_ACCOUNT_ID"
+                  tokenLabel="CF_API_TOKEN"
+                  block={data.primary}
+                />
+              )}
+              {data.secondary && (
+                <DiagSourceBlock
+                  title="Sekundär (CF_*_2 / api_analytics)"
+                  idLabel="CF_ACCOUNT_ID_2"
+                  tokenLabel="CF_API_TOKEN_2"
+                  block={data.secondary}
+                />
+              )}
+              {data.ok && data.primary && (
+                <div className="rounded border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-800">
+                  Die konfigurierte(n) Quelle(n) sind prüfbar; die
+                  Dashboard-Werte fassen alle Datasets zusammen.
                 </div>
               )}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function DiagSourceBlock({
+  title,
+  idLabel,
+  tokenLabel,
+  block,
+}: {
+  title: string;
+  idLabel: string;
+  tokenLabel: string;
+  block: DiagBlock;
+}) {
+  return (
+    <div>
+      <h4 className="mb-2 text-[12px] font-medium text-ink-700">{title}</h4>
+      <div className="grid gap-3 text-[12.5px] sm:grid-cols-2">
+        {block.dataset && (
+          <DiagRow
+            label="Binding / Dataset"
+            ok
+            value={`${block.binding ?? "–"} · ${block.dataset}`}
+            mono
+          />
+        )}
+        <DiagRow
+          label={idLabel}
+          ok={block.accountId.valid && block.accountId.present}
+          value={
+            block.accountId.present
+              ? block.accountId.masked +
+                (block.accountId.valid ? " (valide)" : " (invalide)")
+              : "fehlt"
+          }
+          detail={block.accountId.error || undefined}
+        />
+        <DiagRow
+          label={tokenLabel}
+          ok={block.token.present}
+          value={
+            block.token.present
+              ? `gesetzt (${block.token.length} Zeichen)`
+              : "fehlt"
+          }
+        />
+        <DiagRow
+          label="API-Endpoint"
+          ok={!!block.endpoint}
+          value={block.endpoint || "–"}
+          mono
+        />
+        {block.test && (
+          <DiagRow
+            label="Probe-Call (SELECT 1)"
+            ok={block.test.status >= 200 && block.test.status < 300}
+            value={`HTTP ${block.test.status}${
+              block.test.cfRay ? ` · CF-Ray ${block.test.cfRay}` : ""
+            }`}
+            detail={
+              block.test.bodyPreview
+                ? `Body: ${block.test.bodyPreview}`
+                : undefined
+            }
+            mono
+          />
+        )}
+        {block.hint && (
+          <div className="sm:col-span-2 rounded border border-amber-200 bg-amber-50/60 px-3 py-2 text-[12px] text-amber-900">
+            Hinweis: {block.hint}
+          </div>
+        )}
+        {block.error && (
+          <div className="sm:col-span-2 rounded border border-accent-rose/40 bg-accent-rose/[0.06] px-3 py-2 text-[12px] text-accent-rose">
+            {block.error}
+          </div>
+        )}
+        {block.ok && !block.error && (
+          <div className="sm:col-span-2 rounded border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-[12px] text-emerald-800">
+            Verbindung zur Analytics Engine OK – Schema/Dataset und
+            Permissions passen.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1617,19 +1650,14 @@ function KeyDetailDrawer({
   keyId,
   range,
   mode,
-  binding,
   onClose,
 }: {
   keyId: string;
   range: Range;
   mode: AnalyticsMode;
-  binding: AnalyticsBinding;
   onClose: () => void;
 }) {
-  const apiUrls = useMemo(
-    () => makeApiUrls(mode, binding),
-    [mode, binding],
-  );
+  const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
   const detail = useApi<KeyDetailResponse>(apiUrls.keyDetail(range, keyId));
 
   useEffect(() => {

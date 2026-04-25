@@ -127,6 +127,44 @@ export function resolveAnalyticsBinding(
   return { dataset: API_ANALYTICS_DATASET, error: null };
 }
 
+/** Eine angeschlossene Quelle (Konto + Dataset) für gemergte Statistiken. */
+export type AnalyticsSource = {
+  dataset: string;
+  binding: AeAccountBinding;
+};
+
+/**
+ * Liefert alle Analytics-Quellen, die verfügbar sind: immer primäres
+ * Konto (key_analytics), optional zweites (api_analytics) bei gesetzten
+ * CF_*_2-Variablen.
+ */
+export function getMergedAnalyticsSources(env: AuthEnv): {
+  sources: AnalyticsSource[];
+  error: string | null;
+} {
+  const p = resolveAnalyticsBinding(env, "primary");
+  if (p.error) {
+    return { sources: [], error: p.error };
+  }
+  const sources: AnalyticsSource[] = [
+    { dataset: p.dataset, binding: "primary" },
+  ];
+  const s = resolveAnalyticsBinding(env, "secondary");
+  if (!s.error) {
+    sources.push({ dataset: s.dataset, binding: "secondary" });
+  }
+  return { sources, error: null };
+}
+
+/** Analytics-Engine-JSON: Zahlen sicher als number (kein String-+). */
+export function aeNumber(v: unknown): number {
+  if (v == null) return 0;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() === "") return 0;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export type RunAeSqlOptions = {
   /** Standard: primäres Konto (key_analytics). Secondary: Konto 2 (api_analytics). */
   binding?: AeAccountBinding;

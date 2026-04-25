@@ -1,4 +1,7 @@
-import { diagnoseAe } from "../../_lib/analytics";
+import {
+  diagnoseAe,
+  getMergedAnalyticsSources,
+} from "../../_lib/analytics";
 import {
   getCurrentUser,
   jsonResponse,
@@ -6,17 +9,11 @@ import {
 } from "../../_lib/auth";
 
 /**
- * Diagnose-Endpoint für die Analytics-Engine-Anbindung.
+ * Diagnose für alle genutzten Analytics-Quellen (primär + optional Konto 2).
  *
  *   GET /api/analytics/_diag
- *   GET /api/analytics/_diag?binding=secondary
  *
- * Zeigt (maskiert) ob CF_ACCOUNT_ID und CF_API_TOKEN gesetzt sind, ob die
- * Account-ID syntaktisch valide ist und ob ein einfacher Probe-Call gegen
- * die Analytics-Engine SQL-API funktioniert (inkl. Statuscode + CF-Ray +
- * Body-Vorschau, ohne den Token preiszugeben).
- *
- * Nur für eingeloggte Benutzer erreichbar.
+ * Nur für eingeloggte Benutzer.
  */
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -27,11 +24,25 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
-  const url = new URL(request.url);
-  const bindingRaw = (url.searchParams.get("binding") || "primary").toLowerCase();
-  const binding =
-    bindingRaw === "secondary" ? "secondary" : "primary";
+  const { sources, error: srcErr } = getMergedAnalyticsSources(env);
+  if (srcErr) {
+    return jsonResponse({ error: srcErr, ok: false }, { status: 500 });
+  }
 
-  const result = await diagnoseAe(env, { binding });
-  return jsonResponse(result, { status: result.ok ? 200 : 500 });
+  const primary = await diagnoseAe(env, { binding: "primary" });
+  let secondary: Awaited<ReturnType<typeof diagnoseAe>> | null = null;
+  if (sources.length > 1) {
+    secondary = await diagnoseAe(env, { binding: "secondary" });
+  }
+
+  const ok = primary.ok && (secondary == null || secondary.ok);
+  return jsonResponse(
+    {
+      ok,
+      mergedSources: sources.map((s) => s.dataset),
+      primary,
+      secondary,
+    },
+    { status: ok ? 200 : 500 },
+  );
 };

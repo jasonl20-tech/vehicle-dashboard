@@ -1,14 +1,25 @@
 import {
+  getMergedAnalyticsSources,
   pickBucket,
-  resolveAnalyticsBinding,
-  runAeSql,
   sqlString,
   whereForMode,
-  type AeAccountBinding,
-  type AeRow,
+  type AnalyticsSource,
   type AeSqlError,
   type AnalyticsMode,
 } from "../../_lib/analytics";
+import {
+  mergeOverviewRows,
+  mergeRecent,
+  mergeStatusCodes,
+  mergeTimeseries,
+  mergeTopActions,
+  mergeTopBrands,
+  mergeTopKeys,
+  mergeTopModels,
+  mergeTopPaths,
+  mergeTopViews,
+  runMergedSql,
+} from "../../_lib/mergeAnalytics";
 import {
   getCurrentUser,
   jsonResponse,
@@ -30,18 +41,8 @@ const KIND_VALUES = [
 ] as const;
 type Kind = (typeof KIND_VALUES)[number];
 
-/**
- * Bedingung für "echte Bild-Views" (im Gegensatz zu Metadaten-Calls
- * wie list_brands / list_models / list_years / list_variants /
- * list_trims / check_views). blob5 enthält dabei den View-Namen
- * (z. B. "front_left", "right", "rear").
- */
 const VIEW_FILTER_SQL =
   "blob5 != 'NA' AND blob5 != '' AND blob5 NOT LIKE 'list_%' AND blob5 != 'check_views'";
-
-function ae<T extends AeRow>(env: AuthEnv, ctx: Ctx, sql: string) {
-  return runAeSql<T>(env, sql, { binding: ctx.binding });
-}
 
 function defaultRange(): { from: string; to: string } {
   const now = new Date();
@@ -52,10 +53,16 @@ function defaultRange(): { from: string; to: string } {
 }
 
 function isAllowedKey(s: string): boolean {
-  // index1 enthält bei euch z. B. "VI-…" oder Hex-Hash. Wir lassen alles
-  // zu, was harmlos in eine SQL-String-Konstante kann; die Quote-Escape macht
-  // sqlString. Trotzdem ein Sanity-Limit zur Abwehr von Müll.
   return s.length > 0 && s.length <= 200 && !/[\r\n\t\u0000]/.test(s);
+}
+
+/** Pro Quelle größeres LIMIT, damit das Merge der Top-Listen exakte Sortierung liefert. */
+function perSourceTopLimit(
+  sources: AnalyticsSource[],
+  resultLimit: number,
+): number {
+  if (sources.length <= 1) return resultLimit;
+  return Math.min(3000, Math.max(200, resultLimit * 4));
 }
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
@@ -97,22 +104,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
   const mode = modeRaw as AnalyticsMode;
 
-  const bindingRaw = (url.searchParams.get("binding") || "primary").toLowerCase();
-  if (bindingRaw !== "primary" && bindingRaw !== "secondary") {
+  const { sources, error: srcErr } = getMergedAnalyticsSources(env);
+  if (srcErr || sources.length === 0) {
     return jsonResponse(
-      {
-        error: `Unbekannter binding=${bindingRaw}. Erlaubt: primary, secondary`,
-      },
+      { error: srcErr || "Keine Analytics-Quelle verfügbar" },
       { status: 400 },
     );
   }
-  const binding = bindingRaw as AeAccountBinding;
-
-  const resolved = resolveAnalyticsBinding(env, binding);
-  if (resolved.error) {
-    return jsonResponse({ error: resolved.error }, { status: 400 });
-  }
-  const { dataset } = resolved;
 
   let where: string;
   try {
@@ -143,14 +141,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       to,
       limit,
       key,
-      dataset,
-      binding,
+      sources,
     });
     return jsonResponse({
       kind,
       mode,
-      binding,
-      dataset,
+      mergedSources: sources.map((s) => s.dataset),
       from,
       to,
       ...result,
@@ -178,8 +174,7 @@ type Ctx = {
   to: string;
   limit: number;
   key: string;
-  dataset: string;
-  binding: AeAccountBinding;
+  sources: AnalyticsSource[];
 };
 
 async function dispatch(env: AuthEnv, kind: Kind, ctx: Ctx) {
@@ -210,8 +205,8 @@ async function dispatch(env: AuthEnv, kind: Kind, ctx: Ctx) {
 }
 
 async function overview(env: AuthEnv, ctx: Ctx) {
-  const { where } = ctx;
-  const sql = `
+  const { where, sources } = ctx;
+  const sql = (dataset: string) => `
     SELECT
       SUM(_sample_interval) AS requests,
       count(DISTINCT index1) AS uniqueKeys,
@@ -221,10 +216,10 @@ async function overview(env: AuthEnv, ctx: Ctx) {
       SUM(_sample_interval * if(${VIEW_FILTER_SQL} AND double1 < 400, 1, 0)) AS viewOkRequests,
       MIN(timestamp) AS firstSeen,
       MAX(timestamp) AS lastSeen
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where}
   `;
-  const r = await ae<{
+  const parts = await runMergedSql<{
     requests: number;
     uniqueKeys: number;
     okRequests: number;
@@ -233,49 +228,41 @@ async function overview(env: AuthEnv, ctx: Ctx) {
     viewOkRequests: number;
     firstSeen: string | null;
     lastSeen: string | null;
-  }>(env, ctx, sql);
-  const row = r.data[0] || {
-    requests: 0,
-    uniqueKeys: 0,
-    okRequests: 0,
-    errRequests: 0,
-    viewRequests: 0,
-    viewOkRequests: 0,
-    firstSeen: null,
-    lastSeen: null,
-  };
+  }>(env, sources, sql);
+  const row = mergeOverviewRows(parts.map((p) => p[0]));
   return { row };
 }
 
 async function timeseries(env: AuthEnv, ctx: Ctx) {
-  const { where, from, to } = ctx;
+  const { where, from, to, sources } = ctx;
   const bucket = pickBucket(from, to);
-  const sql = `
+  const sql = (dataset: string) => `
     SELECT
       ${bucket.sql} AS bucket,
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
       count(DISTINCT index1) AS keys
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where}
     GROUP BY bucket
     ORDER BY bucket ASC
     LIMIT 5000
   `;
-  const r = await ae<{
+  const parts = await runMergedSql<{
     bucket: string;
     requests: number;
     ok: number;
     err: number;
     keys: number;
-  }>(env, ctx, sql);
-  return { rows: r.data, bucket: bucket.label };
+  }>(env, sources, sql);
+  return mergeTimeseries(parts, bucket.label);
 }
 
 async function topKeys(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sql = `
+  const { where, limit, sources } = ctx;
+  const inner = perSourceTopLimit(sources, limit);
+  const sql = (dataset: string) => `
     SELECT
       index1 AS keyId,
       SUM(_sample_interval) AS requests,
@@ -283,137 +270,156 @@ async function topKeys(env: AuthEnv, ctx: Ctx) {
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
       count(DISTINCT blob3) AS brands,
       MAX(timestamp) AS lastSeen
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where}
     GROUP BY index1
     ORDER BY requests DESC
-    LIMIT ${limit}
+    LIMIT ${inner}
   `;
-  const r = await ae<{
+  const parts = await runMergedSql<{
     keyId: string;
     requests: number;
     ok: number;
     err: number;
     brands: number;
     lastSeen: string;
-  }>(env, ctx, sql);
-  return { rows: r.data };
+  }>(env, sources, sql);
+  return { rows: mergeTopKeys(parts, limit) };
 }
 
 async function topBrands(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sql = `
+  const { where, limit, sources } = ctx;
+  const inner = perSourceTopLimit(sources, limit);
+  const sql = (dataset: string) => `
     SELECT
       blob3 AS brand,
       SUM(_sample_interval) AS requests
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where} AND blob3 != 'NA' AND blob3 != ''
     GROUP BY blob3
     ORDER BY requests DESC
-    LIMIT ${limit}
+    LIMIT ${inner}
   `;
-  const r = await ae<{ brand: string; requests: number }>(env, ctx, sql);
-  return { rows: r.data };
+  const parts = await runMergedSql<{
+    brand: string;
+    requests: number;
+  }>(env, sources, sql);
+  return { rows: mergeTopBrands(parts, limit) };
 }
 
 async function topModels(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sql = `
+  const { where, limit, sources } = ctx;
+  const inner = perSourceTopLimit(sources, limit);
+  const sql = (dataset: string) => `
     SELECT
       blob3 AS brand,
       blob4 AS model,
       SUM(_sample_interval) AS requests
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where} AND blob4 != 'NA' AND blob4 != ''
     GROUP BY blob3, blob4
     ORDER BY requests DESC
-    LIMIT ${limit}
+    LIMIT ${inner}
   `;
-  const r = await ae<{
+  const parts = await runMergedSql<{
     brand: string;
     model: string;
     requests: number;
-  }>(env, ctx, sql);
-  return { rows: r.data };
+  }>(env, sources, sql);
+  return { rows: mergeTopModels(parts, limit) };
 }
 
 async function topActions(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sql = `
+  const { where, limit, sources } = ctx;
+  const inner = perSourceTopLimit(sources, limit);
+  const sql = (dataset: string) => `
     SELECT
       blob5 AS action,
       SUM(_sample_interval) AS requests
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where} AND blob5 != 'NA' AND blob5 != ''
     GROUP BY blob5
     ORDER BY requests DESC
-    LIMIT ${limit}
+    LIMIT ${inner}
   `;
-  const r = await ae<{ action: string; requests: number }>(env, ctx, sql);
-  return { rows: r.data };
+  const parts = await runMergedSql<{
+    action: string;
+    requests: number;
+  }>(env, sources, sql);
+  return { rows: mergeTopActions(parts, limit) };
 }
 
 async function topPaths(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sql = `
+  const { where, limit, sources } = ctx;
+  const inner = perSourceTopLimit(sources, limit);
+  const sql = (dataset: string) => `
     SELECT
       blob1 AS path,
       SUM(_sample_interval) AS requests
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where}
     GROUP BY blob1
     ORDER BY requests DESC
-    LIMIT ${limit}
+    LIMIT ${inner}
   `;
-  const r = await ae<{ path: string; requests: number }>(env, ctx, sql);
-  return { rows: r.data };
+  const parts = await runMergedSql<{
+    path: string;
+    requests: number;
+  }>(env, sources, sql);
+  return { rows: mergeTopPaths(parts, limit) };
 }
 
 async function topViews(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sql = `
+  const { where, limit, sources } = ctx;
+  const inner = perSourceTopLimit(sources, limit);
+  const sql = (dataset: string) => `
     SELECT
       blob5 AS view,
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
       count(DISTINCT index1) AS keys
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where} AND ${VIEW_FILTER_SQL}
     GROUP BY blob5
     ORDER BY requests DESC
-    LIMIT ${limit}
+    LIMIT ${inner}
   `;
-  const r = await ae<{
+  const parts = await runMergedSql<{
     view: string;
     requests: number;
     ok: number;
     err: number;
     keys: number;
-  }>(env, ctx, sql);
-  return { rows: r.data };
+  }>(env, sources, sql);
+  return { rows: mergeTopViews(parts, limit) };
 }
 
 async function statusCodes(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sql = `
+  const { where, limit, sources } = ctx;
+  const inner = perSourceTopLimit(sources, limit);
+  const sql = (dataset: string) => `
     SELECT
       double1 AS status,
       SUM(_sample_interval) AS requests
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where}
     GROUP BY status
     ORDER BY requests DESC
-    LIMIT ${limit}
+    LIMIT ${inner}
   `;
-  const r = await ae<{ status: number; requests: number }>(env, ctx, sql);
-  return { rows: r.data };
+  const parts = await runMergedSql<{
+    status: number;
+    requests: number;
+  }>(env, sources, sql);
+  return { rows: mergeStatusCodes(parts, limit) };
 }
 
 async function recent(env: AuthEnv, ctx: Ctx) {
-  const { where, limit } = ctx;
-  const sortRaw = "DESC"; // immer neueste zuerst
-  const sql = `
+  const { where, limit, sources } = ctx;
+  // Pro Quelle volles Limit, danach neueste insgesamt.
+  const per = sources.length > 1 ? Math.min(500, limit * 2) : limit;
+  const sql = (dataset: string) => `
     SELECT
       timestamp,
       index1 AS keyId,
@@ -424,12 +430,12 @@ async function recent(env: AuthEnv, ctx: Ctx) {
       blob6 AS statusText,
       double1 AS status,
       _sample_interval AS sampleInterval
-    FROM ${ctx.dataset}
+    FROM ${dataset}
     ${where}
-    ORDER BY timestamp ${sortRaw}
-    LIMIT ${limit}
+    ORDER BY timestamp DESC
+    LIMIT ${per}
   `;
-  const r = await ae<{
+  const parts = await runMergedSql<{
     timestamp: string;
     keyId: string;
     path: string;
@@ -439,8 +445,8 @@ async function recent(env: AuthEnv, ctx: Ctx) {
     statusText: string;
     status: number;
     sampleInterval: number;
-  }>(env, ctx, sql);
-  return { rows: r.data };
+  }>(env, sources, sql);
+  return { rows: mergeRecent(parts, limit) };
 }
 
 async function keyDetail(env: AuthEnv, ctx: Ctx) {

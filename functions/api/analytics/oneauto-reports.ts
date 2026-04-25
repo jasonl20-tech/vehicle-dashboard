@@ -14,7 +14,8 @@
  */
 
 import {
-  KEY_ANALYTICS_DATASET,
+  aeNumber,
+  getMergedAnalyticsSources,
   ONEAUTO_KEY,
   runAeSql,
   sqlDateTime,
@@ -94,16 +95,6 @@ interface FxRate {
 
 const FX_FALLBACK = 1.16; // grober Notnagel, falls API nicht erreichbar
 
-/** Analytics Engine liefert Aggregatfelder in JSON manchmal als String;
- *  `+=` würde sonst String-Konkatenation erzeugen (Bug: riesige „Zahlen“). */
-function aeNum(v: unknown): number {
-  if (v == null) return 0;
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() === "") return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
 /**
  * Holt einen GBP→EUR-Wechselkurs zu einem Datum. frankfurter.app
  * verwendet automatisch den letzten Werktag, falls das Datum auf
@@ -172,14 +163,22 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const minFrom = buckets[buckets.length - 1].fromIso;
   const maxTo = buckets[0].toIso;
 
-  const sql = `
+  const { sources, error: srcErr } = getMergedAnalyticsSources(env);
+  if (srcErr || sources.length === 0) {
+    return jsonResponse(
+      { error: srcErr || "Keine Analytics-Quelle" },
+      { status: 400 },
+    );
+  }
+
+  const buildSql = (dataset: string) => `
     SELECT
       toStartOfMonth(timestamp) AS month,
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(${VIEW_FILTER_SQL}, 1, 0)) AS views,
       SUM(_sample_interval * if(${VIEW_FILTER_SQL} AND double1 < 400, 1, 0)) AS viewsOk,
       SUM(_sample_interval * if(${VIEW_FILTER_SQL} AND double1 >= 400, 1, 0)) AS viewsErr
-    FROM ${KEY_ANALYTICS_DATASET}
+    FROM ${dataset}
     WHERE timestamp >= ${sqlDateTime(minFrom)}
       AND timestamp <  ${sqlDateTime(maxTo)}
       AND index1 = ${sqlString(ONEAUTO_KEY)}
@@ -188,28 +187,35 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     LIMIT 100
   `;
 
-  let aeRows: Array<{
-    month: string;
-    requests: number;
-    views: number;
-    viewsOk: number;
-    viewsErr: number;
-  }> = [];
+  const monthMap = new Map<
+    string,
+    { month: string; requests: number; views: number; viewsOk: number; viewsErr: number }
+  >();
   try {
-    const r = await runAeSql<{
-      month: string;
-      requests: number;
-      views: number;
-      viewsOk: number;
-      viewsErr: number;
-    }>(env, sql);
-    aeRows = r.data.map((row) => ({
-      month: row.month,
-      requests: aeNum(row.requests),
-      views: aeNum(row.views),
-      viewsOk: aeNum(row.viewsOk),
-      viewsErr: aeNum(row.viewsErr),
-    }));
+    for (const s of sources) {
+      const r = await runAeSql<{
+        month: string;
+        requests: number;
+        views: number;
+        viewsOk: number;
+        viewsErr: number;
+      }>(env, buildSql(s.dataset), { binding: s.binding });
+      for (const row of r.data) {
+        const ymk = String(row.month).slice(0, 7);
+        const cur = monthMap.get(ymk) ?? {
+          month: String(row.month),
+          requests: 0,
+          views: 0,
+          viewsOk: 0,
+          viewsErr: 0,
+        };
+        cur.requests += aeNumber(row.requests);
+        cur.views += aeNumber(row.views);
+        cur.viewsOk += aeNumber(row.viewsOk);
+        cur.viewsErr += aeNumber(row.viewsErr);
+        monthMap.set(ymk, cur);
+      }
+    }
   } catch (err) {
     return jsonResponse(
       { error: err instanceof Error ? err.message : String(err) },
@@ -219,14 +225,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   // FX-Rates parallel ziehen.
   const fxResults = await Promise.all(buckets.map((b) => getFxRate(b.fxDate)));
-
-  // AE liefert month z. B. als '2026-04-01' oder '2026-04-01 00:00:00';
-  // wir matchen über den YYYY-MM-Prefix.
-  const monthMap = new Map<string, (typeof aeRows)[number]>();
-  for (const row of aeRows) {
-    const key = String(row.month).slice(0, 7); // YYYY-MM
-    monthMap.set(key, row);
-  }
 
   let totalViews = 0;
   let totalGbp = 0;
@@ -243,10 +241,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       viewsErr: 0,
     };
     const fx = fxResults[i];
-    const viewsN = aeNum(data.views);
-    const reqN = aeNum(data.requests);
-    const okN = aeNum(data.viewsOk);
-    const errN = aeNum(data.viewsErr);
+    const viewsN = aeNumber(data.views);
+    const reqN = aeNumber(data.requests);
+    const okN = aeNumber(data.viewsOk);
+    const errN = aeNumber(data.viewsErr);
     const gbp = Math.round(viewsN * PRICE_GBP_PER_VIEW * 100) / 100;
     const eur =
       fx.rate != null ? Math.round(gbp * fx.rate * 100) / 100 : null;
@@ -279,6 +277,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   return jsonResponse({
     pricePerViewGbp: PRICE_GBP_PER_VIEW,
     key: ONEAUTO_KEY,
+    mergedSources: sources.map((s) => s.dataset),
     months,
     totals: {
       views: totalViews,
