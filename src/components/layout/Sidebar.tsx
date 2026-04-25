@@ -1,15 +1,14 @@
 import {
+  ArrowUpRight,
   BarChart3,
   Car,
   ChevronDown,
+  Command,
   LayoutDashboard,
-  LogOut,
   type LucideIcon,
   MapPinned,
-  MoreVertical,
   Search,
   Settings,
-  UserRound,
   Users,
   Wrench,
 } from "lucide-react";
@@ -24,20 +23,23 @@ type NavItem = {
   children?: NavChild[];
 };
 
-const NAV: NavItem[] = [
-  { label: "Dashboard", icon: LayoutDashboard, to: "/dashboard" },
-  { label: "Flotte", icon: Car, to: "/fleet" },
-  { label: "Fahrten", icon: MapPinned, to: "/trips" },
-  { label: "Fahrer", icon: Users, to: "/drivers" },
-  { label: "Wartung", icon: Wrench, to: "/maintenance" },
+const NAV_PRIMARY: NavItem[] = [
+  { label: "Übersicht", icon: LayoutDashboard, to: "/dashboard" },
   {
     label: "Analytics",
     icon: BarChart3,
     children: [
       { label: "Fahrzeug-Analytics", to: "/analytics" },
-      { label: "Verwaltung", to: "/fleet" },
+      { label: "Touren-Analytics", to: "/trips" },
     ],
   },
+  { label: "Flotte", icon: Car, to: "/fleet" },
+  { label: "Fahrten", icon: MapPinned, to: "/trips" },
+  { label: "Fahrer", icon: Users, to: "/drivers" },
+  { label: "Wartung", icon: Wrench, to: "/maintenance" },
+];
+
+const NAV_FOOTER: NavItem[] = [
   { label: "Einstellungen", icon: Settings, to: "/settings" },
 ];
 
@@ -54,19 +56,21 @@ export default function Sidebar({ mobileOpen, onClose }: Props) {
           type="button"
           aria-label="Menü schließen"
           onClick={onClose}
-          className="fixed inset-0 z-30 bg-ink-900/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
         />
       )}
       <aside
-        className={`fixed lg:sticky top-0 z-40 h-screen w-72 shrink-0 border-r border-ink-200 bg-white transition-transform duration-200 ${
+        className={`fixed lg:sticky top-0 z-40 h-screen w-[260px] shrink-0 bg-night-900 text-night-300 transition-transform duration-200 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0`}
       >
         <div className="flex h-full flex-col">
           <Brand />
           <SearchBox />
-          <Navigation onNavigate={onClose} />
-          <UserCard />
+          <Nav items={NAV_PRIMARY} onNavigate={onClose} />
+          <div className="mt-auto" />
+          <Nav items={NAV_FOOTER} onNavigate={onClose} dense />
+          <UserRow />
         </div>
       </aside>
     </>
@@ -75,59 +79,81 @@ export default function Sidebar({ mobileOpen, onClose }: Props) {
 
 function Brand() {
   return (
-    <div className="flex items-center gap-3 px-5 pt-5 pb-4">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-soft">
-        <Car className="h-4 w-4" />
+    <div className="flex items-center justify-between px-5 pt-6 pb-5">
+      <div className="flex items-center gap-2.5">
+        <div className="relative grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-gradient-to-br from-brand-500 via-brand-600 to-night-700 ring-1 ring-white/10">
+          <Car className="h-[14px] w-[14px] text-white" />
+        </div>
+        <div className="leading-tight">
+          <p className="text-[14px] font-semibold tracking-tight text-white">
+            vehiclehub
+          </p>
+          <p className="text-[10.5px] uppercase tracking-[0.14em] text-night-400">
+            Fleet OS
+          </p>
+        </div>
       </div>
-      <div className="leading-tight">
-        <p className="text-[15px] font-semibold text-ink-900">vehiclehub</p>
-        <p className="text-[11px] text-ink-400">Fleet Operations</p>
-      </div>
+      <button
+        type="button"
+        title="Workspace wechseln"
+        className="text-night-400 hover:text-white"
+      >
+        <ArrowUpRight className="h-4 w-4" />
+      </button>
     </div>
   );
 }
 
 function SearchBox() {
   return (
-    <div className="px-4 pb-4">
-      <label className="relative block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+    <div className="px-4 pb-5">
+      <label className="group relative block">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-night-400" />
         <input
           type="search"
-          placeholder="Suchen"
-          className="w-full rounded-lg border border-ink-200 bg-ink-50 py-2 pl-9 pr-3 text-sm placeholder:text-ink-400 focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-100"
+          placeholder="Suchen oder Befehl…"
+          className="w-full rounded-md bg-white/[0.04] py-2 pl-9 pr-12 text-[13px] text-night-200 placeholder:text-night-400 ring-1 ring-inset ring-white/10 focus:bg-white/[0.07] focus:outline-none focus:ring-brand-500/60"
         />
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-0.5 rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-night-400">
+          <Command className="h-3 w-3" />K
+        </span>
       </label>
     </div>
   );
 }
 
-function Navigation({ onNavigate }: { onNavigate: () => void }) {
+function Nav({
+  items,
+  onNavigate,
+  dense = false,
+}: {
+  items: NavItem[];
+  onNavigate: () => void;
+  dense?: boolean;
+}) {
   const { pathname } = useLocation();
   const initiallyOpen = useMemo(
     () =>
       new Set(
-        NAV.filter((it) =>
-          it.children?.some((c) => pathname.startsWith(c.to)),
-        ).map((it) => it.label),
+        items
+          .filter((it) => it.children?.some((c) => pathname.startsWith(c.to)))
+          .map((it) => it.label),
       ),
-    [pathname],
+    [items, pathname],
   );
   const [openGroups, setOpenGroups] = useState<Set<string>>(initiallyOpen);
 
-  const toggle = (label: string) => {
+  const toggle = (label: string) =>
     setOpenGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+      next.has(label) ? next.delete(label) : next.add(label);
       return next;
     });
-  };
 
   return (
-    <nav className="flex-1 overflow-y-auto px-3">
-      <ul className="space-y-0.5">
-        {NAV.map((item) => {
+    <nav className={`px-2 ${dense ? "" : "flex-1 overflow-y-auto"}`}>
+      <ul className="space-y-px">
+        {items.map((item) => {
           const Icon = item.icon;
           if (item.children) {
             const isOpen = openGroups.has(item.label);
@@ -139,34 +165,34 @@ function Navigation({ onNavigate }: { onNavigate: () => void }) {
                 <button
                   type="button"
                   onClick={() => toggle(item.label)}
-                  className={`group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors ${
+                  className={`group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[13px] transition-colors ${
                     childActive
-                      ? "text-ink-900"
-                      : "text-ink-600 hover:bg-ink-50 hover:text-ink-900"
+                      ? "text-white"
+                      : "text-night-300 hover:bg-white/[0.04] hover:text-white"
                   }`}
                 >
                   <span className="flex items-center gap-3">
-                    <Icon className="h-[18px] w-[18px] text-ink-500 group-hover:text-ink-700" />
+                    <Icon className="h-4 w-4 text-night-400 group-hover:text-night-200" />
                     {item.label}
                   </span>
                   <ChevronDown
-                    className={`h-4 w-4 text-ink-400 transition-transform ${
+                    className={`h-3.5 w-3.5 text-night-400 transition-transform ${
                       isOpen ? "rotate-180" : ""
                     }`}
                   />
                 </button>
                 {isOpen && (
-                  <ul className="mt-1 space-y-0.5 pl-10">
+                  <ul className="ml-7 mt-0.5 space-y-px border-l border-white/10 pl-3">
                     {item.children.map((child) => (
-                      <li key={child.to}>
+                      <li key={child.to + child.label}>
                         <NavLink
                           to={child.to}
                           onClick={onNavigate}
                           className={({ isActive }) =>
-                            `block rounded-md px-3 py-1.5 text-[13px] transition-colors ${
+                            `block rounded-md px-2.5 py-1 text-[12.5px] transition-colors ${
                               isActive
-                                ? "bg-brand-50 text-brand-700 font-medium"
-                                : "text-ink-500 hover:text-ink-800"
+                                ? "text-white"
+                                : "text-night-400 hover:text-night-200"
                             }`
                           }
                         >
@@ -185,21 +211,28 @@ function Navigation({ onNavigate }: { onNavigate: () => void }) {
                 to={item.to!}
                 onClick={onNavigate}
                 className={({ isActive }) =>
-                  `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  `group relative flex items-center gap-3 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
                     isActive
-                      ? "bg-brand-50 text-brand-700 font-medium"
-                      : "text-ink-600 hover:bg-ink-50 hover:text-ink-900"
+                      ? "bg-white/[0.06] text-white"
+                      : "text-night-300 hover:bg-white/[0.04] hover:text-white"
                   }`
                 }
               >
-                <Icon
-                  className={`h-[18px] w-[18px] ${
-                    pathname === item.to
-                      ? "text-brand-600"
-                      : "text-ink-500 group-hover:text-ink-700"
-                  }`}
-                />
-                {item.label}
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <span className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r bg-brand-400" />
+                    )}
+                    <Icon
+                      className={`h-4 w-4 ${
+                        isActive
+                          ? "text-brand-300"
+                          : "text-night-400 group-hover:text-night-200"
+                      }`}
+                    />
+                    {item.label}
+                  </>
+                )}
               </NavLink>
             </li>
           );
@@ -209,34 +242,31 @@ function Navigation({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
-function UserCard() {
+function UserRow() {
   return (
-    <div className="m-3 mt-auto flex items-center gap-3 rounded-xl border border-ink-200 bg-white p-3 shadow-card">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-        <UserRound className="h-4 w-4" />
+    <div className="border-t border-white/[0.06] px-4 py-3">
+      <div className="flex items-center gap-2.5">
+        <div className="relative">
+          <div className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-accent-rose text-[11px] font-semibold text-white">
+            DS
+          </div>
+          <span className="absolute -bottom-0 -right-0 h-2 w-2 rounded-full bg-accent-mint ring-2 ring-night-900" />
+        </div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-[12.5px] font-medium text-white">
+            Darrell Steward
+          </p>
+          <p className="truncate text-[10.5px] text-night-400">
+            Workspace · Acme Logistik
+          </p>
+        </div>
+        <button
+          type="button"
+          className="text-[10.5px] uppercase tracking-wider text-night-400 hover:text-white"
+        >
+          Abm.
+        </button>
       </div>
-      <div className="min-w-0 flex-1 leading-tight">
-        <p className="truncate text-[13px] font-semibold text-ink-900">
-          Darrell Steward
-        </p>
-        <p className="truncate text-[11px] text-ink-400">
-          darrell@vehiclehub.io
-        </p>
-      </div>
-      <button
-        type="button"
-        title="Abmelden"
-        className="rounded-md p-1.5 text-ink-400 hover:bg-ink-50 hover:text-ink-700"
-      >
-        <LogOut className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        title="Mehr"
-        className="rounded-md p-1 text-ink-400 hover:bg-ink-50 hover:text-ink-700"
-      >
-        <MoreVertical className="h-4 w-4" />
-      </button>
     </div>
   );
 }

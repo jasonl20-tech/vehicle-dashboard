@@ -1,4 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://rsms.me/inter/inter.css");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -14,28 +15,49 @@ body,
   height: 100%;
 }
 
-body {
-  @apply bg-ink-50 text-ink-800 font-sans antialiased;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+html {
+  font-family: "InterVariable", "Inter", system-ui, sans-serif;
 }
 
-/* Custom scrollbar */
+body {
+  @apply bg-paper text-ink-800 antialiased;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01", "ss03";
+}
+
+/* Subtle scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply bg-ink-200 rounded-full;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-ink-300;
+  background: rgba(0, 0, 0, 0.22);
+  background-clip: padding-box;
 }
 
-/* Recharts text */
+/* Recharts polish */
 .recharts-cartesian-axis-tick text {
-  @apply fill-ink-400;
+  fill: #8b8b86;
   font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.recharts-cartesian-grid line {
+  stroke: #ececea;
 }
 .recharts-default-tooltip {
-  @apply !rounded-lg !border-ink-200 !shadow-card !text-xs;
+  border-radius: 10px !important;
+  border: 1px solid #ececea !important;
+  box-shadow: 0 10px 30px -12px rgba(13, 13, 15, 0.18) !important;
+  font-size: 12px !important;
+  padding: 8px 10px !important;
+}
+
+/* Selection */
+::selection {
+  background: rgba(109, 82, 255, 0.18);
 }

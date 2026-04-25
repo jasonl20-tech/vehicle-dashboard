@@ -23,39 +23,43 @@ const data = [
 
 export default function UtilizationChart() {
   return (
-    <div className="h-72 w-full">
+    <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={data}
-          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+          margin={{ top: 12, right: 8, left: -12, bottom: 0 }}
         >
           <defs>
             <linearGradient id="utilGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+              <stop offset="0%" stopColor="#6d52ff" stopOpacity={0.28} />
+              <stop offset="100%" stopColor="#6d52ff" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="idleGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#a5adff" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="#a5adff" stopOpacity={0} />
+              <stop offset="0%" stopColor="#b3a6ff" stopOpacity={0.18} />
+              <stop offset="100%" stopColor="#b3a6ff" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="#eef0ff" vertical={false} />
+          <CartesianGrid stroke="#ececea" vertical={false} />
           <XAxis
             dataKey="year"
             axisLine={false}
             tickLine={false}
-            tickMargin={10}
+            tickMargin={12}
           />
           <YAxis
             axisLine={false}
             tickLine={false}
-            tickMargin={8}
+            tickMargin={4}
             tickFormatter={(v) => `${v}%`}
             domain={[0, 100]}
-            ticks={[0, 20, 40, 60, 80, 100]}
+            ticks={[0, 25, 50, 75, 100]}
           />
           <Tooltip
-            cursor={{ stroke: "#c7cdff", strokeDasharray: 4 }}
+            cursor={{
+              stroke: "#bfbfb9",
+              strokeWidth: 1,
+              strokeDasharray: "3 3",
+            }}
             formatter={(v: number, name: string) => [
               `${v}%`,
               name === "utilization" ? "Auslastung" : "Leerlauf",
@@ -64,16 +68,20 @@ export default function UtilizationChart() {
           <Area
             type="monotone"
             dataKey="idle"
-            stroke="#a5adff"
-            strokeWidth={2}
+            stroke="#b3a6ff"
+            strokeWidth={1.75}
             fill="url(#idleGradient)"
+            dot={false}
+            activeDot={{ r: 3, strokeWidth: 0 }}
           />
           <Area
             type="monotone"
             dataKey="utilization"
-            stroke="#4f46e5"
-            strokeWidth={2.5}
+            stroke="#5a3df0"
+            strokeWidth={2.25}
             fill="url(#utilGradient)"
+            dot={false}
+            activeDot={{ r: 4, strokeWidth: 0 }}
           />
         </AreaChart>
       </ResponsiveContainer>

@@ -5,8 +5,10 @@ export default function FleetPage() {
   return (
     <>
       <PageHeader
+        eyebrow="Stammdaten"
         title="Flotte"
         description="Verwalte deine Fahrzeuge, Halter und Stammdaten."
+        primaryAction={{ label: "Fahrzeug hinzufügen" }}
       />
       <VehiclePerformanceTable />
     </>

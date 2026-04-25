@@ -4,11 +4,19 @@ export default function MaintenancePage() {
   return (
     <>
       <PageHeader
+        eyebrow="Service"
         title="Wartung"
         description="Geplante Inspektionen, Reparaturen und Servicehistorie."
       />
-      <div className="rounded-2xl border border-dashed border-ink-200 bg-white p-12 text-center text-sm text-ink-500 shadow-card">
-        Wartungspläne, TÜV-Termine und Werkstattaufträge erscheinen hier.
+      <div className="flex min-h-[40vh] items-center justify-center border-y border-hair">
+        <div className="max-w-md px-6 py-16 text-center">
+          <p className="font-display text-[20px] tracking-tightish text-ink-900">
+            Wartungsplan
+          </p>
+          <p className="mt-2 text-[13px] leading-relaxed text-ink-500">
+            TÜV-Termine, Werkstattaufträge und Wartungshistorie folgen hier.
+          </p>
+        </div>
       </div>
     </>
   );

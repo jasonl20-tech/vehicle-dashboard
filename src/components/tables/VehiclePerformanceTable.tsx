@@ -3,11 +3,10 @@ import {
   ChevronUp,
   Columns3,
   Download,
-  Info,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import Tag from "../ui/Tag";
 
 type Row = {
   id: string;
@@ -129,79 +128,83 @@ export default function VehiclePerformanceTable() {
   }, [query, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
       setSortKey(key);
       setSortDir("desc");
     }
   };
 
   return (
-    <section className="rounded-2xl border border-ink-200 bg-white shadow-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
-        <div className="flex items-center gap-2">
-          <h3 className="text-[15px] font-semibold text-ink-900">
-            Alle Fahrzeug-Performance
-          </h3>
-          <Info className="h-3.5 w-3.5 text-ink-400" />
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-ink-100 px-5 pb-3">
-        <div className="inline-flex rounded-lg border border-ink-200 bg-ink-50 p-1">
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-5 border-b border-hair">
           {(
             [
               { id: "all", label: "Fahrzeuge" },
               { id: "tours", label: "Touren" },
             ] as const
-          ).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                tab === t.id
-                  ? "bg-white text-ink-900 shadow-card"
-                  : "text-ink-500 hover:text-ink-800"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          ).map((t) => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={`relative -mb-px pb-2 text-[13px] transition-colors ${
+                  active
+                    ? "text-ink-900 font-medium"
+                    : "text-ink-500 hover:text-ink-800"
+                }`}
+              >
+                {t.label}
+                {active && (
+                  <span className="absolute inset-x-0 -bottom-px h-[2px] bg-ink-900" />
+                )}
+              </button>
+            );
+          })}
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Suche nach Fahrzeug, Kennzeichen…"
-              className="w-64 rounded-lg border border-ink-200 bg-white py-2 pl-9 pr-3 text-sm placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+              placeholder="Suche…"
+              className="w-56 rounded-md border border-hair bg-white py-1.5 pl-8 pr-3 text-[13px] placeholder:text-ink-400 focus:border-ink-300 focus:outline-none focus:ring-2 focus:ring-ink-100"
             />
           </label>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-brand-100 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12.5px] text-ink-700 hover:border-ink-300"
           >
-            <Columns3 className="h-3.5 w-3.5" />
-            Spalten verwalten
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filter
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-soft hover:bg-brand-700"
+            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12.5px] text-ink-700 hover:border-ink-300"
+          >
+            <Columns3 className="h-3.5 w-3.5" />
+            Spalten
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-2.5 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800"
           >
             <Download className="h-3.5 w-3.5" />
-            Exportieren
+            Export
           </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
+      <div className="overflow-x-auto -mx-2">
+        <table className="min-w-full text-[13.5px]">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-ink-400">
+            <tr className="border-y border-hair text-left text-[10.5px] uppercase tracking-[0.14em] text-ink-400">
               <Th
                 label="Fahrzeug"
                 sortKey="name"
@@ -222,7 +225,7 @@ export default function VehiclePerformanceTable() {
                 activeKey={sortKey}
                 dir={sortDir}
                 onClick={toggleSort}
-                className="text-right"
+                align="right"
               />
               <Th
                 label="Auslastung"
@@ -230,7 +233,7 @@ export default function VehiclePerformanceTable() {
                 activeKey={sortKey}
                 dir={sortDir}
                 onClick={toggleSort}
-                className="text-right"
+                align="right"
               />
               <Th
                 label="Verfügbarkeit"
@@ -238,7 +241,7 @@ export default function VehiclePerformanceTable() {
                 activeKey={sortKey}
                 dir={sortDir}
                 onClick={toggleSort}
-                className="text-right"
+                align="right"
               />
               <Th
                 label="Verbrauch"
@@ -246,7 +249,7 @@ export default function VehiclePerformanceTable() {
                 activeKey={sortKey}
                 dir={sortDir}
                 onClick={toggleSort}
-                className="text-right"
+                align="right"
               />
               <Th
                 label="Vorfälle"
@@ -254,16 +257,24 @@ export default function VehiclePerformanceTable() {
                 activeKey={sortKey}
                 dir={sortDir}
                 onClick={toggleSort}
-                className="text-right"
+                align="right"
               />
             </tr>
           </thead>
-          <tbody className="divide-y divide-ink-100 text-ink-700">
+          <tbody className="divide-y divide-hair">
             {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-ink-50/60">
-                <td className="whitespace-nowrap px-5 py-3.5">
+              <tr
+                key={row.id}
+                className="group transition-colors hover:bg-ink-50/60"
+              >
+                <td className="whitespace-nowrap px-3 py-3.5">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-50 text-[11px] font-semibold text-brand-700">
+                    <span
+                      className="grid h-7 w-7 place-items-center rounded-md text-[10.5px] font-semibold text-ink-700 ring-1 ring-inset ring-hair"
+                      style={{
+                        background: avatarBg(row.id),
+                      }}
+                    >
                       {row.name
                         .split(" ")
                         .map((s) => s[0])
@@ -281,32 +292,26 @@ export default function VehiclePerformanceTable() {
                     </div>
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-5 py-3.5 text-[13px] text-ink-500">
+                <td className="whitespace-nowrap px-3 py-3.5 text-[12.5px] text-ink-500">
                   {row.added}
                 </td>
-                <td className="whitespace-nowrap px-5 py-3.5 text-right text-[13px] tabular-nums">
+                <td className="whitespace-nowrap px-3 py-3.5 text-right font-mono text-[12.5px] tabular-nums text-ink-800">
                   {row.trips}
                 </td>
-                <td className="whitespace-nowrap px-5 py-3.5 text-right text-[13px] tabular-nums">
-                  {row.utilization.toFixed(1)}%
+                <td className="whitespace-nowrap px-3 py-3.5 text-right">
+                  <UtilizationCell value={row.utilization} />
                 </td>
-                <td className="whitespace-nowrap px-5 py-3.5 text-right text-[13px] tabular-nums">
+                <td className="whitespace-nowrap px-3 py-3.5 text-right font-mono text-[12.5px] tabular-nums text-ink-800">
                   {row.uptime.toFixed(1)}%
                 </td>
-                <td className="whitespace-nowrap px-5 py-3.5 text-right text-[13px] tabular-nums">
+                <td className="whitespace-nowrap px-3 py-3.5 text-right font-mono text-[12.5px] tabular-nums text-ink-800">
                   {row.fuelEfficiency.toFixed(1)}{" "}
-                  <span className="text-[11px] text-ink-400">
-                    {row.type === "E-Fahrzeug" ? "kWh/100km" : "l/100km"}
+                  <span className="text-[10.5px] font-sans text-ink-400">
+                    {row.type === "E-Fahrzeug" ? "kWh" : "l"}
                   </span>
                 </td>
-                <td className="whitespace-nowrap px-5 py-3.5 text-right">
-                  {row.incidents === 0 ? (
-                    <Tag variant="success">0</Tag>
-                  ) : row.incidents === 1 ? (
-                    <Tag variant="warning">{row.incidents}</Tag>
-                  ) : (
-                    <Tag variant="danger">{row.incidents}</Tag>
-                  )}
+                <td className="whitespace-nowrap px-3 py-3.5 text-right">
+                  <IncidentDot count={row.incidents} />
                 </td>
               </tr>
             ))}
@@ -314,27 +319,27 @@ export default function VehiclePerformanceTable() {
         </table>
       </div>
 
-      <div className="flex items-center justify-between border-t border-ink-100 px-5 py-3 text-xs text-ink-500">
+      <div className="mt-3 flex items-center justify-between text-[12px] text-ink-500">
         <span>
-          Zeige <span className="font-medium text-ink-700">{rows.length}</span>{" "}
-          von {ROWS.length} Fahrzeugen
+          <span className="font-medium text-ink-700">{rows.length}</span> von{" "}
+          {ROWS.length} Fahrzeugen
         </span>
         <div className="flex items-center gap-1">
           <button
             type="button"
-            className="rounded-md border border-ink-200 bg-white px-2.5 py-1 hover:bg-ink-50"
+            className="rounded-md border border-hair bg-white px-2 py-1 hover:border-ink-300"
           >
             Zurück
           </button>
           <button
             type="button"
-            className="rounded-md bg-brand-600 px-2.5 py-1 font-medium text-white hover:bg-brand-700"
+            className="rounded-md bg-ink-900 px-2 py-1 font-medium text-white hover:bg-ink-800"
           >
             Weiter
           </button>
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -344,24 +349,28 @@ function Th({
   activeKey,
   dir,
   onClick,
-  className = "",
+  align = "left",
 }: {
   label: string;
   sortKey: SortKey;
   activeKey: SortKey;
   dir: "asc" | "desc";
   onClick: (k: SortKey) => void;
-  className?: string;
+  align?: "left" | "right";
 }) {
   const isActive = activeKey === sortKey;
   return (
-    <th className={`whitespace-nowrap px-5 py-3 font-medium ${className}`}>
+    <th
+      className={`whitespace-nowrap px-3 py-2.5 font-medium ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
+    >
       <button
         type="button"
         onClick={() => onClick(sortKey)}
         className={`inline-flex items-center gap-1 ${
           isActive ? "text-ink-700" : ""
-        }`}
+        } ${align === "right" ? "flex-row-reverse" : ""}`}
       >
         {label}
         {isActive ? (
@@ -374,4 +383,55 @@ function Th({
       </button>
     </th>
   );
+}
+
+function UtilizationCell({ value }: { value: number }) {
+  const pct = Math.max(0, Math.min(100, value));
+  const color =
+    pct >= 85 ? "#5a3df0" : pct >= 70 ? "#8a76ff" : pct >= 50 ? "#b3a6ff" : "#d2caff";
+  return (
+    <div className="ml-auto flex max-w-[180px] items-center justify-end gap-2">
+      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-ink-100">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, background: color }}
+        />
+      </div>
+      <span className="font-mono text-[12.5px] tabular-nums text-ink-800">
+        {pct.toFixed(1)}%
+      </span>
+    </div>
+  );
+}
+
+function IncidentDot({ count }: { count: number }) {
+  if (count === 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[12px] text-ink-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-accent-mint" />
+        Keine
+      </span>
+    );
+  }
+  const color = count >= 2 ? "bg-accent-rose" : "bg-accent-amber";
+  return (
+    <span className="inline-flex items-center gap-1 text-[12px] text-ink-700">
+      <span className={`h-1.5 w-1.5 rounded-full ${color}`} />
+      {count}
+    </span>
+  );
+}
+
+function avatarBg(seed: string) {
+  const palette = [
+    "linear-gradient(135deg,#eef0ff,#fff)",
+    "linear-gradient(135deg,#f5f0ff,#fff)",
+    "linear-gradient(135deg,#fff0f4,#fff)",
+    "linear-gradient(135deg,#f0fff7,#fff)",
+    "linear-gradient(135deg,#fff7e6,#fff)",
+    "linear-gradient(135deg,#eaf5ff,#fff)",
+  ];
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
 }

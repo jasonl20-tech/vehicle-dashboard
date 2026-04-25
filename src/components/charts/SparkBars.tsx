@@ -3,14 +3,19 @@ import { Bar, BarChart, ResponsiveContainer } from "recharts";
 type Props = {
   data: { v: number }[];
   color?: string;
+  height?: number;
 };
 
-export default function SparkBars({ data, color = "#c7cdff" }: Props) {
+export default function SparkBars({
+  data,
+  color = "#d2caff",
+  height = 56,
+}: Props) {
   return (
-    <div className="h-20 w-full">
+    <div style={{ height }} className="w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} barCategoryGap={3}>
-          <Bar dataKey="v" fill={color} radius={[3, 3, 0, 0]} />
+        <BarChart data={data} barCategoryGap={2}>
+          <Bar dataKey="v" fill={color} radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

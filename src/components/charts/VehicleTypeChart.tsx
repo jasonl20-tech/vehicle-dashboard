@@ -18,29 +18,29 @@ const data = [
 
 export default function VehicleTypeChart() {
   return (
-    <div className="h-72 w-full">
+    <div className="h-[300px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
-          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-          barCategoryGap="20%"
+          margin={{ top: 12, right: 8, left: -12, bottom: 0 }}
+          barCategoryGap="22%"
         >
-          <CartesianGrid stroke="#eef0ff" vertical={false} />
+          <CartesianGrid stroke="#ececea" vertical={false} />
           <XAxis
             dataKey="type"
             axisLine={false}
             tickLine={false}
-            tickMargin={10}
+            tickMargin={12}
           />
           <YAxis
             axisLine={false}
             tickLine={false}
-            tickMargin={8}
+            tickMargin={4}
             domain={[0, 100]}
-            ticks={[0, 20, 40, 60, 80, 100]}
+            ticks={[0, 25, 50, 75, 100]}
           />
           <Tooltip
-            cursor={{ fill: "rgba(99,102,241,0.06)" }}
+            cursor={{ fill: "rgba(109, 82, 255, 0.06)" }}
             formatter={(v: number, name: string) => [
               v,
               name === "active" ? "Aktiv" : "Verfügbar",
@@ -48,15 +48,15 @@ export default function VehicleTypeChart() {
           />
           <Bar
             dataKey="active"
-            fill="#4f46e5"
-            radius={[6, 6, 0, 0]}
-            barSize={18}
+            fill="#5a3df0"
+            radius={[4, 4, 0, 0]}
+            barSize={14}
           />
           <Bar
             dataKey="idle"
-            fill="#c7cdff"
-            radius={[6, 6, 0, 0]}
-            barSize={18}
+            fill="#d2caff"
+            radius={[4, 4, 0, 0]}
+            barSize={14}
           />
         </BarChart>
       </ResponsiveContainer>
