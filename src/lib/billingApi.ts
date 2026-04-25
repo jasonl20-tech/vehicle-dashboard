@@ -98,15 +98,13 @@ export async function putPlan(
   if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
 }
 
-export async function createPaymentLink(
-  planKey: string,
-  stripePriceId: string,
-): Promise<void> {
+/** Erstellt den Payment Link in Stripe; `stripe_price_id` kommt aus dem Plan-JSON im KV. */
+export async function createPaymentLink(planKey: string): Promise<void> {
   const res = await fetch(BILLING_PAYMENT_LINKS, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ planKey, stripePriceId }),
+    body: JSON.stringify({ planKey }),
   });
   const j = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);

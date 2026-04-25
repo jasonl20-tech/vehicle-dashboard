@@ -1,11 +1,13 @@
 import {
+  extractStripePriceIdFromPlanJson,
+} from "../../_lib/planJson";
+import {
   stripeCreatePaymentLink,
   stripeListPaymentLinks,
 } from "../../_lib/stripeClient";
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
 const PLAN_KEY_RE = /^[a-zA-Z0-9_.-]{1,200}$/;
-const STRIPE_PRICE_RE = /^price_[a-zA-Z0-9]+$/;
 
 /**
  * GET /api/billing/payment-links
@@ -26,7 +28,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     );
   }
   try {
-    const paymentLinks = await stripeListPaymentLinks(env, 100);
+    const all = await stripeListPaymentLinks(env, 100);
+    const paymentLinks = all.filter((p) => p.active);
     return jsonResponse({ paymentLinks }, { status: 200 });
   } catch (e) {
     return jsonResponse(
@@ -36,12 +39,14 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 };
 
-type CreateBody = { planKey?: string; stripePriceId?: string };
+type CreateBody = { planKey?: string };
 
 /**
  * POST /api/billing/payment-links
- * Legt einen neuen Payment Link an; `price_id` (Metadaten) = vorhandener KV-Plan-Key.
- * Body: { "planKey": "plan_test", "stripePriceId": "price_…" }
+ * Legt einen neuen Payment Link in Stripe an; Metadaten `price_id` = `planKey`.
+ * Die Stripe-Preis-ID (`price_…`) muss im Plan-JSON im KV stehen, Feld `stripe_price_id`
+ * (Preis in Stripe anlegen, ID ins JSON übernehmen).
+ * Body: { "planKey": "plan_test" }
  */
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
   request,
@@ -76,8 +81,6 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 
   const planKey =
     typeof body.planKey === "string" ? body.planKey.trim() : "";
-  const stripePriceId =
-    typeof body.stripePriceId === "string" ? body.stripePriceId.trim() : "";
 
   if (!planKey || !PLAN_KEY_RE.test(planKey)) {
     return jsonResponse(
@@ -85,21 +88,34 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       { status: 400 },
     );
   }
-  if (!stripePriceId || !STRIPE_PRICE_RE.test(stripePriceId)) {
+
+  const raw = await env.plans.get(planKey, "text");
+  if (raw == null) {
     return jsonResponse(
       {
-        error:
-          "stripePriceId muss eine Stripe-Preis-ID sein (beginnt mit price_)",
+        error: `Kein Plan im KV unter „${planKey}“ – zuerst anlegen oder anderen Key wählen.`,
       },
       { status: 400 },
     );
   }
 
-  const exists = await env.plans.get(planKey, "text");
-  if (exists == null) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return jsonResponse(
+      { error: "Plan-JSON im KV ist ungültig" },
+      { status: 400 },
+    );
+  }
+
+  const stripePriceId = extractStripePriceIdFromPlanJson(parsed);
+  if (!stripePriceId) {
     return jsonResponse(
       {
-        error: `Kein Plan im KV unter „${planKey}“ – zuerst anlegen oder anderen Key wählen.`,
+        error:
+          "Im Plan-JSON fehlt eine gültige Stripe-Preis-ID. In Stripe den Preis anlegen, dann im KV z. B. " +
+            '"stripe_price_id": "price_…" in diesen Plan eintragen.',
       },
       { status: 400 },
     );

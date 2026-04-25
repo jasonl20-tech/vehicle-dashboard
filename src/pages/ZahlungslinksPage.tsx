@@ -4,7 +4,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  RotateCcw,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -46,12 +45,10 @@ export default function ZahlungslinksPage() {
     [kvs.data?.keys],
   );
 
-  const sortedLinks = useMemo(() => {
+  /** API liefert nur aktive Links; neueste zuerst. */
+  const orderedLinks = useMemo(() => {
     const rows = pl.data?.paymentLinks ?? [];
-    return [...rows].sort((a, b) => {
-      if (a.active !== b.active) return a.active ? -1 : 1;
-      return b.created - a.created;
-    });
+    return [...rows].sort((a, b) => b.created - a.created);
   }, [pl.data?.paymentLinks]);
 
   const reloadAll = useCallback(() => {
@@ -67,9 +64,12 @@ export default function ZahlungslinksPage() {
         title="Zahlungslinks"
         description={
           <>
-            Neue Payment Links legst du hier an und verknüpfst sie mit einem
-            bestehenden KV-Plan. Archivieren deaktiviert den Link in Stripe
-            (kein Löschen). KV-Pläne werden nicht gelöscht, nur bearbeitet.
+            Den Stripe-Preis trägst du im Plan-JSON als{" "}
+            <span className="font-mono">stripe_price_id</span> (den Preis
+            zuerst in Stripe anlegen). Beim Klick legt das System den Payment
+            Link in Stripe an und setzt <span className="font-mono">metadata.price_id</span>{" "}
+            auf den Plan-Key. Archivierte Links erscheinen hier nicht. KV-Pläne
+            nur bearbeiten, nicht löschen.
           </>
         }
         rightSlot={
@@ -114,8 +114,7 @@ export default function ZahlungslinksPage() {
           Stripe Payment Links
         </h2>
         <p className="mb-4 text-[12.5px] text-ink-500">
-          <span className="font-mono">price_id</span> verweist auf den KV-Key.
-          Archivierte Links sind in Stripe deaktiviert, bleiben aber sichtbar.
+          Es werden nur <strong>aktive</strong> Payment Links aufgelistet.
         </p>
         {pl.loading && !pl.data ? (
           <p className="text-[13px] text-ink-400">Lade …</p>
@@ -124,7 +123,7 @@ export default function ZahlungslinksPage() {
             <table className="w-full min-w-[860px] text-left text-[12.5px]">
               <thead>
                 <tr className="border-b border-hair bg-ink-50/80">
-                  <th className="px-3 py-2 font-medium text-ink-600">Status</th>
+                  <th className="px-3 py-2 font-medium text-ink-600">Modus</th>
                   <th className="px-3 py-2 font-medium text-ink-600">
                     price_id (KV-Key)
                   </th>
@@ -134,26 +133,16 @@ export default function ZahlungslinksPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedLinks.map((row) => {
+                {orderedLinks.map((row) => {
                   const pid = row.metadata?.price_id ?? "–";
                   const inKv = pid && pid !== "–" && keySet.has(pid);
                   return (
                     <tr
                       key={row.id}
-                      className={`border-b border-hair/80 last:border-0 ${
-                        !row.active ? "bg-ink-50/60 text-ink-500" : ""
-                      }`}
+                      className="border-b border-hair/80 last:border-0"
                     >
                       <td className="px-3 py-2">
-                        {row.active ? (
-                          <span className="text-emerald-800">Aktiv</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-ink-500">
-                            <Archive className="h-3 w-3" />
-                            Archiviert
-                          </span>
-                        )}
-                        {row.livemode ? " · live" : " · Test"}
+                        {row.livemode ? "Live" : "Test"}
                       </td>
                       <td className="px-3 py-2 font-mono text-[11.5px] text-ink-800">
                         {pid}
@@ -197,54 +186,32 @@ export default function ZahlungslinksPage() {
                             <Pencil className="h-3 w-3" />
                             Metadaten
                           </button>
-                          {row.active ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (
-                                  !window.confirm(
-                                    "Payment Link archivieren? Er ist danach inaktiv (nicht gelöscht).",
-                                  )
-                                ) {
-                                  return;
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  "Payment Link archivieren? Er erscheint danach nicht mehr in dieser Liste; in Stripe bleibt er inaktiv.",
+                                )
+                              ) {
+                                return;
+                              }
+                              void (async () => {
+                                try {
+                                  await setPaymentLinkActive(row.id, false);
+                                  pl.reload();
+                                } catch (e) {
+                                  window.alert(
+                                    e instanceof Error ? e.message : String(e),
+                                  );
                                 }
-                                void (async () => {
-                                  try {
-                                    await setPaymentLinkActive(row.id, false);
-                                    pl.reload();
-                                  } catch (e) {
-                                    window.alert(
-                                      e instanceof Error ? e.message : String(e),
-                                    );
-                                  }
-                                })();
-                              }}
-                              className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
-                            >
-                              <Archive className="h-3 w-3" />
-                              Archivieren
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                void (async () => {
-                                  try {
-                                    await setPaymentLinkActive(row.id, true);
-                                    pl.reload();
-                                  } catch (e) {
-                                    window.alert(
-                                      e instanceof Error ? e.message : String(e),
-                                    );
-                                  }
-                                })();
-                              }}
-                              className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Aktivieren
-                            </button>
-                          )}
+                              })();
+                            }}
+                            className="inline-flex items-center gap-1 rounded border border-hair bg-white px-2 py-1 text-ink-600 hover:border-ink-300"
+                          >
+                            <Archive className="h-3 w-3" />
+                            Archivieren
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -252,7 +219,7 @@ export default function ZahlungslinksPage() {
                 })}
               </tbody>
             </table>
-            {sortedLinks.length === 0 && !pl.error && (
+            {orderedLinks.length === 0 && !pl.error && (
               <p className="p-4 text-[13px] text-ink-500">
                 Keine Payment Links in Stripe gefunden.
               </p>
@@ -266,7 +233,9 @@ export default function ZahlungslinksPage() {
           Pläne (KV: <span className="font-mono">plans</span>)
         </h2>
         <p className="mb-4 text-[12.5px] text-ink-500">
-          Einträge können bearbeitet werden, nicht gelöscht.
+          Im JSON den Preis in Stripe anlegen, dann{" "}
+          <span className="font-mono">stripe_price_id: &quot;price_…&quot;</span>{" "}
+          setzen. Bearbeiten möglich, kein Löschen.
         </p>
         {kvs.loading && !kvs.data ? (
           <p className="text-[13px] text-ink-400">Lade …</p>
@@ -307,6 +276,7 @@ export default function ZahlungslinksPage() {
                   try {
                     await putPlan(k, {
                       plan_name: k,
+                      stripe_price_id: "",
                       expires_in_seconds: 604800,
                       features: {},
                       asset_rules: {},
@@ -480,7 +450,6 @@ function CreatePaymentLinkDialog({
   onCreated: () => void;
 }) {
   const [planKey, setPlanKey] = useState(planKeys[0] ?? "");
-  const [stripePriceId, setStripePriceId] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -503,8 +472,11 @@ function CreatePaymentLinkDialog({
           Neuer Payment Link
         </h3>
         <p className="mt-1 text-[12.5px] text-ink-500">
-          Verknüpfung mit einem <strong>bestehenden</strong> Plan im KV und dem
-          Stripe-Preis (Preis muss in Stripe existieren, z. B. Abo-Preis).
+          Es wird ein Payment Link in&nbsp;Stripe per API erstellt. Die
+          Metadaten <span className="font-mono">price_id</span> werden
+          automatisch auf den Plan-Key gesetzt. Dafür muss im Plan-JSON die
+          Stripe-Preis-ID aus dem Produkte-Bereich stehen:{" "}
+          <span className="font-mono">stripe_price_id</span>.
         </p>
         <div className="mt-4 space-y-3">
           <div>
@@ -527,20 +499,6 @@ function CreatePaymentLinkDialog({
               )}
             </select>
           </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">
-              Stripe Price ID *
-            </label>
-            <input
-              value={stripePriceId}
-              onChange={(e) => setStripePriceId(e.target.value.trim())}
-              className="w-full rounded-md border border-hair bg-white px-2.5 py-2 font-mono text-[12.5px]"
-              placeholder="price_…"
-            />
-            <p className="mt-1 text-[11.5px] text-ink-500">
-              Aus dem Stripe-Dashboard: Produkt → Preis, oder API.
-            </p>
-          </div>
         </div>
         {err && <p className="mt-2 text-[12px] text-accent-rose">{err}</p>}
         <div className="mt-4 flex justify-end gap-2">
@@ -560,13 +518,9 @@ function CreatePaymentLinkDialog({
                 setErr("Wähle einen Plan.");
                 return;
               }
-              if (!/^price_[a-zA-Z0-9]+$/.test(stripePriceId)) {
-                setErr("Stripe Price ID muss mit price_ beginnen.");
-                return;
-              }
               setBusy(true);
               try {
-                await createPaymentLink(planKey, stripePriceId);
+                await createPaymentLink(planKey);
                 onCreated();
               } catch (e) {
                 setErr(e instanceof Error ? e.message : String(e));
@@ -576,7 +530,7 @@ function CreatePaymentLinkDialog({
             }}
             className="rounded-md border border-hair bg-ink-900 px-3 py-1.5 text-[12.5px] text-white disabled:opacity-50"
           >
-            {busy ? "…" : "Erstellen & verknüpfen"}
+            {busy ? "…" : "In Stripe anlegen & verknüpfen"}
           </button>
         </div>
       </div>

@@ -51,7 +51,7 @@ CREATE TABLE user (
 | `POST`  | `/api/logout`| Cookie löschen                                         |
 | `GET`   | `/api/me`    | Aktuellen Benutzer holen (oder `401`)                  |
 | `GET`   | `/api/billing/payment-links` | (Login) Stripe Payment Links listen |
-| `POST`  | `/api/billing/payment-links` | (Login) neuen Payment Link anlegen: `{ planKey, stripePriceId }` (Plan muss im KV existieren) |
+| `POST`  | `/api/billing/payment-links` | (Login) Payment Link in Stripe anlegen, nur `{"planKey"}`; `stripe_price_id` kommt aus dem Plan-JSON im KV |
 | `POST`  | `/api/billing/payment-link`   | (Login) Metadaten am Payment Link setzen (`price_id` → KV-Key) |
 | `POST`  | `/api/billing/payment-link-archive` | (Login) `{ paymentLinkId, active }` – archivieren (`false`) oder aktivieren (`true`) |
 | `GET`   | `/api/billing/plans`         | (Login) alle KV-Keys; `?key=…` liefert JSON |
