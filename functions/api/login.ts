@@ -1,0 +1,69 @@
+import {
+  buildSessionCookie,
+  createSessionToken,
+  jsonResponse,
+  verifyPassword,
+  type AuthEnv,
+} from "../_lib/auth";
+
+export const onRequestPost: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  let body: { benutzername?: unknown; password?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "Ungültige Anfrage" }, { status: 400 });
+  }
+
+  const benutzername =
+    typeof body?.benutzername === "string" ? body.benutzername.trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+
+  if (!benutzername || !password) {
+    return jsonResponse(
+      { error: "Benutzername und Passwort sind erforderlich" },
+      { status: 400 },
+    );
+  }
+
+  const row = await env.user
+    .prepare(
+      "SELECT id, benutzername, password, active FROM user WHERE benutzername = ?1 LIMIT 1",
+    )
+    .bind(benutzername)
+    .first<{
+      id: number;
+      benutzername: string;
+      password: string;
+      active: number;
+    }>();
+
+  if (!row || row.active !== 1 || !verifyPassword(password, row.password)) {
+    return jsonResponse(
+      { error: "Benutzername oder Passwort falsch" },
+      { status: 401 },
+    );
+  }
+
+  // last_login aktualisieren (best effort, kein harter Fail)
+  try {
+    await env.user
+      .prepare("UPDATE user SET last_login = ?1 WHERE id = ?2")
+      .bind(new Date().toISOString(), row.id)
+      .run();
+  } catch (err) {
+    console.warn("[login] last_login update fehlgeschlagen:", err);
+  }
+
+  const token = await createSessionToken(env, row.id);
+
+  return jsonResponse(
+    { ok: true },
+    {
+      status: 200,
+      headers: { "Set-Cookie": buildSessionCookie(token) },
+    },
+  );
+};

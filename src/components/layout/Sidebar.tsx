@@ -5,15 +5,18 @@ import {
   ChevronDown,
   Command,
   LayoutDashboard,
+  LogOut,
   type LucideIcon,
   MapPinned,
   Search,
   Settings,
+  ShieldCheck,
   Users,
   Wrench,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../lib/auth";
 
 type NavChild = { label: string; to: string };
 type NavItem = {
@@ -243,28 +246,73 @@ function Nav({
 }
 
 function UserRow() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  if (!user) return null;
+
+  const initials = (user.benutzername || "??")
+    .split(/[\s._-]+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const banner = user.bannerfarbe && user.bannerfarbe !== "#ffffff"
+    ? user.bannerfarbe
+    : null;
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
+
   return (
-    <div className="border-t border-white/[0.06] px-4 py-3">
-      <div className="flex items-center gap-2.5">
+    <div className="relative border-t border-white/[0.06]">
+      {banner && (
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-7"
+          style={{
+            background: `linear-gradient(to bottom, ${banner}33, transparent)`,
+          }}
+        />
+      )}
+      <div className="relative flex items-center gap-2.5 px-4 py-3">
         <div className="relative">
-          <div className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-accent-rose text-[11px] font-semibold text-white">
-            DS
-          </div>
+          {user.profilbild ? (
+            <img
+              src={user.profilbild}
+              alt={user.benutzername}
+              className="h-8 w-8 rounded-full object-cover ring-1 ring-white/10"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-accent-rose text-[11px] font-semibold text-white">
+              {initials}
+            </div>
+          )}
           <span className="absolute -bottom-0 -right-0 h-2 w-2 rounded-full bg-accent-mint ring-2 ring-night-900" />
         </div>
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate text-[12.5px] font-medium text-white">
-            Darrell Steward
+            {user.benutzername}
           </p>
-          <p className="truncate text-[10.5px] text-night-400">
-            Workspace · Acme Logistik
+          <p className="flex items-center gap-1 truncate text-[10.5px] text-night-400">
+            {user.titel || "Mitglied"}
+            {user.sicherheitsstufe >= 5 && (
+              <ShieldCheck className="h-3 w-3 text-brand-300" />
+            )}
           </p>
         </div>
         <button
           type="button"
-          className="text-[10.5px] uppercase tracking-wider text-night-400 hover:text-white"
+          onClick={handleLogout}
+          title="Abmelden"
+          className="rounded-md p-1 text-night-400 hover:bg-white/[0.05] hover:text-white"
         >
-          Abm.
+          <LogOut className="h-3.5 w-3.5" />
         </button>
       </div>
     </div>

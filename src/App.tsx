@@ -1,17 +1,26 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AnalyticsPage from "./pages/AnalyticsPage";
-import OverviewPage from "./pages/OverviewPage";
-import FleetPage from "./pages/FleetPage";
-import TripsPage from "./pages/TripsPage";
-import MaintenancePage from "./pages/MaintenancePage";
 import DriversPage from "./pages/DriversPage";
+import FleetPage from "./pages/FleetPage";
+import LoginPage from "./pages/LoginPage";
+import MaintenancePage from "./pages/MaintenancePage";
+import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
+import TripsPage from "./pages/TripsPage";
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<DashboardLayout />}>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route index element={<Navigate to="/analytics" replace />} />
         <Route path="/dashboard" element={<OverviewPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
@@ -20,8 +29,8 @@ export default function App() {
         <Route path="/maintenance" element={<MaintenancePage />} />
         <Route path="/drivers" element={<DriversPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/analytics" replace />} />
       </Route>
+      <Route path="*" element={<Navigate to="/analytics" replace />} />
     </Routes>
   );
 }

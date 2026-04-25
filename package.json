@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint .",
-    "deploy": "wrangler pages deploy dist"
+    "typecheck:functions": "tsc --noEmit -p functions/tsconfig.json"
   },
   "dependencies": {
     "lucide-react": "^0.453.0",
@@ -18,6 +17,7 @@
     "recharts": "^2.13.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241011.0",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
