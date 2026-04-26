@@ -81,9 +81,38 @@ type TimeseriesResp = {
  */
 const KeyEmailMapContext = createContext<Record<string, string>>({});
 
+/**
+ * Liefert die Kunden-E-Mail zum Key, sofern in `customer_keys` hinterlegt.
+ * `keyId` aus Analytics kann von der KV-Key-Schrift abweichen → Trim + case-insensitive.
+ */
+function lookupKeyEmail(
+  map: Record<string, string>,
+  id: string,
+): string | undefined {
+  if (!id) return undefined;
+  const t = id.trim();
+  if (!t) return undefined;
+  const direct = map[t];
+  if (direct) return direct;
+  return map[t.toLowerCase()];
+}
+
+/** Eine Map, die pro Key sowohl exakte als auch lowercased Lookups erlaubt. */
+function buildKeyEmailMap(raw: Record<string, string> | undefined): Record<string, string> {
+  const base = raw ?? {};
+  if (Object.keys(base).length === 0) return base;
+  const out: Record<string, string> = { ...base };
+  for (const [k, v] of Object.entries(base)) {
+    if (!v) continue;
+    const lk = k.toLowerCase();
+    if (out[lk] === undefined) out[lk] = v;
+  }
+  return out;
+}
+
 function useKeyEmail(id: string): string | undefined {
   const map = useContext(KeyEmailMapContext);
-  return map[id];
+  return lookupKeyEmail(map, id);
 }
 
 interface KundenApiPageProps {
@@ -112,7 +141,10 @@ export default function KundenApiPage({
   // das KV-Binding, ignorieren wir den Fehler still — die UI fällt dann
   // einfach auf den Key-String zurück.
   const emailMap = useApi<CustomerKeyEmailMap>(CUSTOMER_KEYS_EMAIL_MAP_URL);
-  const keyEmail = emailMap.data?.map ?? {};
+  const keyEmail = useMemo(
+    () => buildKeyEmailMap(emailMap.data?.map),
+    [emailMap.data],
+  );
 
   const overview = useApi<{ row: OverviewRow }>(apiUrls.overview(range));
   const timeseries = useApi<TimeseriesResp>(apiUrls.timeseries(range));
@@ -128,6 +160,7 @@ export default function KundenApiPage({
   const recent = useApi<RecentResp>(apiUrls.recent(range, 200));
 
   function reloadAll() {
+    emailMap.reload();
     overview.reload();
     timeseries.reload();
     topKeys.reload();
@@ -1389,6 +1422,7 @@ function RecentTable({
   loading: boolean;
   onOpenKey: (k: string) => void;
 }) {
+  const keyEmailMap = useContext(KeyEmailMapContext);
   const [sortAsc, setSortAsc] = useState(false);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "ok" | "err">(
@@ -1401,8 +1435,10 @@ function RecentTable({
       if (statusFilter === "ok" && r.status >= 400) return false;
       if (statusFilter === "err" && r.status < 400) return false;
       if (!term) return true;
+      const email = lookupKeyEmail(keyEmailMap, r.keyId);
       return (
         r.keyId.toLowerCase().includes(term) ||
+        (email && email.toLowerCase().includes(term)) ||
         r.path.toLowerCase().includes(term) ||
         r.brand?.toLowerCase().includes(term) ||
         r.model?.toLowerCase().includes(term) ||
@@ -1415,7 +1451,7 @@ function RecentTable({
       return sortAsc ? ta - tb : tb - ta;
     });
     return out;
-  }, [rows, sortAsc, q, statusFilter]);
+  }, [rows, sortAsc, q, statusFilter, keyEmailMap]);
 
   return (
     <div>
@@ -1424,7 +1460,7 @@ function RecentTable({
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
           <input
             type="search"
-            placeholder="Key, Pfad, Marke, Action…"
+            placeholder="E-Mail, Key, Pfad, Marke, Action…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="w-full rounded-md border border-hair bg-white py-1.5 pl-8 pr-3 text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none"
