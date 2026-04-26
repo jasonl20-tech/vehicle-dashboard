@@ -17,6 +17,7 @@ import SystemePromptsPage from "./pages/SystemePromptsPage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
 import AnfragenPage from "./pages/AnfragenPage";
+import NewsletterPage from "./pages/NewsletterPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
@@ -58,7 +59,7 @@ export default function App() {
         <Route path="/kunden/keys" element={<KundenKeysPage />} />
         <Route path="/kunden/test-keys/:key" element={<KundenKeyDetailPage />} />
         <Route path="/kunden/test-keys" element={<KundenTestKeysPage />} />
-        <Route path="/kunden/newsletter" element={<ModulePage />} />
+        <Route path="/kunden/newsletter" element={<NewsletterPage />} />
         <Route
           path="/kunden"
           element={<Navigate to="/kunden/anfragen" replace />}

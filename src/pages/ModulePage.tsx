@@ -30,11 +30,6 @@ const META: Record<
     eyebrow: "Kundenmanagement",
     description: "Test- und Staging-Keys, getrennt von Produktion – Inhalte folgen.",
   },
-  "/kunden/newsletter": {
-    title: "Newsletter",
-    eyebrow: "Kundenmanagement",
-    description: "Kampagnen, Abonnenten und Versand.",
-  },
   "/logs/skalierungs-worker": {
     title: "Skalierungs Worker",
     eyebrow: "Logs",
