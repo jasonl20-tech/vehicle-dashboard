@@ -25,7 +25,7 @@ export type VehicleImageryListResponse = {
   offset: number;
   limit: number;
   cdnBase: string;
-  /** Anhängen an jede Bild-URL (z. B. `?` + `image_url_secret` aus dem Worker). */
+  /** Anhängen an jede Bild-URL: `?key=<image_url_secret>` (vom Worker). */
   imageUrlQuery: string;
 };
 

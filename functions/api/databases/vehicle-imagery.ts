@@ -4,7 +4,7 @@
  * D1 `vehicledatabase` → `vehicleimagery_public_storage` (nur SELECT).
  *
  * Query: q=  limit=  offset=  active=all|1|0
- * Response: `imageUrlQuery` = an jede Bild-URL anhängen (`?` + `env.image_url_secret`).
+ * Response: `imageUrlQuery` = `?key=` + encodiertes `env.image_url_secret`.
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -54,12 +54,12 @@ function cdnBaseFromEnv(env: AuthEnv): string {
 }
 
 /**
- * Wird an jede Bild-URL angehängt: `?` + Wert aus `image_url_secret` (oder leer).
+ * An jede Bild-URL: `?key=<image_url_secret>` (Secret URL-encodiert).
  */
 function imageUrlQueryFromEnv(env: AuthEnv): string {
   const s = (env.image_url_secret ?? "").trim();
   if (!s) return "";
-  return s.startsWith("?") ? s : `?${s}`;
+  return `?key=${encodeURIComponent(s)}`;
 }
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({

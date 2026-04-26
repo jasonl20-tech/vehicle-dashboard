@@ -1,8 +1,7 @@
 import type { VehicleImageryRowLike } from "./vehicleImageryPublicApi";
 
 /**
- * Muster: `{cdnBase}/v1/{format}/{resolution}/{marke}/{modell}/{jahr}/{body}/{trim}/{farbe}/{ansicht}{imageUrlQuery}`
- * `imageUrlQuery` z. B. `?` + Wert aus dem Worker (vgl. `env.image_url_secret`).
+ * Muster: `{path}{imageUrlQuery}` mit `imageUrlQuery` = `?key=…` vom API-Worker.
  */
 export function buildVehicleImageUrl(
   cdnBase: string,
