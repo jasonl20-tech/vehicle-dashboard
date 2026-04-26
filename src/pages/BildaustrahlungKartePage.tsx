@@ -14,13 +14,18 @@ import { BILDAUSTRAHLUNG_CHOROPLETH_UI } from "../lib/choroplethMapUi";
 import { useApi, fmtNumber } from "../lib/customerApi";
 import {
   type ImageUrlRequestsGeoResponse,
-  IMAGE_URL_REQUESTS_GEO_URL,
+  imageUrlRequestsGeoUrl,
 } from "../lib/bildaustrahlungGeoApi";
 
 const OverviewGlobe = lazy(() => import("../components/OverviewGlobe"));
 
 export default function BildaustrahlungKartePage() {
-  const geo = useApi<ImageUrlRequestsGeoResponse>(IMAGE_URL_REQUESTS_GEO_URL);
+  const [apiDiagnose, setApiDiagnose] = useState(false);
+  const geoUrl = useMemo(
+    () => imageUrlRequestsGeoUrl({ diagnose: apiDiagnose }),
+    [apiDiagnose],
+  );
+  const geo = useApi<ImageUrlRequestsGeoResponse>(geoUrl);
   const [view, setView] = useState<"2d" | "3d">("2d");
   const [q, setQ] = useState("");
   const [debugOpen, setDebugOpen] = useState(false);
@@ -44,7 +49,7 @@ export default function BildaustrahlungKartePage() {
     () =>
       JSON.stringify(
         {
-          requestUrl: IMAGE_URL_REQUESTS_GEO_URL,
+          requestUrl: geoUrl,
           loading: geo.loading,
           error: geo.error,
           data: geo.data,
@@ -52,7 +57,7 @@ export default function BildaustrahlungKartePage() {
         null,
         2,
       ),
-    [geo.loading, geo.error, geo.data],
+    [geoUrl, geo.loading, geo.error, geo.data],
   );
 
   const copyDebug = useCallback(async () => {
@@ -247,6 +252,15 @@ export default function BildaustrahlungKartePage() {
                 API-Response (Debug)
               </h2>
               <div className="flex items-center gap-2">
+                <label className="inline-flex max-w-[min(100%,11rem)] items-center gap-1.5 text-[12px] text-ink-600">
+                  <input
+                    type="checkbox"
+                    checked={apiDiagnose}
+                    onChange={(e) => setApiDiagnose(e.target.checked)}
+                    className="rounded border-hair"
+                  />
+                  Volumen-Diagnose
+                </label>
                 <button
                   type="button"
                   onClick={copyDebug}
@@ -264,6 +278,15 @@ export default function BildaustrahlungKartePage() {
                 </button>
               </div>
             </div>
+            <p className="shrink-0 border-b border-hair/80 px-4 py-2 text-[11.5px] text-ink-500">
+              In <code className="text-ink-700">data.stats</code>: pro Quelle
+              Zeilen nach GROUP BY; &quot;Volumen-Diagnose&quot; lädt{" "}
+              <code className="text-ink-700">volumeInRange</code> (SUM im Zeitraum
+              fürs Dataset). 0 + leere Karte = kein passendes{" "}
+              <code className="text-ink-700">dataset</code> / falscher Modus;{" "}
+              <code className="text-ink-700">sampleRejectedBlob3</code> ={" "}
+              <code className="text-ink-700">blob3</code> ist nicht ISO-2.
+            </p>
             <pre className="m-0 max-h-[min(75vh,600px)] overflow-auto p-4 text-left text-[11.5px] leading-relaxed text-ink-800 [tab-size:2]">
               <code className="font-mono text-[11.5px]">{debugJson}</code>
             </pre>

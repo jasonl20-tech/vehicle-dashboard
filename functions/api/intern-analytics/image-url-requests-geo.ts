@@ -5,7 +5,8 @@
  * Länder: `blob3` (ISO-2, z. B. GB). Domains: `index1` (Kunden-Hosts).
  * Zählung: SUM(_sample_interval) wie in den anderen AE-Auswertungen.
  *
- * Query: from, to (YYYY-MM-DD HH:MM:SS, UTC), optional wie bei anderen.
+ * Query: from, to (YYYY-MM-DD HH:MM:SS, UTC), `days` (1–400), `diagnose=1` (zusätzlich
+ * SUM pro Quelle, zeigt ob überhaupt Zeilen im Zeitraum für `dataset` existieren).
  *
  * Hinweis: die Analytics-Engine-SQL-API unterstützt hier kein `TRIM()` /
  * `UPPER()` um Spalten (422). Muster wie `api/analytics/customer-keys` —
@@ -34,6 +35,7 @@ const MAX_DAYS = 400;
 
 type CountryRow = { iso2: string; c: number };
 type DomainRow = { d: string; c: number };
+type VolumeRow = { c: number };
 
 function defaultRange(days: number): { from: string; to: string } {
   const d = Math.min(MAX_DAYS, Math.max(1, days));
@@ -153,13 +155,41 @@ LIMIT ${MAX_DOMAINS}
 FORMAT JSON`;
 }
 
+/** Summe aller Sample-Intervale im Zeitraum für das Dataset (ohne Gruppierung) — Diagnose. */
+function buildVolumeSql(
+  fromIso: string,
+  toIso: string,
+  fromDataset: string,
+  dedicated: boolean,
+  name: string,
+): string {
+  const tw = buildTimeWhere(fromIso, toIso);
+  if (dedicated) {
+    return `SELECT SUM(_sample_interval) AS c
+FROM ${name}
+WHERE ${tw}
+FORMAT JSON`;
+  }
+  return `SELECT SUM(_sample_interval) AS c
+FROM ${fromDataset}
+WHERE ${tw} AND dataset = ${sqlString(name)}
+FORMAT JSON`;
+}
+
+const SAMPLE_REJECTED_MAX = 12;
+
 function mergeByIso2(parts: CountryRow[][]): {
   byIso2: Record<string, number>;
   max: number;
   total: number;
   countryCount: number;
+  countryGroupsRejected: number;
+  sampleRejectedBlob3: string[];
 } {
   const byIso2: Record<string, number> = {};
+  const sampleRejectedBlob3: string[] = [];
+  const seen = new Set<string>();
+  let countryGroupsRejected = 0;
   for (const part of parts) {
     for (const r of part) {
       const rec = r as { iso2?: string; c?: number } & Record<string, unknown>;
@@ -168,7 +198,17 @@ function mergeByIso2(parts: CountryRow[][]): {
         (typeof rec.ISO2 === "string" && rec.ISO2) ||
         "";
       const k = String(raw).toUpperCase().trim();
-      if (!/^[A-Z]{2}$/.test(k)) continue;
+      if (!/^[A-Z]{2}$/.test(k)) {
+        countryGroupsRejected += 1;
+        if (sampleRejectedBlob3.length < SAMPLE_REJECTED_MAX) {
+          const s = String(raw).slice(0, 64);
+          if (s && !seen.has(s)) {
+            seen.add(s);
+            sampleRejectedBlob3.push(s);
+          }
+        }
+        continue;
+      }
       byIso2[k] = (byIso2[k] ?? 0) + aeNumber(r.c);
     }
   }
@@ -182,6 +222,8 @@ function mergeByIso2(parts: CountryRow[][]): {
     max,
     total,
     countryCount: Object.keys(byIso2).length,
+    countryGroupsRejected,
+    sampleRejectedBlob3,
   };
 }
 
@@ -242,22 +284,35 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 
   const { list: runSources, label: accountLabel } = sourcesToRun(env, sources);
+  const wantDiagnose = url.searchParams.get("diagnose") === "1";
 
   const countryRows: CountryRow[][] = [];
   const domainRows: DomainRow[][] = [];
   const errors: string[] = [];
   let hadCountryOk = false;
   let hadDomainOk = false;
+  const perSourceMeta: {
+    binding: AeAccountBinding;
+    fromTable: string;
+    countryGroupRows: number;
+    domainGroupRows: number;
+    volumeInRange?: number;
+  }[] = [];
 
   for (const s of runSources) {
     const fromDataset = fromKeyAnalyticsForBinding(env, s.binding);
     const csql = buildCountrySql(from, to, fromDataset, dedicated, name);
     const dsql = buildDomainSql(from, to, fromDataset, dedicated, name);
+    let cLen = 0;
+    let dLen = 0;
+    let vol: number | undefined;
     try {
       const c = await runAeSql<CountryRow>(env, csql, { binding: s.binding });
       countryRows.push(c.data);
+      cLen = c.data.length;
       hadCountryOk = true;
     } catch (e) {
+      countryRows.push([]);
       errors.push(
         (e as Error).message || String(e),
       );
@@ -265,12 +320,34 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     try {
       const d = await runAeSql<DomainRow>(env, dsql, { binding: s.binding });
       domainRows.push(d.data);
+      dLen = d.data.length;
       hadDomainOk = true;
     } catch (e) {
+      domainRows.push([]);
       errors.push(
         (e as Error).message || String(e),
       );
     }
+    if (wantDiagnose) {
+      const volSql = buildVolumeSql(from, to, fromDataset, dedicated, name);
+      try {
+        const vr = await runAeSql<VolumeRow>(env, volSql, { binding: s.binding });
+        const row = vr.data[0] as VolumeRow | undefined;
+        vol = row ? aeNumber(row.c) : 0;
+      } catch (e) {
+        errors.push(
+          `volumen ${s.binding}: ${(e as Error).message || String(e)}`,
+        );
+        vol = undefined;
+      }
+    }
+    perSourceMeta.push({
+      binding: s.binding,
+      fromTable: fromDataset,
+      countryGroupRows: cLen,
+      domainGroupRows: dLen,
+      ...(wantDiagnose && { volumeInRange: vol }),
+    });
   }
 
   if (!hadCountryOk && !hadDomainOk && errors.length > 0) {
@@ -297,6 +374,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     domainRows.length > 0 ? domainRows : [[] as DomainRow[]],
   );
 
+  const countryGroupsTotal = countryRows.reduce((a, p) => a + p.length, 0);
+  const domainGroupsTotal = domainRows.reduce((a, p) => a + p.length, 0);
+
   return jsonResponse(
     {
       byIso2: merged.byIso2,
@@ -310,6 +390,19 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         mode: dedicated ? ("dedicated" as const) : ("filter" as const),
         accounts: accountLabel,
         days,
+      },
+      stats: {
+        perSource: perSourceMeta,
+        countryGroupsTotal,
+        domainGroupsTotal,
+        countryGroupsRejected: merged.countryGroupsRejected,
+        sampleRejectedBlob3: merged.sampleRejectedBlob3,
+        ...(!wantDiagnose
+          ? {
+              hint:
+                "Zusatz: `?diagnose=1` — SUM(_sample_interval) pro Quelle (Volumen im Zeitraum für dieses dataset).",
+            }
+          : {}),
       },
       queryWarnings: errors.length > 0 ? errors : undefined,
     },
