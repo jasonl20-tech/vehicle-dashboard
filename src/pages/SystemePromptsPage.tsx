@@ -252,15 +252,15 @@ export default function SystemePromptsPage() {
                         Prompt
                       </span>
                       <p className="mb-2 text-[12px] text-ink-500">
+                        Ein großes Textfeld. Die fünf Variablen in der
+                        Seitenleiste: Klick fügt{" "}
                         <span className="font-mono text-ink-600">
-                          {"{{jahrgang}}"}, {"{{marke}}"}, {"{{model}}"},
-                          {"{{bodytyp}}"}, {"{{trim}}"}
+                          {`{{name}}`}-Platzhalter
                         </span>{" "}
-                        erscheinen als feste Blöcke (nicht zeichenweise im
-                        Fließtext bearbeitbar). Freien Text dazwischen in den
-                        Kästen bearbeiten.
+                        an der Cursor-Position bzw. ersetzt die Markierung
+                        (Auswahl) im Text.
                       </p>
-                      <div className="rounded-md border border-hair bg-paper/60 p-2">
+                      <div className="rounded-md border border-hair bg-paper/60 p-3">
                         <PromptFieldWithPlaceholders
                           value={form.prompt}
                           onChange={(v) => setForm((f) => ({ ...f, prompt: v }))}
