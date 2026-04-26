@@ -1,45 +1,43 @@
+import type { CSSProperties } from "react";
 import { leafletChoroplethPathOptions } from "../lib/requestsChoropleth";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
 
 /**
- * Zentrales Modell der 2D-Ansicht (wie das „Gebäude“ um den 3D-Globus):
- * Kacheln, Karten-View, Choropleth-Randwerte, Texte.
+ * 2D-Ansicht: reine **SVG**-Weltkarte (projiziertes Länder-GeoJSON im Browser).
+ * Keine Rasterkacheln (kein OpenStreetMap o. ä.) – daher kein Mischkarten-Etikett
+ * und keine „Zufall“-Ortstexte; nur Länderflächen + Farbe aus Anfrage-Daten.
  *
- * - Farbverlauf (Blau) pro Land: `../lib/requestsChoropleth` → `countryBlues`
- * - Linienstärke / Opazität der Flächen: `choropleth.pathOverrides` unten
- * - Hintergrundkacheln: `tile` (z. B. später MapTiler, Carto, Eigen-Hosting)
- * - Karten-Position: `view` + `fitBounds` / `fitFallback`
- * - Anzeigetexte: `ui` (Karten-„Chrome“)
+ * Ländergeometrie: `anfragenKarteGeo` → lokal abgelegte GeoJSON-Datei. Für ein
+ * lizenziertes/anderes Länder-SVG-Export ersetze einfach diese Datei im `public/`-Pfad
+ * (gleiche Struktur: FeatureCollection mit `properties.ISO_A2`).
  */
 export const anfragenKarteMap2DModel = {
-  tile: {
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>-Mitwirkende',
-  },
-
-  view: {
-    center: [24, 10] as [number, number],
-    zoom: 2,
-    minZoom: 1,
-    maxZoom: 10,
-    scrollWheelZoom: true,
-    worldCopyJump: true,
-  },
-
-  fitBounds: {
-    padding: [28, 28] as [number, number],
-    maxZoom: 4,
-  },
-
-  fitFallback: {
-    center: [20, 10] as [number, number],
-    zoom: 2,
+  /**
+   * Ozean-Hintergrund (Halo um die Projektion) hinter den Länder-SVG-Pfaden.
+   */
+  svg: {
+    projection: "geoEqualEarth" as const,
+    projectionConfig: { scale: 200, center: [0, 0] } as {
+      scale: number;
+      center: [number, number];
+    },
+    ocean: {
+      fill: "#b9d4ec",
+      stroke: "rgba(100, 130, 165, 0.35)",
+      strokeWidth: 0.45,
+    },
+    /** ZoomableGroup: Pan/Scroll-Zoom (nur Länder-SVG) */
+    zoom: {
+      center: [0, 0] as [number, number],
+      zoom: 1,
+      minZoom: 0.5,
+      maxZoom: 8,
+    },
   },
 
   /**
-   * Leaflet `PathOptions`–Parameter (ohne die Farben aus `countryBlues`).
-   * Farbton-Kurve anpassen: in `requestsChoropleth.ts` (`countryBlues`).
+   * Choropleth-Parameter, analog zu ehem. Leaflet `PathOptions`.
+   * Farben: `../lib/requestsChoropleth` → `countryBlues`.
    */
   choropleth: {
     pathOverrides: {
@@ -52,7 +50,7 @@ export const anfragenKarteMap2DModel = {
   ui: {
     cardTitle: "Anfragen nach Land",
     cardDescription:
-      "2D-Karte: je mehr Anfragen, desto blauer (Nicht-Spam, Ländercode in Metadaten). Grenzen: Natural Earth 110m. Kacheln: OpenStreetMap.",
+      "2D: vektorisierte Länderkarte (SVG, keine Hintergrundkacheln) – stärkere Einsendungen erscheinen blauer. Grenzen: Natural Earth; bei Bedarf durch eure lizenzierte Geometrie ersetzbar.",
     legendTitle: "Farbskala",
     legendBody:
       "Hell = wenig/kein Volumen · Dunkelblau = hoher Anteil (relativ zu „stärkstem Land“)",
@@ -60,9 +58,6 @@ export const anfragenKarteMap2DModel = {
   },
 } as const;
 
-/**
- * Fertige Leaflet-Pfad-Styles (Farbe aus `requestsChoropleth` + Werte aus `pathOverrides`).
- */
 export function getMap2DChoroplethPathOptions(
   data: SubmissionsByCountryResponse | null,
   iso: string | undefined,
@@ -71,5 +66,37 @@ export function getMap2DChoroplethPathOptions(
   return {
     ...base,
     ...anfragenKarteMap2DModel.choropleth.pathOverrides,
+  };
+}
+
+/**
+ * Füll- und Linienstil für `react-simple-maps` `<Geography style={{ default, hover }} />`
+ */
+export function getMap2DGeographyStyles(
+  data: SubmissionsByCountryResponse | null,
+  iso: string | undefined,
+): {
+  default: CSSProperties;
+  hover: CSSProperties;
+} {
+  const o = getMap2DChoroplethPathOptions(data, iso);
+  const w = o.weight;
+  return {
+    default: {
+      fill: o.fillColor,
+      fillOpacity: o.fillOpacity,
+      stroke: o.color,
+      strokeWidth: w,
+      opacity: o.opacity,
+      outline: "none",
+    },
+    hover: {
+      fill: o.fillColor,
+      fillOpacity: Math.min(1, o.fillOpacity + 0.04),
+      stroke: o.color,
+      strokeWidth: w + 0.15,
+      opacity: 1,
+      outline: "none",
+    },
   };
 }

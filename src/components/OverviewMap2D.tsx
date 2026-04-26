@@ -1,4 +1,4 @@
-import Map2DLeafletView from "./map2d/Map2DLeafletView";
+import Map2DWorldSvg from "./map2d/Map2DWorldSvg";
 import { Map2DChrome, Map2DLegend } from "./map2d/Map2DChrome";
 import { anfragenKarteMap2DModel } from "../config/anfragenKarteMap2DModel";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
@@ -56,7 +56,7 @@ export default function OverviewMap2D({
         style={{ minHeight: "min(72vh, 720px)" }}
       >
         {geo && geo.features.length > 0 ? (
-          <Map2DLeafletView geo={geo} data={data} dataKey={dataKey} />
+          <Map2DWorldSvg geo={geo} data={data} dataKey={dataKey} />
         ) : (
           <div
             className="grid h-[min(72vh,720px)] min-h-[480px] place-items-center text-[13px] text-ink-500"
