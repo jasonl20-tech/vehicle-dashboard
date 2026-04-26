@@ -20,12 +20,6 @@ const META: Record<
     eyebrow: "Leads",
     description: "Interessenten und Lead-Übersicht – Inhalte folgen.",
   },
-  "/kunden/crm": {
-    title: "CRM",
-    eyebrow: "Kundenmanagement",
-    description:
-      "Kundenstammdaten, Pipeline und Kommunikation – Inhalte folgen.",
-  },
   "/kunden/keys": {
     title: "Kunden keys",
     eyebrow: "Kundenmanagement",
