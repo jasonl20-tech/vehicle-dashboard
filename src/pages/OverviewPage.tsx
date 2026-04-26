@@ -1,11 +1,22 @@
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  CartesianGrid,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import PageHeader from "../components/ui/PageHeader";
 import { controllingApiUrl, type ControllingResponse } from "../lib/controllingApi";
 import {
   type OverviewRow,
-  fmtCompact,
   fmtCurrency,
   fmtNumber,
   makeApiUrls,
@@ -22,7 +33,18 @@ import {
   type OverviewStatsResponse,
 } from "../lib/overviewStatsApi";
 
-// ---------- Format (wie Controlling) ----------
+// ---------- Farben (dezent, ohne Box) ----------
+
+const C = {
+  a: "hsl(214 45% 42%)",
+  b: "hsl(170 32% 40%)",
+  c: "hsl(32 40% 48%)",
+  d: "hsl(280 20% 48%)",
+  pie1: "hsl(214 40% 48%)",
+  pie2: "hsl(32 45% 52%)",
+};
+
+// ---------- Format ----------
 
 function fmtHours(h: number | null | undefined): string {
   if (h == null || !Number.isFinite(h)) return "–";
@@ -34,106 +56,303 @@ function fmtHours(h: number | null | undefined): string {
   return `${(h / (24 * 7)).toFixed(1)} Wo.`;
 }
 
-// ---------- Teilkarten ----------
-
-function DwmBlock({
-  title,
-  d,
-  hint,
-  to,
-}: {
-  title: string;
-  d: OverviewDwm;
-  hint?: string;
-  to: { day: string; week: string; month: string };
-}) {
-  return (
-    <div className="rounded-xl border border-hair bg-paper p-4 shadow-sm">
-      <h3 className="text-[12px] font-semibold text-ink-800">{title}</h3>
-      {hint && (
-        <p className="mt-0.5 text-[11px] text-ink-500">
-          {hint}
-        </p>
-      )}
-      <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div>
-          <dt className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-            Heute
-          </dt>
-          <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink-900">
-            <Link
-              to={to.day}
-              className="hover:text-ink-600 hover:underline"
-            >
-              {fmtNumber(d.day)}
-            </Link>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-            7 Tage
-          </dt>
-          <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink-900">
-            <Link
-              to={to.week}
-              className="hover:text-ink-600 hover:underline"
-            >
-              {fmtNumber(d.week)}
-            </Link>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-            Monat
-          </dt>
-          <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ink-900">
-            <Link
-              to={to.month}
-              className="hover:text-ink-600 hover:underline"
-            >
-              {fmtNumber(d.month)}
-            </Link>
-          </dd>
-        </div>
-      </dl>
-    </div>
-  );
+function dwmRows(d: OverviewDwm) {
+  return [
+    { label: "Heute", n: d.day },
+    { label: "7 Tage", n: d.week },
+    { label: "Monat", n: d.month },
+  ];
 }
 
-function CardShell({
+// ---------- Sektion (flach) ----------
+
+function Section({
   title,
   to,
+  hint,
   children,
-  meta,
+  tall,
 }: {
   title: string;
   to: string;
+  hint?: string;
   children: ReactNode;
-  meta?: string;
+  tall?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-hair bg-paper p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-[12px] font-semibold text-ink-800">{title}</h3>
+    <section className="border-b border-hair/90 py-8 last:mb-0 last:border-0 sm:py-9">
+      <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[13px] font-semibold tracking-tight text-ink-800">
+          {title}
+        </h2>
         <Link
           to={to}
-          className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-ink-500 hover:text-ink-700"
+          className="inline-flex items-center gap-0.5 text-[11.5px] text-ink-500 transition-colors hover:text-ink-800"
         >
-          <span>Öffnen</span>
-          <ExternalLink className="h-3 w-3" aria-hidden />
+          Details
+          <ExternalLink className="h-3 w-3 opacity-60" aria-hidden />
         </Link>
       </div>
-      {meta && (
-        <p className="mt-0.5 text-[11px] text-ink-500">{meta}</p>
-      )}
-      <div className="mt-3">{children}</div>
+      {hint && <p className="mb-3 max-w-2xl text-[11.5px] leading-relaxed text-ink-500">{hint}</p>}
+      <div className={tall ? "h-[200px] w-full min-w-0" : "h-[180px] w-full min-w-0"}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+// ---------- Mini-Charts ----------
+
+function DwmBar({
+  d,
+  color,
+}: {
+  d: OverviewDwm;
+  color: string;
+}) {
+  const data = useMemo(() => dwmRows(d), [d.day, d.week, d.month]);
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="hsl(220 10% 88%)" vertical={false} />
+        <XAxis
+          dataKey="label"
+          tick={{ fontSize: 10, fill: "hsl(220 8% 45%)" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: "hsl(220 8% 45%)" }}
+          width={40}
+          axisLine={false}
+          tickLine={false}
+          allowDecimals={false}
+        />
+        <Tooltip
+          cursor={{ fill: "hsl(220 20% 96% / 0.5)" }}
+          contentStyle={{
+            fontSize: 12,
+            border: "none",
+            borderRadius: 4,
+            boxShadow: "0 1px 8px hsl(0 0% 0% / 0.08)",
+          }}
+          formatter={(v: number) => [fmtNumber(v), "Wert"]}
+        />
+        <Bar dataKey="n" name="Anzahl" maxBarSize={48} fill={color} radius={[2, 2, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function RequestsBar({ day, week, month }: { day: number; week: number; month: number }) {
+  const data = useMemo(
+    () => [
+      { label: "Heute", n: day },
+      { label: "7 Tage", n: week },
+      { label: "Monat", n: month },
+    ],
+    [day, week, month],
+  );
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="hsl(220 10% 88%)" vertical={false} />
+        <XAxis
+          dataKey="label"
+          tick={{ fontSize: 10, fill: "hsl(220 8% 45%)" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: "hsl(220 8% 45%)" }}
+          width={44}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip
+          cursor={{ fill: "hsl(220 20% 96% / 0.5)" }}
+          contentStyle={{
+            fontSize: 12,
+            border: "none",
+            borderRadius: 4,
+            boxShadow: "0 1px 8px hsl(0 0% 0% / 0.08)",
+          }}
+          formatter={(v: number) => [fmtNumber(v), "Requests"]}
+        />
+        <Bar dataKey="n" name="Requests" maxBarSize={48} fill={C.a} radius={[2, 2, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function OneautoHistoryBars({ data }: { data: OneautoReportsResponse | null }) {
+  const months = data?.months ?? [];
+  const chart = useMemo(() => {
+    const slice = months.slice(0, 6).reverse();
+    return slice.map((m) => ({
+      name:
+        m.month.length >= 7
+          ? `${m.month.slice(5, 7)}/${m.month.slice(2, 4)}`
+          : m.month,
+      eur: m.eur ?? 0,
+      gbp: m.gbp,
+      views: m.views,
+    }));
+  }, [months]);
+  if (chart.length === 0) return <EmptyChart label="Noch keine Monatswerte" />;
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={chart} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="hsl(220 10% 88%)" vertical={false} />
+        <XAxis
+          dataKey="name"
+          tick={{ fontSize: 9, fill: "hsl(220 8% 45%)" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <YAxis
+          tick={{ fontSize: 10, fill: "hsl(220 8% 45%)" }}
+          width={48}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip
+          cursor={{ fill: "hsl(220 20% 96% / 0.5)" }}
+          contentStyle={{
+            fontSize: 12,
+            border: "none",
+            borderRadius: 4,
+            boxShadow: "0 1px 8px hsl(0 0% 0% / 0.08)",
+          }}
+          formatter={(v: number, name: string) => {
+            if (name === "eur") return [v != null ? fmtCurrency(v, "EUR") : "–", "EUR (ca.)"];
+            if (name === "gbp") return [fmtCurrency(v, "GBP"), "GBP"];
+            return [fmtNumber(v), name];
+          }}
+        />
+        <Bar dataKey="eur" name="eur" maxBarSize={32} fill={C.b} radius={[2, 2, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function KeysSplitPie({ productive, test }: { productive: number; test: number }) {
+  const data = useMemo(
+    () => [
+      { name: "Produktiv", value: Math.max(0, productive) },
+      { name: "Test", value: Math.max(0, test) },
+    ],
+    [productive, test],
+  );
+  if (data.every((d) => d.value === 0)) {
+    return <EmptyChart label="Keine aktiven Keys" />;
+  }
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <PieChart>
+        <Pie
+          data={data}
+          dataKey="value"
+          nameKey="name"
+          cx="50%"
+          cy="50%"
+          innerRadius="42%"
+          outerRadius="70%"
+          paddingAngle={2}
+          strokeWidth={0}
+        >
+          {data.map((_, i) => (
+            <Cell key={i} fill={i === 0 ? C.pie1 : C.pie2} />
+          ))}
+        </Pie>
+        <Tooltip
+          formatter={(v: number, n: string) => [fmtNumber(v), n]}
+          contentStyle={{
+            fontSize: 12,
+            border: "none",
+            borderRadius: 4,
+            boxShadow: "0 1px 8px hsl(0 0% 0% / 0.08)",
+          }}
+        />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+function OpenJobsBar({ total }: { total: number }) {
+  const data = useMemo(
+    () => [{ label: "Offen", n: total }],
+    [total],
+  );
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke="hsl(220 10% 88%)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+        <YAxis hide />
+        <Tooltip
+          cursor={false}
+          contentStyle={{ fontSize: 12, border: "none" }}
+          formatter={(v: number) => [fmtNumber(v), "Jobs"]}
+        />
+        <Bar dataKey="n" maxBarSize={64} fill={C.c} radius={[2, 2, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function EtaCompareBar({ noNew, withFlow }: { noNew: number | null; withFlow: number | null }) {
+  const h1 = noNew && Number.isFinite(noNew) ? Math.max(0, noNew) : 0;
+  const h2 = withFlow && Number.isFinite(withFlow) ? Math.max(0, withFlow) : 0;
+  const data = useMemo(
+    () => [
+      { name: "Ohne neuen Zufluss", h: h1 },
+      { name: "Bei lauf. Zufluss", h: h2 },
+    ],
+    [h1, h2],
+  );
+  if (h1 <= 0 && h2 <= 0) {
+    return <EmptyChart label="Keine Schätzwerte" />;
+  }
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart
+        layout="vertical"
+        data={data}
+        margin={{ top: 4, right: 20, left: 4, bottom: 0 }}
+      >
+        <CartesianGrid stroke="hsl(220 10% 88%)" horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 10 }} domain={[0, "auto"]} allowDecimals tickFormatter={(v) => `${v}h`} />
+        <YAxis
+          type="category"
+          dataKey="name"
+          width={120}
+          tick={{ fontSize: 9.5, fill: "hsl(220 8% 40%)" }}
+          axisLine={false}
+          tickLine={false}
+        />
+        <Tooltip
+          cursor={{ fill: "hsl(220 20% 96% / 0.4)" }}
+          contentStyle={{ fontSize: 12, border: "none" }}
+          formatter={(v: number) => [fmtHours(v), "ETA"]}
+        />
+        <Bar dataKey="h" maxBarSize={16} fill={C.d} radius={[0, 2, 2, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function EmptyChart({ label }: { label: string }) {
+  return (
+    <div className="grid h-full place-items-center text-[12.5px] text-ink-500">
+      {label}
     </div>
   );
 }
 
-type JobsResp = { total: number };
-
 // ---------- Seite ----------
+
+type JobsResp = { total: number };
 
 export default function OverviewPage() {
   const api = useMemo(() => makeApiUrls("customers"), []);
@@ -153,8 +372,7 @@ export default function OverviewPage() {
     [cRange],
   );
   const oneautoUrl = useMemo(() => reportsUrl(12), []);
-  const jobsUrl =
-    "/api/intern-analytics/controll-jobs?check=0&limit=1" as const;
+  const jobsUrl = "/api/intern-analytics/controll-jobs?check=0&limit=1" as const;
 
   const stat = useApi<OverviewStatsResponse>(OVERVIEW_STATS_URL);
   const reqD = useApi<{ row: OverviewRow }>(reqUrls.day);
@@ -191,21 +409,24 @@ export default function OverviewPage() {
     ctrl.error ||
     jobs.error;
 
-  const thisMonthOa = oneauto.data?.months?.[0];
+  const rDay = reqD.error ? 0 : (reqD.data?.row?.requests ?? 0);
+  const rWeek = reqW.error ? 0 : (reqW.data?.row?.requests ?? 0);
+  const rMonth = reqM.error ? 0 : (reqM.data?.row?.requests ?? 0);
+  const requestsReady = !reqD.error && !reqW.error && !reqM.error && !reqD.loading && !reqW.loading && !reqM.loading;
 
   return (
     <>
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-2 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-end sm:justify-between">
         <PageHeader
           eyebrow="Dashboard"
           title="Übersicht"
-          description="Aktuelle Kennzahlen zu Anfragen, API-Nutzung, Oneauto, Keys und Controlling."
+          description="Aktuelle Kennzahlen als Verläufe und Verteilungen – Anfragen, API, Oneauto, Keys, Controlling."
         />
         <button
           type="button"
           onClick={reloadAll}
           disabled={anyLoading}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 self-start rounded-md border border-hair bg-white px-3 text-[12.5px] font-medium text-ink-700 transition-colors enabled:hover:bg-ink-50 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 self-start text-[12.5px] text-ink-600 transition-opacity hover:text-ink-900 disabled:opacity-40"
         >
           <RefreshCw
             className={`h-3.5 w-3.5 ${anyLoading ? "animate-spin" : ""}`}
@@ -216,230 +437,131 @@ export default function OverviewPage() {
       </div>
 
       {anyError && (
-        <div
-          className="mb-5 rounded-md border border-accent-amber/50 bg-accent-amber/[0.08] px-3 py-2 text-[12.5px] text-ink-700"
-          role="status"
-        >
-          Mindestens eine Quelle liefert einen Fehler. Details pro Bereich
-          unten.{" "}
-          {[stat, reqD, reqW, reqM, oneauto, ctrl, jobs]
-            .map((s) => s.error)
+        <p className="mb-6 text-[12.5px] text-ink-600" role="status">
+          {[
+            stat.error,
+            reqD.error,
+            reqW.error,
+            reqM.error,
+            oneauto.error,
+            ctrl.error,
+            jobs.error,
+          ]
             .filter(Boolean)
             .join(" · ")}
-        </div>
+        </p>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="max-w-5xl">
         {stat.data ? (
           <>
-            <DwmBlock
-              title="Anfragen (Website)"
-              hint="Heute = UTC, Woche = 7 Tage rollierend, Monat = laufender Kalendermonat (UTC)"
-              d={stat.data.website.submissions}
-              to={{
-                day: "/kunden/anfragen",
-                week: "/kunden/anfragen",
-                month: "/kunden/anfragen",
-              }}
-            />
-            <DwmBlock
-              title="Test-Anfragen"
-              hint="Heute = UTC, Woche = 7 Tage rollierend, Monat = laufender Kalendermonat (UTC)"
-              d={stat.data.website.trialSubmissions}
-              to={{
-                day: "/kunden/test-anfragen",
-                week: "/kunden/test-anfragen",
-                month: "/kunden/test-anfragen",
-              }}
-            />
-            <DwmBlock
-              title="Newsletter"
-              hint="Heute = UTC, Woche = 7 Tage rollierend, Monat = laufender Kalendermonat (UTC)"
-              d={stat.data.website.newsletter}
-              to={{
-                day: "/kunden/newsletter",
-                week: "/kunden/newsletter",
-                month: "/kunden/newsletter",
-              }}
-            />
+            <div className="grid gap-0 sm:grid-cols-1 lg:grid-cols-3 lg:gap-8">
+              <Section
+                title="Anfragen (Website)"
+                to="/kunden/anfragen"
+                hint="Heute/7 Tage/Monat (UTC) – identische Definition wie in der API."
+              >
+                <DwmBar d={stat.data.website.submissions} color={C.a} />
+              </Section>
+              <Section
+                title="Test-Anfragen"
+                to="/kunden/test-anfragen"
+                hint="Testformular, gleiche Zeiträume wie oben."
+              >
+                <DwmBar d={stat.data.website.trialSubmissions} color={C.b} />
+              </Section>
+              <Section
+                title="Newsletter"
+                to="/kunden/newsletter"
+                hint="Anmeldungen, gleiche Zeiträume."
+              >
+                <DwmBar d={stat.data.website.newsletter} color={C.c} />
+              </Section>
+            </div>
           </>
         ) : stat.error ? (
-          <div className="rounded-xl border border-accent-rose/30 bg-accent-rose/[0.06] p-4 text-[12.5px] text-accent-rose md:col-span-2 xl:col-span-3">
-            Website-Statistiken: {stat.error}
-          </div>
+          <p className="py-4 text-[12.5px] text-accent-rose">Website-Statistiken: {stat.error}</p>
         ) : (
-          <LoadingCard title="Anfragen / Test / Newsletter" />
+          <p className="py-4 text-[12.5px] text-ink-500">Lade Anfrage-Daten …</p>
         )}
 
-        <CardShell
-          title="Oneauto-Report (dieser Monat, Vorschau)"
+        <Section
+          title="Oneauto-Abrechnung (letzte Monate, EUR ca.)"
           to="/analytics/oneauto-reports"
-          meta="Abrechnung laufender Monat (siehe Tabelle Kunden-API-Reports)"
+          hint="Aktueller Monat inklusive; Vorschau solange Monat offen. Balken: geschätzter EUR-Betrag pro Monat."
+          tall
         >
-          {oneauto.error && (
-            <p className="text-[12.5px] text-accent-rose">{oneauto.error}</p>
+          {oneauto.error ? (
+            <p className="pt-8 text-[12.5px] text-accent-rose">{oneauto.error}</p>
+          ) : oneauto.loading && !oneauto.data ? (
+            <p className="pt-8 text-[12.5px] text-ink-500">Laden …</p>
+          ) : (
+            <OneautoHistoryBars data={oneauto.data} />
           )}
-          {oneauto.loading && !oneauto.data && (
-            <p className="text-[12.5px] text-ink-500">Laden …</p>
-          )}
-          {thisMonthOa && (
-            <div className="space-y-1.5 text-[13px]">
-              <p>
-                <span className="text-ink-500">Betrag: </span>
-                <span className="font-semibold tabular-nums text-ink-900">
-                  {fmtCurrency(thisMonthOa.eur, "EUR")}
-                </span>
-                <span className="text-ink-500"> · </span>
-                {fmtCurrency(thisMonthOa.gbp, "GBP")}
-              </p>
-              <p className="text-[11.5px] text-ink-500">
-                Views (Monat): {fmtNumber(thisMonthOa.views)} · Requests:{" "}
-                {fmtCompact(thisMonthOa.requests)} ·{" "}
-                {thisMonthOa.closed
-                  ? "Monat abgeschlossen"
-                  : "Laufender Monat (Vorschau)"}
-                {thisMonthOa.fx?.date
-                  ? ` · FX ${thisMonthOa.fx.source} ${thisMonthOa.fx.date}`
-                  : null}
-              </p>
-            </div>
-          )}
-        </CardShell>
+        </Section>
 
-        <CardShell
-          title="Kunden-API: Requests (alle Keys)"
+        <Section
+          title="Kunden-API: Requests (alle produktiven Keys)"
           to="/analytics/kunden-api"
-          meta="Heute = ab Mitternacht UTC, Woche = 7 Tage, Monat = Kalendermonat UTC"
+          hint="Zeitfenster: heute = Mitternacht UTC ab jetzt, 7 Tage rollierend, Monat = Kalendermonat."
         >
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-                Heute
-              </div>
-              <div className="mt-0.5 text-lg font-semibold tabular-nums">
-                {reqD.error
-                  ? "–"
-                  : fmtNumber(reqD.data?.row?.requests ?? null)}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-                7 Tage
-              </div>
-              <div className="mt-0.5 text-lg font-semibold tabular-nums">
-                {reqW.error
-                  ? "–"
-                  : fmtNumber(reqW.data?.row?.requests ?? null)}
-              </div>
-            </div>
-            <div>
-              <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-                Monat
-              </div>
-              <div className="mt-0.5 text-lg font-semibold tabular-nums">
-                {reqM.error
-                  ? "–"
-                  : fmtNumber(reqM.data?.row?.requests ?? null)}
-              </div>
-            </div>
-          </div>
-        </CardShell>
+          {reqD.error || reqW.error || reqM.error ? (
+            <p className="pt-8 text-[12.5px] text-accent-rose">API-Analytics: Fehler beim Laden</p>
+          ) : !requestsReady ? (
+            <p className="pt-8 text-[12.5px] text-ink-500">Laden …</p>
+          ) : (
+            <RequestsBar
+              day={rDay}
+              week={rWeek}
+              month={rMonth}
+            />
+          )}
+        </Section>
 
-        <CardShell
-          title="Aktive Keys (KV)"
+        <Section
+          title="Aktive Keys (Produktiv vs. Test)"
           to="/kunden/keys"
-          meta="Produktiv = ohne Test-Plan, Test = Test-Plan-Name. Abgelaufene Keys (expires_at) zählen nicht."
+          hint="Nur unabgelaufene; Verteilung als Anteile. Kein Key-Binding: Bereich leer."
         >
           {stat.data?.activeKeys == null ? (
-            <p className="text-[12.5px] text-ink-500">
-              {stat.loading
-                ? "Laden …"
-                : "Keine KV-Angabe (Binding `customer_keys`)."}
-            </p>
+            <EmptyChart
+              label={stat.loading ? "Laden …" : "Kein `customer_keys`-Binding"}
+            />
           ) : (
-            <div className="grid grid-cols-2 gap-3 text-center">
-              <div>
-                <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-                  Produktiv
-                </div>
-                <div className="mt-0.5 text-xl font-semibold tabular-nums">
-                  <Link
-                    to="/kunden/keys"
-                    className="hover:underline"
-                  >
-                    {fmtNumber(stat.data.activeKeys.productive)}
-                  </Link>
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-medium uppercase tracking-wide text-ink-500">
-                  Test-Keys
-                </div>
-                <div className="mt-0.5 text-xl font-semibold tabular-nums">
-                  <Link
-                    to="/kunden/test-keys"
-                    className="hover:underline"
-                  >
-                    {fmtNumber(stat.data.activeKeys.test)}
-                  </Link>
-                </div>
-              </div>
-            </div>
+            <KeysSplitPie
+              productive={stat.data.activeKeys.productive}
+              test={stat.data.activeKeys.test}
+            />
           )}
-        </CardShell>
+        </Section>
 
-        <CardShell
-          title="Offene Controlling-Jobs"
-          to="/intern-analytics/jobs"
-          meta="Status „offen“ (check = 0)"
-        >
-          {jobs.error && (
-            <p className="text-[12.5px] text-accent-rose">{jobs.error}</p>
-          )}
-          <p className="text-3xl font-semibold tabular-nums text-ink-900">
-            {fmtNumber(jobs.data?.total ?? null)}
-          </p>
-        </CardShell>
+        <div className="grid gap-0 sm:grid-cols-1 lg:grid-cols-2 lg:gap-12">
+          <Section title="Offene Controlling-Jobs" to="/intern-analytics/jobs" hint="Status „offen“ (check = 0).">
+            {jobs.error ? (
+              <p className="pt-8 text-[12.5px] text-accent-rose">{jobs.error}</p>
+            ) : (
+              <OpenJobsBar total={jobs.data?.total ?? 0} />
+            )}
+          </Section>
 
-        <div className="md:col-span-2 xl:col-span-1">
-          <CardShell
-            title="Voraussichtliche Bearbeitungszeit (Controlling)"
+          <Section
+            title="Voraussichtliche Bearbeitungszeit (Stunden, global)"
             to="/intern-analytics/controlling"
-            meta="Basis letzte 7 Tage, Session-Gap 30 min, Zeilen nur mit blob4; global über alle Modi"
+            hint="7 Tage Rückblick, Session-Gap 30 min, nur Zeilen mit blob4."
           >
-            {ctrl.error && (
-              <p className="text-[12.5px] text-accent-rose">{ctrl.error}</p>
+            {ctrl.error ? (
+              <p className="pt-8 text-[12.5px] text-accent-rose">{ctrl.error}</p>
+            ) : ctrl.data ? (
+              <EtaCompareBar
+                noNew={ctrl.data.global.etaIfNoNewHours}
+                withFlow={ctrl.data.global.etaIfKeepsAddingHours}
+              />
+            ) : (
+              <p className="pt-8 text-[12.5px] text-ink-500">Laden …</p>
             )}
-            {ctrl.data && (
-              <dl className="space-y-2 text-[13px]">
-                <div className="flex justify-between gap-4">
-                  <dt className="text-ink-500">Ohne neuen Zufluss</dt>
-                  <dd className="font-medium tabular-nums">
-                    {fmtHours(ctrl.data.global.etaIfNoNewHours)}
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt className="text-ink-500">Bei fortlaufendem Zufluss</dt>
-                  <dd className="font-medium tabular-nums">
-                    {fmtHours(ctrl.data.global.etaIfKeepsAddingHours)}
-                  </dd>
-                </div>
-              </dl>
-            )}
-            {ctrl.loading && !ctrl.data && (
-              <p className="text-[12.5px] text-ink-500">Laden …</p>
-            )}
-          </CardShell>
+          </Section>
         </div>
       </div>
     </>
-  );
-}
-
-function LoadingCard({ title }: { title: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-hair bg-ink-50/30 p-4 text-[12.5px] text-ink-500 md:col-span-2 xl:col-span-3">
-      {title}: Daten werden geladen …
-    </div>
   );
 }
