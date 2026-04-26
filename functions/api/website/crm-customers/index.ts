@@ -4,7 +4,7 @@
  * D1 `website` → Tabelle `crm_customers` (nur SELECT).
  * Query: q, limit, offset
  */
-import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import { getCurrentUser, jsonResponse, type AuthEnv } from "../../../_lib/auth";
 
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;

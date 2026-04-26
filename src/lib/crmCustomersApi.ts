@@ -1,5 +1,10 @@
 export const CRM_CUSTOMERS_API = "/api/website/crm-customers";
 
+export function crmCustomerDetailUrl(id: string): string {
+  const enc = encodeURIComponent(id);
+  return `${CRM_CUSTOMERS_API}/${enc}`;
+}
+
 export type CrmCustomerRow = {
   id: string;
   created_at: string;
@@ -18,6 +23,10 @@ export type CrmCustomersListResponse = {
   total: number;
   offset: number;
   limit: number;
+};
+
+export type CrmCustomerOneResponse = {
+  row: CrmCustomerRow;
 };
 
 export function crmCustomersListUrl(p: {
