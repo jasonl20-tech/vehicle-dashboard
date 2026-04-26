@@ -6,6 +6,11 @@
  * Zählung: SUM(_sample_interval) wie in den anderen AE-Auswertungen.
  *
  * Query: from, to (YYYY-MM-DD HH:MM:SS, UTC), optional wie bei anderen.
+ *
+ * Hinweis: die Analytics-Engine-SQL-API unterstützt hier kein `TRIM()` /
+ * `UPPER()` um Spalten (422). Muster wie `api/analytics/customer-keys` —
+ * nackte `blob3`-Vergleiche + `GROUP BY blob3`; Normalisierung in
+ * `mergeByIso2()`.
  */
 import {
   aeNumber,
@@ -80,21 +85,25 @@ function buildCountrySql(
   const tw = buildTimeWhere(fromIso, toIso);
   if (dedicated) {
     return `SELECT
-  UPPER(TRIM(blob3)) AS iso2,
+  blob3 AS iso2,
   SUM(_sample_interval) AS c
 FROM ${name}
 WHERE ${tw}
-  AND length(TRIM(ifNull(blob3, ''))) = 2
-GROUP BY iso2
+  AND blob3 != ${sqlString("")}
+  AND blob3 != ${sqlString("NA")}
+  AND length(blob3) = 2
+GROUP BY blob3
 FORMAT JSON`;
   }
   return `SELECT
-  UPPER(TRIM(blob3)) AS iso2,
+  blob3 AS iso2,
   SUM(_sample_interval) AS c
 FROM ${fromDataset}
 WHERE ${tw} AND dataset = ${sqlString(name)}
-  AND length(TRIM(ifNull(blob3, ''))) = 2
-GROUP BY iso2
+  AND blob3 != ${sqlString("")}
+  AND blob3 != ${sqlString("NA")}
+  AND length(blob3) = 2
+GROUP BY blob3
 FORMAT JSON`;
 }
 
@@ -106,7 +115,7 @@ function buildDomainSql(
   name: string,
 ): string {
   const tw = buildTimeWhere(fromIso, toIso);
-  const notEmpty = `index1 != ${sqlString("")} AND index1 != ${sqlString("NA")} AND lower(index1) != ${sqlString("na")}`;
+  const notEmpty = `index1 != ${sqlString("")} AND index1 != ${sqlString("NA")}`;
   if (dedicated) {
     return `SELECT
   index1 AS d,
