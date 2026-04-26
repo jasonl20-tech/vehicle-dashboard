@@ -457,14 +457,6 @@ export function sqlString(input: string): string {
   return "'" + String(input).replace(/'/g, "''") + "'";
 }
 
-/**
- * Effektiver Kunden-Key in `key_analytics` / `api_analytics`: `index1` ist oft
- * die Kurzform, `blob2` laut Doku oberhalb die vollständige Form. Für Abgleich
- * mit `customer_keys` (KV) und die UI muss `keyId` = voller Key sein, sofern
- * `blob2` befüllt ist.
- */
-export const SQL_CUSTOMER_AE_KEY_ID = `if(length(trim(COALESCE(blob2, ''))) = 0, index1, trim(COALESCE(blob2, '')))`;
-
 /** `index1` zählt nicht als Oneauto (Kunden-Modus). */
 export function sqlIndex1NotOneautoByPrefix(
   column: string = "index1",

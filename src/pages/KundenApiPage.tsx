@@ -83,7 +83,9 @@ const KeyEmailMapContext = createContext<Record<string, string>>({});
 
 /**
  * Liefert die Kunden-E-Mail zum Key, sofern in `customer_keys` hinterlegt.
- * `keyId` aus Analytics kann von der KV-Key-Schrift abweichen → Trim + case-insensitive.
+ * `index1` aus Analytics Engine entspricht oft nicht 1:1 dem KV-Key-String →
+ * nach exaktem/lower-Lookup: Präfix/Suffix-Abgleich mit den vollen Keys
+ * (kein SQL, nur Frontend).
  */
 function lookupKeyEmail(
   map: Record<string, string>,
@@ -92,9 +94,21 @@ function lookupKeyEmail(
   if (!id) return undefined;
   const t = id.trim();
   if (!t) return undefined;
-  const direct = map[t];
+  const direct = map[t] ?? map[t.toLowerCase()];
   if (direct) return direct;
-  return map[t.toLowerCase()];
+  const tl = t.toLowerCase();
+  if (tl.length < 4) return undefined;
+  const entries = Object.entries(map).filter(([, e]) => Boolean(e));
+  // Längere Keys zuerst, damit spezifischere Treffer Vorrang haben.
+  entries.sort((a, b) => b[0].length - a[0].length);
+  for (const [kvKey, email] of entries) {
+    const k = kvKey.toLowerCase();
+    if (k.length < 4) continue;
+    if (k === tl) return email;
+    if (k.startsWith(tl) || (tl.length >= 6 && k.endsWith(tl))) return email;
+    if (tl.length >= 8 && (k.includes(tl) || tl.includes(k))) return email;
+  }
+  return undefined;
 }
 
 /** Eine Map, die pro Key sowohl exakte als auch lowercased Lookups erlaubt. */

@@ -1,7 +1,6 @@
 import {
   getMergedAnalyticsSources,
   pickBucket,
-  SQL_CUSTOMER_AE_KEY_ID,
   sqlString,
   whereForMode,
   type AnalyticsSource,
@@ -120,11 +119,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       mode,
       from,
       to,
-      key && kind === "key-detail"
-        ? `(${SQL_CUSTOMER_AE_KEY_ID} = ${sqlString(key)} OR index1 = ${sqlString(
-            key,
-          )})`
-        : undefined,
+      key && kind === "key-detail" ? `index1 = ${sqlString(key)}` : undefined,
     );
   } catch (err) {
     return jsonResponse(
@@ -215,7 +210,7 @@ async function overview(env: AuthEnv, ctx: Ctx) {
   const sql = (dataset: string) => `
     SELECT
       SUM(_sample_interval) AS requests,
-      count(DISTINCT ${SQL_CUSTOMER_AE_KEY_ID}) AS uniqueKeys,
+      count(DISTINCT index1) AS uniqueKeys,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS okRequests,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS errRequests,
       SUM(_sample_interval * if(${VIEW_FILTER_SQL}, 1, 0)) AS viewRequests,
@@ -248,7 +243,7 @@ async function timeseries(env: AuthEnv, ctx: Ctx) {
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
-      count(DISTINCT ${SQL_CUSTOMER_AE_KEY_ID}) AS keys
+      count(DISTINCT index1) AS keys
     FROM ${dataset}
     ${where}
     GROUP BY bucket
@@ -270,7 +265,7 @@ async function topKeys(env: AuthEnv, ctx: Ctx) {
   const inner = perSourceTopLimit(sources, limit);
   const sql = (dataset: string) => `
     SELECT
-      ${SQL_CUSTOMER_AE_KEY_ID} AS keyId,
+      index1 AS keyId,
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
@@ -278,7 +273,7 @@ async function topKeys(env: AuthEnv, ctx: Ctx) {
       MAX(timestamp) AS lastSeen
     FROM ${dataset}
     ${where}
-    GROUP BY ${SQL_CUSTOMER_AE_KEY_ID}
+    GROUP BY index1
     ORDER BY requests DESC
     LIMIT ${inner}
   `;
@@ -384,7 +379,7 @@ async function topViews(env: AuthEnv, ctx: Ctx) {
       SUM(_sample_interval) AS requests,
       SUM(_sample_interval * if(double1 < 400, 1, 0)) AS ok,
       SUM(_sample_interval * if(double1 >= 400, 1, 0)) AS err,
-      count(DISTINCT ${SQL_CUSTOMER_AE_KEY_ID}) AS keys
+      count(DISTINCT index1) AS keys
     FROM ${dataset}
     ${where} AND ${VIEW_FILTER_SQL}
     GROUP BY blob5
@@ -428,7 +423,7 @@ async function recent(env: AuthEnv, ctx: Ctx) {
   const sql = (dataset: string) => `
     SELECT
       timestamp,
-      ${SQL_CUSTOMER_AE_KEY_ID} AS keyId,
+      index1 AS keyId,
       blob1 AS path,
       blob3 AS brand,
       blob4 AS model,
