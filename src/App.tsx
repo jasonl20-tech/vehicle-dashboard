@@ -63,7 +63,18 @@ export default function App() {
           path="/systeme"
           element={<Navigate to="/systeme/prompts" replace />}
         />
-        <Route path="/logs" element={<ModulePage />} />
+        <Route
+          path="/logs"
+          element={<Navigate to="/logs/skalierungs-worker" replace />}
+        />
+        <Route
+          path="/logs/skalierungs-worker"
+          element={<ModulePage />}
+        />
+        <Route
+          path="/logs/generierungs-worker"
+          element={<ModulePage />}
+        />
         <Route path="/analytics/kunden-api" element={<KundenApiPage />} />
         <Route path="/analytics/oneauto-api" element={<OneautoApiPage />} />
         <Route

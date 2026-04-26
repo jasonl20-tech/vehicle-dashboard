@@ -31,10 +31,15 @@ const META: Record<
     eyebrow: "Kundenmanagement",
     description: "Kampagnen, Abonnenten und Versand.",
   },
-  "/logs": {
-    title: "Logs",
-    eyebrow: "System",
-    description: "Ereignis- und Anwendungsprotokolle.",
+  "/logs/skalierungs-worker": {
+    title: "Skalierungs Worker",
+    eyebrow: "Logs",
+    description: "Protokolle und Einstellungen des Skalierungs-Workers – Inhalte folgen.",
+  },
+  "/logs/generierungs-worker": {
+    title: "Generierungs Worker",
+    eyebrow: "Logs",
+    description: "Protokolle und Einstellungen des Generierungs-Workers – Inhalte folgen.",
   },
   "/website/blogs": {
     title: "Blogs",

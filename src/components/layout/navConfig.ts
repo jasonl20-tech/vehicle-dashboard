@@ -85,7 +85,14 @@ export const NAV_PRIMARY: NavItem[] = [
       { label: "Mapping", to: "/systeme/mapping" },
     ],
   },
-  { label: "Logs", icon: ScrollText, to: "/logs" },
+  {
+    label: "Logs",
+    icon: ScrollText,
+    children: [
+      { label: "Skalierungs Worker", to: "/logs/skalierungs-worker" },
+      { label: "Generierungs Worker", to: "/logs/generierungs-worker" },
+    ],
+  },
 ];
 
 export const NAV_FOOTER: NavItem[] = [
