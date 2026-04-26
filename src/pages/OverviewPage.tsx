@@ -8,7 +8,13 @@ import {
   Gauge,
   type LucideIcon,
 } from "lucide-react";
+import OverviewGlobe from "../components/OverviewGlobe";
 import PageHeader from "../components/ui/PageHeader";
+import { useApi } from "../lib/customerApi";
+import {
+  type SubmissionsByCountryResponse,
+  SUBMISSIONS_BY_COUNTRY_URL,
+} from "../lib/overviewGlobeApi";
 
 type Kpi = {
   label: string;
@@ -71,6 +77,10 @@ const KPIS: Kpi[] = [
 ];
 
 export default function OverviewPage() {
+  const submissionsByCountry = useApi<SubmissionsByCountryResponse>(
+    SUBMISSIONS_BY_COUNTRY_URL,
+  );
+
   return (
     <>
       <PageHeader
@@ -84,6 +94,14 @@ export default function OverviewPage() {
         {KPIS.map((k, i) => (
           <KpiCell key={k.label} kpi={k} bordered={i >= 3} />
         ))}
+      </div>
+
+      <div className="mt-8 px-0 sm:px-0">
+        <OverviewGlobe
+          data={submissionsByCountry.data}
+          loading={submissionsByCountry.loading}
+          error={submissionsByCountry.error}
+        />
       </div>
     </>
   );
