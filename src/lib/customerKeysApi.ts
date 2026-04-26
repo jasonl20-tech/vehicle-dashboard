@@ -51,14 +51,31 @@ export type CustomerKeySummary = {
   stripe_subscription_id: string | null;
   created_at: string | null;
   is_test_mode: boolean | null;
-  /** `plan_id === "plan_test"`. Fehlt bei alter API-Antwort → per plan_id ableiten. */
+  /**
+   * Kundentest-Key: `plan_id` oder `plan_name` enthält `test` (siehe `isPlanNameTestKey`).
+   * Im Dashboard unter „Kundentest keys“, nicht unter „Kunden keys“.
+   */
   is_test_key?: boolean;
   /** Ablauf (ISO), falls aus Feldern oder created+TTL ermittelbar. */
   expires_at: string | null;
 };
 
-/** Test-Key: gebündelter Plan-Test-Preis. */
+/** Typischer Test-Plan-Key-Name; auch andere Pläne mit `test` im Namen zählen. */
 export const TEST_PLAN_ID = "plan_test";
+
+/**
+ * Kundentest-Key: `plan_id` oder eingebetteter `plan_name` enthält die Zeichenkette
+ * `test` (Groß/Klein egal), z. B. `plan_test`, `api_test_1`.
+ * Muss mit `functions/api/customers/keys` (`is_test_key`) übereinstimmen.
+ */
+export function isPlanNameTestKey(
+  planId: string | null | undefined,
+  planName: string | null | undefined,
+): boolean {
+  const a = (planId ?? "").toLowerCase();
+  const b = (planName ?? "").toLowerCase();
+  return a.includes("test") || b.includes("test");
+}
 
 export type CustomerKeysListResponse = {
   keys: CustomerKeySummary[];
@@ -79,6 +96,17 @@ export function customerKeyUrlOne(key: string): string {
 }
 
 export const CUSTOMER_KEYS_EMAIL_MAP_URL = `${CUSTOMER_KEYS_URL}?map=email`;
+
+/**
+ * GET-Liste: `view=customer` = ohne Kundentest-Keys, `view=test` = nur diese,
+ * `all` = gesamter KV (u. a. für Diagnose; Standard bei alter Nutzung ohne Query).
+ */
+export function customerKeysListUrl(
+  view: "customer" | "test" | "all" = "all",
+): string {
+  if (view === "all") return CUSTOMER_KEYS_URL;
+  return `${CUSTOMER_KEYS_URL}?view=${view}`;
+}
 
 function asStr(v: unknown, d: string): string {
   return typeof v === "string" ? v : d;
@@ -226,11 +254,18 @@ export function shortKey(id: string): string {
   return `${id.slice(0, 8)}…${id.slice(-6)}`;
 }
 
-const KEYS_BASE = "/kunden/keys";
+const PATH_KUNDEN_KEYS = "/kunden/keys";
+const PATH_KUNDENTEST_KEYS = "/kunden/test-keys";
 
-/** React-Router-Pfad zu einem Kunden-Key (Key ist URL-encodiert). */
-export function customerKeyDetailPath(key: string): string {
-  return `${KEYS_BASE}/${encodeURIComponent(key)}`;
+/**
+ * Link zur Key-Detailseite. `test` = Route unter /kunden/test-keys/…
+ */
+export function customerKeyDetailPath(
+  key: string,
+  from: "customer" | "test" = "customer",
+): string {
+  const base = from === "test" ? PATH_KUNDENTEST_KEYS : PATH_KUNDEN_KEYS;
+  return `${base}/${encodeURIComponent(key)}`;
 }
 
 /** `true` wenn `expires_at` in der Vergangenheit liegt. */

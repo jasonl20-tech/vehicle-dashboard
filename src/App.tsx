@@ -3,7 +3,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import KundenApiPage from "./pages/KundenApiPage";
 import KundenKeyDetailPage from "./pages/KundenKeyDetailPage";
-import KundenKeysPage from "./pages/KundenKeysPage";
+import KundenKeysPage, { KundenTestKeysPage } from "./pages/KundenKeysPage";
 import ControllingPage from "./pages/ControllingPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
@@ -31,7 +31,8 @@ export default function App() {
         <Route path="/kunden/anfragen" element={<ModulePage />} />
         <Route path="/kunden/keys/:key" element={<KundenKeyDetailPage />} />
         <Route path="/kunden/keys" element={<KundenKeysPage />} />
-        <Route path="/kunden/test-keys" element={<ModulePage />} />
+        <Route path="/kunden/test-keys/:key" element={<KundenKeyDetailPage />} />
+        <Route path="/kunden/test-keys" element={<KundenTestKeysPage />} />
         <Route path="/kunden/newsletter" element={<ModulePage />} />
         <Route
           path="/kunden"

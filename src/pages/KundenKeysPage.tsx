@@ -4,8 +4,7 @@ import { Link } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
 import { useJsonApi } from "../lib/billingApi";
 import {
-  CUSTOMER_KEYS_URL,
-  TEST_PLAN_ID,
+  customerKeysListUrl,
   customerKeyDetailPath,
   isExpiredIso,
   shortKey,
@@ -15,15 +14,24 @@ import {
 
 const GROUPS_PER_PAGE = 20;
 
-type KeyKind = "all" | "test" | "prod";
+type ListVariant = "customer" | "test";
 type ExpiryFilter = "all" | "expired" | "valid" | "soon7";
 
 export default function KundenKeysPage() {
-  const list = useJsonApi<CustomerKeysListResponse>(CUSTOMER_KEYS_URL);
+  return <KundenKeysListView variant="customer" />;
+}
+
+export function KundenTestKeysPage() {
+  return <KundenKeysListView variant="test" />;
+}
+
+function KundenKeysListView({ variant }: { variant: ListVariant }) {
+  const list = useJsonApi<CustomerKeysListResponse>(
+    customerKeysListUrl(variant === "customer" ? "customer" : "test"),
+  );
 
   const [q, setQ] = useState("");
   const [planId, setPlanId] = useState("");
-  const [keyKind, setKeyKind] = useState<KeyKind>("all");
   const [expiry, setExpiry] = useState<ExpiryFilter>("all");
   const [createdFrom, setCreatedFrom] = useState("");
   const [createdTo, setCreatedTo] = useState("");
@@ -36,7 +44,7 @@ export default function KundenKeysPage() {
 
   useEffect(() => {
     setPage(0);
-  }, [q, planId, keyKind, expiry, createdFrom, createdTo]);
+  }, [q, planId, expiry, createdFrom, createdTo]);
 
   const planOptions = useMemo(() => {
     const s = new Set<string>();
@@ -55,9 +63,6 @@ export default function KundenKeysPage() {
 
     return summaries.filter((s) => {
       if (planId && s.plan_id !== planId) return false;
-      const isTest = s.is_test_key ?? s.plan_id === TEST_PLAN_ID;
-      if (keyKind === "test" && !isTest) return false;
-      if (keyKind === "prod" && isTest) return false;
 
       if (expiry === "expired") {
         if (!s.expires_at || !isExpiredIso(s.expires_at)) return false;
@@ -92,15 +97,7 @@ export default function KundenKeysPage() {
         .toLowerCase();
       return hay.includes(term);
     });
-  }, [
-    summaries,
-    q,
-    planId,
-    keyKind,
-    expiry,
-    createdFrom,
-    createdTo,
-  ]);
+  }, [summaries, q, planId, expiry, createdFrom, createdTo]);
 
   const groups = useMemo(() => groupByEmail(filtered), [filtered]);
   const totalPages = Math.max(1, Math.ceil(groups.length / GROUPS_PER_PAGE));
@@ -116,21 +113,31 @@ export default function KundenKeysPage() {
   }, [groups, safePage]);
 
   const stats = useMemo(() => computeStats(summaries), [summaries]);
+  const linkFrom: "customer" | "test" = variant === "test" ? "test" : "customer";
+  const isTestArea = variant === "test";
 
   return (
     <>
       <PageHeader
         eyebrow="Kundenmanagement"
-        title="Kunden Keys"
+        title={isTestArea ? "Kundentest keys" : "Kunden keys"}
         hideCalendarAndNotifications
         description={
-          <>
-            Übersicht nach Email —{" "}
-            <span className="font-mono text-[12.5px] text-ink-700">
-              plan_id = {TEST_PLAN_ID}
-            </span>{" "}
-            = Test-Key. Klick auf einen Key öffnet die Bearbeiten-Seite.
-          </>
+          isTestArea ? (
+            <>
+              Keys, deren{" "}
+              <span className="font-mono text-[12px] text-ink-600">plan_id</span>{" "}
+              oder <span className="font-mono text-[12px] text-ink-600">plan_name</span>{" "}
+              <span className="font-medium text-ink-800">test</span> enthält. Klick
+              auf einen Key öffnet die Bearbeiten-Seite.
+            </>
+          ) : (
+            <>
+              Produktions-Keys (ohne Pläne mit <span className="font-medium">test</span> im
+              Namen). Kundentest-Keys siehe{" "}
+              <span className="font-mono text-[12px] text-ink-600">Kundentest keys</span>.
+            </>
+          )
         }
         rightSlot={
           <button
@@ -152,7 +159,11 @@ export default function KundenKeysPage() {
         </p>
       )}
 
-      <KpiStrip stats={stats} loading={list.loading && !list.data} />
+      <KpiStrip
+        stats={stats}
+        loading={list.loading && !list.data}
+        variant={variant}
+      />
 
       {list.loading && !list.data ? (
         <p className="py-12 text-center text-[12.5px] text-ink-400">Lade …</p>
@@ -164,8 +175,6 @@ export default function KundenKeysPage() {
             planId={planId}
             onPlanId={setPlanId}
             planOptions={planOptions}
-            keyKind={keyKind}
-            onKeyKind={setKeyKind}
             expiry={expiry}
             onExpiry={setExpiry}
             createdFrom={createdFrom}
@@ -175,7 +184,6 @@ export default function KundenKeysPage() {
             onResetFilters={() => {
               setQ("");
               setPlanId("");
-              setKeyKind("all");
               setExpiry("all");
               setCreatedFrom("");
               setCreatedTo("");
@@ -189,7 +197,9 @@ export default function KundenKeysPage() {
           {groups.length === 0 ? (
             <p className="mt-6 border border-dashed border-hair px-3 py-8 text-center text-[13px] text-ink-500">
               {summaries.length === 0
-                ? "Noch keine Kunden-Keys im KV."
+                ? isTestArea
+                  ? "Keine Kundentest-Keys (kein plan mit „test“ im Namen)."
+                  : "Keine Kunden-Keys (ohne Test-Pläne) im KV."
                 : "Keine Treffer — Filter lockern oder Suche ändern."}
             </p>
           ) : (
@@ -199,6 +209,8 @@ export default function KundenKeysPage() {
                   <EmailGroupBlock
                     key={g.id}
                     group={g}
+                    linkFrom={linkFrom}
+                    showTestBadge={isTestArea}
                     collapsed={collapsed[g.id] ?? true}
                     onToggle={() =>
                       setCollapsed((m) => {
@@ -293,8 +305,6 @@ function groupByEmail(rows: CustomerKeySummary[]): CustomerGroup[] {
 type Stats = {
   total: number;
   withEmail: number;
-  granted: number;
-  testKeys: number;
   uniqueEmails: number;
   uniquePlans: number;
   expired: number;
@@ -303,9 +313,7 @@ type Stats = {
 function computeStats(rows: CustomerKeySummary[]): Stats {
   const emails = new Set<string>();
   const plans = new Set<string>();
-  let granted = 0;
   let withEmail = 0;
-  let testKeys = 0;
   let expired = 0;
   for (const r of rows) {
     if (r.email) {
@@ -313,30 +321,36 @@ function computeStats(rows: CustomerKeySummary[]): Stats {
       withEmail += 1;
     }
     if (r.plan_id) plans.add(r.plan_id);
-    if (r.status === "granted") granted += 1;
-    if (r.is_test_key ?? r.plan_id === TEST_PLAN_ID) testKeys += 1;
     if (r.expires_at && isExpiredIso(r.expires_at)) expired += 1;
   }
   return {
     total: rows.length,
     withEmail,
-    granted,
-    testKeys,
     uniqueEmails: emails.size,
     uniquePlans: plans.size,
     expired,
   };
 }
 
-function KpiStrip({ stats, loading }: { stats: Stats; loading: boolean }) {
+function KpiStrip({
+  stats,
+  loading,
+  variant,
+}: {
+  stats: Stats;
+  loading: boolean;
+  variant: ListVariant;
+}) {
   return (
-    <div className="mb-10 grid grid-cols-2 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:grid-cols-6">
-      <KpiTile label="Keys gesamt" value={ld(loading, stats.total)} sub="im KV" />
+    <div className="mb-10 grid grid-cols-2 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
       <KpiTile
-        label="Test-Keys"
-        value={ld(loading, stats.testKeys)}
-        sub={`${TEST_PLAN_ID}`}
-        tone="warn"
+        label={variant === "test" ? "Kundentest-Keys" : "Kunden-Keys"}
+        value={ld(loading, stats.total)}
+        sub={
+          variant === "test"
+            ? "„test“ in plan_id / plan_name"
+            : "ohne Test-Pläne"
+        }
       />
       <KpiTile
         label="Abgelaufen"
@@ -347,10 +361,18 @@ function KpiStrip({ stats, loading }: { stats: Stats; loading: boolean }) {
       <KpiTile
         label="Mit Email"
         value={ld(loading, stats.withEmail)}
-        sub={!loading && stats.total ? `${pct(stats.withEmail, stats.total)} %` : "—"}
+        sub={
+          !loading && stats.total
+            ? `${pct(stats.withEmail, stats.total)} %`
+            : "—"
+        }
         tone="ok"
       />
-      <KpiTile label="E-Mails" value={ld(loading, stats.uniqueEmails)} sub="unique" />
+      <KpiTile
+        label="E-Mails"
+        value={ld(loading, stats.uniqueEmails)}
+        sub="unique"
+      />
       <KpiTile
         label="Pläne"
         value={ld(loading, stats.uniquePlans)}
@@ -405,8 +427,6 @@ function FilterBar({
   planId,
   onPlanId,
   planOptions,
-  keyKind,
-  onKeyKind,
   expiry,
   onExpiry,
   createdFrom,
@@ -423,8 +443,6 @@ function FilterBar({
   planId: string;
   onPlanId: (s: string) => void;
   planOptions: string[];
-  keyKind: KeyKind;
-  onKeyKind: (k: KeyKind) => void;
   expiry: ExpiryFilter;
   onExpiry: (e: ExpiryFilter) => void;
   createdFrom: string;
@@ -438,7 +456,7 @@ function FilterBar({
 }) {
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="relative sm:col-span-2">
           <Search className="pointer-events-none absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
           <input
@@ -462,23 +480,9 @@ function FilterBar({
             {planOptions.map((p) => (
               <option key={p} value={p}>
                 {p}
-                {p === TEST_PLAN_ID ? " (Test)" : ""}
+                {p.toLowerCase().includes("test") ? " (Test-Plan)" : ""}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-            Art
-          </span>
-          <select
-            value={keyKind}
-            onChange={(e) => onKeyKind(e.target.value as KeyKind)}
-            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
-          >
-            <option value="all">Alle</option>
-            <option value="test">Nur Test-Keys ({TEST_PLAN_ID})</option>
-            <option value="prod">Nur Produktions-Keys</option>
           </select>
         </label>
         <label className="flex flex-col gap-0.5">
@@ -548,10 +552,14 @@ function fmtExpires(iso: string | null): string {
 
 function EmailGroupBlock({
   group,
+  linkFrom,
+  showTestBadge,
   collapsed,
   onToggle,
 }: {
   group: CustomerGroup;
+  linkFrom: "customer" | "test";
+  showTestBadge: boolean;
   collapsed: boolean;
   onToggle: () => void;
 }) {
@@ -602,7 +610,7 @@ function EmailGroupBlock({
                     <tr key={r.key} className="hover:bg-ink-50/30">
                       <td className="max-w-[min(28rem,50vw)] py-1.5 pr-3 align-top">
                         <Link
-                          to={customerKeyDetailPath(r.key)}
+                          to={customerKeyDetailPath(r.key, linkFrom)}
                           className="block font-mono text-[11px] text-brand-600 underline decoration-hair underline-offset-2 hover:text-ink-900"
                           title={r.key}
                         >
@@ -613,7 +621,7 @@ function EmailGroupBlock({
                         <span className="font-mono text-[11px] text-ink-700">
                           {r.plan_id || "—"}
                         </span>
-                        {r.is_test_key && (
+                        {showTestBadge && (
                           <span className="ml-1 font-mono text-[9.5px] uppercase tracking-wider text-accent-amber">
                             test
                           </span>

@@ -41,7 +41,10 @@ type CustomerKeySummary = {
   stripe_subscription_id: string | null;
   created_at: string | null;
   is_test_mode: boolean | null;
-  /** `plan_id === "plan_test"` — Test-Key laut Zahlungs-/Plan-Logik. */
+  /**
+   * Test-Key: `plan_id` oder eingebetteter `plan_name` enthält (Groß/Klein egal)
+   * die Zeichenkette "test" (z. B. `plan_test`, `my_test_api`).
+   */
   is_test_key: boolean;
   /**
    * Geschätzter oder expliziter Ablaufzeitpunkt (ISO 8601 UTC), falls ermittelbar.
@@ -92,6 +95,16 @@ function pickExpiresAtIso(
   return null;
 }
 
+/** True, wenn `test` in `plan_id` oder im Plan-Namen vorkommt (Kundentest-Keys). */
+function isTestKeyPlanName(
+  planId: string | null,
+  planName: string | null,
+): boolean {
+  const a = (planId ?? "").toLowerCase();
+  const b = (planName ?? "").toLowerCase();
+  return a.includes("test") || b.includes("test");
+}
+
 function summarize(
   key: string,
   raw: string | null,
@@ -126,11 +139,14 @@ function summarize(
     null;
   const planId =
     typeof parsed?.plan_id === "string" ? (parsed.plan_id as string) : null;
+  const planNameFromPlan =
+    typeof plan?.plan_name === "string" ? (plan.plan_name as string) : null;
   const expiresAt = pickExpiresAtIso(
     parsed,
     metadata,
     plan ?? undefined,
   );
+  const isTestKey = isTestKeyPlanName(planId, planNameFromPlan);
 
   return {
     key,
@@ -138,8 +154,7 @@ function summarize(
     email:
       typeof customer?.email === "string" ? (customer.email as string) : null,
     plan_id: planId,
-    plan_name:
-      typeof plan?.plan_name === "string" ? (plan.plan_name as string) : null,
+    plan_name: planNameFromPlan,
     stripe_customer_id:
       typeof customer?.stripe_customer_id === "string"
         ? (customer.stripe_customer_id as string)
@@ -156,7 +171,7 @@ function summarize(
       typeof restrictions?.is_test_mode === "boolean"
         ? (restrictions.is_test_mode as boolean)
         : null,
-    is_test_key: planId === "plan_test",
+    is_test_key: isTestKey,
     expires_at: expiresAt,
   };
 }
@@ -192,9 +207,12 @@ async function fetchAllSummaries(
 
 /**
  * GET /api/customers/keys
- *   Ohne Query: alle Keys + Summary (Email, plan_id, status, created_at).
- *   ?key=VI-…: vollständigen Wert lesen.
- *   ?map=email: kompakte Map { [key]: email }, kann clientseitig gecached werden.
+ *   `?key=VI-…`: vollständigen Wert lesen.
+ *   `?map=email`: Map { [key]: email } (alle Keys, ungefiltert).
+ *   `?view=customer`: nur Keys ohne Kundentest-Plan (kein "test" in plan_id / plan_name).
+ *   `?view=test`: nur Kundentest-Keys (s. `isTestKeyPlanName`).
+ *   `?view=all` oder ohne view: vollständige Liste (Rückwärtskompatibilität).
+ *   Ohne `key`/`map`: Keys + Summary (Email, plan_id, …) gemäß `view`.
  */
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -232,7 +250,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ key, value: parsed, raw }, { status: 200 });
   }
 
-  const summaries = await fetchAllSummaries(kv);
+  let summaries = await fetchAllSummaries(kv);
   summaries.sort((a, b) => {
     const ea = (a.email || "~").toLowerCase();
     const eb = (b.email || "~").toLowerCase();
@@ -246,6 +264,20 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       if (s.email) out[s.key] = s.email;
     }
     return jsonResponse({ map: out }, { status: 200 });
+  }
+
+  const view = (url.searchParams.get("view") || "all").trim().toLowerCase();
+  if (view === "customer") {
+    summaries = summaries.filter((s) => !s.is_test_key);
+  } else if (view === "test") {
+    summaries = summaries.filter((s) => s.is_test_key);
+  } else if (view !== "all") {
+    return jsonResponse(
+      {
+        error: `Unbekannter view=${view}. Erlaubt: all, customer, test`,
+      },
+      { status: 400 },
+    );
   }
 
   return jsonResponse({ keys: summaries }, { status: 200 });

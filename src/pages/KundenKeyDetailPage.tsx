@@ -1,6 +1,6 @@
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
 import PlanFormFields, {
   Field,
@@ -12,7 +12,7 @@ import PlanFormFields, {
 import { useJsonApi } from "../lib/billingApi";
 import {
   CUSTOMER_KEY_STATUSES,
-  TEST_PLAN_ID,
+  isPlanNameTestKey,
   customerKeyUrlOne,
   parseCustomerKeyValue,
   putCustomerKey,
@@ -24,7 +24,9 @@ import { type PlanValue } from "../lib/planFormTypes";
 
 export default function KundenKeyDetailPage() {
   const { key: keyParam } = useParams();
+  const location = useLocation();
   const kid = keyParam ? decodeURIComponent(keyParam) : "";
+  const isTestArea = location.pathname.startsWith("/kunden/test-keys");
 
   const one = useJsonApi<CustomerKeyOneResponse>(
     kid ? customerKeyUrlOne(kid) : null,
@@ -38,17 +40,23 @@ export default function KundenKeyDetailPage() {
     <>
       <PageHeader
         eyebrow="Kundenmanagement"
-        title="Kunden-Key bearbeiten"
+        title={isTestArea ? "Kundentest-Key bearbeiten" : "Kunden-Key bearbeiten"}
         hideCalendarAndNotifications
         description={
-          <>
-            Voller Editor für den KV-Schlüssel.{" "}
-            <code className="font-mono text-[12px] text-ink-600">
-              plan_id = {TEST_PLAN_ID}
-            </code>{" "}
-            = Test-Key. Nach dem Speichern zur Übersicht zurück, oder andere
-            Keys dort auswählen.
-          </>
+          isTestArea ? (
+            <>
+              Test-Plan: <span className="font-mono text-[12px]">plan_id</span>{" "}
+              oder <span className="font-mono text-[12px]">plan_name</span> enthält{" "}
+              <span className="font-medium">test</span>. Diese Keys erscheinen nur
+              unter „Kundentest keys“.
+            </>
+          ) : (
+            <>
+              Produktions-Key (ohne „test“ im Plan-Namen). Übersicht unter
+              „Kunden keys“; Pläne mit <span className="font-medium">test</span> im
+              Namen unter „Kundentest keys“.
+            </>
+          )
         }
         rightSlot={
           <button
@@ -66,11 +74,13 @@ export default function KundenKeyDetailPage() {
 
       <p className="mb-6">
         <Link
-          to="/kunden/keys"
+          to={isTestArea ? "/kunden/test-keys" : "/kunden/keys"}
           className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-600 transition-colors hover:text-ink-900"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Zurück zur Kunden-Key-Übersicht
+          {isTestArea
+            ? "Zurück zu Kundentest keys"
+            : "Zurück zu Kunden keys"}
         </Link>
       </p>
 
@@ -188,14 +198,14 @@ function CustomerKeyEditor({
   };
 
   const customerLabel = model.customer.email || shortKey(kid);
-  const isTest = model.plan_id === TEST_PLAN_ID;
+  const isTest = isPlanNameTestKey(model.plan_id, model.plan.plan_name);
 
   return (
     <div className="max-w-4xl border-t border-hair pt-8">
       <div className="mb-6 flex items-baseline justify-between gap-3 border-b border-hair pb-4">
         <div className="min-w-0">
           <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-            {isTest ? "Test-Key" : "Kunden-Key"} · {model.plan_id}
+            {isTest ? "Kundentest-Key" : "Kunden-Key"} · {model.plan_id}
           </p>
           <p
             className="mt-1 truncate font-display text-[20px] tracking-tightish text-ink-900"
@@ -232,7 +242,7 @@ function CustomerKeyEditor({
                 ))}
               </select>
             </Field>
-            <Field label="plan_id" hint="plan_test = Test-Key">
+            <Field label="plan_id" hint="„test“ in plan_id/plan_name → Kundentest keys">
               <TextInput
                 value={model.plan_id}
                 onChange={(v) =>
