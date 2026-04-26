@@ -1,10 +1,13 @@
 import type { GlobeInstance } from "globe.gl";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
+import {
+  COUNTRIES_GEOJSON_URL,
+  filterNeFeatures,
+  type NeFeature,
+} from "../lib/anfragenKarteGeo";
 import { countryBlues, countForFeature } from "../lib/requestsChoropleth";
 import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-const COUNTRIES_GEOJSON_URL = "/globe/ne_110m_admin_0_countries.geojson";
 
 /**
  * Einfarbiges 2:1-Textur-Bild (kein Foto, kein water-Mask-Asset).
@@ -23,22 +26,6 @@ function solidGlobeTextureDataUrl(
     ctx.fillRect(0, 0, w, h);
   }
   return c.toDataURL("image/png");
-}
-
-type NeFeature = {
-  type: "Feature";
-  geometry: { type: string; coordinates: unknown };
-  properties: { ISO_A2?: string; ADMIN?: string };
-};
-
-function filterNeFeatures(
-  features: NeFeature[] | undefined,
-): NeFeature[] {
-  if (!features) return [];
-  return features.filter((f) => {
-    const iso = f.properties?.ISO_A2;
-    return iso && iso !== "AQ" && iso !== "-99";
-  });
 }
 
 export default function OverviewGlobe({
