@@ -208,7 +208,7 @@ export default function KundenCrmPage() {
       <PageHeader
         eyebrow="Kundenmanagement"
         title="CRM"
-        description="Kundenstammdaten in D1 `customers` — E-Mail, Firma und Status bearbeiten. Neuer Eintrag: Formular unten anlegen."
+        description="Kundenstammdaten: Tabelle `customers` in derselben D1-DB wie Anfragen/Newsletter (Binding `website`) — E-Mail, Firma, Status. Neuer Eintrag unten."
       />
 
       {error && (

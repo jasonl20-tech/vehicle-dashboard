@@ -1,5 +1,5 @@
 /**
- * CRM-Kunden (D1 `customers`).
+ * CRM-Kunden — Tabelle `customers` in derselben D1-DB wie `submissions` (Binding `website`).
  *
  *   GET  /api/crm/customers?q=&limit=&offset=
  *   POST /api/crm/customers  { id?, email, company?, status? }
@@ -18,17 +18,17 @@ type CustomerRowDb = {
   status: string | null;
 };
 
-function requireCustomersDb(env: AuthEnv): D1Database | Response {
-  if (!env.customers) {
+function requireWebsiteDb(env: AuthEnv): D1Database | Response {
+  if (!env.website) {
     return jsonResponse(
       {
         error:
-          "D1-Binding `customers` fehlt. Im Cloudflare-Dashboard → Functions → D1, Variable `customers` (env.customers) auf die Datenbank mit Tabelle `customers` setzen.",
+          "D1-Binding `website` fehlt. Im Cloudflare-Dashboard → Functions → D1, Variable `website` (env.website) setzen.",
       },
       { status: 503 },
     );
   }
-  return env.customers;
+  return env.website;
 }
 
 function likeToken(q: string): string {
@@ -45,7 +45,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
-  const db = requireCustomersDb(env);
+  const db = requireWebsiteDb(env);
   if (db instanceof Response) return db;
 
   const url = new URL(request.url);
@@ -104,7 +104,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
-  const db = requireCustomersDb(env);
+  const db = requireWebsiteDb(env);
   if (db instanceof Response) return db;
 
   let body: PostBody;
@@ -173,7 +173,7 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
-  const db = requireCustomersDb(env);
+  const db = requireWebsiteDb(env);
   if (db instanceof Response) return db;
 
   let body: PutBody;
