@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, CloudUpload, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import { fmtNumber, useApi } from "../lib/customerApi";
@@ -7,6 +7,7 @@ import {
   type CrmCustomersListResponse,
   crmCustomersListUrl,
   parseAdditionalEmails,
+  postCrmSync,
 } from "../lib/crmCustomersApi";
 
 const PAGE_SIZE = 50;
@@ -42,6 +43,9 @@ export default function CrmPage() {
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [syncInfo, setSyncInfo] = useState<string | null>(null);
+  const [syncErr, setSyncErr] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -67,6 +71,27 @@ export default function CrmPage() {
       ? "0 / 0"
       : `${offset + 1}–${offset + rows.length} / ${fmtNumber(total)}`;
 
+  const runSync = () => {
+    setSyncing(true);
+    setSyncErr(null);
+    setSyncInfo(null);
+    void postCrmSync()
+      .then((r) => {
+        setSyncInfo(
+          `${r.inserted} neu (KV: ${r.insertedFromKv}, Formulare: ${r.insertedFromSubmissions}) · ` +
+            `${r.skippedAlreadyInCrm} übersprungen (E-Mail schon in CRM) · ` +
+            `${r.submissionsScanned} Einsendungen geprüft (ohne Spam)`,
+        );
+        api.reload();
+      })
+      .catch((e) => {
+        setSyncErr(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        setSyncing(false);
+      });
+  };
+
   return (
     <div className="flex min-h-[calc(100dvh-7rem)] flex-col">
       <PageHeader
@@ -75,10 +100,25 @@ export default function CrmPage() {
         description={
           <span>
             Kundenstammdaten in D1, Binding <code className="text-[12.5px]">website</code>,
-            Tabelle <code className="text-[12.5px]">crm_customers</code>.
+            Tabelle <code className="text-[12.5px]">crm_customers</code>.{" "}
+            <strong className="font-medium text-ink-700">Sync</strong> übernimmt
+            E-Mails aus KV (Kunden-Keys) und Formular-Einsendungen, die noch fehlen.
           </span>
         }
         hideCalendarAndNotifications
+        rightSlot={
+          <button
+            type="button"
+            onClick={() => runSync()}
+            disabled={syncing}
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-hair/90 bg-ink-900 px-3.5 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-ink-800 disabled:opacity-50"
+          >
+            <CloudUpload
+              className={"h-4 w-4 " + (syncing ? "animate-pulse" : "")}
+            />
+            {syncing ? "Sync…" : "Sync"}
+          </button>
+        }
       />
 
       <div
@@ -115,6 +155,18 @@ export default function CrmPage() {
               </button>
             </div>
           </div>
+          {(syncInfo || syncErr) && (
+            <div
+              className={
+                "border-b border-hair/60 px-3 py-2 text-[12px] sm:px-4 " +
+                (syncErr
+                  ? "bg-red-50 text-red-800"
+                  : "bg-emerald-50/90 text-emerald-900")
+              }
+            >
+              {syncErr ?? syncInfo}
+            </div>
+          )}
 
           <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto">
             {api.error && (

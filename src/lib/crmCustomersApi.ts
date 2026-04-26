@@ -1,4 +1,5 @@
 export const CRM_CUSTOMERS_API = "/api/website/crm-customers";
+export const CRM_CUSTOMERS_SYNC_API = "/api/website/crm-customers/sync";
 
 export type CrmCustomerRow = {
   id: string;
@@ -30,6 +31,33 @@ export function crmCustomersListUrl(p: {
   u.searchParams.set("limit", String(p.limit));
   u.searchParams.set("offset", String(p.offset));
   return `${u.pathname}${u.search}`;
+}
+
+export type CrmSyncResponse = {
+  ok: boolean;
+  inserted: number;
+  insertedFromKv: number;
+  insertedFromSubmissions: number;
+  skippedKvWithoutEmail: number;
+  skippedSubmissionWithoutEmail: number;
+  skippedAlreadyInCrm: number;
+  submissionsScanned: number;
+};
+
+export async function postCrmSync(): Promise<CrmSyncResponse> {
+  const res = await fetch(CRM_CUSTOMERS_SYNC_API, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const json = (await res.json().catch(() => ({}))) as CrmSyncResponse & {
+    error?: string;
+  };
+  if (!res.ok) {
+    throw new Error(json.error || `Sync HTTP ${res.status}`);
+  }
+  return json;
 }
 
 export function parseAdditionalEmails(json: string | null | undefined): string[] {
