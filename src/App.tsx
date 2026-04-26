@@ -12,6 +12,7 @@ import OneautoReportsPage from "./pages/OneautoReportsPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
+import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
@@ -49,6 +50,10 @@ export default function App() {
           element={<Navigate to="/kunden/newsletter" replace />}
         />
         <Route path="/systeme/prompts" element={<SystemePromptsPage />} />
+        <Route
+          path="/systeme/blockierte-fahrzeuge"
+          element={<SystemeBlockedVehiclesPage />}
+        />
         <Route path="/systeme/mapping" element={<ModulePage />} />
         <Route
           path="/systeme"

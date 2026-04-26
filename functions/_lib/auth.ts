@@ -72,6 +72,11 @@ export interface AuthEnv {
    */
   prompts?: KVNamespace;
   /**
+   * KV-Binding: globale Sperrliste (ganze Marken, einzelne Marke+Modell). Ein
+   * festes Key `_config_blocked_vehicles` (siehe API). Variable `blocked_vehicles`.
+   */
+  blocked_vehicles?: KVNamespace;
+  /**
    * D1: Fahrzeug-/Bild-Metadaten (z. B. Tabelle `vehicleimagery_public_storage`). Nur SELECT im Code.
    * Binding-Name im Dashboard: `vehicledatabase` → `env.vehicledatabase`
    */

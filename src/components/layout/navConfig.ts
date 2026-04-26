@@ -78,6 +78,7 @@ export const NAV_PRIMARY: NavItem[] = [
     icon: Server,
     children: [
       { label: "Prompts", to: "/systeme/prompts" },
+      { label: "Blockierte Fahrzeuge", to: "/systeme/blockierte-fahrzeuge" },
       { label: "Mapping", to: "/systeme/mapping" },
     ],
   },
