@@ -57,6 +57,10 @@ export default function App() {
         />
         <Route path="/kunden/crm" element={<CrmPage />} />
         <Route path="/kunden/anfragen" element={<AnfragenPage />} />
+        <Route
+          path="/kunden/test-anfragen"
+          element={<AnfragenPage variant="trial" />}
+        />
         <Route path="/kunden/keys/:key" element={<KundenKeyDetailPage />} />
         <Route path="/kunden/keys" element={<KundenKeysPage />} />
         <Route path="/kunden/test-keys/:key" element={<KundenKeyDetailPage />} />

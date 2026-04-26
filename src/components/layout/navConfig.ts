@@ -38,6 +38,7 @@ export const NAV_PRIMARY: NavItem[] = [
     icon: Users,
     children: [
       { label: "Anfragen", to: "/kunden/anfragen" },
+      { label: "Test Anfragen", to: "/kunden/test-anfragen" },
       { label: "CRM", to: "/kunden/crm" },
       { label: "Kunden keys", to: "/kunden/keys" },
       { label: "Kundentest keys", to: "/kunden/test-keys" },

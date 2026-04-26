@@ -15,6 +15,10 @@ import {
   type WebsiteSubmissionsListResponse,
   websiteSubmissionsListUrl,
 } from "../lib/websiteSubmissionsApi";
+import {
+  type WebsiteTrialSubmissionsListResponse,
+  websiteTrialSubmissionsListUrl,
+} from "../lib/websiteTrialSubmissionsApi";
 
 const PAGE_SIZE = 35;
 
@@ -79,7 +83,15 @@ function jsonPretty(x: unknown): string {
   }
 }
 
-export default function AnfragenPage() {
+type AnfragenVariant = "production" | "trial";
+
+export default function AnfragenPage({
+  variant = "production",
+}: {
+  /** `trial` = D1-Tabelle `trial_submissions` (Test Anfragen). */
+  variant?: AnfragenVariant;
+} = {}) {
+  const isTrial = variant === "trial";
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
@@ -96,10 +108,20 @@ export default function AnfragenPage() {
   }, [q, spam]);
 
   const url = useMemo(
-    () => websiteSubmissionsListUrl({ q, limit: PAGE_SIZE, offset, spam }),
-    [q, offset, spam],
+    () =>
+      isTrial
+        ? websiteTrialSubmissionsListUrl({
+            q,
+            limit: PAGE_SIZE,
+            offset,
+            spam,
+          })
+        : websiteSubmissionsListUrl({ q, limit: PAGE_SIZE, offset, spam }),
+    [q, offset, spam, isTrial],
   );
-  const api = useApi<WebsiteSubmissionsListResponse>(url);
+  const api = useApi<
+    WebsiteSubmissionsListResponse | WebsiteTrialSubmissionsListResponse
+  >(url);
 
   const rows = api.data?.rows ?? [];
   const total = api.data?.total ?? 0;
@@ -114,13 +136,22 @@ export default function AnfragenPage() {
     <div>
       <PageHeader
         eyebrow="Kundenmanagement"
-        title="Anfragen"
+        title={isTrial ? "Test Anfragen" : "Anfragen"}
         description={
-          <span>
-            Einsendungen aus dem Formular-Backend (D1{" "}
-            <code className="font-mono text-[11.5px]">website</code>, Tabelle{" "}
-            <code className="font-mono text-[11.5px]">submissions</code>).
-          </span>
+          isTrial ? (
+            <span>
+              Test- und Staging-Einsendungen (D1{" "}
+              <code className="font-mono text-[11.5px]">website</code>, Tabelle{" "}
+              <code className="font-mono text-[11.5px]">trial_submissions</code>
+              ) — getrennt von den produktiven Anfragen.
+            </span>
+          ) : (
+            <span>
+              Einsendungen aus dem Formular-Backend (D1{" "}
+              <code className="font-mono text-[11.5px]">website</code>, Tabelle{" "}
+              <code className="font-mono text-[11.5px]">submissions</code>).
+            </span>
+          )
         }
       />
 
@@ -214,7 +245,9 @@ export default function AnfragenPage() {
                   colSpan={7}
                   className="px-2 py-10 text-center text-[13px] text-ink-500"
                 >
-                  Keine Einsendungen.
+                  {isTrial
+                    ? "Keine Test-Einsendungen (Tabelle leer oder Migration fehlt)."
+                    : "Keine Einsendungen."}
                 </td>
               </tr>
             ) : (
@@ -265,7 +298,7 @@ export default function AnfragenPage() {
                     <td className={`${TD} text-right`}>
                       <button
                         type="button"
-                        onClick={() => setDetail(r)}
+                        onClick={() => setDetail(r as WebsiteSubmissionRow)}
                         className="text-[12px] text-brand-600 hover:underline"
                       >
                         Details
