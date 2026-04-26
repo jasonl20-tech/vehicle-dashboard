@@ -2,12 +2,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  ListFilter,
   Mail,
   RefreshCw,
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
@@ -96,6 +97,8 @@ export default function AnfragenPage({
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [spam, setSpam] = useState<"all" | "0" | "1">("all");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterWrapRef = useRef<HTMLDivElement>(null);
   const [detail, setDetail] = useState<WebsiteSubmissionRow | null>(null);
 
   useEffect(() => {
@@ -106,6 +109,25 @@ export default function AnfragenPage({
   useEffect(() => {
     setOffset(0);
   }, [q, spam]);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = filterWrapRef.current;
+      if (el && !el.contains(e.target as Node)) setFilterOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [filterOpen]);
+
+  const closeFilters = useCallback(() => setFilterOpen(false), []);
 
   const url = useMemo(
     () =>
@@ -132,101 +154,37 @@ export default function AnfragenPage({
       ? "0 / 0"
       : `${offset + 1}–${offset + rows.length} / ${fmtNumber(total)}`;
 
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Kundenmanagement"
-        title={isTrial ? "Test Anfragen" : "Anfragen"}
-        description={
-          isTrial ? (
-            <span>
-              Test- und Staging-Einsendungen (D1{" "}
-              <code className="font-mono text-[11.5px]">website</code>, Tabelle{" "}
-              <code className="font-mono text-[11.5px]">trial_submissions</code>
-              ) — getrennt von den produktiven Anfragen.
-            </span>
-          ) : (
-            <span>
-              Einsendungen aus dem Formular-Backend (D1{" "}
-              <code className="font-mono text-[11.5px]">website</code>, Tabelle{" "}
-              <code className="font-mono text-[11.5px]">submissions</code>).
-            </span>
-          )
-        }
-      />
+  const SPAM_OPTIONS = (
+    [
+      { id: "all" as const, label: "Alle" },
+      { id: "0" as const, label: "Nur gültig" },
+      { id: "1" as const, label: "Nur Spam" },
+    ] as const
+  );
 
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="w-full min-w-[200px] max-w-[400px]">
-          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-            Suche
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-            <input
-              type="search"
-              className={`${TEXT_IN} pl-8`}
-              placeholder="Begriffe (alle müssen vorkommen), E-Mail, Formular, …"
-              value={qIn}
-              onChange={(e) => setQIn(e.target.value)}
-            />
-          </div>
-        </div>
-        <div>
-          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-            Spam
-          </label>
-          <div className="inline-flex overflow-hidden rounded-md border border-hair bg-white">
-            {(
-              [
-                { id: "all" as const, label: "Alle" },
-                { id: "0" as const, label: "Nur gültig" },
-                { id: "1" as const, label: "Nur Spam" },
-              ] as const
-            ).map((o, i) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => setSpam(o.id)}
-                className={`px-2.5 py-1.5 text-[12px] transition-colors ${
-                  spam === o.id
-                    ? "bg-ink-900 text-white"
-                    : "text-ink-600 hover:bg-ink-50"
-                } ${i > 0 ? "border-l border-hair" : ""}`}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => api.reload()}
-          title="Aktualisieren"
-          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair text-ink-500 hover:bg-ink-50"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
-          />
-        </button>
-      </div>
-
+  const tableBlock = (
+    <>
       {api.error && (
-        <p className="mb-4 rounded border border-accent-rose/30 bg-accent-rose/5 px-3 py-2 text-[12.5px] text-accent-rose">
+        <p className="mb-2 rounded border border-accent-rose/30 bg-accent-rose/5 px-3 py-2 text-[12.5px] text-accent-rose">
           {api.error}
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-md border border-hair">
-        <table className="min-w-[900px] w-full text-left">
-          <thead className="bg-paper">
+      <div
+        className={`w-full min-w-0 overflow-x-auto border border-hair bg-paper ${
+          isTrial ? "rounded-none border-x-0" : "rounded-md"
+        }`}
+      >
+        <table className="w-full min-w-[900px] table-auto text-left">
+          <thead className="bg-ink-50/80">
             <tr>
-              <th className={TH}>zeit (UTC)</th>
+              <th className={`${TH} w-[11rem]`}>zeit (UTC)</th>
               <th className={TH}>formular</th>
               <th className={TH}>kontakt</th>
-              <th className={TH}>ip</th>
-              <th className={TH}>land</th>
-              <th className={TH}>spam</th>
-              <th className={TH} />
+              <th className={`${TH} w-36`}>ip</th>
+              <th className={`${TH} w-20`}>land</th>
+              <th className={`${TH} w-20`}>spam</th>
+              <th className={`${TH} w-20 text-right`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-hair">
@@ -266,11 +224,11 @@ export default function AnfragenPage({
                         {r.form_tag}
                       </span>
                     </td>
-                    <td className={TD}>
+                    <td className={`${TD} min-w-0`}>
                       {email ? (
                         <a
                           href={`mailto:${email}`}
-                          className="inline-flex max-w-[240px] items-center gap-1 truncate text-brand-600 hover:underline"
+                          className="inline-flex max-w-full items-center gap-1 truncate text-brand-600 hover:underline"
                         >
                           <Mail className="h-3 w-3 shrink-0" />
                           {email}
@@ -312,7 +270,11 @@ export default function AnfragenPage({
         </table>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-ink-600">
+      <div
+        className={`mt-0 flex flex-wrap items-center justify-between gap-2 border border-t-0 border-hair bg-paper px-2 py-2 text-[12.5px] text-ink-600 ${
+          isTrial ? "rounded-none border-x-0" : "rounded-b-md"
+        }`}
+      >
         <span className="tabular-nums">{pageLabel}</span>
         <div className="flex items-center gap-1">
           <button
@@ -335,6 +297,154 @@ export default function AnfragenPage({
           </button>
         </div>
       </div>
+    </>
+  );
+
+  if (isTrial) {
+    return (
+      <div
+        className="relative -mx-5 w-[calc(100%+2.5rem)] sm:-mx-10 sm:w-[calc(100%+5rem)] lg:-mx-14 lg:w-[calc(100%+7rem)]
+          -mt-6 flex min-h-[calc(100vh-8rem)] flex-col sm:-mt-8 lg:-mt-10"
+      >
+        <div className="flex w-full min-w-0 shrink-0 items-stretch gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+            <input
+              type="search"
+              className={`${TEXT_IN} h-9 w-full pl-8`}
+              placeholder="Suchen: E-Mail, Formular, Begriffe…"
+              value={qIn}
+              onChange={(e) => setQIn(e.target.value)}
+              aria-label="Suche"
+            />
+          </div>
+          <div className="relative shrink-0" ref={filterWrapRef}>
+            <button
+              type="button"
+              onClick={() => setFilterOpen((v) => !v)}
+              title="Filter"
+              aria-expanded={filterOpen}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-hair bg-white text-ink-600 transition hover:border-ink-300 hover:bg-ink-50"
+            >
+              <ListFilter className="h-4 w-4" />
+            </button>
+            {filterOpen && (
+              <div
+                className="absolute right-0 z-40 mt-1 w-[min(100vw-2rem,16rem)] rounded-lg border border-hair bg-paper p-2 shadow-lg"
+                role="menu"
+              >
+                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+                  Spam
+                </p>
+                <div className="flex flex-col gap-1">
+                  {SPAM_OPTIONS.map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      onClick={() => {
+                        setSpam(o.id);
+                        closeFilters();
+                      }}
+                      className={`rounded-md px-2 py-1.5 text-left text-[12.5px] ${
+                        spam === o.id
+                          ? "bg-ink-900 text-white"
+                          : "text-ink-700 hover:bg-ink-50"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => api.reload()}
+            title="Aktualisieren"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition hover:border-ink-300 hover:bg-ink-50"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
+            />
+          </button>
+        </div>
+
+        <div className="mt-2 min-h-0 flex-1 flex flex-col overflow-hidden">
+          {tableBlock}
+        </div>
+
+        {detail && (
+          <SubmissionDetailDialog row={detail} onClose={() => setDetail(null)} />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <PageHeader
+        eyebrow="Kundenmanagement"
+        title="Anfragen"
+        description={
+          <span>
+            Einsendungen aus dem Formular-Backend (D1{" "}
+            <code className="font-mono text-[11.5px]">website</code>, Tabelle{" "}
+            <code className="font-mono text-[11.5px]">submissions</code>).
+          </span>
+        }
+      />
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="w-full min-w-[200px] max-w-[400px]">
+          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
+            Suche
+          </label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+            <input
+              type="search"
+              className={`${TEXT_IN} pl-8`}
+              placeholder="Begriffe (alle müssen vorkommen), E-Mail, Formular, …"
+              value={qIn}
+              onChange={(e) => setQIn(e.target.value)}
+            />
+          </div>
+        </div>
+        <div>
+          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
+            Spam
+          </label>
+          <div className="inline-flex overflow-hidden rounded-md border border-hair bg-white">
+            {SPAM_OPTIONS.map((o, i) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => setSpam(o.id)}
+                className={`px-2.5 py-1.5 text-[12px] transition-colors ${
+                  spam === o.id
+                    ? "bg-ink-900 text-white"
+                    : "text-ink-600 hover:bg-ink-50"
+                } ${i > 0 ? "border-l border-hair" : ""}`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => api.reload()}
+          title="Aktualisieren"
+          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair text-ink-500 hover:bg-ink-50"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
+          />
+        </button>
+      </div>
+
+      {tableBlock}
 
       {detail && (
         <SubmissionDetailDialog row={detail} onClose={() => setDetail(null)} />
