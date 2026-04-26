@@ -235,6 +235,36 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (tryDedicated) modes.push("dedicated");
 
   // 1) Kunden mit Company + Standort holen.
+  // Vorab prüfen, ob `standort` schon existiert – sonst liefern wir eine
+  // sanfte Warnung und keine Bögen (statt 500).
+  let hasStandortCol = false;
+  try {
+    const info = await db
+      .prepare(`PRAGMA table_info(customers)`)
+      .all<{ name: string }>();
+    hasStandortCol = (info.results ?? [])
+      .map((c) => String(c.name).toLowerCase())
+      .includes("standort");
+  } catch {
+    /* PRAGMA evtl. nicht erlaubt; weiter mit hasStandortCol = false */
+  }
+
+  if (!hasStandortCol) {
+    return jsonResponse(
+      {
+        from,
+        to,
+        days,
+        modesTried: modes,
+        customers: [],
+        info:
+          "Spalte `customers.standort` fehlt. Migration `d1/migrations/0005_customers_standort.sql` einspielen, dann erscheinen die Streams.",
+        schemaWarning: "missing_column:customers.standort",
+      },
+      { status: 200 },
+    );
+  }
+
   let customerRows: CustomerDb[];
   try {
     const r = await db
@@ -254,7 +284,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
           "D1-Abfrage `customers` fehlgeschlagen: " +
           ((e as Error).message || String(e)),
         hint:
-          "Fehlt die Spalte `standort`, dann Migration `0005_customers_standort.sql` einspielen.",
+          "Falls die Spalte `standort` fehlt, Migration `0005_customers_standort.sql` einspielen.",
       },
       { status: 500 },
     );

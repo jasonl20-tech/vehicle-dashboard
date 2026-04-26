@@ -54,6 +54,24 @@ function requireWebsiteDb(env: AuthEnv): D1Database | Response {
   return env.website;
 }
 
+/**
+ * Prüft per PRAGMA, ob die Spalte `standort` existiert. So funktioniert die
+ * Route auch bevor `0005_customers_standort.sql` auf der D1-DB ausgeführt
+ * wurde — alte Einträge werden weiterhin gelistet, `standort` bleibt einfach
+ * leer.
+ */
+async function hasStandortColumn(db: D1Database): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare(`PRAGMA table_info(customers)`)
+      .all<{ name: string }>();
+    const cols = (r.results ?? []).map((c) => String(c.name).toLowerCase());
+    return cols.includes("standort");
+  } catch {
+    return false;
+  }
+}
+
 function likeToken(q: string): string {
   const x = q.replace(/[%_]/g, "").trim();
   if (!x) return "";
@@ -94,9 +112,14 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     .first<{ n: number }>();
   const total = countRow?.n ?? 0;
 
+  const hasStandort = await hasStandortColumn(db);
+  const cols = hasStandort
+    ? "id, created_at, email, company, status, standort"
+    : "id, created_at, email, company, status";
+
   const { results } = await db
     .prepare(
-      `SELECT id, created_at, email, company, status, standort FROM customers${whereSql} ORDER BY datetime(created_at) DESC LIMIT ? OFFSET ?`,
+      `SELECT ${cols} FROM customers${whereSql} ORDER BY datetime(created_at) DESC LIMIT ? OFFSET ?`,
     )
     .bind(...binds, limit, offset)
     .all<CustomerRowDb>();
@@ -107,10 +130,24 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     email: r.email,
     company: r.company ?? "",
     status: r.status ?? "Neu",
-    standort: r.standort ?? "",
+    standort: hasStandort ? (r.standort ?? "") : "",
   }));
 
-  return jsonResponse({ rows, total, offset, limit }, { status: 200 });
+  return jsonResponse(
+    {
+      rows,
+      total,
+      offset,
+      limit,
+      ...(hasStandort
+        ? null
+        : {
+            schemaWarning:
+              "Spalte `standort` fehlt in `customers`. Migration `d1/migrations/0005_customers_standort.sql` einspielen, dann ist der Standort-Dropdown im CRM editierbar.",
+          }),
+    },
+    { status: 200 },
+  );
 };
 
 type PostBody = {
@@ -170,13 +207,24 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     standort = parsed;
   }
 
+  const hasStandort = await hasStandortColumn(db);
+
   try {
-    await db
-      .prepare(
-        `INSERT INTO customers (id, email, company, status, standort) VALUES (?, ?, ?, ?, ?)`,
-      )
-      .bind(id, email, company, status, standort)
-      .run();
+    if (hasStandort) {
+      await db
+        .prepare(
+          `INSERT INTO customers (id, email, company, status, standort) VALUES (?, ?, ?, ?, ?)`,
+        )
+        .bind(id, email, company, status, standort)
+        .run();
+    } else {
+      await db
+        .prepare(
+          `INSERT INTO customers (id, email, company, status) VALUES (?, ?, ?, ?)`,
+        )
+        .bind(id, email, company, status)
+        .run();
+    }
   } catch (e) {
     const msg = (e as Error).message || String(e);
     if (msg.includes("UNIQUE") || msg.includes("unique")) {
@@ -195,7 +243,13 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       email,
       company: company ?? "",
       status,
-      standort: standort ?? "",
+      standort: hasStandort ? (standort ?? "") : "",
+      ...(hasStandort
+        ? null
+        : {
+            schemaWarning:
+              "Spalte `standort` fehlt – Wert wurde nicht gespeichert. Migration `0005_customers_standort.sql` einspielen.",
+          }),
     },
     { status: 201 },
   );
@@ -231,9 +285,13 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "id ist Pflicht" }, { status: 400 });
   }
 
+  const hasStandort = await hasStandortColumn(db);
+  const selectCols = hasStandort
+    ? "id, created_at, email, company, status, standort"
+    : "id, created_at, email, company, status";
   const cur = await db
     .prepare(
-      `SELECT id, created_at, email, company, status, standort FROM customers WHERE id = ? LIMIT 1`,
+      `SELECT ${selectCols} FROM customers WHERE id = ? LIMIT 1`,
     )
     .bind(id)
     .first<CustomerRowDb>();
@@ -261,7 +319,7 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
 
   let nextStandort: string | null;
   if (body.standort === undefined) {
-    nextStandort = cur.standort ?? null;
+    nextStandort = (cur.standort ?? null) as string | null;
   } else {
     const parsed = parseStandort(body.standort);
     if (parsed instanceof Error) {
@@ -271,12 +329,21 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
   }
 
   try {
-    await db
-      .prepare(
-        `UPDATE customers SET email = ?, company = ?, status = ?, standort = ? WHERE id = ?`,
-      )
-      .bind(nextEmail, nextCompany, nextStatus, nextStandort, id)
-      .run();
+    if (hasStandort) {
+      await db
+        .prepare(
+          `UPDATE customers SET email = ?, company = ?, status = ?, standort = ? WHERE id = ?`,
+        )
+        .bind(nextEmail, nextCompany, nextStatus, nextStandort, id)
+        .run();
+    } else {
+      await db
+        .prepare(
+          `UPDATE customers SET email = ?, company = ?, status = ? WHERE id = ?`,
+        )
+        .bind(nextEmail, nextCompany, nextStatus, id)
+        .run();
+    }
   } catch (e) {
     const msg = (e as Error).message || String(e);
     if (msg.includes("UNIQUE") || msg.includes("unique")) {
@@ -296,7 +363,13 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
       email: nextEmail,
       company: nextCompany ?? "",
       status: nextStatus ?? "Neu",
-      standort: nextStandort ?? "",
+      standort: hasStandort ? (nextStandort ?? "") : "",
+      ...(hasStandort
+        ? null
+        : {
+            schemaWarning:
+              "Spalte `standort` fehlt – Wert wurde nicht gespeichert. Migration `0005_customers_standort.sql` einspielen.",
+          }),
     },
     { status: 200 },
   );

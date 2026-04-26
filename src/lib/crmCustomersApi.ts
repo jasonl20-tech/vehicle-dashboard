@@ -15,6 +15,8 @@ export type CrmCustomersListResponse = {
   total: number;
   offset: number;
   limit: number;
+  /** Vorhanden, wenn `customers.standort` noch nicht existiert. */
+  schemaWarning?: string;
 };
 
 export function crmCustomersListUrl(opts: {

@@ -261,6 +261,15 @@ export default function KundenCrmPage() {
         </p>
       )}
 
+      {data?.schemaWarning && (
+        <p
+          className="mb-3 rounded border border-accent-amber/40 bg-accent-amber/10 px-2.5 py-1.5 text-[12.5px] text-accent-amber"
+          role="status"
+        >
+          {data.schemaWarning}
+        </p>
+      )}
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="flex min-w-[200px] max-w-md flex-1 items-center gap-2 rounded-md border border-hair bg-white px-2 py-1.5">
           <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
