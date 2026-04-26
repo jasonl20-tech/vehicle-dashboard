@@ -71,44 +71,104 @@ type TimeseriesResp = {
   bucket: "minute" | "hour" | "day";
 };
 
-/**
- * Map { keyId → Kunden-Email } aus der `customer_keys`-KV. Wird einmal pro
- * Seitenladung geholt und an alle KeyChip-Verwendungen vererbt, damit überall
- * die Email statt des opaken Keys angezeigt wird (sofern vorhanden).
- *
- * Bewusst per Context: KeyChip taucht in Tabellen, Drawer, Tooltips … auf;
- * die Map als Prop überall durchzureichen würde nur Boilerplate erzeugen.
- */
-const KeyEmailMapContext = createContext<Record<string, string>>({});
+type KeyCustomerLookup = {
+  email?: string;
+  /** Einer der KV-Keys der Map/Testdatei zugeordnet (exakt oder fuzzy). */
+  resolved: boolean;
+  /** nur sinnvoll, wenn `resolved` */
+  isTestKey: boolean;
+};
 
 /**
- * Liefert die Kunden-E-Mail zum Key, sofern in `customer_keys` hinterlegt.
- * `index1` aus Analytics Engine entspricht oft nicht 1:1 dem KV-Key-String →
- * nach exaktem/lower-Lookup: Präfix/Suffix-Abgleich mit den vollen Keys
- * (kein SQL, nur Frontend).
+ * Daten aus `customer_keys` (E-Mail-Map + Test-Flag) für KeyChips und Suche.
  */
-function lookupKeyEmail(
-  map: Record<string, string>,
+const KeyCustomerContext = createContext<{
+  emailByKey: Record<string, string>;
+  testByKey: Record<string, boolean>;
+}>({ emailByKey: {}, testByKey: {} });
+
+/**
+ * Baut die Menge aller KV-Keys (für Fuzzy-Abgleich, auch ohne E-Mail im KV).
+ */
+function unionKvKeys(
+  emailByKey: Record<string, string>,
+  testByKey: Record<string, boolean>,
+): string[] {
+  return Array.from(
+    new Set([...Object.keys(emailByKey), ...Object.keys(testByKey)]),
+  );
+}
+
+/**
+ * Liefert E-Mail und Test-Status zu einem Analytics-`keyId`, sofern der
+ * zu einem `customer_keys`-Eintrag passt. `index1` o. ä. sind oft kürzer →
+ * Präfix/Suffix-Fuzzy auf alle KV-Keys.
+ */
+function lookupKeyCustomer(
+  emailByKey: Record<string, string>,
+  testByKey: Record<string, boolean>,
   id: string,
-): string | undefined {
-  if (!id) return undefined;
+): KeyCustomerLookup {
+  if (!id) return { resolved: false, isTestKey: false };
   const t = id.trim();
-  if (!t) return undefined;
-  const direct = map[t] ?? map[t.toLowerCase()];
-  if (direct) return direct;
+  if (!t) return { resolved: false, isTestKey: false };
+
+  const allKeys = unionKvKeys(emailByKey, testByKey);
+
+  const directKey = (() => {
+    if (testByKey[t] !== undefined || emailByKey[t]) return t;
+    const tl = t.toLowerCase();
+    for (const k of allKeys) {
+      if (k.toLowerCase() === tl) return k;
+    }
+    return undefined;
+  })();
+
+  if (directKey) {
+    return {
+      email: emailByKey[directKey] ?? emailByKey[directKey.toLowerCase()],
+      resolved: true,
+      isTestKey: testByKey[directKey] ?? testByKey[directKey.toLowerCase()] ?? false,
+    };
+  }
+
   const tl = t.toLowerCase();
-  if (tl.length < 4) return undefined;
-  const entries = Object.entries(map).filter(([, e]) => Boolean(e));
-  // Längere Keys zuerst, damit spezifischere Treffer Vorrang haben.
-  entries.sort((a, b) => b[0].length - a[0].length);
-  for (const [kvKey, email] of entries) {
+  if (tl.length < 4) return { resolved: false, isTestKey: false };
+  const sorted = [...allKeys].sort((a, b) => b.length - a.length);
+  for (const kvKey of sorted) {
     const k = kvKey.toLowerCase();
     if (k.length < 4) continue;
-    if (k === tl) return email;
-    if (k.startsWith(tl) || (tl.length >= 6 && k.endsWith(tl))) return email;
-    if (tl.length >= 8 && (k.includes(tl) || tl.includes(k))) return email;
+    if (k === tl) {
+      return {
+        email: emailByKey[kvKey] ?? emailByKey[kvKey.toLowerCase()],
+        resolved: true,
+        isTestKey: testByKey[kvKey] ?? testByKey[kvKey.toLowerCase()] ?? false,
+      };
+    }
+    if (k.startsWith(tl) || (tl.length >= 6 && k.endsWith(tl))) {
+      return {
+        email: emailByKey[kvKey] ?? emailByKey[kvKey.toLowerCase()],
+        resolved: true,
+        isTestKey: testByKey[kvKey] ?? testByKey[kvKey.toLowerCase()] ?? false,
+      };
+    }
+    if (tl.length >= 8 && (k.includes(tl) || tl.includes(k))) {
+      return {
+        email: emailByKey[kvKey] ?? emailByKey[kvKey.toLowerCase()],
+        resolved: true,
+        isTestKey: testByKey[kvKey] ?? testByKey[kvKey.toLowerCase()] ?? false,
+      };
+    }
   }
-  return undefined;
+  return { resolved: false, isTestKey: false };
+}
+
+function lookupKeyEmail(
+  emailByKey: Record<string, string>,
+  testByKey: Record<string, boolean>,
+  id: string,
+): string | undefined {
+  return lookupKeyCustomer(emailByKey, testByKey, id).email;
 }
 
 /** Eine Map, die pro Key sowohl exakte als auch lowercased Lookups erlaubt. */
@@ -124,9 +184,25 @@ function buildKeyEmailMap(raw: Record<string, string> | undefined): Record<strin
   return out;
 }
 
-function useKeyEmail(id: string): string | undefined {
-  const map = useContext(KeyEmailMapContext);
-  return lookupKeyEmail(map, id);
+function buildKeyTestMap(
+  raw: Record<string, boolean> | undefined,
+): Record<string, boolean> {
+  const base = raw ?? {};
+  if (Object.keys(base).length === 0) return base;
+  const out: Record<string, boolean> = { ...base };
+  for (const [k, v] of Object.entries(base)) {
+    const lk = k.toLowerCase();
+    if (out[lk] === undefined) out[lk] = v;
+  }
+  return out;
+}
+
+function useKeyCustomerInfo(id: string): KeyCustomerLookup {
+  const { emailByKey, testByKey } = useContext(KeyCustomerContext);
+  return useMemo(
+    () => lookupKeyCustomer(emailByKey, testByKey, id),
+    [emailByKey, testByKey, id],
+  );
 }
 
 interface KundenApiPageProps {
@@ -155,10 +231,12 @@ export default function KundenApiPage({
   // das KV-Binding, ignorieren wir den Fehler still — die UI fällt dann
   // einfach auf den Key-String zurück.
   const emailMap = useApi<CustomerKeyEmailMap>(CUSTOMER_KEYS_EMAIL_MAP_URL);
-  const keyEmail = useMemo(
-    () => buildKeyEmailMap(emailMap.data?.map),
-    [emailMap.data],
-  );
+  const keyCustomer = useMemo(() => {
+    return {
+      emailByKey: buildKeyEmailMap(emailMap.data?.map),
+      testByKey: buildKeyTestMap(emailMap.data?.is_test_key),
+    };
+  }, [emailMap.data]);
 
   const overview = useApi<{ row: OverviewRow }>(apiUrls.overview(range));
   const timeseries = useApi<TimeseriesResp>(apiUrls.timeseries(range));
@@ -188,7 +266,7 @@ export default function KundenApiPage({
   }
 
   return (
-    <KeyEmailMapContext.Provider value={keyEmail}>
+    <KeyCustomerContext.Provider value={keyCustomer}>
       <Header
         range={range}
         onRange={setRange}
@@ -331,7 +409,7 @@ export default function KundenApiPage({
           onClose={() => setOpenKey(null)}
         />
       )}
-    </KeyEmailMapContext.Provider>
+    </KeyCustomerContext.Provider>
   );
 }
 
@@ -1436,7 +1514,7 @@ function RecentTable({
   loading: boolean;
   onOpenKey: (k: string) => void;
 }) {
-  const keyEmailMap = useContext(KeyEmailMapContext);
+  const { emailByKey, testByKey } = useContext(KeyCustomerContext);
   const [sortAsc, setSortAsc] = useState(false);
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "ok" | "err">(
@@ -1449,14 +1527,20 @@ function RecentTable({
       if (statusFilter === "ok" && r.status >= 400) return false;
       if (statusFilter === "err" && r.status < 400) return false;
       if (!term) return true;
-      const email = lookupKeyEmail(keyEmailMap, r.keyId);
+      const email = lookupKeyEmail(emailByKey, testByKey, r.keyId);
+      const c = lookupKeyCustomer(emailByKey, testByKey, r.keyId);
       return (
         r.keyId.toLowerCase().includes(term) ||
         (email && email.toLowerCase().includes(term)) ||
         r.path.toLowerCase().includes(term) ||
         r.brand?.toLowerCase().includes(term) ||
         r.model?.toLowerCase().includes(term) ||
-        r.action?.toLowerCase().includes(term)
+        r.action?.toLowerCase().includes(term) ||
+        (term === "test" && c.resolved && c.isTestKey) ||
+        (term === "produktiv" &&
+          c.resolved &&
+          !c.isTestKey) ||
+        (term === "produktion" && c.resolved && !c.isTestKey)
       );
     });
     out = [...out].sort((a, b) => {
@@ -1465,7 +1549,7 @@ function RecentTable({
       return sortAsc ? ta - tb : tb - ta;
     });
     return out;
-  }, [rows, sortAsc, q, statusFilter, keyEmailMap]);
+  }, [rows, sortAsc, q, statusFilter, emailByKey, testByKey]);
 
   return (
     <div>
@@ -1619,6 +1703,25 @@ function StatusBadge({ code }: { code: number }) {
   );
 }
 
+function KeyCustomerTypeBadge({ isTest, show }: { isTest: boolean; show: boolean }) {
+  if (!show) return null;
+  return isTest ? (
+    <span
+      className="shrink-0 text-[9.5px] font-medium uppercase tracking-wider text-accent-amber"
+      title="Kundentest-Key (Plan mit „test“ im Namen/ID)"
+    >
+      Test
+    </span>
+  ) : (
+    <span
+      className="shrink-0 text-[9.5px] font-medium uppercase tracking-wider text-ink-500"
+      title="Produktions-Key (kein Kundentest-Plan)"
+    >
+      Produktiv
+    </span>
+  );
+}
+
 function KeyChip({
   id,
   interactive = false,
@@ -1626,30 +1729,31 @@ function KeyChip({
   id: string;
   interactive?: boolean;
 }) {
-  const email = useKeyEmail(id);
+  const { email, resolved, isTestKey } = useKeyCustomerInfo(id);
   const short = id.length > 22 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
+  const ring = `ring-1 ring-inset ring-hair ${
+    interactive ? "hover:bg-ink-50" : "bg-paper"
+  }`;
 
   // Email vorhanden → Email in Sans-Serif, Key als Tooltip; sonst Key wie zuvor.
   if (email) {
     return (
       <span
         title={id}
-        className={`inline-flex max-w-[260px] items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] ring-1 ring-inset ring-hair ${
-          interactive ? "hover:bg-ink-50" : "bg-paper"
-        }`}
+        className={`inline-flex max-w-[min(280px,100%)] min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11.5px] ${ring}`}
       >
-        <span className="truncate text-ink-800">{email}</span>
+        <span className="min-w-0 truncate text-ink-800">{email}</span>
+        <KeyCustomerTypeBadge isTest={isTestKey} show={resolved} />
       </span>
     );
   }
   return (
     <span
       title={id}
-      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11.5px] ring-1 ring-inset ring-hair ${
-        interactive ? "hover:bg-ink-50" : "bg-paper"
-      }`}
+      className={`inline-flex max-w-[min(280px,100%)] min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 font-mono text-[11.5px] ${ring}`}
     >
-      {short}
+      <span className="min-w-0 truncate">{short}</span>
+      <KeyCustomerTypeBadge isTest={isTestKey} show={resolved} />
     </span>
   );
 }
@@ -1746,7 +1850,7 @@ function KeyDetailDrawer({
 }) {
   const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
   const detail = useApi<KeyDetailResponse>(apiUrls.keyDetail(range, keyId));
-  const email = useKeyEmail(keyId);
+  const { email, resolved, isTestKey } = useKeyCustomerInfo(keyId);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1772,8 +1876,9 @@ function KeyDetailDrawer({
       <aside className="flex w-full max-w-[720px] flex-col overflow-hidden bg-paper shadow-2xl animate-[drawerIn_0.22s_ease-out]">
         <div className="flex items-start justify-between gap-4 border-b border-hair px-6 py-4">
           <div className="min-w-0">
-            <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-400">
+            <p className="flex flex-wrap items-center gap-2 text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-400">
               {email ? "Kunde" : "Kunden-Key"}
+              <KeyCustomerTypeBadge isTest={isTestKey} show={resolved} />
             </p>
             <p
               className="mt-1 truncate text-[15px] text-ink-900"

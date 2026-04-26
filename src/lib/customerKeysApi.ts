@@ -89,6 +89,8 @@ export type CustomerKeyOneResponse = {
 
 export type CustomerKeyEmailMap = {
   map: Record<string, string>;
+  /** Pro KV-Key, ob Kundentest-Key (s. `is_test_key` in keys.ts). */
+  is_test_key?: Record<string, boolean>;
 };
 
 export function customerKeyUrlOne(key: string): string {

@@ -208,7 +208,8 @@ async function fetchAllSummaries(
 /**
  * GET /api/customers/keys
  *   `?key=VI-…`: vollständigen Wert lesen.
- *   `?map=email`: Map { [key]: email } (alle Keys, ungefiltert).
+ *   `?map=email`: { map: { [key]: email }, is_test_key: { [key]: boolean } }
+ *   (alle Keys in `is_test_key`; in `map` nur Keys mit E-Mail).
  *   `?view=customer`: nur Keys ohne Kundentest-Plan (kein "test" in plan_id / plan_name).
  *   `?view=test`: nur Kundentest-Keys (s. `isTestKeyPlanName`).
  *   `?view=all` oder ohne view: vollständige Liste (Rückwärtskompatibilität).
@@ -260,10 +261,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   if (map === "email") {
     const out: Record<string, string> = {};
+    const is_test_key: Record<string, boolean> = {};
     for (const s of summaries) {
       if (s.email) out[s.key] = s.email;
+      is_test_key[s.key] = s.is_test_key;
     }
-    return jsonResponse({ map: out }, { status: 200 });
+    return jsonResponse({ map: out, is_test_key }, { status: 200 });
   }
 
   const view = (url.searchParams.get("view") || "all").trim().toLowerCase();
