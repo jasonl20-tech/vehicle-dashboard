@@ -17,6 +17,7 @@ import SettingsPage from "./pages/SettingsPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
+import KundenCrmPage from "./pages/KundenCrmPage";
 import AnfragenPage from "./pages/AnfragenPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
@@ -51,6 +52,7 @@ export default function App() {
           element={<AnfragenKartePage />}
         />
         <Route path="/leads" element={<ModulePage />} />
+        <Route path="/kunden/crm" element={<KundenCrmPage />} />
         <Route path="/kunden/anfragen" element={<AnfragenPage />} />
         <Route
           path="/kunden/test-anfragen"

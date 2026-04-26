@@ -108,6 +108,10 @@ export interface AuthEnv {
    * D1: Webseite (z. B. Tabelle `submissions` für Formular-Einsendungen). Variable `website`.
    */
   website?: D1Database;
+  /**
+   * D1: CRM-Kunden (`customers`: id, email, company, status, …). Variable `customers`.
+   */
+  customers?: D1Database;
 }
 
 // ---------- base64url helpers ----------
