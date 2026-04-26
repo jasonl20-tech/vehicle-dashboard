@@ -1,4 +1,9 @@
 import type { GlobeInstance } from "globe.gl";
+import {
+  ANFRAGEN_CHOROPLETH_UI,
+  mergeChoroplethUi,
+  type ChoroplethMapUi,
+} from "../lib/choroplethMapUi";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
 import {
   COUNTRIES_GEOJSON_URL,
@@ -33,11 +38,18 @@ export default function OverviewGlobe({
   data,
   loading,
   error,
+  copy,
 }: {
   data: SubmissionsByCountryResponse | null;
   loading: boolean;
   error: string | null;
+  copy?: Partial<ChoroplethMapUi>;
 }) {
+  const ui = mergeChoroplethUi(ANFRAGEN_CHOROPLETH_UI, copy);
+  const countLabelRef = useRef(ui.globeCountLabel);
+  useEffect(() => {
+    countLabelRef.current = ui.globeCountLabel;
+  }, [ui.globeCountLabel]);
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const dataRef = useRef<SubmissionsByCountryResponse | null>(null);
@@ -134,7 +146,7 @@ export default function OverviewGlobe({
             : (iso ?? "");
           const cur = dataRef.current;
           const c = countForFeature(cur, iso);
-          if (c > 0) return `${name} — ${c} Anfr.`;
+          if (c > 0) return `${name} — ${c} ${countLabelRef.current}`;
           return name;
         })
         .polygonsTransitionDuration(400)
@@ -215,11 +227,10 @@ export default function OverviewGlobe({
     >
       <div className="border-b border-hair/80 bg-paper/90 px-4 py-3 sm:px-6 sm:py-4">
         <h2 className="text-[12px] font-medium uppercase tracking-[0.12em] text-ink-400">
-          Anfragen nach Land
+          {ui.cardTitle}
         </h2>
         <p className="mt-0.5 max-w-3xl text-[13px] text-ink-600">
-          Länderfläche wird blauer, je mehr Anfragen (Nicht-Spam, Ländercode in
-          Metadaten). Grenzen: Natural Earth 110m.
+          {ui.cardDescription}
         </p>
         {data && !error && (
           <p className="mt-1.5 text-[12.5px] text-ink-500">
@@ -287,11 +298,8 @@ export default function OverviewGlobe({
         )}
 
         <div className="pointer-events-none absolute right-4 top-4 z-10 max-w-[220px] rounded-md border border-hair/60 bg-paper/90 px-2.5 py-2 text-[11px] text-ink-500 shadow-sm backdrop-blur-sm">
-          <p className="font-medium text-ink-600">Farbskala</p>
-          <p className="mt-0.5 leading-snug">
-            Hell = wenig/kein Volumen · Dunkelblau = hoher Anteil (relativ zu
-            „stärkstem Land“)
-          </p>
+          <p className="font-medium text-ink-600">{ui.legendTitle}</p>
+          <p className="mt-0.5 leading-snug">{ui.legendBody}</p>
         </div>
       </div>
     </div>

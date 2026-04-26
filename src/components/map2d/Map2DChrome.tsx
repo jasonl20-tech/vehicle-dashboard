@@ -1,18 +1,22 @@
-import { anfragenKarteMap2DModel } from "../../config/anfragenKarteMap2DModel";
+import type { ChoroplethMapUi } from "../../lib/choroplethMapUi";
+import { ANFRAGEN_CHOROPLETH_UI, mergeChoroplethUi } from "../../lib/choroplethMapUi";
 import type { SubmissionsByCountryResponse } from "../../lib/overviewGlobeApi";
 
-const ui = anfragenKarteMap2DModel.ui;
+const defaultUi = ANFRAGEN_CHOROPLETH_UI;
 
 type Props = {
   data: SubmissionsByCountryResponse | null;
   loading: boolean;
   error: string | null;
+  /** Optional: Texte ersetzen (Bildaustrahlung vs. Anfragen). */
+  copy?: Partial<ChoroplethMapUi>;
 };
 
 /**
  * Karten-„Rahmen“: Titel, Kennzahlen, Fehler/Loading (gleiche Rolle wie der Kopfbereich im 3D-Globus).
  */
-export function Map2DChrome({ data, loading, error }: Props) {
+export function Map2DChrome({ data, loading, error, copy }: Props) {
+  const ui = mergeChoroplethUi(defaultUi, copy);
   return (
     <div className="border-b border-hair/80 bg-paper/90 px-4 py-3 sm:px-6 sm:py-4">
       <h2 className="text-[12px] font-medium uppercase tracking-[0.12em] text-ink-400">
@@ -44,7 +48,8 @@ export function Map2DChrome({ data, loading, error }: Props) {
   );
 }
 
-export function Map2DLegend() {
+export function Map2DLegend({ copy }: { copy?: Partial<ChoroplethMapUi> }) {
+  const ui = mergeChoroplethUi(defaultUi, copy);
   return (
     <div className="pointer-events-none absolute right-4 top-4 z-[500] max-w-[220px] rounded-md border border-hair/60 bg-paper/90 px-2.5 py-2 text-[11px] text-ink-500 shadow-sm backdrop-blur-sm">
       <p className="font-medium text-ink-600">{ui.legendTitle}</p>

@@ -53,6 +53,15 @@ export interface AuthEnv {
    * Ohne Wert: fest definierter Alt-Key + Primär-Key fassen beide Accounts zusammen.
    */
   ONEAUTO_KEY_2?: string;
+  /**
+   * Bildaustrahlung (`image_url_requests`): `1` = dedizierte AE-Tabelle `FROM <name>`;
+   * `0`/leer = `key_analytics` / `api_analytics` mit `AND dataset = …` (siehe `IMAGE_URL_REQUESTS_DATASET`).
+   */
+  IMAGE_URL_REQUESTS_DEDICATED?: string;
+  /** Name der AE-Quelle (Tabellen- oder `dataset`-Wert, Standard `image_url_requests`). */
+  IMAGE_URL_REQUESTS_DATASET?: string;
+  /** Wie `CONTROLLING_AE_ACCOUNT`: `secondary` = nur Zweitkonto, sonst primär. */
+  IMAGE_URL_AE_ACCOUNT?: string;
   /** Stripe Secret Key (`sk_…`, nur serverseitig). */
   STRIPE_SECRET_KEY?: string;
   /**

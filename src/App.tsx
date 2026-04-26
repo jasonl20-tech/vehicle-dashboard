@@ -11,6 +11,7 @@ import ModulePage from "./pages/ModulePage";
 import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
 import AnfragenKartePage from "./pages/AnfragenKartePage";
+import BildaustrahlungKartePage from "./pages/BildaustrahlungKartePage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
@@ -42,7 +43,7 @@ export default function App() {
         />
         <Route
           path="/ansichten/bildaustrahlung"
-          element={<ModulePage />}
+          element={<BildaustrahlungKartePage />}
         />
         <Route path="/ansichten/bildempfang" element={<ModulePage />} />
         <Route

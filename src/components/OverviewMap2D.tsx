@@ -1,6 +1,7 @@
 import Map2DWorldSvg from "./map2d/Map2DWorldSvg";
 import { Map2DChrome, Map2DLegend } from "./map2d/Map2DChrome";
 import { anfragenKarteMap2DModel } from "../config/anfragenKarteMap2DModel";
+import type { ChoroplethMapUi } from "../lib/choroplethMapUi";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
 import {
   COUNTRIES_GEOJSON_URL,
@@ -10,8 +11,6 @@ import {
 } from "../lib/anfragenKarteGeo";
 import { useEffect, useState } from "react";
 
-const empty = anfragenKarteMap2DModel.ui.emptyGeoText;
-
 /**
  * 2D-Ansicht: Komposition aus {@link Map2DChrome} + {@link Map2DLeafletView}.
  * Konfiguration: `../config/anfragenKarteMap2DModel.ts`, geteilte Farben: `../lib/requestsChoropleth`.
@@ -20,11 +19,15 @@ export default function OverviewMap2D({
   data,
   loading,
   error,
+  copy,
 }: {
   data: SubmissionsByCountryResponse | null;
   loading: boolean;
   error: string | null;
+  copy?: Partial<ChoroplethMapUi>;
 }) {
+  const empty =
+    copy?.emptyGeoText ?? anfragenKarteMap2DModel.ui.emptyGeoText;
   const [geo, setGeo] = useState<NeFeatureCollection | null>(null);
 
   useEffect(() => {
@@ -49,7 +52,7 @@ export default function OverviewMap2D({
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-hair bg-gradient-to-b from-paper to-[#eef3f6]">
-      <Map2DChrome data={data} loading={loading} error={error} />
+      <Map2DChrome data={data} loading={loading} error={error} copy={copy} />
 
       <div
         className="relative w-full"
@@ -66,7 +69,7 @@ export default function OverviewMap2D({
           </div>
         )}
 
-        <Map2DLegend />
+        <Map2DLegend copy={copy} />
       </div>
     </div>
   );
