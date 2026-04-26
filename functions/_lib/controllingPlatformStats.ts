@@ -57,19 +57,20 @@ function fromTableForFilterMode(binding: AeAccountBinding): string {
 }
 
 /**
- * Kein `toString`/`trim`: Cloudflare Analytics Engine SQL unterstützt
- * `toString` nicht (422 unknown function). index/blob sind Strings; leere
- * Werte per direktem Vergleich bzw. `empty()`.
+ * Filter wie `customer-keys` (`blob3 != 'NA' AND blob3 != ''`): ohne
+ * `lowerUTF8/empty/match` – diese verursachen auf manchen AE-Konten den
+ * Planner-Fehler „unable to find type of column: timestamp" (Planner kann
+ * dann Spaltentypen nicht ableiten).
  */
 function blob4FilterSql(mode: ControllingBlob4Mode): string {
+  const base = "blob4 != '' AND blob4 != 'NA' AND blob4 != 'na'";
   if (mode === "hex32") {
-    // Bindestriche/Leerzeichen entfernen; exakt 32 hex-Zeichen (replaceAll: AE SQL / CH).
     return (
-      "blob4 != '' AND NOT empty(blob4) AND lowerUTF8(blob4) != 'na' AND " +
-      "match(lowerUTF8(replaceAll(replaceAll(blob4, '-', ''), ' ', '')), '^[0-9a-f]{32}$')"
+      base +
+      " AND length(blob4) = 32 AND match(blob4, '^[0-9a-fA-F]{32}$')"
     );
   }
-  return "blob4 != '' AND NOT empty(blob4) AND lowerUTF8(blob4) != 'na'";
+  return base;
 }
 
 export type ControllingFetchPlan = {
@@ -81,24 +82,28 @@ export type ControllingFetchPlan = {
   fromTable: string;
 };
 
-// Nicht `formatDateTime(timestamp,…)` im SELECT: 422 "unable to find type
-// of column: timestamp" auf manchen AE-Konten. Roh-Spalte wie in
-// customer-keys recent/… (dort: `SELECT timestamp, … FROM …`).
+/**
+ * Mirror der funktionierenden `customer-keys/recent` Projektion:
+ *  - kein Alias auf `timestamp` (sonst hat der AE-Planner stellenweise
+ *    Probleme, den Spaltentyp aus dem Output abzuleiten),
+ *  - keine const-Projektion à la `'' AS s_index2` (AE planner sah dadurch
+ *    `timestamp` als „unknown type"),
+ *  - direkte Spaltennamen, Mapping passiert in `parseControllingRow`.
+ */
 const selectBody = `SELECT
-  timestamp AS ts,
-  _sample_interval AS siv,
-  index1 AS s_index1,
-  '' AS s_index2,
-  blob1 AS s_blob1,
-  blob2 AS s_blob2,
-  blob3 AS s_blob3,
-  blob4 AS s_blob4,
-  blob5 AS s_blob5,
-  double1 AS d1,
-  double2 AS d2,
-  double3 AS d3,
-  double4 AS d4,
-  double5 AS d5`;
+  timestamp,
+  _sample_interval,
+  index1,
+  blob1,
+  blob2,
+  blob3,
+  blob4,
+  blob5,
+  double1,
+  double2,
+  double3,
+  double4,
+  double5`;
 
 /**
  * Standard: dedicated AE-Tabelle (`FROM controll_platform_logs`).
@@ -167,7 +172,7 @@ export type RawControllingRow = {
 };
 
 export function parseControllingRow(r: AeRow): RawControllingRow {
-  const tsVal = r.ts;
+  const tsVal = r.timestamp;
   const tsStr =
     tsVal == null
       ? ""
@@ -176,19 +181,19 @@ export function parseControllingRow(r: AeRow): RawControllingRow {
         : String(tsVal);
   return {
     ts: tsStr,
-    siv: r.siv == null ? "" : String(r.siv),
-    s_index1: String(r.s_index1 ?? ""),
-    s_index2: String(r.s_index2 ?? ""),
-    s_blob1: String(r.s_blob1 ?? ""),
-    s_blob2: String(r.s_blob2 ?? ""),
-    s_blob3: String(r.s_blob3 ?? ""),
-    s_blob4: String(r.s_blob4 ?? ""),
-    s_blob5: String(r.s_blob5 ?? ""),
-    d1: aeNumber(r.d1),
-    d2: aeNumber(r.d2),
-    d3: aeNumber(r.d3),
-    d4: aeNumber(r.d4),
-    d5: aeNumber(r.d5),
+    siv: r._sample_interval == null ? "" : String(r._sample_interval),
+    s_index1: String(r.index1 ?? ""),
+    s_index2: "",
+    s_blob1: String(r.blob1 ?? ""),
+    s_blob2: String(r.blob2 ?? ""),
+    s_blob3: String(r.blob3 ?? ""),
+    s_blob4: String(r.blob4 ?? ""),
+    s_blob5: String(r.blob5 ?? ""),
+    d1: aeNumber(r.double1),
+    d2: aeNumber(r.double2),
+    d3: aeNumber(r.double3),
+    d4: aeNumber(r.double4),
+    d5: aeNumber(r.double5),
   };
 }
 
