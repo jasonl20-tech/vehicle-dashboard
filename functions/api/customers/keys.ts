@@ -22,7 +22,7 @@ function requireKv(env: AuthEnv): KVNamespace | Response {
   return env.customer_keys;
 }
 
-type CustomerKeySummary = {
+export type CustomerKeySummary = {
   key: string;
   status: string | null;
   email: string | null;
@@ -154,7 +154,7 @@ function summarize(
   };
 }
 
-async function fetchAllSummaries(
+export async function fetchAllSummaries(
   kv: KVNamespace,
 ): Promise<CustomerKeySummary[]> {
   const names: string[] = [];

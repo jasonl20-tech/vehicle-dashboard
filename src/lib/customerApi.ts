@@ -33,6 +33,32 @@ export function rangeFromPreset(id: Range["preset"]): Range {
   };
 }
 
+/** Heute (UTC): Tagesanfang … jetzt (+1 min Puffer für `to`). */
+export function rangeTodayUtc(): Range {
+  const now = new Date();
+  const start = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0),
+  );
+  return {
+    from: toAeTimestamp(start),
+    to: toAeTimestamp(new Date(now.getTime() + 60_000)),
+    preset: "custom",
+  };
+}
+
+/** Laufender Kalendermonat (UTC, ab Monatsanfang). */
+export function rangeCurrentMonthUtc(): Range {
+  const now = new Date();
+  const start = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0),
+  );
+  return {
+    from: toAeTimestamp(start),
+    to: toAeTimestamp(new Date(now.getTime() + 60_000)),
+    preset: "custom",
+  };
+}
+
 /** YYYY-MM-DD HH:MM:SS in UTC, vom Backend als toDateTime() akzeptiert. */
 export function toAeTimestamp(d: Date): string {
   return d.toISOString().replace("T", " ").slice(0, 19);
