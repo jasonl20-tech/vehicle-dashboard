@@ -1537,10 +1537,7 @@ function RecentTable({
         r.model?.toLowerCase().includes(term) ||
         r.action?.toLowerCase().includes(term) ||
         (term === "test" && c.resolved && c.isTestKey) ||
-        (term === "produktiv" &&
-          c.resolved &&
-          !c.isTestKey) ||
-        (term === "produktion" && c.resolved && !c.isTestKey)
+        (term === "kunde" && c.resolved && !c.isTestKey)
       );
     });
     out = [...out].sort((a, b) => {
@@ -1710,14 +1707,14 @@ function KeyCustomerTypeBadge({ isTest, show }: { isTest: boolean; show: boolean
       className="shrink-0 text-[9.5px] font-medium uppercase tracking-wider text-accent-amber"
       title="Kundentest-Key (Plan mit „test“ im Namen/ID)"
     >
-      Test
+      TEST
     </span>
   ) : (
     <span
       className="shrink-0 text-[9.5px] font-medium uppercase tracking-wider text-ink-500"
-      title="Produktions-Key (kein Kundentest-Plan)"
+      title="Produktionskunde (kein Kundentest-Plan)"
     >
-      Produktiv
+      KUNDE
     </span>
   );
 }
