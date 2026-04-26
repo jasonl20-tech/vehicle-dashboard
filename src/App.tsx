@@ -15,6 +15,7 @@ import SettingsPage from "./pages/SettingsPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
+import AnfragenPage from "./pages/AnfragenPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
@@ -34,7 +35,7 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<OverviewPage />} />
         <Route path="/kunden/crm" element={<ModulePage />} />
-        <Route path="/kunden/anfragen" element={<ModulePage />} />
+        <Route path="/kunden/anfragen" element={<AnfragenPage />} />
         <Route path="/kunden/keys/:key" element={<KundenKeyDetailPage />} />
         <Route path="/kunden/keys" element={<KundenKeysPage />} />
         <Route path="/kunden/test-keys/:key" element={<KundenKeyDetailPage />} />

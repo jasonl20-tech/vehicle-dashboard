@@ -95,6 +95,10 @@ export interface AuthEnv {
    * D1: Mapping-Tabellen (manufacture/model/color/body/trim). Variable `mapping`.
    */
   mapping?: D1Database;
+  /**
+   * D1: Webseite (z. B. Tabelle `submissions` für Formular-Einsendungen). Variable `website`.
+   */
+  website?: D1Database;
 }
 
 // ---------- base64url helpers ----------

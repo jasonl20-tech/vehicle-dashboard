@@ -11,11 +11,6 @@ const META: Record<
     description:
       "Kundenstammdaten, Pipeline und Kommunikation – Inhalte folgen.",
   },
-  "/kunden/anfragen": {
-    title: "Anfragen",
-    eyebrow: "Kundenmanagement",
-    description: "Eingehende Anfragen und Angebote an einem Ort.",
-  },
   "/kunden/keys": {
     title: "Kunden keys",
     eyebrow: "Kundenmanagement",
