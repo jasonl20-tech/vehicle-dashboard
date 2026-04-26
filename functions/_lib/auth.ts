@@ -81,6 +81,10 @@ export interface AuthEnv {
    * Binding-Name im Dashboard: `vehicledatabase` → `env.vehicledatabase`
    */
   vehicledatabase?: D1Database;
+  /**
+   * D1: Mapping-Tabellen (manufacture/model/color/body/trim). Variable `mapping`.
+   */
+  mapping?: D1Database;
 }
 
 // ---------- base64url helpers ----------

@@ -13,6 +13,7 @@ import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
+import SystemeMappingPage from "./pages/SystemeMappingPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
@@ -54,7 +55,7 @@ export default function App() {
           path="/systeme/blockierte-fahrzeuge"
           element={<SystemeBlockedVehiclesPage />}
         />
-        <Route path="/systeme/mapping" element={<ModulePage />} />
+        <Route path="/systeme/mapping" element={<SystemeMappingPage />} />
         <Route
           path="/systeme"
           element={<Navigate to="/systeme/prompts" replace />}
