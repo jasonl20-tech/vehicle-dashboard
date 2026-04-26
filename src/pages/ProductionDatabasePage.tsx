@@ -92,9 +92,11 @@ export default function ProductionDatabasePage() {
             <span className="font-mono text-[11.5px]">vehicledatabase</span>
             <span className="text-ink-600">). Bild-URLs: </span>
             <code className="whitespace-nowrap break-all font-mono text-[11px] text-ink-700">
-              …/v1/…/ansicht
+              …/v1/…/left.png?key=…
             </code>
-            <span className="text-ink-600"> plus Query aus dem Worker.</span>
+            <span className="text-ink-600"> (Endung = DB-Feld </span>
+            <code className="font-mono">format</code>
+            <span className="text-ink-600">) plus Query aus dem Worker.</span>
           </span>
         }
       />
