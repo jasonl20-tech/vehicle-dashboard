@@ -67,7 +67,7 @@ export default function BildaustrahlungKartePage() {
       <PageHeader
         eyebrow="Ansichten"
         title="Bildaustrahlung"
-        description="Bild-URL-Requests (Analytics `image_url_requests`): Länder in `blob3`, Kunden-Domains in `index1`. 2D- oder 3D-Karte + Domain-Agenda (letzte 30 Tage, Zeitraum per API anpassbar)."
+        description="Bild-URL-Requests (Analytics `image_url_requests`): Länder in `blob3`, Kunden-Domains in `index1`. 2D- oder 3D-Karte + Domain-Agenda (Standard 90 Tage, Zeitraum per `from`/`to` in der API anpassbar)."
         rightSlot={viewToggle}
       />
 

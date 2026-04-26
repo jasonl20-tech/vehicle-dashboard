@@ -20,6 +20,7 @@ import {
   sqlDateTime,
   sqlString,
   type AeAccountBinding,
+  type AnalyticsSource,
 } from "../../_lib/analytics";
 import {
   getCurrentUser,
@@ -27,18 +28,20 @@ import {
   type AuthEnv,
 } from "../../_lib/auth";
 
-const DEFAULT_DAYS = 30;
+const DEFAULT_DAYS = 90;
 const MAX_DOMAINS = 500;
+const MAX_DAYS = 400;
 
 type CountryRow = { iso2: string; c: number };
 type DomainRow = { d: string; c: number };
 
-function defaultRange(): { from: string; to: string } {
+function defaultRange(days: number): { from: string; to: string } {
+  const d = Math.min(MAX_DAYS, Math.max(1, days));
   const to = new Date();
   const from = new Date(
-    to.getTime() - DEFAULT_DAYS * 24 * 60 * 60 * 1000,
+    to.getTime() - d * 24 * 60 * 60 * 1000,
   );
-  const fmt = (d: Date) => d.toISOString().replace("T", " ").slice(0, 19);
+  const fmt = (x: Date) => x.toISOString().replace("T", " ").slice(0, 19);
   return { from: fmt(from), to: fmt(new Date(to.getTime() + 60_000)) };
 }
 
@@ -54,10 +57,24 @@ function getDatasetName(env: AuthEnv): string {
   return raw;
 }
 
-function imageUrlAeBinding(env: AuthEnv): AeAccountBinding {
-  return env.IMAGE_URL_AE_ACCOUNT?.trim().toLowerCase() === "secondary"
-    ? "secondary"
-    : "primary";
+/**
+ * Wenn leer: beide Konto-Quellen (primary + secondary), sonst nur eines.
+ * So werden Daten abgeglichen mit customer-keys/oneauto (Merge über Konten).
+ */
+function sourcesToRun(
+  env: AuthEnv,
+  all: AnalyticsSource[],
+): { list: AnalyticsSource[]; label: "all" | "primary" | "secondary" } {
+  const r = env.IMAGE_URL_AE_ACCOUNT?.trim().toLowerCase();
+  if (r === "secondary") {
+    const list = all.filter((s) => s.binding === "secondary");
+    return { list: list.length ? list : all, label: "secondary" };
+  }
+  if (r === "primary") {
+    const list = all.filter((s) => s.binding === "primary");
+    return { list: list.length ? list : all, label: "primary" };
+  }
+  return { list: all, label: "all" };
 }
 
 /**
@@ -91,7 +108,6 @@ FROM ${name}
 WHERE ${tw}
   AND blob3 != ${sqlString("")}
   AND blob3 != ${sqlString("NA")}
-  AND length(blob3) = 2
 GROUP BY blob3
 FORMAT JSON`;
   }
@@ -102,7 +118,6 @@ FROM ${fromDataset}
 WHERE ${tw} AND dataset = ${sqlString(name)}
   AND blob3 != ${sqlString("")}
   AND blob3 != ${sqlString("NA")}
-  AND length(blob3) = 2
 GROUP BY blob3
 FORMAT JSON`;
 }
@@ -147,7 +162,12 @@ function mergeByIso2(parts: CountryRow[][]): {
   const byIso2: Record<string, number> = {};
   for (const part of parts) {
     for (const r of part) {
-      const k = (r.iso2 || "").toUpperCase().trim();
+      const rec = r as { iso2?: string; c?: number } & Record<string, unknown>;
+      const raw =
+        (typeof rec.iso2 === "string" && rec.iso2) ||
+        (typeof rec.ISO2 === "string" && rec.ISO2) ||
+        "";
+      const k = String(raw).toUpperCase().trim();
       if (!/^[A-Z]{2}$/.test(k)) continue;
       byIso2[k] = (byIso2[k] ?? 0) + aeNumber(r.c);
     }
@@ -169,7 +189,12 @@ function mergeDomains(parts: DomainRow[][]): { domains: { domain: string; count:
   const m = new Map<string, { display: string; n: number }>();
   for (const part of parts) {
     for (const r of part) {
-      const raw = String(r.d ?? "").trim();
+      const rec = r as { d?: string } & Record<string, unknown>;
+      const raw = String(
+        (typeof rec.d === "string" && rec.d) ||
+          (typeof rec.D === "string" && rec.D) ||
+          "",
+      ).trim();
       if (!raw) continue;
       const k = raw.toLowerCase();
       const n = aeNumber(r.c);
@@ -194,7 +219,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 
   const url = new URL(request.url);
-  const def = defaultRange();
+  const daysRaw = Number(url.searchParams.get("days") || DEFAULT_DAYS);
+  const days =
+    Number.isFinite(daysRaw) && daysRaw > 0
+      ? Math.min(MAX_DAYS, Math.max(1, daysRaw))
+      : DEFAULT_DAYS;
+  const def = defaultRange(days);
   const from = (url.searchParams.get("from") || def.from).trim();
   const to = (url.searchParams.get("to") || def.to).trim();
   const name = getDatasetName(env);
@@ -211,13 +241,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     );
   }
 
-  // Optional: ein Account wie Controlling (nur primary oder secondary)
-  const oneBinding = imageUrlAeBinding(env);
-  const chosen =
-    oneBinding === "secondary"
-      ? sources.filter((s) => s.binding === "secondary")
-      : sources.filter((s) => s.binding === "primary");
-  const runSources = chosen.length > 0 ? chosen : sources;
+  const { list: runSources, label: accountLabel } = sourcesToRun(env, sources);
 
   const countryRows: CountryRow[][] = [];
   const domainRows: DomainRow[][] = [];
@@ -283,8 +307,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       range: { from, to },
       engine: {
         name,
-        mode: dedicated ? "dedicated" as const : "filter" as const,
-        binding: oneBinding,
+        mode: dedicated ? ("dedicated" as const) : ("filter" as const),
+        accounts: accountLabel,
+        days,
       },
       queryWarnings: errors.length > 0 ? errors : undefined,
     },
