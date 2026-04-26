@@ -158,6 +158,12 @@ export default function KundenCrmPage() {
     listUrl,
   );
 
+  const listRows = useMemo((): CrmCustomerRow[] => {
+    if (!data) return [];
+    if (Array.isArray(data.rows)) return data.rows;
+    return [];
+  }, [data]);
+
   const create = useCallback(async () => {
     setFormErr("");
     const email = newEmail.trim();
@@ -236,10 +242,18 @@ export default function KundenCrmPage() {
       </div>
 
       <p className="mb-2 text-[12.5px] text-ink-500">
-        {data != null
-          ? `${fmtNumber(data.total)} Einträge insgesamt`
-          : null}
-        {loading && " · Laden…"}
+        {data != null && typeof data.total === "number" && (
+          <>
+            {fmtNumber(data.total)} Einträge insgesamt
+            {loading && " · "}
+          </>
+        )}
+        {loading && "Laden…"}
+        {data && !Array.isArray(data.rows) && !error && !loading && (
+          <span className="ml-1 text-accent-amber">
+            API-Antwort unerwartet (kein <code>rows</code>).
+          </span>
+        )}
       </p>
 
       <div className="mb-6 overflow-x-auto rounded-md border border-hair">
@@ -255,7 +269,14 @@ export default function KundenCrmPage() {
             </tr>
           </thead>
           <tbody>
-            {data?.rows.map((row) => (
+            {loading && listRows.length === 0 && !error && (
+              <tr>
+                <td colSpan={6} className="px-2 py-6 text-center text-ink-500">
+                  Kundendaten werden geladen…
+                </td>
+              </tr>
+            )}
+            {listRows.map((row) => (
               <RowEditor
                 key={row.id}
                 row={row}
@@ -265,7 +286,7 @@ export default function KundenCrmPage() {
                 }
               />
             ))}
-            {data && data.rows.length === 0 && !loading && !error && (
+            {listRows.length === 0 && !loading && !error && (
               <tr>
                 <td colSpan={6} className="px-2 py-6 text-center text-ink-500">
                   Keine Einträge
@@ -276,7 +297,7 @@ export default function KundenCrmPage() {
         </table>
       </div>
 
-      {data?.rows.map((row) =>
+      {listRows.map((row) =>
         rowErr[row.id] ? (
           <p
             key={`e-${row.id}`}
