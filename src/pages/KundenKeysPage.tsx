@@ -1,49 +1,84 @@
-import { Mail, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, Mail, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
-import PlanFormFields, {
-  Field,
-  Grid2,
-  Section,
-  TextInput,
-  getPlanValidationMsg,
-} from "../components/billing/PlanFormFields";
 import { useJsonApi } from "../lib/billingApi";
 import {
   CUSTOMER_KEYS_URL,
-  CUSTOMER_KEY_STATUSES,
-  customerKeyUrlOne,
-  parseCustomerKeyValue,
-  putCustomerKey,
+  TEST_PLAN_ID,
+  customerKeyDetailPath,
+  isExpiredIso,
   shortKey,
-  type CustomerKeyOneResponse,
   type CustomerKeySummary,
   type CustomerKeysListResponse,
-  type CustomerKeyValue,
 } from "../lib/customerKeysApi";
-import { type PlanValue } from "../lib/planFormTypes";
+
+const GROUPS_PER_PAGE = 20;
+
+type KeyKind = "all" | "test" | "prod";
+type ExpiryFilter = "all" | "expired" | "valid" | "soon7";
 
 export default function KundenKeysPage() {
   const list = useJsonApi<CustomerKeysListResponse>(CUSTOMER_KEYS_URL);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
 
-  const one = useJsonApi<CustomerKeyOneResponse>(
-    selectedKey ? customerKeyUrlOne(selectedKey) : null,
-  );
+  const [q, setQ] = useState("");
+  const [planId, setPlanId] = useState("");
+  const [keyKind, setKeyKind] = useState<KeyKind>("all");
+  const [expiry, setExpiry] = useState<ExpiryFilter>("all");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [page, setPage] = useState(0);
+  /** `true` = Gruppe zugeklappt (nur Email-Zeile). Standard: zu, übersichtlicher. */
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const reloadAll = useCallback(() => {
-    list.reload();
-    if (selectedKey) one.reload();
-  }, [list, one, selectedKey]);
-
+  const reload = useCallback(() => list.reload(), [list]);
   const summaries = list.data?.keys ?? [];
 
+  useEffect(() => {
+    setPage(0);
+  }, [q, planId, keyKind, expiry, createdFrom, createdTo]);
+
+  const planOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const r of summaries) {
+      if (r.plan_id) s.add(r.plan_id);
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, "de"));
+  }, [summaries]);
+
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return summaries;
+    const term = q.trim().toLowerCase();
+    const now = Date.now();
+    const soonEnd = now + 7 * 24 * 60 * 60 * 1000;
+    const cFrom = createdFrom ? dayStart(createdFrom) : null;
+    const cTo = createdTo ? dayEnd(createdTo) : null;
+
     return summaries.filter((s) => {
-      const fields = [
+      if (planId && s.plan_id !== planId) return false;
+      const isTest = s.is_test_key ?? s.plan_id === TEST_PLAN_ID;
+      if (keyKind === "test" && !isTest) return false;
+      if (keyKind === "prod" && isTest) return false;
+
+      if (expiry === "expired") {
+        if (!s.expires_at || !isExpiredIso(s.expires_at)) return false;
+      } else if (expiry === "valid") {
+        if (!s.expires_at) return true; // kein Enddatum = gilt als unbegrenzt
+        if (isExpiredIso(s.expires_at)) return false;
+      } else if (expiry === "soon7") {
+        if (!s.expires_at) return false;
+        const t = Date.parse(s.expires_at);
+        if (isNaN(t) || t < now || t > soonEnd) return false;
+      }
+
+      if (cFrom != null || cTo != null) {
+        const c = s.created_at ? Date.parse(s.created_at) : NaN;
+        if (isNaN(c)) return false;
+        if (cFrom != null && c < cFrom) return false;
+        if (cTo != null && c > cTo) return false;
+      }
+
+      if (!term) return true;
+      const hay = [
         s.email,
         s.key,
         s.plan_id,
@@ -51,21 +86,35 @@ export default function KundenKeysPage() {
         s.stripe_customer_id,
         s.stripe_subscription_id,
         s.status,
-      ];
-      return fields.some(
-        (f) => typeof f === "string" && f.toLowerCase().includes(q),
-      );
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(term);
     });
-  }, [summaries, search]);
+  }, [
+    summaries,
+    q,
+    planId,
+    keyKind,
+    expiry,
+    createdFrom,
+    createdTo,
+  ]);
 
-  // Gruppen für die Sidebar: Email als primärer Header. Mehrere Keys pro
-  // Email werden als Untereinträge angezeigt; Keys ohne Email landen in
-  // einer „(ohne Email)"-Gruppe ganz unten.
   const groups = useMemo(() => groupByEmail(filtered), [filtered]);
+  const totalPages = Math.max(1, Math.ceil(groups.length / GROUPS_PER_PAGE));
+  const safePage = Math.min(Math.max(0, page), totalPages - 1);
 
-  // Stats für das KPI-Band: Total / Granted / Tests / unique Pläne / unique
-  // Emails. Alles auf das ungefilterte Set bezogen, damit die Suche die
-  // KPIs nicht verzerrt.
+  useEffect(() => {
+    setPage((p) => Math.min(p, Math.max(0, totalPages - 1)));
+  }, [totalPages]);
+  const pageGroups = useMemo(() => {
+    const p = Math.max(0, safePage);
+    const start = p * GROUPS_PER_PAGE;
+    return groups.slice(start, start + GROUPS_PER_PAGE);
+  }, [groups, safePage]);
+
   const stats = useMemo(() => computeStats(summaries), [summaries]);
 
   return (
@@ -76,23 +125,22 @@ export default function KundenKeysPage() {
         hideCalendarAndNotifications
         description={
           <>
-            KV{" "}
+            Übersicht nach Email —{" "}
             <span className="font-mono text-[12.5px] text-ink-700">
-              customer_keys
-            </span>
-            : ausgegebene Kunden-Keys mit Plan, Status und Stripe-Verknüpfung —
-            sortiert nach Email-Adresse für schnelles Zuordnen.
+              plan_id = {TEST_PLAN_ID}
+            </span>{" "}
+            = Test-Key. Klick auf einen Key öffnet die Bearbeiten-Seite.
           </>
         }
         rightSlot={
           <button
             type="button"
-            onClick={reloadAll}
+            onClick={reload}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
             title="Aktualisieren"
           >
             <RefreshCw
-              className={`h-3.5 w-3.5 ${list.loading || one.loading ? "animate-spin" : ""}`}
+              className={`h-3.5 w-3.5 ${list.loading ? "animate-spin" : ""}`}
             />
           </button>
         }
@@ -109,83 +157,107 @@ export default function KundenKeysPage() {
       {list.loading && !list.data ? (
         <p className="py-12 text-center text-[12.5px] text-ink-400">Lade …</p>
       ) : (
-        <div className="grid gap-10 border-t border-hair pt-10 lg:grid-cols-12 lg:gap-0">
-          {/* Sidebar: Email-/Key-Liste */}
-          <aside className="lg:col-span-4 lg:border-r lg:border-hair lg:pr-8 xl:col-span-3">
-            <div className="mb-3 flex items-baseline justify-between">
-              <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-                Kunden
-              </p>
-              <span className="text-[11px] tabular-nums text-ink-400">
-                {filtered.length} / {summaries.length}
-              </span>
-            </div>
+        <div className="border-t border-hair pt-8">
+          <FilterBar
+            q={q}
+            onQ={setQ}
+            planId={planId}
+            onPlanId={setPlanId}
+            planOptions={planOptions}
+            keyKind={keyKind}
+            onKeyKind={setKeyKind}
+            expiry={expiry}
+            onExpiry={setExpiry}
+            createdFrom={createdFrom}
+            onCreatedFrom={setCreatedFrom}
+            createdTo={createdTo}
+            onCreatedTo={setCreatedTo}
+            onResetFilters={() => {
+              setQ("");
+              setPlanId("");
+              setKeyKind("all");
+              setExpiry("all");
+              setCreatedFrom("");
+              setCreatedTo("");
+              setPage(0);
+            }}
+            resultCount={filtered.length}
+            groupCount={groups.length}
+            totalCount={summaries.length}
+          />
 
-            <div className="relative mb-4">
-              <Search className="pointer-events-none absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-              <input
-                type="search"
-                placeholder="Email, Key, Plan, Stripe-ID …"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full border-b border-hair bg-transparent py-1.5 pl-6 pr-2 text-[12.5px] text-ink-800 outline-none placeholder:text-ink-400 focus:border-ink-700"
-              />
-            </div>
-
-            {groups.length === 0 ? (
-              <p className="border border-dashed border-hair px-3 py-6 text-center text-[12px] text-ink-500">
-                {summaries.length === 0
-                  ? "Noch keine Kunden-Keys."
-                  : "Keine Treffer."}
-              </p>
-            ) : (
-              <ul className="divide-y divide-hair border-y border-hair">
-                {groups.map((g) => (
-                  <CustomerGroupRow
+          {groups.length === 0 ? (
+            <p className="mt-6 border border-dashed border-hair px-3 py-8 text-center text-[13px] text-ink-500">
+              {summaries.length === 0
+                ? "Noch keine Kunden-Keys im KV."
+                : "Keine Treffer — Filter lockern oder Suche ändern."}
+            </p>
+          ) : (
+            <>
+              <ul className="mt-6 divide-y divide-hair border-y border-hair">
+                {pageGroups.map((g) => (
+                  <EmailGroupBlock
                     key={g.id}
                     group={g}
-                    selectedKey={selectedKey}
-                    onSelect={setSelectedKey}
+                    collapsed={collapsed[g.id] ?? true}
+                    onToggle={() =>
+                      setCollapsed((m) => {
+                        const cur = m[g.id] ?? true;
+                        return { ...m, [g.id]: !cur };
+                      })
+                    }
                   />
                 ))}
               </ul>
-            )}
-          </aside>
 
-          {/* Editor */}
-          <div className="lg:col-span-8 lg:pl-10 xl:col-span-9">
-            {selectedKey ? (
-              <CustomerKeyEditor
-                key={selectedKey}
-                kid={selectedKey}
-                one={one.data}
-                err={one.error}
-                loading={one.loading}
-                onAfterSave={() => {
-                  list.reload();
-                  one.reload();
-                }}
-              />
-            ) : (
-              <div className="flex h-full min-h-[240px] flex-col items-start justify-center border border-dashed border-hair px-6 py-10">
-                <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-                  Kein Kunden-Key ausgewählt
-                </p>
-                <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-500">
-                  Wähle links einen Kunden aus, um den Plan + Status
-                  einzusehen oder zu bearbeiten. Mehrere Keys pro Email werden
-                  unter der Email gruppiert.
-                </p>
-              </div>
-            )}
-          </div>
+              {totalPages > 1 && (
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-ink-600">
+                  <p className="text-[11.5px] text-ink-400">
+                    Gruppen {safePage * GROUPS_PER_PAGE + 1}–
+                    {Math.min((safePage + 1) * GROUPS_PER_PAGE, groups.length)} von{" "}
+                    {groups.length} (Keys: {filtered.length} / {summaries.length})
+                  </p>
+                  <div className="inline-flex items-center gap-1 border border-hair">
+                    <button
+                      type="button"
+                      disabled={safePage <= 0}
+                      onClick={() => setPage((p) => Math.max(0, p - 1))}
+                      className="px-3 py-1.5 text-[12px] hover:bg-ink-50 disabled:opacity-40"
+                    >
+                      Zurück
+                    </button>
+                    <span className="border-l border-hair px-3 py-1.5 font-mono text-[11px]">
+                      {safePage + 1} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={safePage >= totalPages - 1}
+                      onClick={() =>
+                        setPage((p) => Math.min(totalPages - 1, p + 1))
+                      }
+                      className="px-3 py-1.5 text-[12px] hover:bg-ink-50 disabled:opacity-40"
+                    >
+                      Weiter
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </>
   );
 }
 
-// ---------- Gruppierung & Stats ----------
+// ---------- filter helpers ----------
+
+function dayStart(ymd: string): number {
+  return new Date(ymd + "T00:00:00").getTime();
+}
+function dayEnd(ymd: string): number {
+  return new Date(ymd + "T23:59:59.999").getTime();
+}
 
 type CustomerGroup = {
   id: string;
@@ -222,17 +294,19 @@ type Stats = {
   total: number;
   withEmail: number;
   granted: number;
-  testMode: number;
+  testKeys: number;
   uniqueEmails: number;
   uniquePlans: number;
+  expired: number;
 };
 
 function computeStats(rows: CustomerKeySummary[]): Stats {
   const emails = new Set<string>();
   const plans = new Set<string>();
   let granted = 0;
-  let testMode = 0;
   let withEmail = 0;
+  let testKeys = 0;
+  let expired = 0;
   for (const r of rows) {
     if (r.email) {
       emails.add(r.email.toLowerCase());
@@ -240,57 +314,57 @@ function computeStats(rows: CustomerKeySummary[]): Stats {
     }
     if (r.plan_id) plans.add(r.plan_id);
     if (r.status === "granted") granted += 1;
-    if (r.is_test_mode === true) testMode += 1;
+    if (r.is_test_key ?? r.plan_id === TEST_PLAN_ID) testKeys += 1;
+    if (r.expires_at && isExpiredIso(r.expires_at)) expired += 1;
   }
   return {
     total: rows.length,
     withEmail,
     granted,
-    testMode,
+    testKeys,
     uniqueEmails: emails.size,
     uniquePlans: plans.size,
+    expired,
   };
 }
 
 function KpiStrip({ stats, loading }: { stats: Stats; loading: boolean }) {
   return (
-    <div className="mb-12 grid grid-cols-2 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
+    <div className="mb-10 grid grid-cols-2 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:grid-cols-6">
+      <KpiTile label="Keys gesamt" value={ld(loading, stats.total)} sub="im KV" />
       <KpiTile
-        label="Keys gesamt"
-        value={loading ? "…" : String(stats.total)}
-        sub="im KV"
+        label="Test-Keys"
+        value={ld(loading, stats.testKeys)}
+        sub={`${TEST_PLAN_ID}`}
+        tone="warn"
+      />
+      <KpiTile
+        label="Abgelaufen"
+        value={ld(loading, stats.expired)}
+        sub="Ablaufdatum"
+        tone="warn"
       />
       <KpiTile
         label="Mit Email"
-        value={loading ? "…" : String(stats.withEmail)}
-        sub={
-          loading
-            ? ""
-            : stats.total > 0
-              ? `${Math.round((stats.withEmail / stats.total) * 100)} % zugeordnet`
-              : "—"
-        }
-        tone={stats.withEmail > 0 ? "ok" : "neutral"}
-      />
-      <KpiTile
-        label="Aktiv (granted)"
-        value={loading ? "…" : String(stats.granted)}
-        sub={loading ? "" : `${stats.total - stats.granted} sonstige`}
+        value={ld(loading, stats.withEmail)}
+        sub={!loading && stats.total ? `${pct(stats.withEmail, stats.total)} %` : "—"}
         tone="ok"
       />
+      <KpiTile label="E-Mails" value={ld(loading, stats.uniqueEmails)} sub="unique" />
       <KpiTile
-        label="Unique Pläne"
-        value={loading ? "…" : String(stats.uniquePlans)}
-        sub={loading ? "" : "verknüpft"}
-      />
-      <KpiTile
-        label="Testmodus"
-        value={loading ? "…" : String(stats.testMode)}
-        sub={loading ? "" : "is_test_mode = true"}
-        tone={stats.testMode > 0 ? "warn" : "neutral"}
+        label="Pläne"
+        value={ld(loading, stats.uniquePlans)}
+        sub="unique plan_id"
       />
     </div>
   );
+}
+
+function ld(loading: boolean, n: number) {
+  return loading ? "…" : String(n);
+}
+function pct(a: number, b: number) {
+  return b ? Math.round((a / b) * 100) : 0;
 }
 
 function KpiTile({
@@ -311,392 +385,256 @@ function KpiTile({
         ? "text-accent-amber"
         : "text-ink-400";
   return (
-    <div className="px-5 py-6 sm:px-6 lg:px-8 lg:first:pl-0">
-      <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
+    <div className="px-4 py-5 sm:px-5 lg:px-6">
+      <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
         {label}
       </p>
-      <p className="mt-3 font-display text-[36px] leading-none tracking-tighter2 text-ink-900">
+      <p className="mt-2 font-display text-[32px] leading-none tracking-tighter2 text-ink-900">
         {value}
       </p>
-      {sub && <p className={`mt-3 text-[12px] font-medium ${subColor}`}>{sub}</p>}
+      {sub && <p className={`mt-2 text-[11.5px] font-medium ${subColor}`}>{sub}</p>}
     </div>
   );
 }
 
-// ---------- Sidebar-Zeile ----------
+// ---------- Filterbar ----------
 
-function CustomerGroupRow({
-  group,
-  selectedKey,
-  onSelect,
+function FilterBar({
+  q,
+  onQ,
+  planId,
+  onPlanId,
+  planOptions,
+  keyKind,
+  onKeyKind,
+  expiry,
+  onExpiry,
+  createdFrom,
+  onCreatedFrom,
+  createdTo,
+  onCreatedTo,
+  onResetFilters,
+  resultCount,
+  groupCount,
+  totalCount,
 }: {
-  group: CustomerGroup;
-  selectedKey: string | null;
-  onSelect: (k: string) => void;
+  q: string;
+  onQ: (s: string) => void;
+  planId: string;
+  onPlanId: (s: string) => void;
+  planOptions: string[];
+  keyKind: KeyKind;
+  onKeyKind: (k: KeyKind) => void;
+  expiry: ExpiryFilter;
+  onExpiry: (e: ExpiryFilter) => void;
+  createdFrom: string;
+  onCreatedFrom: (s: string) => void;
+  createdTo: string;
+  onCreatedTo: (s: string) => void;
+  onResetFilters: () => void;
+  resultCount: number;
+  groupCount: number;
+  totalCount: number;
 }) {
-  const single = group.rows.length === 1;
   return (
-    <li>
-      <div className="px-1 py-2">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ink-800">
-            {group.email ? (
-              <>
-                <Mail className="h-3 w-3 shrink-0 text-ink-400" />
-                <span className="truncate" title={group.email}>
-                  {group.email}
-                </span>
-              </>
-            ) : (
-              <span className="italic text-ink-400">(ohne Email)</span>
-            )}
-          </p>
-          {!single && (
-            <span className="text-[10.5px] tabular-nums text-ink-400">
-              {group.rows.length}
-            </span>
-          )}
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative sm:col-span-2">
+          <Search className="pointer-events-none absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+          <input
+            type="search"
+            placeholder="Suche: Email, Key, Plan, Status, Stripe-IDs…"
+            value={q}
+            onChange={(e) => onQ(e.target.value)}
+            className="w-full border-b border-hair bg-transparent py-1.5 pl-6 pr-2 text-[12.5px] text-ink-800 outline-none placeholder:text-ink-400 focus:border-ink-700"
+          />
         </div>
-        <ul className={single ? "mt-1" : "mt-1 space-y-0.5 pl-4"}>
-          {group.rows.map((r) => {
-            const active = selectedKey === r.key;
-            return (
-              <li key={r.key}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(r.key)}
-                  className={`group flex w-full items-center justify-between gap-2 px-1.5 py-1 text-left transition-colors ${
-                    active
-                      ? "bg-ink-50 text-ink-900"
-                      : "text-ink-600 hover:bg-ink-50/60 hover:text-ink-900"
-                  }`}
-                  title={r.key}
-                >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="font-mono text-[11px] text-ink-700">
-                      {shortKey(r.key)}
-                    </span>
-                    {r.plan_id && (
-                      <span className="truncate text-[10.5px] text-ink-400">
-                        {r.plan_id}
-                      </span>
-                    )}
-                  </span>
-                  <StatusDot status={r.status} testMode={r.is_test_mode} />
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </li>
-  );
-}
-
-function StatusDot({
-  status,
-  testMode,
-}: {
-  status: string | null;
-  testMode: boolean | null;
-}) {
-  let color = "bg-ink-200";
-  let title = status || "—";
-  if (status === "granted") {
-    color = "bg-accent-mint";
-    title = "granted";
-  } else if (status === "pending") {
-    color = "bg-accent-amber";
-  } else if (status === "revoked" || status === "expired") {
-    color = "bg-accent-rose";
-  }
-  if (testMode) {
-    title += " · Testmodus";
-  }
-  return (
-    <span className="flex shrink-0 items-center gap-1">
-      {testMode && (
-        <span className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-accent-amber">
-          test
-        </span>
-      )}
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${color}`}
-        title={title}
-        aria-hidden
-      />
-    </span>
-  );
-}
-
-// ---------- Editor ----------
-
-function CustomerKeyEditor({
-  kid,
-  one,
-  err,
-  loading,
-  onAfterSave,
-}: {
-  kid: string;
-  one: CustomerKeyOneResponse | null;
-  err: string | null;
-  loading: boolean;
-  onAfterSave: () => void;
-}) {
-  const [model, setModel] = useState<CustomerKeyValue | null>(null);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveErr, setSaveErr] = useState<string | null>(null);
-  const [savedPing, setSavedPing] = useState(false);
-
-  // Modell aus dem geladenen KV-Wert ableiten. `one` trifft asynchron ein,
-  // daher useEffect. parseError wird nur bei wirklich kaputtem JSON gesetzt;
-  // sonst fallen wir mit Defaults gracefully zurück.
-  useEffect(() => {
-    if (!one || one.key !== kid) return;
-    let input: unknown = one.value;
-    if (input == null && one.raw) {
-      try {
-        input = JSON.parse(one.raw) as unknown;
-      } catch {
-        setModel(null);
-        setParseError("Gespeichertes JSON ist ungültig");
-        return;
-      }
-    }
-    const parsed = parseCustomerKeyValue(input);
-    if (parsed.ok) {
-      setModel(parsed.value);
-      setParseError(null);
-    } else {
-      setModel(null);
-      setParseError(parsed.error);
-    }
-  }, [one, kid]);
-
-  if (loading && !one) {
-    return (
-      <p className="py-8 text-[12.5px] text-ink-400">Lade Kunden-Key …</p>
-    );
-  }
-  if (err) {
-    return (
-      <p className="border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
-        {err}
-      </p>
-    );
-  }
-  if (parseError && !model) {
-    return (
-      <p className="border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
-        Wert ungültig: {parseError}
-      </p>
-    );
-  }
-  if (!model) {
-    return <p className="py-8 text-[12.5px] text-ink-400">…</p>;
-  }
-
-  const planValidation = getPlanValidationMsg(model.plan);
-  const customerValidation = ((): string | null => {
-    if (model.customer.email && !/^\S+@\S+\.\S+$/.test(model.customer.email)) {
-      return "Email: ungültiges Format";
-    }
-    if (!model.plan_id.trim()) return "plan_id darf nicht leer sein";
-    if (!model.status.trim()) return "status darf nicht leer sein";
-    return null;
-  })();
-  const validationMsg = customerValidation ?? planValidation;
-
-  const setPlan = (next: PlanValue) =>
-    setModel((m) => (m ? { ...m, plan: next } : m));
-
-  const onSave = async () => {
-    if (!model || validationMsg) {
-      if (validationMsg) setSaveErr(validationMsg);
-      return;
-    }
-    setSaveErr(null);
-    setSaving(true);
-    try {
-      await putCustomerKey(kid, model);
-      setSavedPing(true);
-      window.setTimeout(() => setSavedPing(false), 1600);
-      onAfterSave();
-    } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const customerLabel = model.customer.email || shortKey(kid);
-
-  return (
-    <div>
-      {/* Editor-Header */}
-      <div className="mb-6 flex items-baseline justify-between gap-3 border-b border-hair pb-4">
-        <div className="min-w-0">
-          <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-            Kunden-Key
-          </p>
-          <p
-            className="mt-1 truncate font-display text-[20px] tracking-tightish text-ink-900"
-            title={kid}
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
+            plan_id
+          </span>
+          <select
+            value={planId}
+            onChange={(e) => onPlanId(e.target.value)}
+            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
           >
-            {customerLabel}
-          </p>
-          <p
-            className="mt-0.5 truncate font-mono text-[11.5px] text-ink-500"
-            title={kid}
+            <option value="">Alle Pläne</option>
+            {planOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+                {p === TEST_PLAN_ID ? " (Test)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
+            Art
+          </span>
+          <select
+            value={keyKind}
+            onChange={(e) => onKeyKind(e.target.value as KeyKind)}
+            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
           >
-            {kid}
-          </p>
-        </div>
+            <option value="all">Alle</option>
+            <option value="test">Nur Test-Keys ({TEST_PLAN_ID})</option>
+            <option value="prod">Nur Produktions-Keys</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
+            Ablauf
+          </span>
+          <select
+            value={expiry}
+            onChange={(e) => onExpiry(e.target.value as ExpiryFilter)}
+            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
+          >
+            <option value="all">Alle</option>
+            <option value="expired">Abgelaufen</option>
+            <option value="valid">Noch gültig (oder ohne Datum)</option>
+            <option value="soon7">Läuft in 7 Tagen ab</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
+            Erstellt ab
+          </span>
+          <input
+            type="date"
+            value={createdFrom}
+            onChange={(e) => onCreatedFrom(e.target.value)}
+            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
+          />
+        </label>
+        <label className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
+            Erstellt bis
+          </span>
+          <input
+            type="date"
+            value={createdTo}
+            onChange={(e) => onCreatedTo(e.target.value)}
+            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
+          />
+        </label>
       </div>
-
-      {/* Status & Customer */}
-      <Section title="Status & Kunde">
-        <div className="space-y-5">
-          <Grid2>
-            <Field label="status">
-              <select
-                value={model.status}
-                onChange={(e) =>
-                  setModel((m) => (m ? { ...m, status: e.target.value } : m))
-                }
-                className="w-full border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
-              >
-                {[
-                  ...new Set([
-                    model.status,
-                    ...CUSTOMER_KEY_STATUSES,
-                  ]),
-                ].map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="plan_id">
-              <TextInput
-                value={model.plan_id}
-                onChange={(v) =>
-                  setModel((m) => (m ? { ...m, plan_id: v } : m))
-                }
-                mono
-              />
-            </Field>
-          </Grid2>
-
-          <Field label="customer.email">
-            <TextInput
-              type="email"
-              value={model.customer.email}
-              onChange={(v) =>
-                setModel((m) =>
-                  m ? { ...m, customer: { ...m.customer, email: v } } : m,
-                )
-              }
-              placeholder="kunde@example.com"
-            />
-          </Field>
-
-          <Grid2>
-            <Field label="customer.stripe_customer_id">
-              <TextInput
-                value={model.customer.stripe_customer_id ?? ""}
-                onChange={(v) =>
-                  setModel((m) =>
-                    m
-                      ? {
-                          ...m,
-                          customer: {
-                            ...m.customer,
-                            stripe_customer_id: v.trim() || null,
-                          },
-                        }
-                      : m,
-                  )
-                }
-                placeholder="cus_…"
-                mono
-              />
-            </Field>
-            <Field
-              label="customer.stripe_subscription_id"
-              hint="z. B. one_time_purchase"
-            >
-              <TextInput
-                value={model.customer.stripe_subscription_id}
-                onChange={(v) =>
-                  setModel((m) =>
-                    m
-                      ? {
-                          ...m,
-                          customer: {
-                            ...m.customer,
-                            stripe_subscription_id: v,
-                          },
-                        }
-                      : m,
-                  )
-                }
-                mono
-              />
-            </Field>
-          </Grid2>
-
-          <Grid2>
-            <Field
-              label="metadata.created_at"
-              hint="ISO 8601 (UTC)"
-            >
-              <TextInput
-                value={model.metadata.created_at}
-                onChange={(v) =>
-                  setModel((m) =>
-                    m
-                      ? { ...m, metadata: { ...m.metadata, created_at: v } }
-                      : m,
-                  )
-                }
-                mono
-              />
-            </Field>
-          </Grid2>
-        </div>
-      </Section>
-
-      {/* Eingebetteter Plan — gleicher Editor wie unter „Pläne" */}
-      <PlanFormFields model={model.plan} onChange={setPlan} />
-
-      {/* Sticky Save-Footer */}
-      <div className="sticky bottom-0 -mx-6 mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-hair bg-paper/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-paper/85">
-        <div className="min-w-0 text-[11.5px] text-ink-500">
-          {validationMsg ? (
-            <span className="text-accent-amber">{validationMsg}</span>
-          ) : saveErr ? (
-            <span className="text-accent-rose">{saveErr}</span>
-          ) : savedPing ? (
-            <span className="text-accent-mint">Gespeichert.</span>
-          ) : (
-            <span className="text-ink-400">
-              Änderungen werden nach „Speichern“ übernommen.
-            </span>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-ink-500">
+        <p>
+          <span className="font-medium text-ink-800">{resultCount}</span> Keys
+          in{" "}
+          <span className="font-medium text-ink-800">{groupCount}</span>{" "}
+          E-Mail-Gruppen · Gesamt im KV:{" "}
+          <span className="text-ink-400">{totalCount}</span>
+        </p>
         <button
           type="button"
-          disabled={saving || !!validationMsg}
-          onClick={onSave}
-          className="rounded-md bg-ink-900 px-4 py-2 text-[12.5px] font-medium text-white transition-colors hover:bg-ink-800 disabled:opacity-50"
+          onClick={onResetFilters}
+          className="text-[12px] text-ink-600 underline decoration-hair underline-offset-2 hover:text-ink-900"
         >
-          {saving ? "Speichere …" : "Kunden-Key speichern"}
+          Filter zurücksetzen
         </button>
       </div>
     </div>
+  );
+}
+
+function fmtExpires(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+}
+
+function EmailGroupBlock({
+  group,
+  collapsed,
+  onToggle,
+}: {
+  group: CustomerGroup;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <li>
+      <div className="px-0 py-1 sm:px-1">
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center justify-between gap-3 border-b border-transparent py-2 text-left transition-colors hover:border-hair"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Mail className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+            {group.email ? (
+              <span className="truncate text-[13px] font-medium text-ink-900" title={group.email}>
+                {group.email}
+              </span>
+            ) : (
+              <span className="italic text-[13px] text-ink-400">(ohne Email)</span>
+            )}
+            <span className="shrink-0 text-[11px] tabular-nums text-ink-400">
+              {group.rows.length} Key{group.rows.length === 1 ? "" : "s"}
+            </span>
+          </span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform ${
+              collapsed ? "-rotate-90" : "rotate-0"
+            }`}
+            aria-hidden
+          />
+        </button>
+        {!collapsed && (
+          <div className="mt-1 max-h-[min(24rem,70vh)] overflow-y-auto">
+            <table className="min-w-full text-left text-[11.5px]">
+              <thead className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-400">
+                <tr>
+                  <th className="py-1.5 pr-3">Key / Bearbeiten</th>
+                  <th className="py-1.5 pr-3">plan_id</th>
+                  <th className="py-1.5 pr-3">Ablauf</th>
+                  <th className="py-1.5 pr-2">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hair/80 text-ink-800">
+                {group.rows.map((r) => {
+                  const exp = r.expires_at;
+                  const expired = exp && isExpiredIso(exp);
+                  return (
+                    <tr key={r.key} className="hover:bg-ink-50/30">
+                      <td className="max-w-[min(28rem,50vw)] py-1.5 pr-3 align-top">
+                        <Link
+                          to={customerKeyDetailPath(r.key)}
+                          className="block font-mono text-[11px] text-brand-600 underline decoration-hair underline-offset-2 hover:text-ink-900"
+                          title={r.key}
+                        >
+                          {shortKey(r.key)}
+                        </Link>
+                      </td>
+                      <td className="pr-3 align-top">
+                        <span className="font-mono text-[11px] text-ink-700">
+                          {r.plan_id || "—"}
+                        </span>
+                        {r.is_test_key && (
+                          <span className="ml-1 font-mono text-[9.5px] uppercase tracking-wider text-accent-amber">
+                            test
+                          </span>
+                        )}
+                      </td>
+                      <td
+                        className={`pr-3 align-top tabular-nums ${
+                          expired ? "text-accent-rose" : "text-ink-600"
+                        }`}
+                      >
+                        {fmtExpires(exp)}
+                      </td>
+                      <td className="align-top text-ink-500">{r.status || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </li>
   );
 }

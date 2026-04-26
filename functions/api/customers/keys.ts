@@ -41,7 +41,56 @@ type CustomerKeySummary = {
   stripe_subscription_id: string | null;
   created_at: string | null;
   is_test_mode: boolean | null;
+  /** `plan_id === "plan_test"` — Test-Key laut Zahlungs-/Plan-Logik. */
+  is_test_key: boolean;
+  /**
+   * Geschätzter oder expliziter Ablaufzeitpunkt (ISO 8601 UTC), falls ermittelbar.
+   * Quellen: `expire` / `expires_at` am Root, `metadata.expire` / `expires_at`,
+   * sonst `created_at` + `plan.expires_in_seconds`.
+   */
+  expires_at: string | null;
 };
+
+/**
+ * Liest Ablaufdatum aus flexiblen Feldern; Fallback: Erstellung + Plan-TTL.
+ */
+function pickExpiresAtIso(
+  parsed: Record<string, unknown>,
+  metadata: Record<string, unknown>,
+  plan: Record<string, unknown> | null | undefined,
+): string | null {
+  const tryParse = (v: unknown): string | null => {
+    if (v == null) return null;
+    if (typeof v === "string" && v.trim()) {
+      const t = Date.parse(v.trim());
+      if (!isNaN(t)) return new Date(t).toISOString();
+    }
+    if (typeof v === "number" && v > 0) {
+      const ms = v < 1e12 ? v * 1000 : v;
+      return new Date(ms).toISOString();
+    }
+    return null;
+  };
+
+  const fromFields = tryParse(parsed.expire) ?? tryParse(parsed.expires_at);
+  if (fromFields) return fromFields;
+  const fromMeta =
+    tryParse(metadata.expire) ??
+    tryParse(metadata.expires_at) ??
+    tryParse((metadata as Record<string, unknown>).expired_at);
+  if (fromMeta) return fromMeta;
+
+  const created =
+    typeof metadata.created_at === "string" ? metadata.created_at : null;
+  const sec = plan?.expires_in_seconds;
+  if (created && typeof sec === "number" && sec > 0) {
+    const t0 = Date.parse(created);
+    if (!isNaN(t0)) {
+      return new Date(t0 + sec * 1000).toISOString();
+    }
+  }
+  return null;
+}
 
 function summarize(
   key: string,
@@ -62,24 +111,33 @@ function summarize(
       stripe_subscription_id: null,
       created_at: null,
       is_test_mode: null,
+      is_test_key: false,
+      expires_at: null,
     };
   }
   const customer =
     (parsed?.customer as Record<string, unknown> | null | undefined) ?? null;
   const metadata =
-    (parsed?.metadata as Record<string, unknown> | null | undefined) ?? null;
+    (parsed?.metadata as Record<string, unknown> | null | undefined) ?? {};
   const plan =
     (parsed?.plan as Record<string, unknown> | null | undefined) ?? null;
   const restrictions =
     (plan?.content_restrictions as Record<string, unknown> | null | undefined) ??
     null;
+  const planId =
+    typeof parsed?.plan_id === "string" ? (parsed.plan_id as string) : null;
+  const expiresAt = pickExpiresAtIso(
+    parsed,
+    metadata,
+    plan ?? undefined,
+  );
 
   return {
     key,
     status: typeof parsed?.status === "string" ? (parsed.status as string) : null,
     email:
       typeof customer?.email === "string" ? (customer.email as string) : null,
-    plan_id: typeof parsed?.plan_id === "string" ? (parsed.plan_id as string) : null,
+    plan_id: planId,
     plan_name:
       typeof plan?.plan_name === "string" ? (plan.plan_name as string) : null,
     stripe_customer_id:
@@ -98,6 +156,8 @@ function summarize(
       typeof restrictions?.is_test_mode === "boolean"
         ? (restrictions.is_test_mode as boolean)
         : null,
+    is_test_key: planId === "plan_test",
+    expires_at: expiresAt,
   };
 }
 

@@ -27,10 +27,16 @@ export type CustomerKeyCustomer = {
   stripe_subscription_id: string;
 };
 
+export type CustomerKeyMetadata = {
+  created_at: string;
+  /** Ablauf (ISO 8601), optional — kann auch früher als `expire` am Root stand. */
+  expires_at?: string;
+};
+
 export type CustomerKeyValue = {
   status: string;
   customer: CustomerKeyCustomer;
-  metadata: { created_at: string };
+  metadata: CustomerKeyMetadata;
   plan_id: string;
   plan: PlanValue;
 };
@@ -45,7 +51,14 @@ export type CustomerKeySummary = {
   stripe_subscription_id: string | null;
   created_at: string | null;
   is_test_mode: boolean | null;
+  /** `plan_id === "plan_test"`. Fehlt bei alter API-Antwort → per plan_id ableiten. */
+  is_test_key?: boolean;
+  /** Ablauf (ISO), falls aus Feldern oder created+TTL ermittelbar. */
+  expires_at: string | null;
 };
+
+/** Test-Key: gebündelter Plan-Test-Preis. */
+export const TEST_PLAN_ID = "plan_test";
 
 export type CustomerKeysListResponse = {
   keys: CustomerKeySummary[];
@@ -84,8 +97,8 @@ export function defaultCustomerKeyValue(): CustomerKeyValue {
       stripe_subscription_id: "one_time_purchase",
     },
     metadata: { created_at: new Date().toISOString() },
-    plan_id: "plan_test",
-    plan: defaultPlanValue("plan_test"),
+    plan_id: TEST_PLAN_ID,
+    plan: defaultPlanValue(TEST_PLAN_ID),
   };
 }
 
@@ -118,12 +131,25 @@ export function parseCustomerKeyValue(
   const metadata =
     (base.metadata as Record<string, unknown> | null | undefined) ?? {};
   const planRaw = base.plan;
-  const plan_id = asStr(base.plan_id, "plan_test");
+  const plan_id = asStr(base.plan_id, TEST_PLAN_ID);
 
   const planParsed = parsePlanValue(planRaw, plan_id);
   if (!planParsed.ok) {
     return { ok: false, error: planParsed.error };
   }
+
+  const expiresFromMeta = asStr(metadata.expires_at as string, "").trim();
+  const expiresFromMetaAlt = asStr(
+    (metadata as Record<string, unknown>).expire as string,
+    "",
+  ).trim();
+  const expiresRoot = asStr(base.expire as string, "").trim();
+  const expiresRootAt = asStr(base.expires_at as string, "").trim();
+  const expiresAt =
+    expiresFromMeta ||
+    expiresFromMetaAlt ||
+    expiresRoot ||
+    expiresRootAt;
 
   return {
     ok: true,
@@ -142,6 +168,7 @@ export function parseCustomerKeyValue(
       },
       metadata: {
         created_at: asStr(metadata.created_at, new Date().toISOString()),
+        ...(expiresAt ? { expires_at: expiresAt } : {}),
       },
       plan_id,
       plan: planParsed.value,
@@ -156,17 +183,25 @@ export function parseCustomerKeyValue(
 export function customerKeyValueToKv(
   v: CustomerKeyValue,
 ): Record<string, unknown> {
-  return {
+  const metadata: Record<string, unknown> = {
+    created_at: v.metadata.created_at,
+  };
+  const exp = v.metadata.expires_at?.trim();
+  if (exp) metadata.expires_at = exp;
+
+  const out: Record<string, unknown> = {
     status: v.status,
     customer: {
       email: v.customer.email,
       stripe_customer_id: v.customer.stripe_customer_id,
       stripe_subscription_id: v.customer.stripe_subscription_id,
     },
-    metadata: { created_at: v.metadata.created_at },
+    metadata,
     plan_id: v.plan_id,
     plan: planValueToKvJson(v.plan),
   };
+  // internes UI-Flag nie persistieren
+  return out;
 }
 
 export async function putCustomerKey(
@@ -189,4 +224,19 @@ export async function putCustomerKey(
 export function shortKey(id: string): string {
   if (id.length <= 22) return id;
   return `${id.slice(0, 8)}…${id.slice(-6)}`;
+}
+
+const KEYS_BASE = "/kunden/keys";
+
+/** React-Router-Pfad zu einem Kunden-Key (Key ist URL-encodiert). */
+export function customerKeyDetailPath(key: string): string {
+  return `${KEYS_BASE}/${encodeURIComponent(key)}`;
+}
+
+/** `true` wenn `expires_at` in der Vergangenheit liegt. */
+export function isExpiredIso(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false;
+  const t = Date.parse(expiresAt);
+  if (isNaN(t)) return false;
+  return t < Date.now();
 }
