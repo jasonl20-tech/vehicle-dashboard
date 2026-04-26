@@ -22,17 +22,21 @@ export type ImageUrlRequestsGeoResponse = SubmissionsByCountryResponse & {
   range: { from: string; to: string };
   engine: {
     name: string;
-    mode: "dedicated" | "filter";
+    mode: "auto" | "dedicated" | "filter";
+    modesTried?: ("filter" | "dedicated")[];
     accounts: "all" | "primary" | "secondary";
     days: number;
   };
   stats: {
     perSource: {
       binding: "primary" | "secondary";
+      mode: "filter" | "dedicated";
       fromTable: string;
       countryGroupRows: number;
       domainGroupRows: number;
       volumeInRange?: number;
+      datasetsTopFiltered?: { dataset: string; count: number }[];
+      errors?: string[];
     }[];
     countryGroupsTotal: number;
     domainGroupsTotal: number;

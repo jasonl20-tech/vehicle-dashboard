@@ -5,13 +5,17 @@
  * Länder: `blob3` (ISO-2, z. B. GB). Domains: `index1` (Kunden-Hosts).
  * Zählung: SUM(_sample_interval) wie in den anderen AE-Auswertungen.
  *
- * Query: from, to (YYYY-MM-DD HH:MM:SS, UTC), `days` (1–400), `diagnose=1` (zusätzlich
- * SUM pro Quelle, zeigt ob überhaupt Zeilen im Zeitraum für `dataset` existieren).
+ * Query: from, to (YYYY-MM-DD HH:MM:SS, UTC), `days` (1–400),
+ * `diagnose=1` (Volumen pro Quelle/Modus + tatsächliche `dataset`-Werte).
  *
  * Hinweis: die Analytics-Engine-SQL-API unterstützt hier kein `TRIM()` /
- * `UPPER()` um Spalten (422). Muster wie `api/analytics/customer-keys` —
- * nackte `blob3`-Vergleiche + `GROUP BY blob3`; Normalisierung in
- * `mergeByIso2()`.
+ * `UPPER()` um Spalten (422). Nackte `blob3`-Vergleiche + `GROUP BY blob3`;
+ * Normalisierung in `mergeByIso2()`.
+ *
+ * Wichtig: probiert *immer* beide Modi (`filter` über `key_analytics` /
+ * `api_analytics` mit `AND dataset=…` UND `dedicated` aus eigener Tabelle).
+ * So ist es egal, wie der Writer schreibt – sobald die Tabelle/das dataset
+ * existiert, kommen Daten an. Treffer aus mehreren Modi werden gemerged.
  */
 import {
   aeNumber,
@@ -32,25 +36,30 @@ import {
 const DEFAULT_DAYS = 90;
 const MAX_DOMAINS = 500;
 const MAX_DAYS = 400;
+const MAX_DATASETS = 50;
 
 type CountryRow = { iso2: string; c: number };
 type DomainRow = { d: string; c: number };
 type VolumeRow = { c: number };
+type DatasetRow = { dataset: string; c: number };
+type Mode = "filter" | "dedicated";
 
 function defaultRange(days: number): { from: string; to: string } {
   const d = Math.min(MAX_DAYS, Math.max(1, days));
   const to = new Date();
-  const from = new Date(
-    to.getTime() - d * 24 * 60 * 60 * 1000,
-  );
+  const from = new Date(to.getTime() - d * 24 * 60 * 60 * 1000);
   const fmt = (x: Date) => x.toISOString().replace("T", " ").slice(0, 19);
   return { from: fmt(from), to: fmt(new Date(to.getTime() + 60_000)) };
 }
 
-function isDedicatedTableMode(env: AuthEnv): boolean {
-  const v = env.IMAGE_URL_REQUESTS_DEDICATED?.trim().toLowerCase();
-  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
-  return false;
+function envFlag(v: string | undefined): boolean {
+  const x = v?.trim().toLowerCase();
+  return x === "1" || x === "true" || x === "yes" || x === "on";
+}
+
+function envFlagFalse(v: string | undefined): boolean {
+  const x = v?.trim().toLowerCase();
+  return x === "0" || x === "false" || x === "no" || x === "off";
 }
 
 function getDatasetName(env: AuthEnv): string {
@@ -79,30 +88,34 @@ function sourcesToRun(
   return { list: all, label: "all" };
 }
 
-/**
- * Tatsächliches fromTable für Filter-Mode (key_analytics vs api_analytics pro Binding).
- */
+/** Filter-Mode: tatsächliche Hosttabelle (key_analytics vs api_analytics). */
 function fromKeyAnalyticsForBinding(
   env: AuthEnv,
   binding: AeAccountBinding,
 ): string {
   const p = resolveAnalyticsBinding(env, binding);
-  return p.error ? (binding === "secondary" ? "api_analytics" : "key_analytics") : p.dataset;
+  return p.error
+    ? binding === "secondary"
+      ? "api_analytics"
+      : "key_analytics"
+    : p.dataset;
 }
 
 function buildTimeWhere(fromIso: string, toIso: string): string {
-  return `timestamp >= ${sqlDateTime(fromIso)} AND timestamp < ${sqlDateTime(toIso)}`;
+  return `timestamp >= ${sqlDateTime(fromIso)} AND timestamp < ${sqlDateTime(
+    toIso,
+  )}`;
 }
 
 function buildCountrySql(
   fromIso: string,
   toIso: string,
   fromDataset: string,
-  dedicated: boolean,
+  mode: Mode,
   name: string,
 ): string {
   const tw = buildTimeWhere(fromIso, toIso);
-  if (dedicated) {
+  if (mode === "dedicated") {
     return `SELECT
   blob3 AS iso2,
   SUM(_sample_interval) AS c
@@ -128,12 +141,14 @@ function buildDomainSql(
   fromIso: string,
   toIso: string,
   fromDataset: string,
-  dedicated: boolean,
+  mode: Mode,
   name: string,
 ): string {
   const tw = buildTimeWhere(fromIso, toIso);
-  const notEmpty = `index1 != ${sqlString("")} AND index1 != ${sqlString("NA")}`;
-  if (dedicated) {
+  const notEmpty = `index1 != ${sqlString("")} AND index1 != ${sqlString(
+    "NA",
+  )}`;
+  if (mode === "dedicated") {
     return `SELECT
   index1 AS d,
   SUM(_sample_interval) AS c
@@ -155,16 +170,16 @@ LIMIT ${MAX_DOMAINS}
 FORMAT JSON`;
 }
 
-/** Summe aller Sample-Intervale im Zeitraum für das Dataset (ohne Gruppierung) — Diagnose. */
+/** Volumen im Zeitraum (Diagnose) – ohne Gruppierung. */
 function buildVolumeSql(
   fromIso: string,
   toIso: string,
   fromDataset: string,
-  dedicated: boolean,
+  mode: Mode,
   name: string,
 ): string {
   const tw = buildTimeWhere(fromIso, toIso);
-  if (dedicated) {
+  if (mode === "dedicated") {
     return `SELECT SUM(_sample_interval) AS c
 FROM ${name}
 WHERE ${tw}
@@ -173,6 +188,22 @@ FORMAT JSON`;
   return `SELECT SUM(_sample_interval) AS c
 FROM ${fromDataset}
 WHERE ${tw} AND dataset = ${sqlString(name)}
+FORMAT JSON`;
+}
+
+/** Diagnose: tatsächliche `dataset`-Werte in einer Filter-Tabelle. */
+function buildDatasetListSql(
+  fromIso: string,
+  toIso: string,
+  fromDataset: string,
+): string {
+  const tw = buildTimeWhere(fromIso, toIso);
+  return `SELECT dataset, SUM(_sample_interval) AS c
+FROM ${fromDataset}
+WHERE ${tw}
+GROUP BY dataset
+ORDER BY c DESC
+LIMIT ${MAX_DATASETS}
 FORMAT JSON`;
 }
 
@@ -227,7 +258,9 @@ function mergeByIso2(parts: CountryRow[][]): {
   };
 }
 
-function mergeDomains(parts: DomainRow[][]): { domains: { domain: string; count: number }[] } {
+function mergeDomains(parts: DomainRow[][]): {
+  domains: { domain: string; count: number }[];
+} {
   const m = new Map<string, { display: string; n: number }>();
   for (const part of parts) {
     for (const r of part) {
@@ -251,6 +284,17 @@ function mergeDomains(parts: DomainRow[][]): { domains: { domain: string; count:
   return { domains };
 }
 
+type SourceModeMeta = {
+  binding: AeAccountBinding;
+  mode: Mode;
+  fromTable: string;
+  countryGroupRows: number;
+  domainGroupRows: number;
+  volumeInRange?: number;
+  datasetsTopFiltered?: { dataset: string; count: number }[];
+  errors?: string[];
+};
+
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
   env,
@@ -270,7 +314,17 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const from = (url.searchParams.get("from") || def.from).trim();
   const to = (url.searchParams.get("to") || def.to).trim();
   const name = getDatasetName(env);
-  const dedicated = isDedicatedTableMode(env);
+  const wantDiagnose = url.searchParams.get("diagnose") === "1";
+
+  /**
+   * `IMAGE_URL_REQUESTS_DEDICATED` steuert Modus, aber wir probieren default
+   * IMMER beide Modi (filter + dedicated). Per Env kann man einen davon
+   * explizit deaktivieren – sinnvoll, falls die dedizierte Tabelle nicht
+   * existiert und sonst 400er werfen würde.
+   */
+  const dedicatedEnv = env.IMAGE_URL_REQUESTS_DEDICATED?.trim().toLowerCase();
+  const tryFilter = !envFlag(env.IMAGE_URL_REQUESTS_FILTER_DISABLE);
+  const tryDedicated = !envFlagFalse(dedicatedEnv);
 
   const { sources, error: srcErr } = getMergedAnalyticsSources(env);
   if (srcErr) {
@@ -284,91 +338,107 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 
   const { list: runSources, label: accountLabel } = sourcesToRun(env, sources);
-  const wantDiagnose = url.searchParams.get("diagnose") === "1";
 
   const countryRows: CountryRow[][] = [];
   const domainRows: DomainRow[][] = [];
   const errors: string[] = [];
-  let hadCountryOk = false;
-  let hadDomainOk = false;
-  const perSourceMeta: {
-    binding: AeAccountBinding;
-    fromTable: string;
-    countryGroupRows: number;
-    domainGroupRows: number;
-    volumeInRange?: number;
-  }[] = [];
+  let hadAnyOk = false;
+  const perSourceMeta: SourceModeMeta[] = [];
+
+  const modes: Mode[] = [];
+  if (tryFilter) modes.push("filter");
+  if (tryDedicated) modes.push("dedicated");
 
   for (const s of runSources) {
-    const fromDataset = fromKeyAnalyticsForBinding(env, s.binding);
-    const csql = buildCountrySql(from, to, fromDataset, dedicated, name);
-    const dsql = buildDomainSql(from, to, fromDataset, dedicated, name);
-    let cLen = 0;
-    let dLen = 0;
-    let vol: number | undefined;
-    try {
-      const c = await runAeSql<CountryRow>(env, csql, { binding: s.binding });
-      countryRows.push(c.data);
-      cLen = c.data.length;
-      hadCountryOk = true;
-    } catch (e) {
-      countryRows.push([]);
-      errors.push(
-        (e as Error).message || String(e),
-      );
-    }
-    try {
-      const d = await runAeSql<DomainRow>(env, dsql, { binding: s.binding });
-      domainRows.push(d.data);
-      dLen = d.data.length;
-      hadDomainOk = true;
-    } catch (e) {
-      domainRows.push([]);
-      errors.push(
-        (e as Error).message || String(e),
-      );
-    }
-    if (wantDiagnose) {
-      const volSql = buildVolumeSql(from, to, fromDataset, dedicated, name);
-      try {
-        const vr = await runAeSql<VolumeRow>(env, volSql, { binding: s.binding });
-        const row = vr.data[0] as VolumeRow | undefined;
-        vol = row ? aeNumber(row.c) : 0;
-      } catch (e) {
-        errors.push(
-          `volumen ${s.binding}: ${(e as Error).message || String(e)}`,
-        );
-        vol = undefined;
-      }
-    }
-    perSourceMeta.push({
-      binding: s.binding,
-      fromTable: fromDataset,
-      countryGroupRows: cLen,
-      domainGroupRows: dLen,
-      ...(wantDiagnose && { volumeInRange: vol }),
-    });
-  }
+    const fromTable = fromKeyAnalyticsForBinding(env, s.binding);
+    for (const mode of modes) {
+      const localErrors: string[] = [];
+      let cLen = 0;
+      let dLen = 0;
+      let vol: number | undefined;
+      let datasetsTopFiltered: { dataset: string; count: number }[] | undefined;
 
-  if (!hadCountryOk && !hadDomainOk && errors.length > 0) {
-    return jsonResponse(
-      {
-        error: "image_url_requests: Analytics Engine Abfrage fehlgeschlagen",
-        details: errors.slice(0, 2),
-        hint: dedicated
-          ? "Prüfe, ob die Tabelle existiert, oder setze IMAGE_URL_REQUESTS_DEDICATED=0 und schreibe in key_analytics mit Spalte dataset."
-          : "Prüfe, ob `dataset` = " +
-            name +
-            " in key_analytics existiert, oder setze IMAGE_URL_REQUESTS_DEDICATED=1 und eine eigene Tabelle.",
-      },
-      { status: 502 },
-    );
+      const csql = buildCountrySql(from, to, fromTable, mode, name);
+      const dsql = buildDomainSql(from, to, fromTable, mode, name);
+      try {
+        const c = await runAeSql<CountryRow>(env, csql, {
+          binding: s.binding,
+        });
+        countryRows.push(c.data);
+        cLen = c.data.length;
+        if (cLen > 0) hadAnyOk = true;
+      } catch (e) {
+        countryRows.push([]);
+        const msg = (e as Error).message || String(e);
+        localErrors.push(`country ${s.binding}/${mode}: ${msg}`);
+      }
+      try {
+        const d = await runAeSql<DomainRow>(env, dsql, { binding: s.binding });
+        domainRows.push(d.data);
+        dLen = d.data.length;
+        if (dLen > 0) hadAnyOk = true;
+      } catch (e) {
+        domainRows.push([]);
+        const msg = (e as Error).message || String(e);
+        localErrors.push(`domain ${s.binding}/${mode}: ${msg}`);
+      }
+
+      if (wantDiagnose) {
+        const volSql = buildVolumeSql(from, to, fromTable, mode, name);
+        try {
+          const vr = await runAeSql<VolumeRow>(env, volSql, {
+            binding: s.binding,
+          });
+          const row = vr.data[0] as VolumeRow | undefined;
+          vol = row ? aeNumber(row.c) : 0;
+        } catch (e) {
+          localErrors.push(
+            `volumen ${s.binding}/${mode}: ${(e as Error).message || String(e)}`,
+          );
+        }
+        if (mode === "filter") {
+          try {
+            const ds = await runAeSql<DatasetRow>(
+              env,
+              buildDatasetListSql(from, to, fromTable),
+              { binding: s.binding },
+            );
+            datasetsTopFiltered = ds.data
+              .map((r) => {
+                const rec = r as Record<string, unknown>;
+                const ds =
+                  (typeof rec.dataset === "string" && rec.dataset) ||
+                  (typeof rec.DATASET === "string" && rec.DATASET) ||
+                  "";
+                return { dataset: String(ds), count: aeNumber(r.c) };
+              })
+              .filter((r) => r.dataset !== "");
+          } catch (e) {
+            localErrors.push(
+              `datasets ${s.binding}: ${(e as Error).message || String(e)}`,
+            );
+          }
+        }
+      }
+
+      perSourceMeta.push({
+        binding: s.binding,
+        mode,
+        fromTable: mode === "dedicated" ? name : fromTable,
+        countryGroupRows: cLen,
+        domainGroupRows: dLen,
+        ...(wantDiagnose && {
+          volumeInRange: vol,
+          ...(datasetsTopFiltered && { datasetsTopFiltered }),
+        }),
+        ...(localErrors.length > 0 && { errors: localErrors }),
+      });
+      errors.push(...localErrors);
+    }
   }
 
   const merged = mergeByIso2(
-    countryRows.length > 0
-      ? countryRows
-      : [[] as CountryRow[]],
+    countryRows.length > 0 ? countryRows : [[] as CountryRow[]],
   );
   const { domains } = mergeDomains(
     domainRows.length > 0 ? domainRows : [[] as DomainRow[]],
@@ -376,6 +446,20 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   const countryGroupsTotal = countryRows.reduce((a, p) => a + p.length, 0);
   const domainGroupsTotal = domainRows.reduce((a, p) => a + p.length, 0);
+
+  // Wenn ALLE Versuche 0 Daten ergeben + ALLE warfen Fehler → 502.
+  if (!hadAnyOk && perSourceMeta.every((m) => (m.errors?.length ?? 0) > 0)) {
+    return jsonResponse(
+      {
+        error: "image_url_requests: Analytics Engine Abfrage fehlgeschlagen",
+        details: errors.slice(0, 4),
+        hint:
+          "Beide Modi (filter + dedicated) lieferten Fehler. Mit `?diagnose=1` zeigt die API die tatsächlich vorhandenen `dataset`-Werte und das Volumen.",
+        stats: { perSource: perSourceMeta },
+      },
+      { status: 502 },
+    );
+  }
 
   return jsonResponse(
     {
@@ -387,7 +471,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       range: { from, to },
       engine: {
         name,
-        mode: dedicated ? ("dedicated" as const) : ("filter" as const),
+        mode: "auto" as const,
+        modesTried: modes,
         accounts: accountLabel,
         days,
       },
@@ -400,7 +485,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         ...(!wantDiagnose
           ? {
               hint:
-                "Zusatz: `?diagnose=1` — SUM(_sample_interval) pro Quelle (Volumen im Zeitraum für dieses dataset).",
+                "Zusatz: `?diagnose=1` — listet pro Quelle das Volumen und die tatsächlichen `dataset`-Werte (Filter-Mode).",
             }
           : {}),
       },
