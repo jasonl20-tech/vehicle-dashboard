@@ -71,11 +71,6 @@ const META: Record<
     eyebrow: "Webseite",
     description: "Produkt- und Release-Notizen.",
   },
-  "/databases/production": {
-    title: "Produktions-Datenbank",
-    eyebrow: "Datenbanken",
-    description: "Verbindung und Schema-Überblick (Produktivumgebung).",
-  },
 };
 
 const DEFAULT_META = {

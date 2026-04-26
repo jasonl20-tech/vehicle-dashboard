@@ -82,6 +82,16 @@ export interface AuthEnv {
    */
   vehicledatabase?: D1Database;
   /**
+   * Öffentliche Bild-CDN-Basis (ohne Slash am Ende), z. B. `https://bildurl.vehicleimagery.com`.
+   * Optional: Pages-Variable `IMAGE_CDN_BASE`; sonst Fallback im API-Code.
+   */
+  IMAGE_CDN_BASE?: string;
+  /**
+   * Optional: Geheimnis für signierte Bild-URLs o. ä. (Variable `image_url_secret` im Dashboard).
+   * Wird nicht an den Browser ausgeliefert.
+   */
+  image_url_secret?: string;
+  /**
    * D1: Mapping-Tabellen (manufacture/model/color/body/trim). Variable `mapping`.
    */
   mapping?: D1Database;

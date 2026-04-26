@@ -15,6 +15,7 @@ import SettingsPage from "./pages/SettingsPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
+import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
@@ -106,7 +107,10 @@ export default function App() {
         <Route path="/website/whitepaper" element={<ModulePage />} />
         <Route path="/website/company" element={<ModulePage />} />
         <Route path="/website/changelog" element={<ModulePage />} />
-        <Route path="/databases/production" element={<ModulePage />} />
+        <Route
+          path="/databases/production"
+          element={<ProductionDatabasePage />}
+        />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
