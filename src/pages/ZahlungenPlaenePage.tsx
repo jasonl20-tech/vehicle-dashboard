@@ -15,10 +15,14 @@ export default function ZahlungenPlaenePage() {
   const kvs = useJsonApi<PlansListResponse>(BILLING_PLANS);
 
   const [planKey, setPlanKey] = useState<string | null>(null);
-  const { data: planOne, error: planErr, loading: planLoading, reload: planReload } =
-    useJsonApi<{ key: string; value: unknown; raw: string }>(
-      planKey ? plansUrlOne(planKey) : null,
-    );
+  const {
+    data: planOne,
+    error: planErr,
+    loading: planLoading,
+    reload: planReload,
+  } = useJsonApi<{ key: string; value: unknown; raw: string }>(
+    planKey ? plansUrlOne(planKey) : null,
+  );
 
   const [newKey, setNewKey] = useState("");
   const [newKeyError, setNewKeyError] = useState<string | null>(null);
@@ -29,6 +33,8 @@ export default function ZahlungenPlaenePage() {
     if (planKey) planReload();
   }, [kvs, planKey, planReload]);
 
+  const keys = kvs.data?.keys ?? [];
+
   return (
     <>
       <PageHeader
@@ -37,9 +43,10 @@ export default function ZahlungenPlaenePage() {
         hideCalendarAndNotifications
         description={
           <>
-            KV <span className="font-mono">plans</span>: Pläne per Formular
-            bearbeiten (Werte aus D1-Fahrzeugkatalog &amp; Stripe). Kein
-            Löschen.
+            KV{" "}
+            <span className="font-mono text-[12.5px] text-ink-700">plans</span>:
+            Pläne per Formular bearbeiten — Werte aus D1-Fahrzeugkatalog &amp;
+            Stripe. Kein Löschen.
           </>
         }
         rightSlot={
@@ -57,39 +64,60 @@ export default function ZahlungenPlaenePage() {
       />
 
       {kvs.error && (
-        <p className="mb-4 text-[13px] text-accent-rose">{kvs.error}</p>
+        <p className="mb-6 border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
+          {kvs.error}
+        </p>
       )}
 
       {kvs.loading && !kvs.data ? (
-        <p className="text-[13px] text-ink-400">Lade …</p>
+        <p className="py-12 text-center text-[12.5px] text-ink-400">Lade …</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-12">
-          <div className="lg:col-span-4">
-            <p className="mb-2 text-[11.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
-              Keys
-            </p>
-            <ul className="max-h-[320px] space-y-0.5 overflow-y-auto rounded-md border border-hair p-1">
-              {(kvs.data?.keys ?? []).map((k) => (
-                <li key={k}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlanKey(k);
-                      setNewKeyError(null);
-                    }}
-                    className={`w-full rounded px-2.5 py-1.5 text-left font-mono text-[12px] ${
-                      planKey === k
-                        ? "bg-brand-500/10 text-ink-900"
-                        : "text-ink-600 hover:bg-ink-50"
-                    }`}
-                  >
-                    {k}
-                  </button>
-                </li>
-              ))}
-            </ul>
+        <div className="grid gap-10 border-t border-hair pt-10 lg:grid-cols-12 lg:gap-0">
+          {/* Sidebar: Keys */}
+          <aside className="lg:col-span-3 lg:border-r lg:border-hair lg:pr-8">
+            <div className="mb-3 flex items-baseline justify-between">
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                Plan-Keys
+              </p>
+              <span className="text-[11px] tabular-nums text-ink-400">
+                {keys.length}
+              </span>
+            </div>
+            {keys.length === 0 ? (
+              <p className="border border-dashed border-hair px-3 py-6 text-center text-[12px] text-ink-500">
+                Noch keine Pläne — unten neuen Key anlegen.
+              </p>
+            ) : (
+              <ul className="divide-y divide-hair border-y border-hair">
+                {keys.map((k) => {
+                  const active = planKey === k;
+                  return (
+                    <li key={k}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlanKey(k);
+                          setNewKeyError(null);
+                        }}
+                        className={`group flex w-full items-center justify-between px-2 py-2 text-left font-mono text-[12px] transition-colors ${
+                          active
+                            ? "bg-ink-50 text-ink-900"
+                            : "text-ink-600 hover:bg-ink-50/60 hover:text-ink-900"
+                        }`}
+                      >
+                        <span className="truncate">{k}</span>
+                        {active && (
+                          <span className="ml-2 h-1.5 w-1.5 shrink-0 bg-ink-900" />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
             <form
-              className="mt-3 flex flex-wrap items-end gap-2"
+              className="mt-5"
               onSubmit={async (e) => {
                 e.preventDefault();
                 const k = newKey.trim();
@@ -111,45 +139,72 @@ export default function ZahlungenPlaenePage() {
                 }
               }}
             >
-              <input
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value)}
-                placeholder="neuer_key"
-                className="min-w-0 flex-1 rounded-md border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
-              />
-              <button
-                type="submit"
-                disabled={saving}
-                className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-600 hover:border-ink-300"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Neu
-              </button>
-            </form>
-          </div>
-          <div className="lg:col-span-8">
-            <p className="mb-2 text-[11.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
-              Plan-Editor
-            </p>
-            {planKey ? (
-              <PlanFormEditor
-                key={planKey}
-                planKey={planKey}
-                planOne={planOne}
-                planLoading={planLoading}
-                planErr={planErr}
-                onAfterSave={() => {
-                  kvs.reload();
-                  planReload();
-                }}
-              />
-            ) : (
-              <p className="text-[13px] text-ink-500">
-                Wähle einen Key oder lege einen neuen an.
+              <p className="mb-2 text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                Neuen Plan anlegen
               </p>
-            )}
-            {newKeyError && (
-              <p className="mt-2 text-[12.5px] text-accent-rose">{newKeyError}</p>
+              <div className="flex items-center gap-2">
+                <input
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  placeholder="neuer_key"
+                  className="min-w-0 flex-1 border-b border-hair bg-transparent py-1.5 font-mono text-[12px] text-ink-800 outline-none placeholder:text-ink-400 focus:border-ink-700"
+                />
+                <button
+                  type="submit"
+                  disabled={saving || !newKey.trim()}
+                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-700 hover:border-ink-300 hover:text-ink-900 disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Anlegen
+                </button>
+              </div>
+              {newKeyError && (
+                <p className="mt-2 border-l-2 border-accent-rose px-3 py-1.5 text-[12px] text-accent-rose">
+                  {newKeyError}
+                </p>
+              )}
+            </form>
+          </aside>
+
+          {/* Editor */}
+          <div className="lg:col-span-9 lg:pl-10">
+            {planKey ? (
+              <>
+                <div className="mb-6 flex items-baseline justify-between gap-3 border-b border-hair pb-4">
+                  <div className="min-w-0">
+                    <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                      Plan-Editor
+                    </p>
+                    <p
+                      className="mt-1 truncate font-mono text-[16px] text-ink-900"
+                      title={planKey}
+                    >
+                      {planKey}
+                    </p>
+                  </div>
+                </div>
+                <PlanFormEditor
+                  key={planKey}
+                  planKey={planKey}
+                  planOne={planOne}
+                  planLoading={planLoading}
+                  planErr={planErr}
+                  onAfterSave={() => {
+                    kvs.reload();
+                    planReload();
+                  }}
+                />
+              </>
+            ) : (
+              <div className="flex h-full min-h-[240px] flex-col items-start justify-center border border-dashed border-hair px-6 py-10">
+                <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                  Kein Plan ausgewählt
+                </p>
+                <p className="mt-2 max-w-sm text-[13px] leading-relaxed text-ink-500">
+                  Wähle links einen Plan-Key aus oder lege unten in der
+                  Seitenleiste einen neuen Plan an, um den Editor zu öffnen.
+                </p>
+              </div>
             )}
           </div>
         </div>

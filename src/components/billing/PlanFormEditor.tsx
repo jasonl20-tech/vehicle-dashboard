@@ -1,5 +1,5 @@
 import { Plus, RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BILLING_STRIPE_PRICES,
   putPlan,
@@ -53,6 +53,7 @@ export default function PlanFormEditor({
   const [parseError, setParseError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [savedPing, setSavedPing] = useState(false);
   const [cat, setCat] = useState<VehicleImageryCatalog | null>(null);
   const [catErr, setCatErr] = useState<string | null>(null);
   const [catLoading, setCatLoading] = useState(true);
@@ -139,15 +140,19 @@ export default function PlanFormEditor({
   }, [cat?.jahre]);
 
   if (planLoading && !planOne) {
-    return <p className="text-[13px] text-ink-400">Lade Plan …</p>;
+    return <p className="py-8 text-[12.5px] text-ink-400">Lade Plan …</p>;
   }
   if (planErr) {
-    return <p className="text-[13px] text-accent-rose">{planErr}</p>;
+    return (
+      <p className="border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
+        {planErr}
+      </p>
+    );
   }
   if (parseError && !model) {
     return (
-      <div className="space-y-2">
-        <p className="text-[13px] text-accent-rose">
+      <div className="space-y-3">
+        <p className="border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
           Plan-JSON ungültig: {parseError}
         </p>
         <button
@@ -156,7 +161,7 @@ export default function PlanFormEditor({
             setModel(defaultPlanValue(planKey));
             setParseError(null);
           }}
-          className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px]"
+          className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:border-ink-300 hover:text-ink-900"
         >
           Auf Standard-Plan setzen
         </button>
@@ -164,7 +169,7 @@ export default function PlanFormEditor({
     );
   }
   if (!model) {
-    return <p className="text-[13px] text-ink-400">…</p>;
+    return <p className="py-8 text-[12.5px] text-ink-400">…</p>;
   }
 
   const set = (patch: Partial<PlanValue> | ((m: PlanValue) => PlanValue)) => {
@@ -209,6 +214,8 @@ export default function PlanFormEditor({
     setSaving(true);
     try {
       await putPlan(planKey, planValueToKvJson(model));
+      setSavedPing(true);
+      window.setTimeout(() => setSavedPing(false), 1600);
       onAfterSave();
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : String(e));
@@ -218,59 +225,62 @@ export default function PlanFormEditor({
   };
 
   return (
-    <div className="space-y-8">
+    <div>
       {catErr && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[12.5px] text-amber-900">
-          Katalog: {catErr} – Dropdowns können leer bleiben; Werte in den Plan
-          trotzdem wählbar, wenn du sie zuvor gespeichert hast.
+        <p className="mb-6 border-l-2 border-accent-amber px-3 py-2 text-[12px] text-accent-amber">
+          Katalog: {catErr} — Dropdowns können leer bleiben; bereits
+          gespeicherte Werte erscheinen mit.
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2">
+
+      <div className="mb-8 flex flex-wrap items-center gap-3 text-[11.5px]">
         <button
           type="button"
           onClick={loadCat}
           disabled={catLoading}
-          className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1 text-[12px] text-ink-600"
+          className="inline-flex items-center gap-1.5 text-ink-600 hover:text-ink-900 disabled:opacity-50"
         >
           <RefreshCw
             className={`h-3.5 w-3.5 ${catLoading ? "animate-spin" : ""}`}
           />
-          Fahrzeugkatalog
+          Fahrzeugkatalog neu laden
         </button>
         {sp.error && (
-          <span className="text-[11px] text-ink-500">(Stripe-Preisliste: {sp.error})</span>
+          <span className="text-ink-400">
+            Stripe-Preisliste:{" "}
+            <span className="text-accent-amber">{sp.error}</span>
+          </span>
         )}
       </div>
 
-      <section>
-        <h3 className="mb-2 font-display text-[16px] text-ink-900">Stammdaten</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-[12px]">
-            <span className="text-ink-500">plan_name</span>
-            <input
+      {/* Stammdaten */}
+      <Section title="Stammdaten">
+        <Grid2>
+          <Field label="plan_name">
+            <TextInput
               value={model.plan_name}
-              onChange={(e) => set({ plan_name: e.target.value })}
-              className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
+              onChange={(v) => set({ plan_name: v })}
             />
-          </label>
-          <label className="block text-[12px]">
-            <span className="text-ink-500">expires_in_seconds</span>
-            <input
+          </Field>
+          <Field
+            label="expires_in_seconds"
+            hint={`${(model.expires_in_seconds / 86400).toFixed(1)} Tage`}
+          >
+            <TextInput
               type="number"
               min={60}
-              value={model.expires_in_seconds}
-              onChange={(e) =>
-                set({ expires_in_seconds: Number(e.target.value) || 604800 })
+              value={String(model.expires_in_seconds)}
+              onChange={(v) =>
+                set({ expires_in_seconds: Number(v) || 604800 })
               }
-              className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
             />
-          </label>
-        </div>
-      </section>
+          </Field>
+        </Grid2>
+      </Section>
 
-      <section>
-        <h3 className="mb-2 font-display text-[16px] text-ink-900">Features</h3>
-        <div className="grid gap-2 sm:grid-cols-2">
+      {/* Features */}
+      <Section title="Features">
+        <Grid2>
           {(
             [
               ["allow_shadow", "Schatten"],
@@ -281,38 +291,29 @@ export default function PlanFormEditor({
               ["watermark_images", "Wasserzeichen"],
             ] as const
           ).map(([k, label]) => (
-            <label
+            <Toggle
               key={k}
-              className="flex cursor-pointer items-center gap-2 text-[12.5px]"
-            >
-              <input
-                type="checkbox"
-                checked={model.features[k]}
-                onChange={(e) =>
-                  setModel((m) =>
-                    m
-                      ? {
-                        ...m,
-                        features: { ...m.features, [k]: e.target.checked },
-                      }
-                      : m,
-                  )
-                }
-              />
-              {label}
-            </label>
+              label={label}
+              code={k}
+              checked={model.features[k]}
+              onChange={(v) =>
+                setModel((m) =>
+                  m
+                    ? { ...m, features: { ...m.features, [k]: v } }
+                    : m,
+                )
+              }
+            />
           ))}
-        </div>
-      </section>
+        </Grid2>
+      </Section>
 
-      <section>
-        <h3 className="mb-2 font-display text-[16px] text-ink-900">
-          Asset-Regeln
-        </h3>
-        <p className="mb-2 text-[11.5px] text-ink-500">
-          Nur Werte aus dem D1-Katalog wählbar; bereits gespeicherte Werte erscheinen mit.
-        </p>
-        <div className="space-y-4">
+      {/* Asset-Regeln */}
+      <Section
+        title="Asset-Regeln"
+        hint="Nur Werte aus dem D1-Katalog wählbar; bereits gespeicherte Werte werden ergänzt."
+      >
+        <div className="divide-y divide-hair border-y border-hair">
           {(
             [
               [
@@ -358,249 +359,253 @@ export default function PlanFormEditor({
             const current = get(model);
             const all = mergeOpts(opts, current);
             return (
-              <div key={key}>
-                <p className="mb-1 text-[11px] font-medium text-ink-500">{label}</p>
-                <div className="max-h-40 space-y-1 overflow-y-auto rounded border border-hair/80 bg-ink-50/40 p-2">
-                  {all.length === 0 && (
-                    <p className="text-[11px] text-ink-400">(kein Katalog)</p>
-                  )}
-                  {all.map((opt) => (
-                    <label
-                      key={opt}
-                      className="flex cursor-pointer items-center gap-2 text-[12px]"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={current.includes(opt)}
-                        onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...current, opt]
-                            : current.filter((x: string) => x !== opt);
-                          setModel((m) => (m ? patch(next)(m) : m));
-                        }}
-                      />
-                      <span className="font-mono text-[11.5px]">{opt}</span>
-                    </label>
-                  ))}
+              <div
+                key={key}
+                className="grid grid-cols-1 gap-3 py-4 sm:grid-cols-[180px_1fr] sm:gap-6"
+              >
+                <div>
+                  <p className="text-[12.5px] font-medium text-ink-800">
+                    {label}
+                  </p>
+                  <p className="mt-1 font-mono text-[10.5px] text-ink-400">
+                    {key}
+                  </p>
+                  <p className="mt-2 text-[11px] text-ink-500">
+                    {current.length} / {all.length} aktiv
+                  </p>
                 </div>
+                <ChipPicker
+                  options={all}
+                  selected={current}
+                  emptyHint="(kein Katalog)"
+                  onToggle={(opt, on) => {
+                    const next = on
+                      ? [...current, opt]
+                      : current.filter((x) => x !== opt);
+                    setModel((m) => (m ? patch(next)(m) : m));
+                  }}
+                />
               </div>
             );
           })}
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <h3 className="mb-2 font-display text-[16px] text-ink-900">
-          Inhaltsbeschränkungen
-        </h3>
-        <div className="space-y-3">
-          <label className="flex items-center gap-2 text-[12.5px]">
-            <input
-              type="checkbox"
+      {/* Inhaltsbeschränkungen */}
+      <Section title="Inhaltsbeschränkungen">
+        <div className="space-y-6">
+          <Grid2>
+            <Toggle
+              label="Testmodus"
+              code="content.is_test_mode"
               checked={model.content.is_test_mode}
-              onChange={(e) =>
+              onChange={(v) =>
                 setModel((m) =>
                   m
                     ? {
-                      ...m,
-                      content: { ...m.content, is_test_mode: e.target.checked },
-                    }
+                        ...m,
+                        content: { ...m.content, is_test_mode: v },
+                      }
                     : m,
                 )
               }
             />
-            Testmodus
-          </label>
-          <label className="flex items-center gap-2 text-[12.5px]">
-            <input
-              type="checkbox"
+            <Toggle
+              label="Alle Fahrzeuge erlaubt"
+              code='content.allowed_vehicle_ids: ["*"]'
               checked={model.content.allow_all_vehicles}
-              onChange={(e) => {
-                const v = e.target.checked;
+              onChange={(v) => {
                 setModel((m) =>
                   m
                     ? {
-                      ...m,
-                      content: { ...m.content, allow_all_vehicles: v, allowed_vehicle_ids: v ? [] : m.content.allowed_vehicle_ids },
-                    }
+                        ...m,
+                        content: {
+                          ...m.content,
+                          allow_all_vehicles: v,
+                          allowed_vehicle_ids: v
+                            ? []
+                            : m.content.allowed_vehicle_ids,
+                        },
+                      }
                     : m,
                 );
               }}
             />
-            Alle Fahrzeuge erlaubt <span className="font-mono">(allowed_vehicle_ids: [&quot;*&quot;])</span>
-          </label>
+          </Grid2>
+
           {!model.content.allow_all_vehicles && (
-            <div>
-              <p className="mb-1 text-[11px] text-ink-500">Fahrzeug-IDs (eine pro Zeile)</p>
+            <Field
+              label="Fahrzeug-IDs"
+              hint="eine pro Zeile, oder per Komma/Semikolon"
+            >
               <textarea
                 value={model.content.allowed_vehicle_ids.join("\n")}
                 onChange={(e) =>
                   setModel((m) =>
                     m
                       ? {
-                        ...m,
-                        content: {
-                          ...m.content,
-                          allowed_vehicle_ids: e.target.value
-                            .split(/[\n,;]+/)
-                            .map((s) => s.trim())
-                            .filter(Boolean),
-                        },
-                      }
+                          ...m,
+                          content: {
+                            ...m.content,
+                            allowed_vehicle_ids: e.target.value
+                              .split(/[\n,;]+/)
+                              .map((s) => s.trim())
+                              .filter(Boolean),
+                          },
+                        }
                       : m,
                   )
                 }
-                className="h-20 w-full rounded border border-hair bg-white p-2 font-mono text-[11.5px]"
+                className="h-24 w-full border-b border-hair bg-transparent py-2 font-mono text-[11.5px] text-ink-800 outline-none placeholder:text-ink-400 focus:border-ink-700"
                 placeholder="id1"
               />
-            </div>
+            </Field>
           )}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="text-[12px]">
-              <span className="text-ink-500">Jahre min (ca. {jahreBounds.min}–{jahreBounds.max})</span>
-              <input
+
+          <Grid2>
+            <Field
+              label="Jahre min"
+              hint={`Katalog: ${jahreBounds.min}–${jahreBounds.max}`}
+            >
+              <TextInput
                 type="number"
-                value={model.content.year_range.min}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
+                value={String(model.content.year_range.min)}
+                onChange={(v) => {
+                  const n = Number(v);
                   setModel((m) =>
                     m
                       ? {
-                        ...m,
-                        content: {
-                          ...m.content,
-                          year_range: { ...m.content.year_range, min: n },
-                        },
-                      }
+                          ...m,
+                          content: {
+                            ...m.content,
+                            year_range: { ...m.content.year_range, min: n },
+                          },
+                        }
                       : m,
                   );
                 }}
-                className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
               />
-            </label>
-            <label className="text-[12px]">
-              <span className="text-ink-500">Jahre max</span>
-              <input
+            </Field>
+            <Field label="Jahre max">
+              <TextInput
                 type="number"
-                value={model.content.year_range.max}
-                onChange={(e) => {
-                  const n = Number(e.target.value);
+                value={String(model.content.year_range.max)}
+                onChange={(v) => {
+                  const n = Number(v);
                   setModel((m) =>
                     m
                       ? {
-                        ...m,
-                        content: {
-                          ...m.content,
-                          year_range: { ...m.content.year_range, max: n },
-                        },
-                      }
+                          ...m,
+                          content: {
+                            ...m.content,
+                            year_range: { ...m.content.year_range, max: n },
+                          },
+                        }
                       : m,
                   );
                 }}
-                className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
               />
-            </label>
-          </div>
+            </Field>
+          </Grid2>
+
+          <BrandPickerRow
+            title="Erlaubte Marken"
+            code="content.allowed_brands"
+            options={mergeOpts(cat?.marken ?? [], model.content.allowed_brands)}
+            selected={model.content.allowed_brands}
+            onToggle={(opt, on) => {
+              const a = on
+                ? [...model.content.allowed_brands, opt]
+                : model.content.allowed_brands.filter((x) => x !== opt);
+              setModel((m) =>
+                m
+                  ? { ...m, content: { ...m.content, allowed_brands: a } }
+                  : m,
+              );
+            }}
+          />
+
+          <BrandPickerRow
+            title="Blockierte Marken"
+            code="content.blocked_brands"
+            options={mergeOpts(cat?.marken ?? [], model.content.blocked_brands)}
+            selected={model.content.blocked_brands}
+            onToggle={(opt, on) => {
+              const a = on
+                ? [...model.content.blocked_brands, opt]
+                : model.content.blocked_brands.filter((x) => x !== opt);
+              setModel((m) =>
+                m
+                  ? { ...m, content: { ...m.content, blocked_brands: a } }
+                  : m,
+              );
+            }}
+          />
+
+          {/* Blockierte Modelle pro Marke */}
           <div>
-            <p className="mb-1 text-[11px] text-ink-500">Erlaubte Marken</p>
-            <div className="max-h-32 space-y-1 overflow-y-auto rounded border border-hair/80 p-2">
-              {mergeOpts(cat?.marken ?? [], model.content.allowed_brands).map(
-                (opt) => (
-                  <label
-                    key={`a-${opt}`}
-                    className="flex items-center gap-2 text-[12px]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={model.content.allowed_brands.includes(opt)}
-                      onChange={(e) => {
-                        const a = e.target.checked
-                          ? [...model.content.allowed_brands, opt]
-                          : model.content.allowed_brands.filter((x) => x !== opt);
-                        setModel((m) =>
-                          m ? { ...m, content: { ...m.content, allowed_brands: a } } : m,
-                        );
-                      }}
-                    />
-                    {opt}
-                  </label>
-                ),
-              )}
+            <div className="mb-2 flex items-baseline justify-between">
+              <p className="text-[12.5px] font-medium text-ink-800">
+                Blockierte Modelle (pro Marke)
+              </p>
+              <p className="font-mono text-[10.5px] text-ink-400">
+                content.blocked_models_rows
+              </p>
             </div>
-          </div>
-          <div>
-            <p className="mb-1 text-[11px] text-ink-500">Blockierte Marken</p>
-            <div className="max-h-32 space-y-1 overflow-y-auto rounded border border-hair/80 p-2">
-              {mergeOpts(cat?.marken ?? [], model.content.blocked_brands).map(
-                (opt) => (
-                  <label
-                    key={`b-${opt}`}
-                    className="flex items-center gap-2 text-[12px]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={model.content.blocked_brands.includes(opt)}
-                      onChange={(e) => {
-                        const a = e.target.checked
-                          ? [...model.content.blocked_brands, opt]
-                          : model.content.blocked_brands.filter((x) => x !== opt);
-                        setModel((m) =>
-                          m
-                            ? { ...m, content: { ...m.content, blocked_brands: a } }
-                            : m,
-                        );
-                      }}
-                    />
-                    {opt}
-                  </label>
-                ),
+            <div className="divide-y divide-hair border-y border-hair">
+              {model.content.blocked_models_rows.length === 0 && (
+                <div className="py-4 text-[12px] text-ink-400">
+                  Noch keine blockierten Modelle.
+                </div>
               )}
-            </div>
-          </div>
-          <div>
-            <p className="mb-1 text-[11px] text-ink-500">
-              blockierte Modelle (pro Marke)
-            </p>
-            {model.content.blocked_models_rows.map((row, idx) => (
-              <div
-                key={idx}
-                className="mb-2 flex flex-col gap-2 rounded border border-hair/60 p-2 sm:flex-row sm:items-start"
-              >
-                <select
-                  value={row.brand}
-                  onChange={async (e) => {
-                    const brand = e.target.value;
-                    setModel((m) => {
-                      if (!m) return m;
-                      const rows = [...m.content.blocked_models_rows];
-                      rows[idx] = { ...rows[idx], brand, models: [] };
-                      return { ...m, content: { ...m.content, blocked_models_rows: rows } };
-                    });
-                    await loadModelleForBlockRow(idx, brand);
-                  }}
-                  className="rounded border border-hair bg-white px-2 py-1.5 text-[12px]"
+              {model.content.blocked_models_rows.map((row, idx) => (
+                <div
+                  key={idx}
+                  className="grid grid-cols-1 gap-3 py-4 sm:grid-cols-[180px_1fr_auto] sm:items-start sm:gap-6"
                 >
-                  <option value="">Marke wählen</option>
-                  {(cat?.marken ?? []).map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-                <div className="min-w-0 flex-1 max-h-28 space-y-1 overflow-y-auto">
-                  {mergeOpts(
-                    blockMarke[idx] ?? [],
-                    row.models,
-                  ).map((opt) => (
-                    <label
-                      key={opt}
-                      className="flex items-center gap-2 text-[11px] font-mono"
+                  <div>
+                    <p className="mb-1 text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                      Marke
+                    </p>
+                    <select
+                      value={row.brand}
+                      onChange={async (e) => {
+                        const brand = e.target.value;
+                        setModel((m) => {
+                          if (!m) return m;
+                          const rows = [...m.content.blocked_models_rows];
+                          rows[idx] = { ...rows[idx], brand, models: [] };
+                          return {
+                            ...m,
+                            content: { ...m.content, blocked_models_rows: rows },
+                          };
+                        });
+                        await loadModelleForBlockRow(idx, brand);
+                      }}
+                      className="w-full border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
                     >
-                      <input
-                        type="checkbox"
-                        checked={row.models.includes(opt)}
-                        onChange={(e) => {
-                          const next = e.target.checked
+                      <option value="">— wählen —</option>
+                      {(cat?.marken ?? []).map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                      Modelle{" "}
+                      <span className="ml-1 font-mono normal-case tracking-normal text-ink-300">
+                        ({row.models.length})
+                      </span>
+                    </p>
+                    {row.brand ? (
+                      <ChipPicker
+                        options={mergeOpts(blockMarke[idx] ?? [], row.models)}
+                        selected={row.models}
+                        emptyHint="(keine Modelle für diese Marke)"
+                        onToggle={(opt, on) => {
+                          const next = on
                             ? [...row.models, opt]
                             : row.models.filter((x) => x !== opt);
                           setModel((m) => {
@@ -609,37 +614,47 @@ export default function PlanFormEditor({
                             rows[idx] = { ...rows[idx], models: next };
                             return {
                               ...m,
-                              content: { ...m.content, blocked_models_rows: rows },
+                              content: {
+                                ...m.content,
+                                blocked_models_rows: rows,
+                              },
                             };
                           });
                         }}
                       />
-                      {opt}
-                    </label>
-                  ))}
+                    ) : (
+                      <p className="text-[11.5px] text-ink-400">
+                        Marke wählen, um Modelle anzuzeigen.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModel((m) => {
+                        if (!m) return m;
+                        const rows = m.content.blocked_models_rows.filter(
+                          (_, i) => i !== idx,
+                        );
+                        return {
+                          ...m,
+                          content: { ...m.content, blocked_models_rows: rows },
+                        };
+                      });
+                      setBlockMarke((o) => {
+                        const n = { ...o };
+                        delete n[idx];
+                        return n;
+                      });
+                    }}
+                    className="self-start text-ink-400 transition-colors hover:text-accent-rose"
+                    title="Zeile entfernen"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModel((m) => {
-                      if (!m) return m;
-                      const rows = m.content.blocked_models_rows.filter(
-                        (_, i) => i !== idx,
-                      );
-                      return { ...m, content: { ...m.content, blocked_models_rows: rows } };
-                    });
-                    setBlockMarke((o) => {
-                      const n = { ...o };
-                      delete n[idx];
-                      return n;
-                    });
-                  }}
-                  className="self-start rounded p-1 text-ink-500 hover:text-accent-rose"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
+              ))}
+            </div>
             <button
               type="button"
               onClick={() =>
@@ -657,145 +672,349 @@ export default function PlanFormEditor({
                   };
                 })
               }
-              className="mt-1 inline-flex items-center gap-1 text-[12px] text-ink-600"
+              className="mt-3 inline-flex items-center gap-1.5 text-[12px] text-ink-600 hover:text-ink-900"
             >
               <Plus className="h-3.5 w-3.5" />
-              Marke/Modelle
+              Marke / Modelle hinzufügen
             </button>
           </div>
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <h3 className="mb-2 font-display text-[16px] text-ink-900">Infrastruktur</h3>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <label className="block text-[12px] sm:col-span-2">
-            <span className="text-ink-500">custom_cdn</span>
-            <input
+      {/* Infrastruktur */}
+      <Section title="Infrastruktur">
+        <div className="space-y-5">
+          <Field label="custom_cdn">
+            <TextInput
               value={model.infrastructure.custom_cdn}
-              onChange={(e) =>
+              onChange={(v) =>
                 setModel((m) =>
                   m
                     ? {
-                      ...m,
-                      infrastructure: {
-                        ...m.infrastructure,
-                        custom_cdn: e.target.value,
-                      },
-                    }
+                        ...m,
+                        infrastructure: {
+                          ...m.infrastructure,
+                          custom_cdn: v,
+                        },
+                      }
                     : m,
                 )
               }
-              className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
             />
-          </label>
-          <label className="block text-[12px]">
-            <span className="text-ink-500">analytics_env_name</span>
-            <input
-              value={model.infrastructure.analytics_env_name}
-              onChange={(e) =>
-                setModel((m) =>
-                  m
-                    ? {
-                      ...m,
-                      infrastructure: {
-                        ...m.infrastructure,
-                        analytics_env_name: e.target.value,
-                      },
-                    }
-                    : m,
-                )
-              }
-              className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
-            />
-          </label>
-          <label className="block text-[12px]">
-            <span className="text-ink-500">cache_ttl_seconds</span>
-            <input
-              type="number"
-              min={0}
-              value={model.infrastructure.cache_ttl_seconds}
-              onChange={(e) =>
-                setModel((m) =>
-                  m
-                    ? {
-                      ...m,
-                      infrastructure: {
-                        ...m.infrastructure,
-                        cache_ttl_seconds: Number(e.target.value) || 0,
-                      },
-                    }
-                    : m,
-                )
-              }
-              className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
-            />
-          </label>
-        </div>
-      </section>
-
-      <section>
-        <h3 className="mb-2 font-display text-[16px] text-ink-900">Stripe</h3>
-        <div className="max-w-lg">
-          {sp.data && sp.data.prices.length > 0 ? (
-            <select
-              value={
-                sp.data.prices.some((p) => p.id === model.stripe_price_id)
-                  ? model.stripe_price_id
-                  : model.stripe_price_id
-                    ? `__custom__${model.stripe_price_id}`
-                    : ""
-              }
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v.startsWith("__custom__")) {
-                  set({ stripe_price_id: v.replace("__custom__", "") });
-                } else {
-                  set({ stripe_price_id: v });
+          </Field>
+          <Grid2>
+            <Field label="analytics_env_name">
+              <TextInput
+                value={model.infrastructure.analytics_env_name}
+                onChange={(v) =>
+                  setModel((m) =>
+                    m
+                      ? {
+                          ...m,
+                          infrastructure: {
+                            ...m.infrastructure,
+                            analytics_env_name: v,
+                          },
+                        }
+                      : m,
+                  )
                 }
-              }}
-              className="w-full rounded border border-hair bg-white px-2 py-2 text-[12px]"
-            >
-              <option value="">— kein Preis (oder unten manuell) —</option>
-              {sp.data.prices.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {fmtPriceLabel(p)}
-                </option>
-              ))}
-              {model.stripe_price_id &&
-                !sp.data.prices.some((p) => p.id === model.stripe_price_id) && (
-                <option value={`__custom__${model.stripe_price_id}`}>
-                  Gespeichert: {model.stripe_price_id}
-                </option>
-              )}
-            </select>
-          ) : null}
-          <label className="mt-2 block text-[12px]">
-            <span className="text-ink-500">stripe_price_id (manuell)</span>
-            <input
-              value={model.stripe_price_id}
-              onChange={(e) => set({ stripe_price_id: e.target.value.trim() })}
-              placeholder="price_…"
-              className="mt-0.5 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12px]"
-            />
-          </label>
+              />
+            </Field>
+            <Field label="cache_ttl_seconds">
+              <TextInput
+                type="number"
+                min={0}
+                value={String(model.infrastructure.cache_ttl_seconds)}
+                onChange={(v) =>
+                  setModel((m) =>
+                    m
+                      ? {
+                          ...m,
+                          infrastructure: {
+                            ...m.infrastructure,
+                            cache_ttl_seconds: Number(v) || 0,
+                          },
+                        }
+                      : m,
+                  )
+                }
+              />
+            </Field>
+          </Grid2>
         </div>
-      </section>
+      </Section>
 
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Stripe */}
+      <Section title="Stripe">
+        <div className="max-w-2xl space-y-5">
+          {sp.data && sp.data.prices.length > 0 ? (
+            <Field label="Stripe-Preis (Auswahl)">
+              <select
+                value={
+                  sp.data.prices.some((p) => p.id === model.stripe_price_id)
+                    ? model.stripe_price_id
+                    : model.stripe_price_id
+                      ? `__custom__${model.stripe_price_id}`
+                      : ""
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v.startsWith("__custom__")) {
+                    set({ stripe_price_id: v.replace("__custom__", "") });
+                  } else {
+                    set({ stripe_price_id: v });
+                  }
+                }}
+                className="w-full border-b border-hair bg-transparent py-2 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
+              >
+                <option value="">— kein Preis (oder unten manuell) —</option>
+                {sp.data.prices.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {fmtPriceLabel(p)}
+                  </option>
+                ))}
+                {model.stripe_price_id &&
+                  !sp.data.prices.some((p) => p.id === model.stripe_price_id) && (
+                    <option value={`__custom__${model.stripe_price_id}`}>
+                      Gespeichert: {model.stripe_price_id}
+                    </option>
+                  )}
+              </select>
+            </Field>
+          ) : null}
+          <Field label="stripe_price_id (manuell)" hint="Format: price_…">
+            <TextInput
+              value={model.stripe_price_id}
+              onChange={(v) => set({ stripe_price_id: v.trim() })}
+              placeholder="price_…"
+              mono
+            />
+          </Field>
+        </div>
+      </Section>
+
+      {/* Footer / Save */}
+      <div className="sticky bottom-0 -mx-6 mt-10 flex flex-wrap items-center justify-between gap-3 border-t border-hair bg-paper/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-paper/85">
+        <div className="min-w-0 text-[11.5px] text-ink-500">
+          {validationMsg ? (
+            <span className="text-accent-amber">{validationMsg}</span>
+          ) : saveErr ? (
+            <span className="text-accent-rose">{saveErr}</span>
+          ) : savedPing ? (
+            <span className="text-accent-mint">Gespeichert.</span>
+          ) : (
+            <span className="text-ink-400">
+              Änderungen werden nach „Speichern“ übernommen.
+            </span>
+          )}
+        </div>
         <button
           type="button"
           disabled={saving || !!validationMsg}
           onClick={onSave}
-          className="rounded-md border border-hair bg-ink-900 px-4 py-2 text-[12.5px] text-white disabled:opacity-50"
+          className="rounded-md bg-ink-900 px-4 py-2 text-[12.5px] font-medium text-white transition-colors hover:bg-ink-800 disabled:opacity-50"
         >
-          {saving ? "…" : "Plan speichern"}
+          {saving ? "Speichere …" : "Plan speichern"}
         </button>
-        {validationMsg && (
-          <p className="text-[12px] text-amber-800">{validationMsg}</p>
-        )}
-        {saveErr && <p className="text-[12px] text-accent-rose">{saveErr}</p>}
       </div>
+    </div>
+  );
+}
+
+// ---------- Layout-Bausteine ----------
+
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="border-t border-hair pt-8 first:border-t-0 first:pt-0 mb-10">
+      <div className="mb-5">
+        <h3 className="font-display text-[18px] tracking-tightish text-ink-900">
+          {title}
+        </h3>
+        {hint && <p className="mt-1 text-[11.5px] text-ink-500">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Grid2({ children }: { children: ReactNode }) {
+  return <div className="grid gap-5 sm:grid-cols-2">{children}</div>;
+}
+
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <p className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-400">
+          {label}
+        </p>
+        {hint && (
+          <p className="text-[10.5px] text-ink-400">{hint}</p>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TextInput({
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  min,
+  mono = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  type?: "text" | "number";
+  placeholder?: string;
+  min?: number;
+  mono?: boolean;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      min={min}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className={`w-full border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none placeholder:text-ink-400 focus:border-ink-700 ${
+        mono ? "font-mono text-[12px]" : ""
+      }`}
+    />
+  );
+}
+
+function Toggle({
+  label,
+  code,
+  checked,
+  onChange,
+}: {
+  label: string;
+  code?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-3 border-b border-hair py-2 text-[12.5px] hover:text-ink-900">
+      <div className="min-w-0">
+        <span className="block text-ink-800">{label}</span>
+        {code && (
+          <span className="mt-0.5 block truncate font-mono text-[10.5px] text-ink-400">
+            {code}
+          </span>
+        )}
+      </div>
+      <span
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+          checked ? "bg-ink-900" : "bg-ink-200"
+        }`}
+      >
+        <span
+          className={`inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? "translate-x-3.5" : "translate-x-0.5"
+          }`}
+        />
+      </span>
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+    </label>
+  );
+}
+
+function ChipPicker({
+  options,
+  selected,
+  emptyHint,
+  onToggle,
+}: {
+  options: string[];
+  selected: string[];
+  emptyHint?: string;
+  onToggle: (opt: string, on: boolean) => void;
+}) {
+  if (options.length === 0) {
+    return <p className="text-[11.5px] text-ink-400">{emptyHint ?? "—"}</p>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => {
+        const on = selected.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onToggle(opt, !on)}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[11px] transition-colors ${
+              on
+                ? "border-ink-900 bg-ink-900 text-white"
+                : "border-hair bg-white text-ink-600 hover:border-ink-300 hover:text-ink-900"
+            }`}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function BrandPickerRow({
+  title,
+  code,
+  options,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  code: string;
+  options: string[];
+  selected: string[];
+  onToggle: (opt: string, on: boolean) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <p className="text-[12.5px] font-medium text-ink-800">
+          {title}{" "}
+          <span className="ml-1 font-mono text-[10.5px] text-ink-400">
+            ({selected.length})
+          </span>
+        </p>
+        <p className="font-mono text-[10.5px] text-ink-400">{code}</p>
+      </div>
+      <ChipPicker
+        options={options}
+        selected={selected}
+        emptyHint="(kein Katalog)"
+        onToggle={onToggle}
+      />
     </div>
   );
 }
