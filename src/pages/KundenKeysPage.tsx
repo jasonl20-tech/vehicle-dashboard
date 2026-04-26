@@ -550,6 +550,18 @@ function fmtExpires(iso: string | null): string {
   return d.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
 }
 
+/** E-Mail-Kopfzeile: rot = alle Keys mit Datum abgelaufen, gelb = gemischt, sonst neutral. */
+function emailGroupBarTone(
+  rows: CustomerKeySummary[],
+): "allExpired" | "someExpired" | "ok" {
+  if (rows.length === 0) return "ok";
+  const allExpired = rows.every((r) => r.expires_at && isExpiredIso(r.expires_at));
+  if (allExpired) return "allExpired";
+  if (rows.some((r) => r.expires_at && isExpiredIso(r.expires_at)))
+    return "someExpired";
+  return "ok";
+}
+
 function EmailGroupBlock({
   group,
   linkFrom,
@@ -563,16 +575,32 @@ function EmailGroupBlock({
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  const bar = emailGroupBarTone(group.rows);
+  const barBtn =
+    bar === "allExpired"
+      ? "border-b border-transparent border-l-2 border-l-accent-rose bg-accent-rose/[0.07] pl-1.5 text-left transition-colors hover:border-b-hair hover:border-l-accent-rose hover:bg-accent-rose/15"
+      : bar === "someExpired"
+        ? "border-b border-transparent border-l-2 border-l-accent-amber/90 bg-accent-amber/12 pl-1.5 text-left transition-colors hover:border-b-hair hover:border-l-accent-amber hover:bg-accent-amber/18"
+        : "border-b border-l-2 border-l-transparent border-transparent pl-0 text-left transition-colors hover:border-hair";
+  const mailClass =
+    bar === "allExpired"
+      ? "text-accent-rose"
+      : bar === "someExpired"
+        ? "text-accent-amber"
+        : "text-ink-400";
+  const metaClass =
+    bar === "allExpired"
+      ? "text-accent-rose/80"
+      : bar === "someExpired"
+        ? "text-accent-amber/80"
+        : "text-ink-400";
+
   return (
     <li>
       <div className="px-0 py-1 sm:px-1">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex w-full items-center justify-between gap-3 border-b border-transparent py-2 text-left transition-colors hover:border-hair"
-        >
+        <button type="button" onClick={onToggle} className={`flex w-full items-center justify-between gap-3 rounded-l py-2 ${barBtn}`}>
           <span className="flex min-w-0 items-center gap-2">
-            <Mail className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+            <Mail className={`h-3.5 w-3.5 shrink-0 ${mailClass}`} />
             {group.email ? (
               <span className="truncate text-[13px] font-medium text-ink-900" title={group.email}>
                 {group.email}
@@ -580,12 +608,12 @@ function EmailGroupBlock({
             ) : (
               <span className="italic text-[13px] text-ink-400">(ohne Email)</span>
             )}
-            <span className="shrink-0 text-[11px] tabular-nums text-ink-400">
+            <span className={`shrink-0 text-[11px] tabular-nums ${metaClass}`}>
               {group.rows.length} Key{group.rows.length === 1 ? "" : "s"}
             </span>
           </span>
           <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform ${
+            className={`h-3.5 w-3.5 shrink-0 ${metaClass} transition-transform ${
               collapsed ? "-rotate-90" : "rotate-0"
             }`}
             aria-hidden
