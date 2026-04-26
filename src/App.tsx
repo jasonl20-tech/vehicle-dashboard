@@ -7,6 +7,7 @@ import KundenKeysPage, { KundenTestKeysPage } from "./pages/KundenKeysPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControllingPage from "./pages/ControllingPage";
 import LoginPage from "./pages/LoginPage";
+import CrmPage from "./pages/CrmPage";
 import ModulePage from "./pages/ModulePage";
 import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
@@ -49,7 +50,7 @@ export default function App() {
           element={<AnfragenKartePage />}
         />
         <Route path="/leads" element={<ModulePage />} />
-        <Route path="/kunden/crm" element={<ModulePage />} />
+        <Route path="/kunden/crm" element={<CrmPage />} />
         <Route path="/kunden/anfragen" element={<AnfragenPage />} />
         <Route path="/kunden/keys/:key" element={<KundenKeyDetailPage />} />
         <Route path="/kunden/keys" element={<KundenKeysPage />} />
