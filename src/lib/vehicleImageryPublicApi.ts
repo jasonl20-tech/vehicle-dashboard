@@ -29,6 +29,13 @@ export type VehicleImageryListResponse = {
   imageUrlQuery: string;
 };
 
+/** GET ?id= (ein Fahrzeug) bzw. PUT-Antwort */
+export type VehicleImageryOneResponse = {
+  row: VehicleImageryPublicRow;
+  cdnBase: string;
+  imageUrlQuery: string;
+};
+
 export function vehicleImageryListUrl(p: {
   q: string;
   limit: number;
@@ -41,4 +48,31 @@ export function vehicleImageryListUrl(p: {
   if (p.q.trim()) u.searchParams.set("q", p.q.trim());
   if (p.active !== "all") u.searchParams.set("active", p.active);
   return u.pathname + u.search;
+}
+
+export function vehicleImageryOneUrl(id: number): string {
+  const u = new URL(VEHICLE_IMAGERY_API, "https://x");
+  u.searchParams.set("id", String(id));
+  return u.pathname + u.search;
+}
+
+export async function putVehicleImageryActive(
+  id: number,
+  active: 0 | 1,
+): Promise<VehicleImageryOneResponse> {
+  const res = await fetch(VEHICLE_IMAGERY_API, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ id, active }),
+  });
+  const j = (await res.json().catch(() => ({}))) as
+    | VehicleImageryOneResponse
+    | { error?: string };
+  if (!res.ok) {
+    throw new Error(
+      (j as { error?: string }).error || `HTTP ${res.status}`,
+    );
+  }
+  return j as VehicleImageryOneResponse;
 }

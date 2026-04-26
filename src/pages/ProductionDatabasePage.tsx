@@ -1,23 +1,20 @@
-import {
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  ImageIcon,
-  RefreshCw,
-  Search,
-  X,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, ImageIcon, RefreshCw, Search } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   type VehicleImageryListResponse,
-  type VehicleImageryPublicRow,
   vehicleImageryListUrl,
 } from "../lib/vehicleImageryPublicApi";
-import { buildVehicleImageUrl, parseViewTokens } from "../lib/vehicleImageryUrl";
+import { parseViewTokens } from "../lib/vehicleImageryUrl";
 
 const PAGE_SIZE = 40;
+
+const TEXT_IN =
+  "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
+const TH = "px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
+const TD = "px-2 py-2 align-top text-[12.5px] text-ink-800";
 
 function fmtWhen(s: string | null | undefined): string {
   if (!s?.trim()) return "—";
@@ -35,17 +32,12 @@ function fmtWhen(s: string | null | undefined): string {
   }).format(new Date(t));
 }
 
-const TEXT_IN =
-  "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
-const TH = "px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
-const TD = "px-2 py-2 align-top text-[12.5px] text-ink-800";
-
 export default function ProductionDatabasePage() {
+  const navigate = useNavigate();
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [active, setActive] = useState<"all" | "0" | "1">("all");
-  const [openRow, setOpenRow] = useState<VehicleImageryPublicRow | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -69,15 +61,12 @@ export default function ProductionDatabasePage() {
     /\/$/,
     "",
   );
-  const imageUrlQuery = api.data?.imageUrlQuery ?? "";
 
   const atEnd = offset + rows.length >= total;
   const pageLabel =
     total === 0
       ? "0 / 0"
       : `${offset + 1}–${offset + rows.length} / ${fmtNumber(total)}`;
-
-  const closeDetail = useCallback(() => setOpenRow(null), []);
 
   return (
     <div>
@@ -125,8 +114,8 @@ export default function ProductionDatabasePage() {
             {(
               [
                 { id: "all" as const, label: "Alle" },
-                { id: "1" as const, label: "Aktiv" },
-                { id: "0" as const, label: "Inaktiv" },
+                { id: "1" as const, label: "Nur aktiv" },
+                { id: "0" as const, label: "Nur inaktiv" },
               ] as const
             ).map((o, i) => (
               <button
@@ -163,8 +152,8 @@ export default function ProductionDatabasePage() {
       )}
 
       <p className="mb-2 text-[11.5px] text-ink-500">
-        Zeile anklicken, um <strong className="text-ink-700">Bilder &amp; URLs</strong>{" "}
-        zu öffnen (keine Vorschau in der Tabelle).
+        Zeile anklicken für die <strong className="text-ink-700">Detailseite</strong>{" "}
+        mit Bildern und Aktiv-Schalter.
       </p>
 
       <div className="overflow-x-auto rounded-md border border-hair">
@@ -211,11 +200,11 @@ export default function ProductionDatabasePage() {
                     key={r.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setOpenRow(r)}
+                    onClick={() => navigate(`/databases/production/${r.id}`)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        setOpenRow(r);
+                        navigate(`/databases/production/${r.id}`);
                       }
                     }}
                     className="cursor-pointer hover:bg-ink-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-400/40"
@@ -294,116 +283,6 @@ export default function ProductionDatabasePage() {
           </button>
         </div>
       </div>
-
-      {openRow && (
-        <VehicleImageryDetailDrawer
-          row={openRow}
-          cdnBase={cdnBase}
-          imageUrlQuery={imageUrlQuery}
-          onClose={closeDetail}
-        />
-      )}
-    </div>
-  );
-}
-
-function VehicleImageryDetailDrawer({
-  row,
-  cdnBase,
-  imageUrlQuery,
-  onClose,
-}: {
-  row: VehicleImageryPublicRow;
-  cdnBase: string;
-  imageUrlQuery: string;
-  onClose: () => void;
-}) {
-  const views = parseViewTokens(row.views);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Fahrzeugbilder"
-    >
-      <button
-        type="button"
-        aria-label="Schließen"
-        onClick={onClose}
-        className="flex-1 cursor-default bg-night-900/40 backdrop-blur-sm"
-      />
-      <aside className="flex w-full max-w-[min(100vw,720px)] flex-col overflow-hidden bg-paper shadow-2xl animate-[drawerIn_0.22s_ease-out]">
-        <div className="flex items-start justify-between gap-3 border-b border-hair px-4 py-3 sm:px-6">
-          <div className="min-w-0">
-            <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-400">
-              {row.marke || "—"} · id {row.id}
-            </p>
-            <p className="mt-0.5 truncate text-[15px] font-medium text-ink-900" title={row.modell ?? ""}>
-              {row.modell || "—"} · {row.jahr ?? "—"}
-            </p>
-            <p className="mt-0.5 text-[12px] text-ink-600">
-              {row.body} / {row.trim} / {row.farbe} · {row.format} · {row.resolution}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-hair text-ink-500 hover:text-ink-900"
-            title="Schließen (Esc)"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-          {views.length === 0 ? (
-            <p className="text-[13px] text-ink-500">
-              Keine Ansichten — Feld <code className="font-mono text-ink-600">views</code>{" "}
-              leer.
-            </p>
-          ) : (
-            <ul className="grid gap-4 sm:grid-cols-2">
-              {views.map((v) => {
-                const href = buildVehicleImageUrl(cdnBase, row, v, imageUrlQuery);
-                return (
-                  <li
-                    key={v}
-                    className="overflow-hidden rounded-lg border border-hair bg-ink-50/40"
-                  >
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="block border-b border-hair bg-paper p-1.5 text-[10.5px] text-brand-600 hover:underline"
-                    >
-                      <span className="font-mono break-all">{v}</span>
-                      <ExternalLink className="ml-1 inline h-2.5 w-2.5" />
-                    </a>
-                    <div className="grid place-items-center p-2">
-                      <img
-                        src={href}
-                        alt={v}
-                        loading="lazy"
-                        className="max-h-48 w-full object-contain"
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      </aside>
     </div>
   );
 }

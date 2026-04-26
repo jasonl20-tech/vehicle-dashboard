@@ -16,6 +16,7 @@ import SystemePromptsPage from "./pages/SystemePromptsPage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
+import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
@@ -107,6 +108,10 @@ export default function App() {
         <Route path="/website/whitepaper" element={<ModulePage />} />
         <Route path="/website/company" element={<ModulePage />} />
         <Route path="/website/changelog" element={<ModulePage />} />
+        <Route
+          path="/databases/production/:id"
+          element={<ProductionVehicleDetailPage />}
+        />
         <Route
           path="/databases/production"
           element={<ProductionDatabasePage />}

@@ -1,9 +1,13 @@
 /**
  * GET /api/databases/vehicle-imagery
+ * PUT /api/databases/vehicle-imagery
  *
- * D1 `vehicledatabase` → `vehicleimagery_public_storage` (nur SELECT).
+ * D1 `vehicledatabase` → `vehicleimagery_public_storage`
  *
- * Query: q=  limit=  offset=  active=all|1|0
+ * GET: Query `id=` → ein Datensatz { row, cdnBase, imageUrlQuery }
+ * GET: sonst Liste: q, limit, offset, active=all|1|0
+ * PUT: Body { id, active: 0|1 }
+ *
  * Response: `imageUrlQuery` = `?key=` + encodiertes `env.image_url_secret`.
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
@@ -62,6 +66,10 @@ function imageUrlQueryFromEnv(env: AuthEnv): string {
   return `?key=${encodeURIComponent(s)}`;
 }
 
+const SELECT_LIST = `SELECT
+  id, marke, modell, jahr, body, trim, farbe, resolution, format, views, sonstiges, active, last_updated
+FROM vehicleimagery_public_storage`;
+
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
   env,
@@ -74,6 +82,27 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (db instanceof Response) return db;
 
   const url = new URL(request.url);
+  const idParam = (url.searchParams.get("id") || "").trim();
+  if (idParam) {
+    const oneId = Number(idParam);
+    if (!Number.isInteger(oneId) || oneId < 1) {
+      return jsonResponse({ error: "id ungültig" }, { status: 400 });
+    }
+    const row = await db
+      .prepare(`${SELECT_LIST} WHERE id = ?`)
+      .bind(oneId)
+      .first<VehicleImageryPublicRow>();
+    if (!row) {
+      return jsonResponse({ error: "Nicht gefunden" }, { status: 404 });
+    }
+    const cdnBase = cdnBaseFromEnv(env);
+    const imageUrlQuery = imageUrlQueryFromEnv(env);
+    return jsonResponse(
+      { row, cdnBase, imageUrlQuery },
+      { status: 200 },
+    );
+  }
+
   const q = (url.searchParams.get("q") || "").trim();
   const pat = likePattern(q);
   const limit = Math.min(
@@ -126,9 +155,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     .first<{ n: number }>();
   const total = countRow?.n ?? 0;
 
-  const listSql = `SELECT
-  id, marke, modell, jahr, body, trim, farbe, resolution, format, views, sonstiges, active, last_updated
-FROM vehicleimagery_public_storage
+  const listSql = `${SELECT_LIST}
 ${whereSql}
 ORDER BY last_updated DESC, id DESC
 LIMIT ? OFFSET ?`;
@@ -151,4 +178,68 @@ LIMIT ? OFFSET ?`;
     },
     { status: 200 },
   );
+};
+
+type PutBody = { id?: unknown; active?: unknown };
+
+export const onRequestPut: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  const db = requireVehicleDb(env);
+  if (db instanceof Response) return db;
+
+  let body: PutBody;
+  try {
+    body = (await request.json()) as PutBody;
+  } catch {
+    return jsonResponse({ error: "Ungültige JSON-Anfrage" }, { status: 400 });
+  }
+
+  const id = Number(body.id);
+  if (!Number.isInteger(id) || id < 1) {
+    return jsonResponse({ error: "id ungültig" }, { status: 400 });
+  }
+  const a = body.active;
+  let activeVal: 0 | 1;
+  if (a === 0 || a === "0" || a === false) {
+    activeVal = 0;
+  } else if (a === 1 || a === "1" || a === true) {
+    activeVal = 1;
+  } else {
+    return jsonResponse(
+      { error: "active muss 0 oder 1 sein" },
+      { status: 400 },
+    );
+  }
+
+  const run = await db
+    .prepare(
+      `UPDATE vehicleimagery_public_storage
+SET active = ?, last_updated = datetime('now')
+WHERE id = ?`,
+    )
+    .bind(activeVal, id)
+    .run();
+  const changes = Number(
+    (run as { meta?: { changes?: number } }).meta?.changes ?? 0,
+  );
+  if (changes === 0) {
+    return jsonResponse({ error: "Nicht gefunden" }, { status: 404 });
+  }
+
+  const row = await db
+    .prepare(`${SELECT_LIST} WHERE id = ?`)
+    .bind(id)
+    .first<VehicleImageryPublicRow>();
+  if (!row) {
+    return jsonResponse({ error: "Nicht gefunden" }, { status: 404 });
+  }
+  const cdnBase = cdnBaseFromEnv(env);
+  const imageUrlQuery = imageUrlQueryFromEnv(env);
+  return jsonResponse({ row, cdnBase, imageUrlQuery }, { status: 200 });
 };
