@@ -2,6 +2,7 @@ import type { GlobeInstance } from "globe.gl";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
 import {
   COUNTRIES_GEOJSON_URL,
+  effectiveNeIso2,
   filterNeFeatures,
   type NeFeature,
 } from "../lib/anfragenKarteGeo";
@@ -103,7 +104,7 @@ export default function OverviewGlobe({
         .polygonAltitude(0.003)
         .polygonCapColor((d) => {
           const f = d as NeFeature;
-          const iso = f.properties.ISO_A2;
+          const iso = effectiveNeIso2(f.properties);
           const cur = dataRef.current;
           const max = cur?.max && cur.max > 0 ? cur.max : 0;
           const c = countForFeature(cur, iso);
@@ -119,7 +120,7 @@ export default function OverviewGlobe({
         })
         .polygonStrokeColor((d) => {
           const f = d as NeFeature;
-          const iso = f.properties.ISO_A2;
+          const iso = effectiveNeIso2(f.properties);
           const cur = dataRef.current;
           const max = cur?.max && cur.max > 0 ? cur.max : 0;
           const c = countForFeature(cur, iso);
@@ -127,7 +128,7 @@ export default function OverviewGlobe({
         })
         .polygonLabel((d) => {
           const f = d as NeFeature;
-          const iso = f.properties.ISO_A2;
+          const iso = effectiveNeIso2(f.properties);
           const name = f.properties.ADMIN
             ? String(f.properties.ADMIN)
             : (iso ?? "");

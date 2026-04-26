@@ -44,6 +44,7 @@ declare module "react-simple-maps" {
       zoom?: number;
       minZoom?: number;
       maxZoom?: number;
+      filterZoomEvent?: (event: unknown) => boolean;
     }>
   >;
 }

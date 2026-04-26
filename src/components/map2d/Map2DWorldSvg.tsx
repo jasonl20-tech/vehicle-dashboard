@@ -4,8 +4,12 @@ import {
 } from "../../config/anfragenKarteMap2DModel";
 import type { SubmissionsByCountryResponse } from "../../lib/overviewGlobeApi";
 import { countForFeature } from "../../lib/requestsChoropleth";
-import type { NeFeature, NeFeatureCollection } from "../../lib/anfragenKarteGeo";
-import { useEffect, useRef, useState } from "react";
+import {
+  type NeFeature,
+  type NeFeatureCollection,
+  effectiveNeIso2,
+} from "../../lib/anfragenKarteGeo";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ComposableMap, Geographies, Geography, ZoomableGroup } from "react-simple-maps";
 
 const m = anfragenKarteMap2DModel.svg;
@@ -37,8 +41,14 @@ export default function Map2DWorldSvg({ geo, data, dataKey }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  const scale = Math.max(120, dims.w * m.scaleFactor);
   const paper = m.canvasClassName ?? "bg-[#f2f4f7]";
+  const projectionConfig = useMemo(
+    () => ({
+      scale: Math.max(120, dims.w * m.scaleFactor),
+      center: m.projectionConfigStatic.center,
+    }),
+    [dims.w, m.scaleFactor, m.projectionConfigStatic.center],
+  );
 
   return (
     <div
@@ -49,10 +59,7 @@ export default function Map2DWorldSvg({ geo, data, dataKey }: Props) {
         width={dims.w}
         height={dims.h}
         projection={m.projection}
-        projectionConfig={{
-          scale,
-          center: m.projectionConfigStatic.center,
-        }}
+        projectionConfig={projectionConfig}
         className="text-ink-400"
         role="img"
         aria-label="Anfragen nach Land, flache 2D-Länderkarte (SVG)"
@@ -62,12 +69,19 @@ export default function Map2DWorldSvg({ geo, data, dataKey }: Props) {
           zoom={m.zoom.zoom}
           minZoom={m.zoom.minZoom}
           maxZoom={m.zoom.maxZoom}
+          filterZoomEvent={(d3Event) => {
+            if (!d3Event || typeof d3Event !== "object") return false;
+            const t = (d3Event as { type?: string }).type;
+            if (t === "wheel") return true;
+            const e = d3Event as { ctrlKey?: boolean; button?: number };
+            return !e.ctrlKey && !e.button;
+          }}
         >
           <Geographies key={dataKey} geography={geo}>
             {({ geographies }) =>
               geographies.map((g) => {
                 const p = g.properties as NeFeature["properties"] | undefined;
-                const iso = p?.ISO_A2;
+                const iso = effectiveNeIso2(p);
                 const name = p?.ADMIN ? String(p.ADMIN) : (iso ?? "");
                 const c = countForFeature(data, iso);
                 const title =
