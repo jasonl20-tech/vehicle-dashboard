@@ -100,7 +100,7 @@ export default function ProductionDatabasePage() {
             <input
               type="search"
               className={`${TEXT_IN} pl-8`}
-              placeholder="Marke, Modell, Jahr, Body, …"
+              placeholder="z. B. chevrolet orange (alle Wörter, beliebige Spalte)"
               value={qIn}
               onChange={(e) => setQIn(e.target.value)}
             />

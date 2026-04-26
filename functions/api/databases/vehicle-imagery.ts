@@ -29,11 +29,43 @@ function requireVehicleDb(env: AuthEnv): D1Database | Response {
   return env.vehicledatabase;
 }
 
-function likePattern(q: string): string {
-  const t = q.replace(/[%_]/g, "").trim();
-  if (!t) return "";
-  return `%${t}%`;
+/** Eine Eingabe zu LIKE-%mehrere_Wörter% — einzelne Zeichen % und _ in der Suche entfernen. */
+function likePatternForToken(t: string): string {
+  const x = t.replace(/[%_]/g, "").trim();
+  if (!x) return "";
+  return `%${x}%`;
 }
+
+/**
+ * Freitext in Wörter (Whitespace) splitten, für jedes Wort ein Muster bauen.
+ * Leere Tokens fallen weg, max. 24 Wörter.
+ */
+function searchTokensFromQuery(q: string): string[] {
+  const words = q.trim().split(/\s+/);
+  const out: string[] = [];
+  for (const w of words) {
+    const pat = likePatternForToken(w);
+    if (pat) out.push(pat);
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+
+const SEARCH_OR_SQL = `(
+  CAST(id AS TEXT) LIKE ?
+  OR ifnull(marke, '') LIKE ?
+  OR ifnull(modell, '') LIKE ?
+  OR CAST(jahr AS TEXT) LIKE ?
+  OR ifnull(body, '') LIKE ?
+  OR ifnull(trim, '') LIKE ?
+  OR ifnull(farbe, '') LIKE ?
+  OR ifnull(resolution, '') LIKE ?
+  OR ifnull(format, '') LIKE ?
+  OR ifnull(views, '') LIKE ?
+  OR ifnull(sonstiges, '') LIKE ?
+  OR ifnull(last_updated, '') LIKE ?
+)`;
+const BINDS_PER_TOKEN = 12;
 
 export type VehicleImageryPublicRow = {
   id: number;
@@ -104,7 +136,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 
   const q = (url.searchParams.get("q") || "").trim();
-  const pat = likePattern(q);
+  const searchTokens = searchTokensFromQuery(q);
   const limit = Math.min(
     MAX_LIMIT,
     Math.max(
@@ -129,22 +161,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     binds.push(activeRaw === "1" ? 1 : 0);
   }
 
-  if (pat) {
-    where.push(
-      `(
-  ifnull(marke, '') LIKE ?
-  OR ifnull(modell, '') LIKE ?
-  OR CAST(jahr AS TEXT) LIKE ?
-  OR ifnull(body, '') LIKE ?
-  OR ifnull(trim, '') LIKE ?
-  OR ifnull(farbe, '') LIKE ?
-  OR ifnull(resolution, '') LIKE ?
-  OR ifnull(format, '') LIKE ?
-  OR ifnull(views, '') LIKE ?
-  OR ifnull(sonstiges, '') LIKE ?
-)`,
-    );
-    for (let i = 0; i < 10; i++) binds.push(pat);
+  /* Pro Suchwort: irgendein passendes Feld; alle Wörter müssen (AND) erfüllt sein. */
+  for (const pat of searchTokens) {
+    where.push(SEARCH_OR_SQL);
+    for (let i = 0; i < BINDS_PER_TOKEN; i++) binds.push(pat);
   }
 
   const whereSql = ` WHERE ${where.join(" AND ")}`;
