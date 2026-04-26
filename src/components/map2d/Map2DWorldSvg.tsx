@@ -6,13 +6,7 @@ import type { SubmissionsByCountryResponse } from "../../lib/overviewGlobeApi";
 import { countForFeature } from "../../lib/requestsChoropleth";
 import type { NeFeature, NeFeatureCollection } from "../../lib/anfragenKarteGeo";
 import { useEffect, useRef, useState } from "react";
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  Sphere,
-  ZoomableGroup,
-} from "react-simple-maps";
+import { ComposableMap, Geographies, Geography, ZoomableGroup } from "react-simple-maps";
 
 const m = anfragenKarteMap2DModel.svg;
 
@@ -43,19 +37,25 @@ export default function Map2DWorldSvg({ geo, data, dataKey }: Props) {
     return () => ro.disconnect();
   }, []);
 
+  const scale = Math.max(120, dims.w * m.scaleFactor);
+  const paper = m.canvasClassName ?? "bg-[#f2f4f7]";
+
   return (
     <div
       ref={wrapRef}
-      className="h-[min(72vh,720px)] w-full min-h-[480px] md:min-h-[560px] [&_svg.rsm-svg]:h-auto [&_svg.rsm-svg]:w-full"
+      className={`h-[min(72vh,720px)] w-full min-h-[480px] md:min-h-[560px] [&_svg.rsm-svg]:h-auto [&_svg.rsm-svg]:w-full ${paper}`}
     >
       <ComposableMap
         width={dims.w}
         height={dims.h}
         projection={m.projection}
-        projectionConfig={m.projectionConfig}
+        projectionConfig={{
+          scale,
+          center: m.projectionConfigStatic.center,
+        }}
         className="text-ink-400"
         role="img"
-        aria-label="Anfragen nach Land, SVG-Weltkarte"
+        aria-label="Anfragen nach Land, flache 2D-Länderkarte (SVG)"
       >
         <ZoomableGroup
           center={m.zoom.center}
@@ -63,12 +63,6 @@ export default function Map2DWorldSvg({ geo, data, dataKey }: Props) {
           minZoom={m.zoom.minZoom}
           maxZoom={m.zoom.maxZoom}
         >
-          <Sphere
-            id="anfragen-ocean"
-            fill={m.ocean.fill}
-            stroke={m.ocean.stroke}
-            strokeWidth={m.ocean.strokeWidth}
-          />
           <Geographies key={dataKey} geography={geo}>
             {({ geographies }) =>
               geographies.map((g) => {

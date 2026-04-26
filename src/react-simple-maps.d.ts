@@ -38,14 +38,6 @@ declare module "react-simple-maps" {
     title?: string;
   }>;
 
-  export const Sphere: React.FC<{
-    id?: string;
-    fill?: string;
-    stroke?: string;
-    strokeWidth?: number;
-    className?: string;
-  }>;
-
   export const ZoomableGroup: React.FC<
     React.PropsWithChildren<{
       center?: [number, number];

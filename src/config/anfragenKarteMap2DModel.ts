@@ -3,30 +3,25 @@ import { leafletChoroplethPathOptions } from "../lib/requestsChoropleth";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
 
 /**
- * 2D-Ansicht: reine **SVG**-Weltkarte (projiziertes Länder-GeoJSON im Browser).
- * Keine Rasterkacheln (kein OpenStreetMap o. ä.) – daher kein Mischkarten-Etikett
- * und keine „Zufall“-Ortstexte; nur Länderflächen + Farbe aus Anfrage-Daten.
+ * 2D-Ansicht: **Flache** SVG-Länderkarte (d3 `geoNaturalEarth1` – klassische
+ * Wandkarten-Projektion, **kein** Globus / keine weltrunde Ozean-Scheibe).
+ * Kein Meer als eigene Fläche: nur Länder-Polygone; der sichtbare „Zwischenraum“
+ * ist der neutrale Karten-Hintergrund (Papierfarbe), kein Blau.
  *
- * Ländergeometrie: `anfragenKarteGeo` → lokal abgelegte GeoJSON-Datei. Für ein
- * lizenziertes/anderes Länder-SVG-Export ersetze einfach diese Datei im `public/`-Pfad
- * (gleiche Struktur: FeatureCollection mit `properties.ISO_A2`).
+ * Geometrie: `anfragenKarteGeo` → GeoJSON unter `public/…` (ISO_A2 pro Land).
  */
 export const anfragenKarteMap2DModel = {
-  /**
-   * Ozean-Hintergrund (Halo um die Projektion) hinter den Länder-SVG-Pfaden.
-   */
   svg: {
-    projection: "geoEqualEarth" as const,
-    projectionConfig: { scale: 200, center: [0, 0] } as {
-      scale: number;
-      center: [number, number];
+    /** Flache 2D-Projektion (rechteckige Anmutung, keine Kugel-Silhouette) */
+    projection: "geoNaturalEarth1" as const,
+    /** `scale = width * scaleFactor` (wird in `Map2DWorldSvg` aus Containerbreite berechnet) */
+    scaleFactor: 0.198,
+    projectionConfigStatic: {
+      center: [0, 0] as [number, number],
     },
-    ocean: {
-      fill: "#b9d4ec",
-      stroke: "rgba(100, 130, 165, 0.35)",
-      strokeWidth: 0.45,
-    },
-    /** ZoomableGroup: Pan/Scroll-Zoom (nur Länder-SVG) */
+    /** Hintergrund unter der SVG (Zwischenräume zwischen Ländern) */
+    canvasClassName: "rounded-b-xl bg-[#f2f4f7]",
+    /** ZoomableGroup: Pan/Scroll-Zoom */
     zoom: {
       center: [0, 0] as [number, number],
       zoom: 1,
@@ -50,7 +45,7 @@ export const anfragenKarteMap2DModel = {
   ui: {
     cardTitle: "Anfragen nach Land",
     cardDescription:
-      "2D: vektorisierte Länderkarte (SVG, keine Hintergrundkacheln) – stärkere Einsendungen erscheinen blauer. Grenzen: Natural Earth; bei Bedarf durch eure lizenzierte Geometrie ersetzbar.",
+      "2D: flache Länderkarte (SVG, ohne Meeresfläche, ohne Kugel-Hintergrund). Stärkere Einsendungen erscheinen blauer. Geometrie über GeoJSON; Datei bei Bedarf austauschbar.",
     legendTitle: "Farbskala",
     legendBody:
       "Hell = wenig/kein Volumen · Dunkelblau = hoher Anteil (relativ zu „stärkstem Land“)",
