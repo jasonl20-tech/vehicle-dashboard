@@ -4,6 +4,7 @@
  * D1 `vehicledatabase` → `vehicleimagery_public_storage` (nur SELECT).
  *
  * Query: q=  limit=  offset=  active=all|1|0
+ * Response: `imageUrlQuery` = an jede Bild-URL anhängen (`?` + `env.image_url_secret`).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -50,6 +51,15 @@ function cdnBaseFromEnv(env: AuthEnv): string {
   const raw = (env.IMAGE_CDN_BASE || "").trim();
   if (raw) return raw.replace(/\/$/, "");
   return DEFAULT_CDN_BASE;
+}
+
+/**
+ * Wird an jede Bild-URL angehängt: `?` + Wert aus `image_url_secret` (oder leer).
+ */
+function imageUrlQueryFromEnv(env: AuthEnv): string {
+  const s = (env.image_url_secret ?? "").trim();
+  if (!s) return "";
+  return s.startsWith("?") ? s : `?${s}`;
 }
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
@@ -128,10 +138,7 @@ LIMIT ? OFFSET ?`;
     .all<VehicleImageryPublicRow>();
 
   const cdnBase = cdnBaseFromEnv(env);
-  // Nur Metadaten fürs UI (Wert des Secrets nie ausliefern)
-  const hasImageUrlSecret = Boolean(
-    env.image_url_secret && String(env.image_url_secret).length > 0,
-  );
+  const imageUrlQuery = imageUrlQueryFromEnv(env);
 
   return jsonResponse(
     {
@@ -140,7 +147,7 @@ LIMIT ? OFFSET ?`;
       offset,
       limit,
       cdnBase,
-      hasImageUrlSecret: hasImageUrlSecret,
+      imageUrlQuery,
     },
     { status: 200 },
   );
