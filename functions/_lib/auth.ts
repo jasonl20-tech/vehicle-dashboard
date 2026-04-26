@@ -40,7 +40,11 @@ export interface AuthEnv {
    * Standard: controll_platform_logs.
    */
   CONTROLLING_AE_DATASET?: string;
-  /** Wenn 1: physische Tabelle `FROM ${CONTROLLING_AE_DATASET}` ohne Filter auf Spalte `dataset` (Sonderfall). */
+  /**
+   * Standard: 1 (eigene AE-Tabelle, z. B. `controll_platform_logs`).
+   * Auf 0/false/no setzen, falls Logs in `key_analytics`/`api_analytics`
+   * landen und nur per Spalte `dataset` getrennt sind.
+   */
   CONTROLLING_AE_DEDICATED?: string;
   /** primary = `key_analytics`, secondary = `api_analytics` (Zweitkonto). */
   CONTROLLING_AE_ACCOUNT?: string;

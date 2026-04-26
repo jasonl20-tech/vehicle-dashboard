@@ -1,9 +1,14 @@
 /**
- * Auswertung der Analytics-Engine (gleiches Muster wie Kunden-API: `key_analytics`).
- * Export-Zeile: Spalte 3 = `controll_platform_logs` ist der Wert in **dataset**,
- * nicht der Tabellenname. Daher: `FROM key_analytics` + `AND dataset = '…'`
- * (ohne: „unable to find type of column: timestamp“ auf fälschlich angenommener
- * Tabelle controll_platform_logs).
+ * Auswertung der Analytics-Engine für Controlling.
+ *
+ * Auf eurem Account ist `controll_platform_logs` eine **eigene AE-Tabelle**
+ * (siehe AE-UI: Liste der Datasets ≠ Spalte `dataset` in `key_analytics`).
+ * Daher Standard: `FROM controll_platform_logs` (dedicated table).
+ *
+ * Falls die Logs auf einem anderen Account in `key_analytics`/`api_analytics`
+ * landen und nur per Spalte `dataset` getrennt sind:
+ *   CONTROLLING_AE_DEDICATED=0
+ *   CONTROLLING_AE_ACCOUNT=primary|secondary
  */
 import type { AuthEnv } from "./auth";
 import {
@@ -30,9 +35,15 @@ export function getControllingDataset(env: AuthEnv): string {
   return raw;
 }
 
+/**
+ * Standard: Dataset hat eine eigene AE-Tabelle (z. B. `controll_platform_logs`).
+ * Nur wenn `CONTROLLING_AE_DEDICATED=0|false|no` gesetzt ist, fallback auf
+ * `FROM key_analytics … WHERE dataset = '…'`.
+ */
 function isDedicatedTableMode(env: AuthEnv): boolean {
   const v = env.CONTROLLING_AE_DEDICATED?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return true;
 }
 
 function controllingAeBinding(env: AuthEnv): AeAccountBinding {
@@ -90,10 +101,9 @@ const selectBody = `SELECT
   double5 AS d5`;
 
 /**
- * Baut die gleiche Controlling-Query wie bisher, aber:
- * - Standard: `FROM key_analytics` + `AND dataset = 'controll_platform_logs'`
- *   (wie /api/analytics/customer-keys auf key_analytics).
- * - optional: dedicated `FROM` + `CONTROLLING_AE_DEDICATED=1`
+ * Standard: dedicated AE-Tabelle (`FROM controll_platform_logs`).
+ * Override per `CONTROLLING_AE_DEDICATED=0` → `FROM key_analytics`/`api_analytics`
+ * + `AND dataset = '…'` (wie /api/analytics/customer-keys).
  */
 export function buildControllingFetchPlan(
   env: AuthEnv,

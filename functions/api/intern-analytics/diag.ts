@@ -1,11 +1,14 @@
 /**
  * Diagnose für die Controlling-Quelle:
- *   GET /api/intern-analytics/_diag
+ *   GET /api/intern-analytics/diag
  *
  * Liefert:
  *   - SHOW TABLES (auf dem aktiven Account)
  *   - Probe-Selects mit FROM key_analytics, FROM api_analytics
  *     und FROM <controll_platform_logs> (dedicated Tabellenname)
+ *
+ * Hinweis: Cloudflare Pages routet keine Dateien, deren Name mit `_`
+ * beginnt – daher heißt diese Datei `diag.ts`, nicht `_diag.ts`.
  */
 import {
   API_ANALYTICS_DATASET,
