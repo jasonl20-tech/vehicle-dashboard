@@ -1,15 +1,12 @@
 import type { GlobeInstance } from "globe.gl";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
 import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import countries from "world-countries";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const COUNTRIES_GEOJSON_URL = "/globe/ne_110m_admin_0_countries.geojson";
 
 /**
  * Einfarbiges 2:1-Textur-Bild (kein Foto, kein water-Mask-Asset).
- * `three-globe`/`earth-water.png` kann Land als Schwarz mappen – das wirkte
- * auf der Kugel wie „Löcher“/Bug neben den Polygon-Flächen.
  */
 function solidGlobeTextureDataUrl(
   color: string,
@@ -43,64 +40,53 @@ function filterNeFeatures(
   });
 }
 
-type HexInput = { lat: number; lng: number; weight: number; iso: string };
-
-const CCA2_TO_LL = (() => {
-  const m = new Map<string, [number, number]>();
-  for (const c of countries) {
-    if (c.cca2 && c.latlng?.length === 2) {
-      m.set(c.cca2, [c.latlng[0], c.latlng[1]]);
-    }
-  }
-  return m;
-})();
-
 function lerp(a: number, b: number, t: number): number {
   return Math.round(a + (b - a) * t);
 }
 
-/** Mint / eisblau (wenig) → tiefes Indigo (viel) – angelehnt an Live-View-ästhetik */
-function colorForWeight(sumWeight: number, maxW: number, sideDim = 1): string {
-  if (maxW <= 0 || sumWeight <= 0)
-    return `rgba(200, 210, 225, ${0.35 * sideDim})`;
-  const t = Math.min(1, sumWeight / maxW);
-  return `rgb(${lerp(232, 55, t)}, ${lerp(245, 48, t)}, ${lerp(248, 150, t)})`;
-}
-
 /**
- * Länder zu vielen gewichteten Punkten mit leichtem Jitter, damit H3-Hexes
- * sichtbar extrudiert werden (ein Punkt = oft zu wenig Masse pro Zelle).
+ * Keine/zu niedrige Werte: neutrales Hellgrau.
+ * Viele Anfragen: kräftigeres Blau (Skala relativ zu max in den Daten).
  */
-function buildHexBinPoints(
-  data: SubmissionsByCountryResponse | null,
-): HexInput[] {
-  if (!data?.byIso2 || !data.max) return [];
-  const out: HexInput[] = [];
-  for (const [iso, count] of Object.entries(data.byIso2)) {
-    if (count <= 0) continue;
-    const ll = CCA2_TO_LL.get(iso);
-    if (!ll) continue;
-    const [baseLat, baseLng] = ll;
-    const n = Math.min(90, Math.max(5, Math.round(Math.cbrt(count) * 5.5)));
-    const w = count / n;
-    for (let i = 0; i < n; i++) {
-      const a = (i * 2.618) % (Math.PI * 2);
-      const ring = 0.2 + (i % 6) * 0.11;
-      const jLat = Math.sin(a) * ring * 0.42;
-      const jLng = Math.cos(a) * ring * 0.45;
-      out.push({ lat: baseLat + jLat, lng: baseLng + jLng, weight: w, iso });
-    }
+function countryBlues(
+  count: number,
+  max: number,
+): { cap: string; side: string; stroke: string } {
+  if (max <= 0) {
+    return {
+      cap: "rgb(240, 244, 248)",
+      side: "rgb(223, 230, 240)",
+      stroke: "rgba(70, 88, 108, 0.88)",
+    };
   }
-  return out;
+  if (count <= 0) {
+    return {
+      cap: "rgb(238, 244, 250)",
+      side: "rgb(222, 232, 242)",
+      stroke: "rgba(70, 88, 108, 0.88)",
+    };
+  }
+  const t = Math.min(1, count / max);
+  const r = lerp(236, 30, t);
+  const g = lerp(244, 95, t);
+  const b = lerp(252, 220, t);
+  const stroke =
+    t > 0.45
+      ? "rgba(255, 255, 255, 0.4)"
+      : "rgba(55, 72, 95, 0.88)";
+  return {
+    cap: `rgb(${r},${g},${b})`,
+    side: `rgb(${lerp(r, r - 18, 0.25)},${lerp(g, g - 12, 0.25)},${lerp(b, b - 20, 0.25)})`,
+    stroke,
+  };
 }
 
-function hexLabelFromBin(hex: {
-  points: object[];
-  sumWeight: number;
-}): string {
-  const p = hex.points[0] as HexInput | undefined;
-  const iso = p?.iso ?? "…";
-  return `${iso} · ≈ ${Math.round(hex.sumWeight)} Anfr.`;
+function countForFeature(
+  data: SubmissionsByCountryResponse | null,
+  iso: string | undefined,
+): number {
+  if (!data?.byIso2 || !iso) return 0;
+  return data.byIso2[iso] ?? 0;
 }
 
 export default function OverviewGlobe({
@@ -114,15 +100,14 @@ export default function OverviewGlobe({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const maxWRef = useRef(1);
+  const dataRef = useRef<SubmissionsByCountryResponse | null>(null);
   const globeRef = useRef<GlobeInstance | null>(null);
   const [ready, setReady] = useState(false);
   const [countryPolys, setCountryPolys] = useState<NeFeature[] | null>(null);
-  const hexPoints = useMemo(() => buildHexBinPoints(data), [data]);
 
   useEffect(() => {
-    maxWRef.current = data?.max && data.max > 0 ? data.max : 1;
-  }, [data?.max]);
+    dataRef.current = data;
+  }, [data]);
 
   useEffect(() => {
     let ok = true;
@@ -176,39 +161,43 @@ export default function OverviewGlobe({
         .pointsData([])
         .polygonsData([])
         .polygonGeoJsonGeometry("geometry")
-        .polygonAltitude(0.0045)
-        .polygonCapColor(() => "rgba(245, 248, 252, 0.98)")
-        .polygonSideColor(() => "rgba(218, 227, 238, 0.9)")
-        .polygonStrokeColor(() => "rgba(70, 88, 108, 0.95)")
+        .polygonAltitude(0.003)
+        .polygonCapColor((d) => {
+          const f = d as NeFeature;
+          const iso = f.properties.ISO_A2;
+          const cur = dataRef.current;
+          const max = cur?.max && cur.max > 0 ? cur.max : 0;
+          const c = countForFeature(cur, iso);
+          return countryBlues(c, max).cap;
+        })
+        .polygonSideColor((d) => {
+          const f = d as NeFeature;
+          const iso = f.properties.ISO_A2;
+          const cur = dataRef.current;
+          const max = cur?.max && cur.max > 0 ? cur.max : 0;
+          const c = countForFeature(cur, iso);
+          return countryBlues(c, max).side;
+        })
+        .polygonStrokeColor((d) => {
+          const f = d as NeFeature;
+          const iso = f.properties.ISO_A2;
+          const cur = dataRef.current;
+          const max = cur?.max && cur.max > 0 ? cur.max : 0;
+          const c = countForFeature(cur, iso);
+          return countryBlues(c, max).stroke;
+        })
         .polygonLabel((d) => {
-          const p = (d as NeFeature).properties;
-          return p?.ADMIN ? String(p.ADMIN) : "";
+          const f = d as NeFeature;
+          const iso = f.properties.ISO_A2;
+          const name = f.properties.ADMIN
+            ? String(f.properties.ADMIN)
+            : (iso ?? "");
+          const cur = dataRef.current;
+          const c = countForFeature(cur, iso);
+          if (c > 0) return `${name} — ${c} Anfr.`;
+          return name;
         })
-        .polygonsTransitionDuration(300);
-
-      g.hexBinPointsData([])
-        .hexBinPointLat("lat")
-        .hexBinPointLng("lng")
-        .hexBinPointWeight("weight")
-        .hexBinResolution(3)
-        .hexMargin(0.18)
-        // merge=true kann in WebGL fehlerhafte/„seltsame“ zusammengefügte Meshes erzeugen
-        .hexBinMerge(false)
-        .hexAltitude(({ sumWeight }) => {
-          const m = maxWRef.current;
-          const t = m > 0 ? sumWeight / m : 0;
-          // Obere Kappe begrenzen (extreme Zellen wirkten sonst als „Kapsel“-Artefakt)
-          return Math.min(0.09, 0.012 + 0.11 * Math.sqrt(Math.min(1, t)));
-        })
-        .hexTopColor(({ sumWeight }) =>
-          colorForWeight(sumWeight, maxWRef.current, 1),
-        )
-        .hexSideColor(({ sumWeight }) =>
-          colorForWeight(sumWeight, maxWRef.current, 0.72),
-        )
-        .hexLabel(hexLabelFromBin)
-        .hexTopCurvatureResolution(4)
-        .hexTransitionDuration(900)
+        .polygonsTransitionDuration(400)
         .enablePointerInteraction(true);
 
       g.pointOfView({ lat: 22, lng: 12, altitude: 2.35 }, 0);
@@ -234,15 +223,9 @@ export default function OverviewGlobe({
 
   useEffect(() => {
     const g = globeRef.current;
-    if (!g || !ready) return;
-    g.hexBinPointsData(hexPoints);
-  }, [hexPoints, ready]);
-
-  useEffect(() => {
-    const g = globeRef.current;
     if (!g || !ready || !countryPolys) return;
-    g.polygonsData(countryPolys);
-  }, [countryPolys, ready]);
+    g.polygonsData([...countryPolys]);
+  }, [data, countryPolys, ready]);
 
   useEffect(() => {
     if (!ready || !containerRef.current || !globeRef.current) return;
@@ -295,9 +278,8 @@ export default function OverviewGlobe({
           Anfragen nach Land
         </h2>
         <p className="mt-0.5 max-w-3xl text-[13px] text-ink-600">
-          Kartografische Kugel mit Ländergrenzen; die Säulen (Hex) zeigen
-          relative Anfragen (Nicht-Spam, Ländercode in Metadaten). Grenzen:
-          Natural Earth 110m.
+          Länderfläche wird blauer, je mehr Anfragen (Nicht-Spam, Ländercode in
+          Metadaten). Grenzen: Natural Earth 110m.
         </p>
         {data && !error && (
           <p className="mt-1.5 text-[12.5px] text-ink-500">
@@ -364,9 +346,12 @@ export default function OverviewGlobe({
           </div>
         )}
 
-        <div className="pointer-events-none absolute right-4 top-4 z-10 max-w-[200px] rounded-md border border-hair/60 bg-paper/90 px-2.5 py-2 text-[11px] text-ink-500 shadow-sm backdrop-blur-sm">
-          <p className="font-medium text-ink-600">Höhe &amp; Farbe</p>
-          <p className="mt-0.5 leading-snug">≈ Anfragenvolumen im Hex-Feld</p>
+        <div className="pointer-events-none absolute right-4 top-4 z-10 max-w-[220px] rounded-md border border-hair/60 bg-paper/90 px-2.5 py-2 text-[11px] text-ink-500 shadow-sm backdrop-blur-sm">
+          <p className="font-medium text-ink-600">Farbskala</p>
+          <p className="mt-0.5 leading-snug">
+            Hell = wenig/kein Volumen · Dunkelblau = hoher Anteil (relativ zu
+            „stärkstem Land“)
+          </p>
         </div>
       </div>
     </div>
