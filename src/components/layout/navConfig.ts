@@ -45,7 +45,10 @@ export const NAV_PRIMARY: NavItem[] = [
   {
     label: "Intern Analytics",
     icon: LineChart,
-    children: [{ label: "Controlling", to: "/intern-analytics/controlling" }],
+    children: [
+      { label: "Controlling", to: "/intern-analytics/controlling" },
+      { label: "Job Übersicht", to: "/intern-analytics/jobs" },
+    ],
   },
   {
     label: "Zahlungen",

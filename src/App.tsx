@@ -4,6 +4,7 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import KundenApiPage from "./pages/KundenApiPage";
 import KundenKeyDetailPage from "./pages/KundenKeyDetailPage";
 import KundenKeysPage, { KundenTestKeysPage } from "./pages/KundenKeysPage";
+import ControllJobsPage from "./pages/ControllJobsPage";
 import ControllingPage from "./pages/ControllingPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
@@ -74,6 +75,10 @@ export default function App() {
         <Route
           path="/intern-analytics/controlling"
           element={<ControllingPage />}
+        />
+        <Route
+          path="/intern-analytics/jobs"
+          element={<ControllJobsPage />}
         />
         <Route
           path="/intern-analytics"
