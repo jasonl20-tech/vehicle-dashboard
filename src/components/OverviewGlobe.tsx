@@ -4,11 +4,28 @@ import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import countries from "world-countries";
 
-/** ruhiger Ozean-Hintergrund (kein Satellitenbild) — three-globe Beispiel-Assets */
-const EARTH_OCEAN =
-  "https://cdn.jsdelivr.net/npm/three-globe@2.45.2/example/img/earth-water.png";
-
 const COUNTRIES_GEOJSON_URL = "/globe/ne_110m_admin_0_countries.geojson";
+
+/**
+ * Einfarbiges 2:1-Textur-Bild (kein Foto, kein water-Mask-Asset).
+ * `three-globe`/`earth-water.png` kann Land als Schwarz mappen – das wirkte
+ * auf der Kugel wie „Löcher“/Bug neben den Polygon-Flächen.
+ */
+function solidGlobeTextureDataUrl(
+  color: string,
+  w = 1024,
+  h = 512,
+): string {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, w, h);
+  }
+  return c.toDataURL("image/png");
+}
 
 type NeFeature = {
   type: "Feature";
@@ -145,10 +162,12 @@ export default function OverviewGlobe({
       });
       globeRef.current = g;
 
+      const mapBase = solidGlobeTextureDataUrl("#b9d4ec");
+
       g.width(w)
         .height(h)
         .backgroundColor("rgba(0,0,0,0)")
-        .globeImageUrl(EARTH_OCEAN)
+        .globeImageUrl(mapBase)
         .lineHoverPrecision(0)
         .showGraticules(false)
         .showAtmosphere(true)
@@ -157,10 +176,10 @@ export default function OverviewGlobe({
         .pointsData([])
         .polygonsData([])
         .polygonGeoJsonGeometry("geometry")
-        .polygonAltitude(0.003)
-        .polygonCapColor(() => "rgba(240, 244, 248, 0.96)")
-        .polygonSideColor(() => "rgba(210, 220, 232, 0.85)")
-        .polygonStrokeColor(() => "rgba(80, 95, 115, 0.92)")
+        .polygonAltitude(0.0045)
+        .polygonCapColor(() => "rgba(245, 248, 252, 0.98)")
+        .polygonSideColor(() => "rgba(218, 227, 238, 0.9)")
+        .polygonStrokeColor(() => "rgba(70, 88, 108, 0.95)")
         .polygonLabel((d) => {
           const p = (d as NeFeature).properties;
           return p?.ADMIN ? String(p.ADMIN) : "";
@@ -173,11 +192,13 @@ export default function OverviewGlobe({
         .hexBinPointWeight("weight")
         .hexBinResolution(3)
         .hexMargin(0.18)
-        .hexBinMerge(true)
+        // merge=true kann in WebGL fehlerhafte/„seltsame“ zusammengefügte Meshes erzeugen
+        .hexBinMerge(false)
         .hexAltitude(({ sumWeight }) => {
           const m = maxWRef.current;
           const t = m > 0 ? sumWeight / m : 0;
-          return 0.02 + 0.18 * Math.sqrt(Math.min(1, t));
+          // Obere Kappe begrenzen (extreme Zellen wirkten sonst als „Kapsel“-Artefakt)
+          return Math.min(0.09, 0.012 + 0.11 * Math.sqrt(Math.min(1, t)));
         })
         .hexTopColor(({ sumWeight }) =>
           colorForWeight(sumWeight, maxWRef.current, 1),
