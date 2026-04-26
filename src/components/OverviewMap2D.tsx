@@ -3,6 +3,7 @@ import { Map2DChrome, Map2DLegend } from "./map2d/Map2DChrome";
 import { anfragenKarteMap2DModel } from "../config/anfragenKarteMap2DModel";
 import type { ChoroplethMapUi } from "../lib/choroplethMapUi";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
+import type { BildaustrahlungArc } from "../lib/bildaustrahlungArcsApi";
 import {
   COUNTRIES_GEOJSON_URL,
   toFeatureCollection,
@@ -20,11 +21,14 @@ export default function OverviewMap2D({
   loading,
   error,
   copy,
+  arcs,
 }: {
   data: SubmissionsByCountryResponse | null;
   loading: boolean;
   error: string | null;
   copy?: Partial<ChoroplethMapUi>;
+  /** Bögen vom Kundenstandort zum Viewer-Land (Bildaustrahlung). */
+  arcs?: BildaustrahlungArc[];
 }) {
   const empty =
     copy?.emptyGeoText ?? anfragenKarteMap2DModel.ui.emptyGeoText;
@@ -59,7 +63,7 @@ export default function OverviewMap2D({
         style={{ minHeight: "min(72vh, 720px)" }}
       >
         {geo && geo.features.length > 0 ? (
-          <Map2DWorldSvg geo={geo} data={data} dataKey={dataKey} />
+          <Map2DWorldSvg geo={geo} data={data} dataKey={dataKey} arcs={arcs} />
         ) : (
           <div
             className="grid h-[min(72vh,720px)] min-h-[480px] place-items-center text-[13px] text-ink-500"

@@ -6,6 +6,8 @@ export type CrmCustomerRow = {
   email: string;
   company: string;
   status: string;
+  /** ISO-3166-Alpha-2, leerer String wenn nicht gesetzt. */
+  standort: string;
 };
 
 export type CrmCustomersListResponse = {

@@ -8,13 +8,42 @@ import {
   type CrmCustomersListResponse,
   crmCustomersListUrl,
 } from "../lib/crmCustomersApi";
+import { ISO2_COUNTRIES } from "../lib/iso2Countries";
 
 const PAGE_SIZE = 50;
 const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
+const SELECT_IN =
+  "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const TH = "px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
 const TH_TR = "px-2 py-2 text-right text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
 const TD = "px-2 py-2 align-top text-[12.5px] text-ink-800";
+
+function StandortSelect({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <select
+      className={SELECT_IN}
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={ariaLabel}
+    >
+      <option value="">— kein Standort —</option>
+      {ISO2_COUNTRIES.map((c) => (
+        <option key={c.iso2} value={c.iso2}>
+          {c.nameDe} ({c.iso2})
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function fmtWhen(s: string | null | undefined): string {
   if (!s?.trim()) return "—";
@@ -45,13 +74,15 @@ function RowEditor({
   const [email, setEmail] = useState(row.email);
   const [company, setCompany] = useState(row.company);
   const [status, setStatus] = useState(row.status);
+  const [standort, setStandort] = useState(row.standort);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setEmail(row.email);
     setCompany(row.company);
     setStatus(row.status);
-  }, [row.id, row.email, row.company, row.status]);
+    setStandort(row.standort);
+  }, [row.id, row.email, row.company, row.status, row.standort]);
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -65,6 +96,7 @@ function RowEditor({
           email: email.trim(),
           company: company.trim() || null,
           status: status.trim() || "Neu",
+          standort: standort.trim() ? standort.trim().toUpperCase() : null,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -78,7 +110,7 @@ function RowEditor({
     } finally {
       setSaving(false);
     }
-  }, [row.id, email, company, status, onSaved, onError]);
+  }, [row.id, email, company, status, standort, onSaved, onError]);
 
   return (
     <tr>
@@ -112,6 +144,13 @@ function RowEditor({
           placeholder="z. B. Neu"
         />
       </td>
+      <td className={TD}>
+        <StandortSelect
+          value={standort}
+          onChange={setStandort}
+          ariaLabel="Standort des Kunden"
+        />
+      </td>
       <td className={`${TD} whitespace-nowrap text-ink-500`}>
         {fmtWhen(row.created_at)}
       </td>
@@ -138,6 +177,7 @@ export default function KundenCrmPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newCompany, setNewCompany] = useState("");
   const [newStatus, setNewStatus] = useState("Neu");
+  const [newStandort, setNewStandort] = useState("");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -181,6 +221,9 @@ export default function KundenCrmPage() {
           email,
           company: newCompany.trim() || undefined,
           status: newStatus.trim() || "Neu",
+          standort: newStandort.trim()
+            ? newStandort.trim().toUpperCase()
+            : undefined,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -191,13 +234,14 @@ export default function KundenCrmPage() {
       setNewEmail("");
       setNewCompany("");
       setNewStatus("Neu");
+      setNewStandort("");
       reload();
     } catch (e) {
       setFormErr((e as Error).message);
     } finally {
       setAdding(false);
     }
-  }, [newEmail, newCompany, newStatus, reload]);
+  }, [newEmail, newCompany, newStatus, newStandort, reload]);
 
   const onRowSaved = useCallback(() => {
     reload();
@@ -264,6 +308,7 @@ export default function KundenCrmPage() {
               <th className={TH}>E-Mail</th>
               <th className={TH}>Firma</th>
               <th className={TH}>Status</th>
+              <th className={TH}>Standort</th>
               <th className={TH}>Angelegt</th>
               <th className={TH_TR}>Aktion</th>
             </tr>
@@ -271,7 +316,7 @@ export default function KundenCrmPage() {
           <tbody>
             {loading && listRows.length === 0 && !error && (
               <tr>
-                <td colSpan={6} className="px-2 py-6 text-center text-ink-500">
+                <td colSpan={7} className="px-2 py-6 text-center text-ink-500">
                   Kundendaten werden geladen…
                 </td>
               </tr>
@@ -288,7 +333,7 @@ export default function KundenCrmPage() {
             ))}
             {listRows.length === 0 && !loading && !error && (
               <tr>
-                <td colSpan={6} className="px-2 py-6 text-center text-ink-500">
+                <td colSpan={7} className="px-2 py-6 text-center text-ink-500">
                   Keine Einträge
                 </td>
               </tr>
@@ -371,6 +416,16 @@ export default function KundenCrmPage() {
               className={TEXT_IN}
               value={newStatus}
               onChange={(e) => setNewStatus(e.target.value)}
+            />
+          </div>
+          <div className="w-full min-w-0 sm:max-w-[220px]">
+            <label className="mb-0.5 block text-[11px] text-ink-500">
+              Standort (optional)
+            </label>
+            <StandortSelect
+              value={newStandort}
+              onChange={setNewStandort}
+              ariaLabel="Standort des neuen Kunden"
             />
           </div>
           <button

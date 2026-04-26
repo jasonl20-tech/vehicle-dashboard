@@ -2,13 +2,18 @@
  * CRM-Kunden — Tabelle `customers` in derselben D1-DB wie `submissions` (Binding `website`).
  *
  *   GET  /api/crm/customers?q=&limit=&offset=
- *   POST /api/crm/customers  { id?, email, company?, status? }
- *   PUT  /api/crm/customers  { id, email?, company?, status? }  (email-Wechsel nur ohne Konflikt)
+ *   POST /api/crm/customers  { id?, email, company?, status?, standort? }
+ *   PUT  /api/crm/customers  { id, email?, company?, status?, standort? }  (email-Wechsel nur ohne Konflikt)
+ *
+ * `standort` ist ISO-3166-Alpha-2 (z. B. "DE", "AT"). Leerstring oder `null`
+ * räumt das Feld; serverseitig wird ein Regex auf 2 Buchstaben geprüft.
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
 const MAX_LIMIT = 200;
 const DEFAULT_LIMIT = 50;
+
+const ISO2_RE = /^[A-Z]{2}$/;
 
 type CustomerRowDb = {
   id: string;
@@ -16,7 +21,25 @@ type CustomerRowDb = {
   email: string;
   company: string | null;
   status: string | null;
+  standort: string | null;
 };
+
+/**
+ * Akzeptiert ISO-2 case-insensitiv. Leerstring/`null`/`undefined` → `null`
+ * (löschen). Ungültiges Token → `Error`. Wird per `parseStandort()` aus dem
+ * Body-Wert erzeugt (POST/PUT).
+ */
+function parseStandort(v: unknown): string | null | Error {
+  if (v === undefined) return new Error("undefined");
+  if (v === null) return null;
+  if (typeof v !== "string") return new Error("standort muss string sein");
+  const t = v.trim().toUpperCase();
+  if (!t) return null;
+  if (!ISO2_RE.test(t)) {
+    return new Error("standort muss ein ISO-3166-Alpha-2-Code sein (z. B. DE)");
+  }
+  return t;
+}
 
 function requireWebsiteDb(env: AuthEnv): D1Database | Response {
   if (!env.website) {
@@ -73,7 +96,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   const { results } = await db
     .prepare(
-      `SELECT id, created_at, email, company, status FROM customers${whereSql} ORDER BY datetime(created_at) DESC LIMIT ? OFFSET ?`,
+      `SELECT id, created_at, email, company, status, standort FROM customers${whereSql} ORDER BY datetime(created_at) DESC LIMIT ? OFFSET ?`,
     )
     .bind(...binds, limit, offset)
     .all<CustomerRowDb>();
@@ -84,6 +107,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     email: r.email,
     company: r.company ?? "",
     status: r.status ?? "Neu",
+    standort: r.standort ?? "",
   }));
 
   return jsonResponse({ rows, total, offset, limit }, { status: 200 });
@@ -94,6 +118,7 @@ type PostBody = {
   email?: string;
   company?: string | null;
   status?: string | null;
+  standort?: string | null;
 };
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
@@ -134,12 +159,23 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       ? body.status.trim()
       : "Neu";
 
+  let standort: string | null;
+  if (body.standort === undefined) {
+    standort = null;
+  } else {
+    const parsed = parseStandort(body.standort);
+    if (parsed instanceof Error) {
+      return jsonResponse({ error: parsed.message }, { status: 400 });
+    }
+    standort = parsed;
+  }
+
   try {
     await db
       .prepare(
-        `INSERT INTO customers (id, email, company, status) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO customers (id, email, company, status, standort) VALUES (?, ?, ?, ?, ?)`,
       )
-      .bind(id, email, company, status)
+      .bind(id, email, company, status, standort)
       .run();
   } catch (e) {
     const msg = (e as Error).message || String(e);
@@ -153,7 +189,14 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   return jsonResponse(
-    { ok: true, id, email, company: company ?? "", status },
+    {
+      ok: true,
+      id,
+      email,
+      company: company ?? "",
+      status,
+      standort: standort ?? "",
+    },
     { status: 201 },
   );
 };
@@ -163,6 +206,7 @@ type PutBody = {
   email?: string;
   company?: string | null;
   status?: string | null;
+  standort?: string | null;
 };
 
 export const onRequestPut: PagesFunction<AuthEnv> = async ({
@@ -189,7 +233,7 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
 
   const cur = await db
     .prepare(
-      `SELECT id, email, company, status FROM customers WHERE id = ? LIMIT 1`,
+      `SELECT id, created_at, email, company, status, standort FROM customers WHERE id = ? LIMIT 1`,
     )
     .bind(id)
     .first<CustomerRowDb>();
@@ -215,12 +259,23 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
         ? null
         : String(body.status).trim() || "Neu";
 
+  let nextStandort: string | null;
+  if (body.standort === undefined) {
+    nextStandort = cur.standort ?? null;
+  } else {
+    const parsed = parseStandort(body.standort);
+    if (parsed instanceof Error) {
+      return jsonResponse({ error: parsed.message }, { status: 400 });
+    }
+    nextStandort = parsed;
+  }
+
   try {
     await db
       .prepare(
-        `UPDATE customers SET email = ?, company = ?, status = ? WHERE id = ?`,
+        `UPDATE customers SET email = ?, company = ?, status = ?, standort = ? WHERE id = ?`,
       )
-      .bind(nextEmail, nextCompany, nextStatus, id)
+      .bind(nextEmail, nextCompany, nextStatus, nextStandort, id)
       .run();
   } catch (e) {
     const msg = (e as Error).message || String(e);
@@ -241,6 +296,7 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
       email: nextEmail,
       company: nextCompany ?? "",
       status: nextStatus ?? "Neu",
+      standort: nextStandort ?? "",
     },
     { status: 200 },
   );

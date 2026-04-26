@@ -47,4 +47,31 @@ declare module "react-simple-maps" {
       filterZoomEvent?: (event: unknown) => boolean;
     }>
   >;
+
+  export const Line: React.FC<{
+    /** [lng, lat] des Startpunkts. */
+    from?: [number, number];
+    /** [lng, lat] des Endpunkts. */
+    to?: [number, number];
+    /** Alternative zu from/to: explizite Kette von [lng, lat]-Stützpunkten. */
+    coordinates?: [number, number][];
+    stroke?: string;
+    strokeWidth?: number;
+    strokeOpacity?: number;
+    fill?: string;
+    className?: string;
+  }>;
+
+  export const Marker: React.FC<
+    React.PropsWithChildren<{
+      /** [lng, lat] des Markers. */
+      coordinates: [number, number];
+      className?: string;
+      style?: {
+        default?: React.CSSProperties;
+        hover?: React.CSSProperties;
+        pressed?: React.CSSProperties;
+      };
+    }>
+  >;
 }

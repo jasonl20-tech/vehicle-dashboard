@@ -1,4 +1,4 @@
-import { Bug, Globe, Map, Search, X } from "lucide-react";
+import { Bug, Globe, Map, Search, Waypoints, X } from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -16,21 +16,46 @@ import {
   type ImageUrlRequestsGeoResponse,
   imageUrlRequestsGeoUrl,
 } from "../lib/bildaustrahlungGeoApi";
+import {
+  type BildaustrahlungArcsResponse,
+  arcsFromCustomers,
+  imageUrlRequestsCustomerArcsUrl,
+} from "../lib/bildaustrahlungArcsApi";
+import { iso2Name } from "../lib/iso2Countries";
 
 const OverviewGlobe = lazy(() => import("../components/OverviewGlobe"));
 
 export default function BildaustrahlungKartePage() {
   const [apiDiagnose, setApiDiagnose] = useState(false);
+  const [showArcs, setShowArcs] = useState(true);
   const geoUrl = useMemo(
     () => imageUrlRequestsGeoUrl({ diagnose: apiDiagnose }),
     [apiDiagnose],
   );
+  const arcsUrl = useMemo(() => imageUrlRequestsCustomerArcsUrl(), []);
   const geo = useApi<ImageUrlRequestsGeoResponse>(geoUrl);
+  const arcsApi = useApi<BildaustrahlungArcsResponse>(arcsUrl);
   const [view, setView] = useState<"2d" | "3d">("2d");
   const [q, setQ] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    null,
+  );
   const [debugOpen, setDebugOpen] = useState(false);
 
   const data = geo.data;
+
+  const arcCustomersAll = arcsApi.data?.customers ?? [];
+  const visibleArcCustomers = useMemo(() => {
+    if (!showArcs) return [];
+    if (selectedCustomerId) {
+      return arcCustomersAll.filter((c) => c.id === selectedCustomerId);
+    }
+    return arcCustomersAll;
+  }, [arcCustomersAll, showArcs, selectedCustomerId]);
+  const arcs = useMemo(
+    () => arcsFromCustomers(visibleArcCustomers),
+    [visibleArcCustomers],
+  );
 
   const domainMax = useMemo(() => {
     const dom = geo.data?.domains ?? [];
@@ -49,15 +74,32 @@ export default function BildaustrahlungKartePage() {
     () =>
       JSON.stringify(
         {
-          requestUrl: geoUrl,
-          loading: geo.loading,
-          error: geo.error,
-          data: geo.data,
+          geo: {
+            requestUrl: geoUrl,
+            loading: geo.loading,
+            error: geo.error,
+            data: geo.data,
+          },
+          arcs: {
+            requestUrl: arcsUrl,
+            loading: arcsApi.loading,
+            error: arcsApi.error,
+            data: arcsApi.data,
+          },
         },
         null,
         2,
       ),
-    [geoUrl, geo.loading, geo.error, geo.data],
+    [
+      geoUrl,
+      geo.loading,
+      geo.error,
+      geo.data,
+      arcsUrl,
+      arcsApi.loading,
+      arcsApi.error,
+      arcsApi.data,
+    ],
   );
 
   const copyDebug = useCallback(async () => {
@@ -108,14 +150,38 @@ export default function BildaustrahlungKartePage() {
     </div>
   );
 
+  const arcsCount = arcs.length;
+  const arcsToggle = (
+    <button
+      type="button"
+      onClick={() => setShowArcs((v) => !v)}
+      disabled={arcCustomersAll.length === 0}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium shadow-sm transition disabled:opacity-50 ${
+        showArcs && arcCustomersAll.length > 0
+          ? "border-ink-900 bg-ink-900 text-white hover:bg-ink-800"
+          : "border-hair bg-paper text-ink-700 hover:bg-hair/60 hover:text-ink-900"
+      }`}
+      aria-pressed={showArcs}
+      title={
+        arcCustomersAll.length === 0
+          ? "Keine Kunden mit Standort + passender Domain gefunden"
+          : "Bögen vom Kundenstandort zum Viewer-Land ein-/ausblenden"
+      }
+    >
+      <Waypoints className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      Streams ({arcsCount})
+    </button>
+  );
+
   const headerRight = (
     <div className="flex flex-wrap items-center justify-end gap-2">
+      {arcsToggle}
       <button
         type="button"
         onClick={() => setDebugOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-lg border border-hair bg-paper px-3 py-1.5 text-[12.5px] font-medium text-ink-700 shadow-sm transition hover:bg-hair/60 hover:text-ink-900"
         aria-expanded={debugOpen}
-        title="Roh-Response der Geo-API anzeigen"
+        title="Roh-Response der APIs anzeigen"
       >
         <Bug className="h-3.5 w-3.5 shrink-0" aria-hidden />
         Debug
@@ -207,6 +273,7 @@ export default function BildaustrahlungKartePage() {
               loading={geo.loading}
               error={geo.error}
               copy={BILDAUSTRAHLUNG_CHOROPLETH_UI}
+              arcs={arcs}
             />
           ) : (
             <Suspense
@@ -221,8 +288,65 @@ export default function BildaustrahlungKartePage() {
                 loading={geo.loading}
                 error={geo.error}
                 copy={BILDAUSTRAHLUNG_CHOROPLETH_UI}
+                arcs={arcs}
               />
             </Suspense>
+          )}
+
+          {arcCustomersAll.length > 0 && (
+            <div className="mt-3 rounded-xl border border-hair bg-paper px-3 py-2.5 text-[12.5px]">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-[12px] font-medium uppercase tracking-[0.1em] text-ink-400">
+                  Kunden-Streams (CRM × Bildaustrahlung)
+                </h3>
+                {selectedCustomerId && (
+                  <button
+                    type="button"
+                    className="text-[11.5px] text-accent-blue underline decoration-dotted hover:text-ink-900"
+                    onClick={() => setSelectedCustomerId(null)}
+                  >
+                    Auswahl aufheben
+                  </button>
+                )}
+              </div>
+              <p className="mt-0.5 text-[11.5px] text-ink-500">
+                Kunde mit gesetzter <code>standort</code> + passendem{" "}
+                <code>company</code> (= index1-Domain). Klick filtert die
+                Bögen auf einen Kunden.
+              </p>
+              <ul className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                {arcCustomersAll.map((c) => {
+                  const active = selectedCustomerId === c.id;
+                  return (
+                    <li key={c.id}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setSelectedCustomerId((prev) =>
+                            prev === c.id ? null : c.id,
+                          )
+                        }
+                        className={`flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md border px-2 py-1.5 text-left transition ${
+                          active
+                            ? "border-ink-900 bg-ink-900/5"
+                            : "border-hair hover:bg-hair/40"
+                        }`}
+                        aria-pressed={active}
+                      >
+                        <span className="block w-full truncate font-medium text-ink-900">
+                          {c.company || c.email}
+                        </span>
+                        <span className="text-[11px] text-ink-500">
+                          {iso2Name(c.standort)} ({c.standort}) →{" "}
+                          {fmtNumber(c.viewersTotal)} Requests aus{" "}
+                          {c.viewersCountryCount} Ländern
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
         </div>
       </div>
@@ -279,13 +403,11 @@ export default function BildaustrahlungKartePage() {
               </div>
             </div>
             <p className="shrink-0 border-b border-hair/80 px-4 py-2 text-[11.5px] text-ink-500">
-              In <code className="text-ink-700">data.stats</code>: pro Quelle
-              Zeilen nach GROUP BY; &quot;Volumen-Diagnose&quot; lädt{" "}
-              <code className="text-ink-700">volumeInRange</code> (SUM im Zeitraum
-              fürs Dataset). 0 + leere Karte = kein passendes{" "}
-              <code className="text-ink-700">dataset</code> / falscher Modus;{" "}
-              <code className="text-ink-700">sampleRejectedBlob3</code> ={" "}
-              <code className="text-ink-700">blob3</code> ist nicht ISO-2.
+              <strong className="text-ink-700">geo</strong>: gesamtes Bildaustrahlung-Aggregat (Domains, Länder).{" "}
+              <strong className="text-ink-700">arcs</strong>: pro Kunde mit{" "}
+              <code className="text-ink-700">standort</code> +{" "}
+              <code className="text-ink-700">company</code>=index1-Domain das
+              Country-Breakdown – Quelle für die Bögen auf Karte.
             </p>
             <pre className="m-0 max-h-[min(75vh,600px)] overflow-auto p-4 text-left text-[11.5px] leading-relaxed text-ink-800 [tab-size:2]">
               <code className="font-mono text-[11.5px]">{debugJson}</code>

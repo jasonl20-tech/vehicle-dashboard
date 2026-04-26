@@ -12,8 +12,21 @@ import {
   type NeFeature,
 } from "../lib/anfragenKarteGeo";
 import { countryBlues, countForFeature } from "../lib/requestsChoropleth";
+import type { BildaustrahlungArc } from "../lib/bildaustrahlungArcsApi";
+import { iso2Latlng, iso2Name } from "../lib/iso2Countries";
 import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+type ArcDatum = {
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  altitude: number;
+  color: [string, string];
+  weight: number;
+  label: string;
+};
 
 /**
  * Einfarbiges 2:1-Textur-Bild (kein Foto, kein water-Mask-Asset).
@@ -39,11 +52,18 @@ export default function OverviewGlobe({
   loading,
   error,
   copy,
+  arcs,
 }: {
   data: SubmissionsByCountryResponse | null;
   loading: boolean;
   error: string | null;
   copy?: Partial<ChoroplethMapUi>;
+  /**
+   * Bögen vom Kundenstandort zum Viewer-Land. Wenn gesetzt, wird die
+   * `arcsData`-API von globe.gl benutzt; Auto-Rotate wird gedrosselt, damit
+   * Linien gut ablesbar sind.
+   */
+  arcs?: BildaustrahlungArc[];
 }) {
   const ui = mergeChoroplethUi(ANFRAGEN_CHOROPLETH_UI, copy);
   const countLabelRef = useRef(ui.globeCountLabel);
@@ -60,6 +80,33 @@ export default function OverviewGlobe({
   useEffect(() => {
     dataRef.current = data;
   }, [data]);
+
+  /**
+   * Arcs in das von globe.gl erwartete Schema bringen. Punkte mit
+   * unbekannter ISO-2 (kein latlng) werden ausgesiebt.
+   */
+  const arcData: ArcDatum[] = useMemo(() => {
+    if (!arcs || arcs.length === 0) return [];
+    const out: ArcDatum[] = [];
+    for (const a of arcs) {
+      const from = iso2Latlng(a.fromIso2);
+      const toLl = iso2Latlng(a.toIso2);
+      if (!from || !toLl) continue;
+      const w = Math.max(0.05, Math.min(1, a.weight));
+      const tag = `${a.company || a.domain} (${a.fromIso2} → ${a.toIso2})`;
+      out.push({
+        startLat: from[0],
+        startLng: from[1],
+        endLat: toLl[0],
+        endLng: toLl[1],
+        altitude: 0.18 + 0.32 * w,
+        color: ["rgba(214,33,82,0.85)", "rgba(45,108,223,0.85)"],
+        weight: w,
+        label: `${tag}: ${a.count} Requests · ${iso2Name(a.toIso2)}`,
+      });
+    }
+    return out;
+  }, [arcs]);
 
   useEffect(() => {
     let ok = true;
@@ -154,6 +201,21 @@ export default function OverviewGlobe({
 
       g.pointOfView({ lat: 22, lng: 12, altitude: 2.35 }, 0);
 
+      // Arcs sind initial leer – Daten kommen via Effekt unten.
+      g.arcsData([])
+        .arcStartLat((d: object) => (d as ArcDatum).startLat)
+        .arcStartLng((d: object) => (d as ArcDatum).startLng)
+        .arcEndLat((d: object) => (d as ArcDatum).endLat)
+        .arcEndLng((d: object) => (d as ArcDatum).endLng)
+        .arcColor((d: object) => (d as ArcDatum).color)
+        .arcAltitude((d: object) => (d as ArcDatum).altitude)
+        .arcStroke((d: object) => 0.25 + 0.55 * (d as ArcDatum).weight)
+        .arcDashLength(0.4)
+        .arcDashGap(0.1)
+        .arcDashAnimateTime(2200)
+        .arcLabel((d: object) => (d as ArcDatum).label)
+        .arcsTransitionDuration(400);
+
       const ctrl = g.controls();
       ctrl.autoRotate = true;
       ctrl.autoRotateSpeed = 0.32;
@@ -178,6 +240,16 @@ export default function OverviewGlobe({
     if (!g || !ready || !countryPolys) return;
     g.polygonsData([...countryPolys]);
   }, [data, countryPolys, ready]);
+
+  useEffect(() => {
+    const g = globeRef.current;
+    if (!g || !ready) return;
+    g.arcsData(arcData);
+    const ctrl = g.controls();
+    if (ctrl) {
+      ctrl.autoRotateSpeed = arcData.length > 0 ? 0.16 : 0.32;
+    }
+  }, [arcData, ready]);
 
   useEffect(() => {
     if (!ready || !containerRef.current || !globeRef.current) return;
