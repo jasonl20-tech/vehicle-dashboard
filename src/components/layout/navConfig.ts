@@ -8,7 +8,9 @@ import {
   ScrollText,
   Server,
   Settings,
+  UserPlus,
   Users,
+  View,
   Wallet,
 } from "lucide-react";
 
@@ -23,6 +25,15 @@ export type NavItem = {
 export const NAV_PRIMARY: NavItem[] = [
   { label: "Übersicht", icon: LayoutDashboard, to: "/dashboard" },
   {
+    label: "Ansichten",
+    icon: View,
+    children: [
+      { label: "Bildaustrahlung", to: "/ansichten/bildaustrahlung" },
+      { label: "Bildempfang", to: "/ansichten/bildempfang" },
+      { label: "Anfragen Karte", to: "/ansichten/anfragen-karte" },
+    ],
+  },
+  {
     label: "Kundenmanagement",
     icon: Users,
     children: [
@@ -33,6 +44,7 @@ export const NAV_PRIMARY: NavItem[] = [
       { label: "Newsletter", to: "/kunden/newsletter" },
     ],
   },
+  { label: "Leads", icon: UserPlus, to: "/leads" },
   {
     label: "API Analytics",
     icon: BarChart3,

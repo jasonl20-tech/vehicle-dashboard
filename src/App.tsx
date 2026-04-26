@@ -10,6 +10,7 @@ import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
 import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
+import AnfragenKartePage from "./pages/AnfragenKartePage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
@@ -34,6 +35,20 @@ export default function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<OverviewPage />} />
+        <Route
+          path="/ansichten"
+          element={<Navigate to="/ansichten/bildaustrahlung" replace />}
+        />
+        <Route
+          path="/ansichten/bildaustrahlung"
+          element={<ModulePage />}
+        />
+        <Route path="/ansichten/bildempfang" element={<ModulePage />} />
+        <Route
+          path="/ansichten/anfragen-karte"
+          element={<AnfragenKartePage />}
+        />
+        <Route path="/leads" element={<ModulePage />} />
         <Route path="/kunden/crm" element={<ModulePage />} />
         <Route path="/kunden/anfragen" element={<AnfragenPage />} />
         <Route path="/kunden/keys/:key" element={<KundenKeyDetailPage />} />
