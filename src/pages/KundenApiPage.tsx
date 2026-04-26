@@ -11,6 +11,8 @@ import {
 import {
   type ChangeEvent,
   type ReactNode,
+  createContext,
+  useContext,
   useEffect,
   useMemo,
   useState,
@@ -57,6 +59,10 @@ import {
   toAeTimestamp,
   useApi,
 } from "../lib/customerApi";
+import {
+  CUSTOMER_KEYS_EMAIL_MAP_URL,
+  type CustomerKeyEmailMap,
+} from "../lib/customerKeysApi";
 
 type TopKeysResp = { rows: TopKey[] };
 type RecentResp = { rows: RecentRow[] };
@@ -64,6 +70,21 @@ type TimeseriesResp = {
   rows: TimeseriesPoint[];
   bucket: "minute" | "hour" | "day";
 };
+
+/**
+ * Map { keyId → Kunden-Email } aus der `customer_keys`-KV. Wird einmal pro
+ * Seitenladung geholt und an alle KeyChip-Verwendungen vererbt, damit überall
+ * die Email statt des opaken Keys angezeigt wird (sofern vorhanden).
+ *
+ * Bewusst per Context: KeyChip taucht in Tabellen, Drawer, Tooltips … auf;
+ * die Map als Prop überall durchzureichen würde nur Boilerplate erzeugen.
+ */
+const KeyEmailMapContext = createContext<Record<string, string>>({});
+
+function useKeyEmail(id: string): string | undefined {
+  const map = useContext(KeyEmailMapContext);
+  return map[id];
+}
 
 interface KundenApiPageProps {
   /** Datenquelle: alle Kunden (Standard) oder nur der Oneauto-Key. */
@@ -86,6 +107,12 @@ export default function KundenApiPage({
   const [openKey, setOpenKey] = useState<string | null>(null);
 
   const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
+
+  // Email-Map: Mapping vom Kunden-Key zur Email (sofern hinterlegt). Fehlt
+  // das KV-Binding, ignorieren wir den Fehler still — die UI fällt dann
+  // einfach auf den Key-String zurück.
+  const emailMap = useApi<CustomerKeyEmailMap>(CUSTOMER_KEYS_EMAIL_MAP_URL);
+  const keyEmail = emailMap.data?.map ?? {};
 
   const overview = useApi<{ row: OverviewRow }>(apiUrls.overview(range));
   const timeseries = useApi<TimeseriesResp>(apiUrls.timeseries(range));
@@ -114,7 +141,7 @@ export default function KundenApiPage({
   }
 
   return (
-    <>
+    <KeyEmailMapContext.Provider value={keyEmail}>
       <Header
         range={range}
         onRange={setRange}
@@ -257,7 +284,7 @@ export default function KundenApiPage({
           onClose={() => setOpenKey(null)}
         />
       )}
-    </>
+    </KeyEmailMapContext.Provider>
   );
 }
 
@@ -1549,7 +1576,22 @@ function KeyChip({
   id: string;
   interactive?: boolean;
 }) {
+  const email = useKeyEmail(id);
   const short = id.length > 22 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
+
+  // Email vorhanden → Email in Sans-Serif, Key als Tooltip; sonst Key wie zuvor.
+  if (email) {
+    return (
+      <span
+        title={id}
+        className={`inline-flex max-w-[260px] items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] ring-1 ring-inset ring-hair ${
+          interactive ? "hover:bg-ink-50" : "bg-paper"
+        }`}
+      >
+        <span className="truncate text-ink-800">{email}</span>
+      </span>
+    );
+  }
   return (
     <span
       title={id}
@@ -1654,6 +1696,7 @@ function KeyDetailDrawer({
 }) {
   const apiUrls = useMemo(() => makeApiUrls(mode), [mode]);
   const detail = useApi<KeyDetailResponse>(apiUrls.keyDetail(range, keyId));
+  const email = useKeyEmail(keyId);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1680,14 +1723,22 @@ function KeyDetailDrawer({
         <div className="flex items-start justify-between gap-4 border-b border-hair px-6 py-4">
           <div className="min-w-0">
             <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-400">
-              Kunden-Key
+              {email ? "Kunde" : "Kunden-Key"}
             </p>
             <p
-              className="mt-1 truncate font-mono text-[13.5px] text-ink-900"
+              className="mt-1 truncate text-[15px] text-ink-900"
               title={keyId}
             >
-              {keyId}
+              {email ?? <span className="font-mono text-[13.5px]">{keyId}</span>}
             </p>
+            {email && (
+              <p
+                className="mt-0.5 truncate font-mono text-[11px] text-ink-400"
+                title={keyId}
+              >
+                {keyId}
+              </p>
+            )}
           </div>
           <button
             type="button"

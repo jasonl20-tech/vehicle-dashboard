@@ -61,6 +61,12 @@ export interface AuthEnv {
    */
   plans?: KVNamespace;
   /**
+   * KV-Binding: Kunden-Keys. Schlüssel = Kunden-Key (z. B. `VI-…`), Wert = JSON
+   * mit `status`, `customer.email`, `plan_id`, eingebetteter `plan` (wie unter `plans`),
+   * `metadata.created_at`. Binding-Name im Dashboard: `customer_keys` → `env.customer_keys`.
+   */
+  customer_keys?: KVNamespace;
+  /**
    * D1: Fahrzeug-/Bild-Metadaten (z. B. Tabelle `vehicleimagery_public_storage`). Nur SELECT im Code.
    * Binding-Name im Dashboard: `vehicledatabase` → `env.vehicledatabase`
    */

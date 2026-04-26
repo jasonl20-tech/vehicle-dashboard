@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import KundenApiPage from "./pages/KundenApiPage";
+import KundenKeysPage from "./pages/KundenKeysPage";
 import ControllingPage from "./pages/ControllingPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
@@ -27,7 +28,7 @@ export default function App() {
         <Route path="/dashboard" element={<OverviewPage />} />
         <Route path="/kunden/crm" element={<ModulePage />} />
         <Route path="/kunden/anfragen" element={<ModulePage />} />
-        <Route path="/kunden/keys" element={<ModulePage />} />
+        <Route path="/kunden/keys" element={<KundenKeysPage />} />
         <Route path="/kunden/test-keys" element={<ModulePage />} />
         <Route path="/kunden/newsletter" element={<ModulePage />} />
         <Route
