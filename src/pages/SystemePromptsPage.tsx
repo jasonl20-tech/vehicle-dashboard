@@ -1,5 +1,6 @@
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import PromptFieldWithPlaceholders from "../components/prompts/PromptFieldWithPlaceholders";
 import PageHeader from "../components/ui/PageHeader";
 import { useJsonApi } from "../lib/billingApi";
 import {
@@ -246,20 +247,27 @@ export default function SystemePromptsPage() {
                         {saveErr}
                       </p>
                     )}
-                    <label className="block">
+                    <div className="block">
                       <span className="mb-1.5 block text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
                         Prompt
                       </span>
-                      <textarea
-                        value={form.prompt}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, prompt: e.target.value }))
-                        }
-                        rows={14}
-                        className="w-full rounded-md border border-hair bg-white px-3 py-2 text-[13px] leading-relaxed text-ink-800 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none"
-                        placeholder="Platzhalter z. B. {{jahrgang}} {{marke}} …"
-                      />
-                    </label>
+                      <p className="mb-2 text-[12px] text-ink-500">
+                        <span className="font-mono text-ink-600">
+                          {"{{jahrgang}}"}, {"{{marke}}"}, {"{{model}}"},
+                          {"{{bodytyp}}"}, {"{{trim}}"}
+                        </span>{" "}
+                        erscheinen als feste Blöcke (nicht zeichenweise im
+                        Fließtext bearbeitbar). Freien Text dazwischen in den
+                        Kästen bearbeiten.
+                      </p>
+                      <div className="rounded-md border border-hair bg-paper/60 p-2">
+                        <PromptFieldWithPlaceholders
+                          value={form.prompt}
+                          onChange={(v) => setForm((f) => ({ ...f, prompt: v }))}
+                          className="w-full"
+                        />
+                      </div>
+                    </div>
                     <div className="grid gap-4 sm:grid-cols-3">
                       <label className="block sm:col-span-1">
                         <span className="mb-1.5 block text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
