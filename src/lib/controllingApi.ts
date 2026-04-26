@@ -1,13 +1,12 @@
 import type { Range } from "./customerApi";
 
-export type ControllingBlob4Mode = "nonempty" | "hex32";
+export type ControllingBlob4Mode = "nonempty" | "hex32" | "all";
 
 export function controllingApiUrl(
   range: Range,
   opts: {
     gapMinutes: number;
     blob4: ControllingBlob4Mode;
-    /** max. Zeilen aus Analytics Engine */
     limit?: number;
   },
 ): string {
@@ -26,6 +25,23 @@ export type ControllingSession = {
   events: number;
   durationSec: number;
   gapStartSec: number | null;
+  modes: string[];
+};
+
+export type ControllingPerModeOfUser = {
+  mode: string;
+  events: number;
+  processed: number;
+  perHour: number | null;
+  activeSec: number;
+};
+
+export type ControllingPerUserInMode = {
+  user: string;
+  events: number;
+  processed: number;
+  perHour: number | null;
+  activeSec: number;
 };
 
 export type ControllingUserStats = {
@@ -36,60 +52,62 @@ export type ControllingUserStats = {
   sessions: ControllingSession[];
   totalSessionTimeSec: number;
   avgSessionTimeSec: number;
-  openNow: {
-    done: number | null;
-    total: number | null;
-    open: number | null;
-    d2: number;
-    d3: number;
-    d4: number;
-    d5: number;
-    at: string;
-    blob4: string;
-    action: string;
-  } | null;
-  forecast: {
-    open: number;
-    ratePerHour: number | null;
-    etaHours: number | null;
-    basis: string;
-  } | null;
+  modes: string[];
+  primaryOs: string | null;
+  lastIp: string | null;
+  topButtons: Array<{ mode: string; button: string; count: number }>;
+  perMode: ControllingPerModeOfUser[];
+  totalProcessed: number;
+  processedPerHour: number | null;
+  perActiveMinute: number | null;
 };
 
-export type ControllingByBlob4 = {
-  blob4: string;
-  lastTs: string | null;
-  userCount: number;
+export type ControllingByMode = {
+  mode: string;
+  events: number;
+  uniqueUsers: number;
   users: string[];
+  firstTs: string | null;
+  lastTs: string | null;
   latestOpen: number | null;
   latestTotal: number | null;
-  forecast: {
-    ratePerHour: number | null;
-    etaHours: number | null;
-    basis: string;
-  };
+  latestDone: number | null;
+  processedPerHour: number | null;
+  addedPerHour: number | null;
+  netReductionPerHour: number | null;
+  etaIfNoNewHours: number | null;
+  etaIfKeepsAddingHours: number | null;
+  processedTotal: number;
+  addedTotal: number;
+  topButtons: Array<{ button: string; count: number }>;
+  byUser: ControllingPerUserInMode[];
 };
 
-export type ControllingRawRow = {
-  ts: string;
-  siv: string;
-  s_index1: string;
-  s_index2: string;
-  s_blob1: string;
-  s_blob2: string;
-  s_blob3: string;
-  s_blob4: string;
-  s_blob5: string;
-  d1: number;
-  d2: number;
-  d3: number;
-  d4: number;
-  d5: number;
+export type ControllingBucket = {
+  bucket: string;
+  events: number;
+  activeUsers: number;
+  processed: number;
+  added: number;
+};
+
+export type ControllingGlobal = {
+  latestOpen: number | null;
+  latestTotal: number | null;
+  latestDone: number | null;
+  processedPerHour: number | null;
+  addedPerHour: number | null;
+  netReductionPerHour: number | null;
+  etaIfNoNewHours: number | null;
+  etaIfKeepsAddingHours: number | null;
+  processedTotal: number;
+  addedTotal: number;
+  activeUsers: number;
+  activeUserSec: number;
 };
 
 export type ControllingResponse = {
   dataset: string;
-  /** Wie in der Kunden-API: z. B. key_analytics + Spalte dataset. */
   ae?: {
     fromTable: string;
     fromMode: "key_analytics_filter" | "dedicated_table";
@@ -101,8 +119,8 @@ export type ControllingResponse = {
   rowLimit: number;
   rangeRows: number;
   truncated: boolean;
-  byUser: Record<string, ControllingUserStats>;
-  byBlob4: ControllingByBlob4[];
-  rawTail: ControllingRawRow[];
-  meta?: { beschreibung: string };
+  global: ControllingGlobal;
+  byUser: ControllingUserStats[];
+  byMode: ControllingByMode[];
+  timeline: ControllingBucket[];
 };

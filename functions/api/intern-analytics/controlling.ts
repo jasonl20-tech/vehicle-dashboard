@@ -1,13 +1,13 @@
 /**
  * GET /api/intern-analytics/controlling
  *
+ * Liefert Auswertung der AE-Tabelle `controll_platform_logs`.
+ *
  * Query-Parameter:
  *   from, to     – YYYY-MM-DD HH:MM:SS (Standard: letzte 7 Tage)
  *   gapMinutes   – Sessions-Trennung (Standard: 5)
- *   limit        – max. Zeilen aus Analytics Engine (Standard: 100000)
- *   blob4        – nonempty | hex32  (nur hex32-Keys in blob4)
- *   includeRaw   – 0 | 1  (Rohzeilen am Ende; Standard 1)
- *   rawLimit     – letzte N Rohzeilen (Standard 150)
+ *   limit        – max. Zeilen aus AE (Standard: 100000, max. 150000)
+ *   blob4        – nonempty | hex32 | all  (Standard: nonempty)
  */
 import {
   resolveAnalyticsBinding,
@@ -24,7 +24,6 @@ import {
   buildControllingFetchPlan,
   defaultControllingRange,
   MAX_QUERY_ROWS,
-  parseControllingRow,
   processControllingData,
   type ControllingBlob4Mode,
   getControllingDataset,
@@ -53,12 +52,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   );
   const blob4Raw = (url.searchParams.get("blob4") || "nonempty").toLowerCase();
   const blob4Mode: ControllingBlob4Mode =
-    blob4Raw === "hex32" ? "hex32" : "nonempty";
-  const includeRaw = (url.searchParams.get("includeRaw") || "1") !== "0";
-  const rawLimit = Math.min(
-    500,
-    Math.max(20, Number(url.searchParams.get("rawLimit") || 150)),
-  );
+    blob4Raw === "hex32"
+      ? "hex32"
+      : blob4Raw === "all"
+        ? "all"
+        : "nonempty";
 
   let plan: ReturnType<typeof buildControllingFetchPlan>;
   try {
@@ -67,10 +65,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       blob4Mode,
     });
   } catch (e) {
-    return jsonResponse(
-      { error: (e as Error).message },
-      { status: 400 },
-    );
+    return jsonResponse({ error: (e as Error).message }, { status: 400 });
   }
 
   const pRun = resolveAnalyticsBinding(env, plan.binding);
@@ -100,10 +95,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const likelyTruncated = data.length >= limit;
   const processed = processControllingData(data, gapMs, { likelyTruncated });
 
-  const rawTail = includeRaw
-    ? data.slice(-rawLimit).map((r) => parseControllingRow(r))
-    : [];
-
   return jsonResponse({
     dataset: getControllingDataset(env),
     ae: {
@@ -116,10 +107,5 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     blob4Mode,
     rowLimit: limit,
     ...processed,
-    rawTail,
-    meta: {
-      beschreibung:
-        "Offen = max(0, double3−double2) wenn double3>0. Prognose aus letzten abnehmenden „offen“-Werten (Sessions: >5 min Pause = neue Session).",
-    },
   });
 };
