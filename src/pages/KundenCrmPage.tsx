@@ -74,15 +74,15 @@ function RowEditor({
   const [email, setEmail] = useState(row.email);
   const [company, setCompany] = useState(row.company);
   const [status, setStatus] = useState(row.status);
-  const [standort, setStandort] = useState(row.standort);
+  const [location, setLocation] = useState(row.location);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setEmail(row.email);
     setCompany(row.company);
     setStatus(row.status);
-    setStandort(row.standort);
-  }, [row.id, row.email, row.company, row.status, row.standort]);
+    setLocation(row.location);
+  }, [row.id, row.email, row.company, row.status, row.location]);
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -96,7 +96,7 @@ function RowEditor({
           email: email.trim(),
           company: company.trim() || null,
           status: status.trim() || "Neu",
-          standort: standort.trim() ? standort.trim().toUpperCase() : null,
+          location: location.trim() ? location.trim().toUpperCase() : null,
         }),
       });
       const j = (await res.json().catch(() => ({}))) as { error?: string };
@@ -110,7 +110,7 @@ function RowEditor({
     } finally {
       setSaving(false);
     }
-  }, [row.id, email, company, status, standort, onSaved, onError]);
+  }, [row.id, email, company, status, location, onSaved, onError]);
 
   return (
     <tr>
@@ -146,8 +146,8 @@ function RowEditor({
       </td>
       <td className={TD}>
         <StandortSelect
-          value={standort}
-          onChange={setStandort}
+          value={location}
+          onChange={setLocation}
           ariaLabel="Standort des Kunden"
         />
       </td>
@@ -177,7 +177,7 @@ export default function KundenCrmPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newCompany, setNewCompany] = useState("");
   const [newStatus, setNewStatus] = useState("Neu");
-  const [newStandort, setNewStandort] = useState("");
+  const [newLocation, setNewLocation] = useState("");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -221,8 +221,8 @@ export default function KundenCrmPage() {
           email,
           company: newCompany.trim() || undefined,
           status: newStatus.trim() || "Neu",
-          standort: newStandort.trim()
-            ? newStandort.trim().toUpperCase()
+          location: newLocation.trim()
+            ? newLocation.trim().toUpperCase()
             : undefined,
         }),
       });
@@ -234,14 +234,14 @@ export default function KundenCrmPage() {
       setNewEmail("");
       setNewCompany("");
       setNewStatus("Neu");
-      setNewStandort("");
+      setNewLocation("");
       reload();
     } catch (e) {
       setFormErr((e as Error).message);
     } finally {
       setAdding(false);
     }
-  }, [newEmail, newCompany, newStatus, newStandort, reload]);
+  }, [newEmail, newCompany, newStatus, newLocation, reload]);
 
   const onRowSaved = useCallback(() => {
     reload();
@@ -432,8 +432,8 @@ export default function KundenCrmPage() {
               Standort (optional)
             </label>
             <StandortSelect
-              value={newStandort}
-              onChange={setNewStandort}
+              value={newLocation}
+              onChange={setNewLocation}
               ariaLabel="Standort des neuen Kunden"
             />
           </div>

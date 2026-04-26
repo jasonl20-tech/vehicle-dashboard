@@ -2,11 +2,13 @@
  * CRM-Kunden — Tabelle `customers` in derselben D1-DB wie `submissions` (Binding `website`).
  *
  *   GET  /api/crm/customers?q=&limit=&offset=
- *   POST /api/crm/customers  { id?, email, company?, status?, standort? }
- *   PUT  /api/crm/customers  { id, email?, company?, status?, standort? }  (email-Wechsel nur ohne Konflikt)
+ *   POST /api/crm/customers  { id?, email, company?, status?, location? }
+ *   PUT  /api/crm/customers  { id, email?, company?, status?, location? }
  *
- * `standort` ist ISO-3166-Alpha-2 (z. B. "DE", "AT"). Leerstring oder `null`
- * räumt das Feld; serverseitig wird ein Regex auf 2 Buchstaben geprüft.
+ * Landeskürzel liegt in der Spalte **`location`** (ISO-3166-Alpha-2). Für ältere
+ * Installationen wird **`standort`** noch als DB-Spalte und Body-Alias unterstützt.
+ *
+ * JSON-Antwort nutzt immer **`location`** (leerer String = nicht gesetzt).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -15,30 +17,39 @@ const DEFAULT_LIMIT = 50;
 
 const ISO2_RE = /^[A-Z]{2}$/;
 
+type GeoCol = "location" | "standort";
+
 type CustomerRowDb = {
   id: string;
   created_at: string;
   email: string;
   company: string | null;
   status: string | null;
-  standort: string | null;
+  location?: string | null;
+  standort?: string | null;
 };
 
-/**
- * Akzeptiert ISO-2 case-insensitiv. Leerstring/`null`/`undefined` → `null`
- * (löschen). Ungültiges Token → `Error`. Wird per `parseStandort()` aus dem
- * Body-Wert erzeugt (POST/PUT).
- */
-function parseStandort(v: unknown): string | null | Error {
+function parseLocationIso2(v: unknown): string | null | Error {
   if (v === undefined) return new Error("undefined");
   if (v === null) return null;
-  if (typeof v !== "string") return new Error("standort muss string sein");
+  if (typeof v !== "string") return new Error("location muss string sein");
   const t = v.trim().toUpperCase();
   if (!t) return null;
   if (!ISO2_RE.test(t)) {
-    return new Error("standort muss ein ISO-3166-Alpha-2-Code sein (z. B. DE)");
+    return new Error(
+      "location muss ein ISO-3166-Alpha-2-Code sein (z. B. DE)",
+    );
   }
   return t;
+}
+
+/** Body: `location` bevorzugt, `standort` nur noch Alias. */
+function bodyLocationInput(body: {
+  location?: unknown;
+  standort?: unknown;
+}): unknown {
+  if (body.location !== undefined) return body.location;
+  return body.standort;
 }
 
 function requireWebsiteDb(env: AuthEnv): D1Database | Response {
@@ -55,20 +66,19 @@ function requireWebsiteDb(env: AuthEnv): D1Database | Response {
 }
 
 /**
- * Prüft per PRAGMA, ob die Spalte `standort` existiert. So funktioniert die
- * Route auch bevor `0005_customers_standort.sql` auf der D1-DB ausgeführt
- * wurde — alte Einträge werden weiterhin gelistet, `standort` bleibt einfach
- * leer.
+ * Welche Spalte enthält das ISO-2-Land? Bevorzugt `location`, sonst Legacy `standort`.
  */
-async function hasStandortColumn(db: D1Database): Promise<boolean> {
+async function getGeoColumn(db: D1Database): Promise<GeoCol | null> {
   try {
     const r = await db
       .prepare(`PRAGMA table_info(customers)`)
       .all<{ name: string }>();
     const cols = (r.results ?? []).map((c) => String(c.name).toLowerCase());
-    return cols.includes("standort");
+    if (cols.includes("location")) return "location";
+    if (cols.includes("standort")) return "standort";
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -112,10 +122,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     .first<{ n: number }>();
   const total = countRow?.n ?? 0;
 
-  const hasStandort = await hasStandortColumn(db);
-  const cols = hasStandort
-    ? "id, created_at, email, company, status, standort"
-    : "id, created_at, email, company, status";
+  const geoCol = await getGeoColumn(db);
+  const cols =
+    geoCol != null
+      ? `id, created_at, email, company, status, ${geoCol} AS location`
+      : "id, created_at, email, company, status";
 
   const { results } = await db
     .prepare(
@@ -130,7 +141,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     email: r.email,
     company: r.company ?? "",
     status: r.status ?? "Neu",
-    standort: hasStandort ? (r.standort ?? "") : "",
+    location: geoCol != null ? (r.location ?? "") : "",
   }));
 
   return jsonResponse(
@@ -139,12 +150,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       total,
       offset,
       limit,
-      ...(hasStandort
-        ? null
-        : {
+      ...(geoCol == null
+        ? {
             schemaWarning:
-              "Spalte `standort` fehlt in `customers`. Migration `d1/migrations/0005_customers_standort.sql` einspielen, dann ist der Standort-Dropdown im CRM editierbar.",
-          }),
+              "Keine Spalte `location` (oder Legacy `standort`) in `customers`. Optional: `ALTER TABLE customers ADD COLUMN location TEXT;` oder Migration `d1/migrations/0005_customers_location.sql`.",
+          }
+        : null),
     },
     { status: 200 },
   );
@@ -155,6 +166,7 @@ type PostBody = {
   email?: string;
   company?: string | null;
   status?: string | null;
+  location?: string | null;
   standort?: string | null;
 };
 
@@ -196,26 +208,26 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       ? body.status.trim()
       : "Neu";
 
-  let standort: string | null;
-  if (body.standort === undefined) {
-    standort = null;
+  let locationVal: string | null;
+  if (bodyLocationInput(body) === undefined) {
+    locationVal = null;
   } else {
-    const parsed = parseStandort(body.standort);
+    const parsed = parseLocationIso2(bodyLocationInput(body));
     if (parsed instanceof Error) {
       return jsonResponse({ error: parsed.message }, { status: 400 });
     }
-    standort = parsed;
+    locationVal = parsed;
   }
 
-  const hasStandort = await hasStandortColumn(db);
+  const geoCol = await getGeoColumn(db);
 
   try {
-    if (hasStandort) {
+    if (geoCol != null) {
       await db
         .prepare(
-          `INSERT INTO customers (id, email, company, status, standort) VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO customers (id, email, company, status, ${geoCol}) VALUES (?, ?, ?, ?, ?)`,
         )
-        .bind(id, email, company, status, standort)
+        .bind(id, email, company, status, locationVal)
         .run();
     } else {
       await db
@@ -243,13 +255,13 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       email,
       company: company ?? "",
       status,
-      standort: hasStandort ? (standort ?? "") : "",
-      ...(hasStandort
-        ? null
-        : {
+      location: geoCol != null ? (locationVal ?? "") : "",
+      ...(geoCol == null
+        ? {
             schemaWarning:
-              "Spalte `standort` fehlt – Wert wurde nicht gespeichert. Migration `0005_customers_standort.sql` einspielen.",
-          }),
+              "Keine Spalte `location` / `standort` – Land wurde nicht gespeichert. `ALTER TABLE customers ADD COLUMN location TEXT;` ausführen.",
+          }
+        : null),
     },
     { status: 201 },
   );
@@ -260,6 +272,7 @@ type PutBody = {
   email?: string;
   company?: string | null;
   status?: string | null;
+  location?: string | null;
   standort?: string | null;
 };
 
@@ -285,14 +298,13 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "id ist Pflicht" }, { status: 400 });
   }
 
-  const hasStandort = await hasStandortColumn(db);
-  const selectCols = hasStandort
-    ? "id, created_at, email, company, status, standort"
-    : "id, created_at, email, company, status";
+  const geoCol = await getGeoColumn(db);
+  const selectCols =
+    geoCol != null
+      ? `id, created_at, email, company, status, ${geoCol} AS location`
+      : "id, created_at, email, company, status";
   const cur = await db
-    .prepare(
-      `SELECT ${selectCols} FROM customers WHERE id = ? LIMIT 1`,
-    )
+    .prepare(`SELECT ${selectCols} FROM customers WHERE id = ? LIMIT 1`)
     .bind(id)
     .first<CustomerRowDb>();
   if (!cur) {
@@ -317,24 +329,24 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
         ? null
         : String(body.status).trim() || "Neu";
 
-  let nextStandort: string | null;
-  if (body.standort === undefined) {
-    nextStandort = (cur.standort ?? null) as string | null;
+  let nextLocation: string | null;
+  if (bodyLocationInput(body) === undefined) {
+    nextLocation = (cur.location ?? null) as string | null;
   } else {
-    const parsed = parseStandort(body.standort);
+    const parsed = parseLocationIso2(bodyLocationInput(body));
     if (parsed instanceof Error) {
       return jsonResponse({ error: parsed.message }, { status: 400 });
     }
-    nextStandort = parsed;
+    nextLocation = parsed;
   }
 
   try {
-    if (hasStandort) {
+    if (geoCol != null) {
       await db
         .prepare(
-          `UPDATE customers SET email = ?, company = ?, status = ?, standort = ? WHERE id = ?`,
+          `UPDATE customers SET email = ?, company = ?, status = ?, ${geoCol} = ? WHERE id = ?`,
         )
-        .bind(nextEmail, nextCompany, nextStatus, nextStandort, id)
+        .bind(nextEmail, nextCompany, nextStatus, nextLocation, id)
         .run();
     } else {
       await db
@@ -363,13 +375,13 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
       email: nextEmail,
       company: nextCompany ?? "",
       status: nextStatus ?? "Neu",
-      standort: hasStandort ? (nextStandort ?? "") : "",
-      ...(hasStandort
-        ? null
-        : {
+      location: geoCol != null ? (nextLocation ?? "") : "",
+      ...(geoCol == null
+        ? {
             schemaWarning:
-              "Spalte `standort` fehlt – Wert wurde nicht gespeichert. Migration `0005_customers_standort.sql` einspielen.",
-          }),
+              "Keine Spalte `location` / `standort` – Land wurde nicht gespeichert. `ALTER TABLE customers ADD COLUMN location TEXT;` ausführen.",
+          }
+        : null),
     },
     { status: 200 },
   );

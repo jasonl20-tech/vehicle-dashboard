@@ -2,7 +2,7 @@
  * GET /api/intern-analytics/image-url-requests-customer-arcs
  *
  * Sammelt Customer-Datensätze (D1: `customers`), bei denen sowohl `company`
- * als auch `standort` (ISO-2) gesetzt sind, und holt aus der Analytics
+ * als auch `location` (ISO-2; Legacy: Spalte `standort`) gesetzt sind, und holt aus der Analytics
  * Engine das Country-Breakdown pro `index1`-Domain – damit auf der
  * Bildaustrahlungs-Karte ein Bogen vom Firmensitz zu jedem Viewer-Land
  * gezeichnet werden kann.
@@ -13,7 +13,7 @@
  * {
  *   from, to, days, modesTried,
  *   customers: [{
- *     id, email, company, standort,                       // CRM
+ *     id, email, company, location,                        // CRM
  *     domain,                                             // gematchte index1-Domain
  *     viewers: { DE: 12, US: 5, ... },                    // ISO-2 → SUM(_sample_interval)
  *     viewersTotal, viewersCountryCount, viewerMax        // Aggregate
@@ -51,13 +51,29 @@ const MAX_GROUP_ROWS = 50_000;
 type Mode = "filter" | "dedicated";
 type DomainCountryRow = { d: string; iso2: string; c: number };
 
+type GeoCol = "location" | "standort";
+
 type CustomerDb = {
   id: string;
   email: string;
   company: string | null;
   status: string | null;
-  standort: string | null;
+  location: string | null;
 };
+
+async function getGeoColumn(db: D1Database): Promise<GeoCol | null> {
+  try {
+    const info = await db
+      .prepare(`PRAGMA table_info(customers)`)
+      .all<{ name: string }>();
+    const cols = (info.results ?? []).map((c) => String(c.name).toLowerCase());
+    if (cols.includes("location")) return "location";
+    if (cols.includes("standort")) return "standort";
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function defaultRange(days: number): { from: string; to: string } {
   const d = Math.min(MAX_DAYS, Math.max(1, days));
@@ -234,22 +250,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (tryFilter) modes.push("filter");
   if (tryDedicated) modes.push("dedicated");
 
-  // 1) Kunden mit Company + Standort holen.
-  // Vorab prüfen, ob `standort` schon existiert – sonst liefern wir eine
-  // sanfte Warnung und keine Bögen (statt 500).
-  let hasStandortCol = false;
-  try {
-    const info = await db
-      .prepare(`PRAGMA table_info(customers)`)
-      .all<{ name: string }>();
-    hasStandortCol = (info.results ?? [])
-      .map((c) => String(c.name).toLowerCase())
-      .includes("standort");
-  } catch {
-    /* PRAGMA evtl. nicht erlaubt; weiter mit hasStandortCol = false */
-  }
-
-  if (!hasStandortCol) {
+  // 1) Kunden mit Company + Land (Spalte `location` oder Legacy `standort`).
+  const geoCol = await getGeoColumn(db);
+  if (geoCol == null) {
     return jsonResponse(
       {
         from,
@@ -258,8 +261,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         modesTried: modes,
         customers: [],
         info:
-          "Spalte `customers.standort` fehlt. Migration `d1/migrations/0005_customers_standort.sql` einspielen, dann erscheinen die Streams.",
-        schemaWarning: "missing_column:customers.standort",
+          "Keine Spalte `location` oder `standort` in `customers`. `ALTER TABLE customers ADD COLUMN location TEXT;` (siehe `d1/migrations/0005_customers_location.sql`).",
+        schemaWarning: "missing_column:customers.location",
       },
       { status: 200 },
     );
@@ -269,9 +272,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   try {
     const r = await db
       .prepare(
-        `SELECT id, email, company, status, standort
+        `SELECT id, email, company, status, ${geoCol} AS location
          FROM customers
-         WHERE standort IS NOT NULL AND TRIM(standort) != ''
+         WHERE ${geoCol} IS NOT NULL AND TRIM(${geoCol}) != ''
            AND company IS NOT NULL AND TRIM(company) != ''
          ORDER BY datetime(created_at) DESC`,
       )
@@ -284,7 +287,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
           "D1-Abfrage `customers` fehlgeschlagen: " +
           ((e as Error).message || String(e)),
         hint:
-          "Falls die Spalte `standort` fehlt, Migration `0005_customers_standort.sql` einspielen.",
+          "Erwartet Spalte `location` oder `standort` mit ISO-2-Ländercode.",
       },
       { status: 500 },
     );
@@ -299,8 +302,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const lookupByDomain = new Map<string, { customerId: string }[]>();
   let totalDomains = 0;
   for (const c of customerRows) {
-    const standort = (c.standort ?? "").toUpperCase();
-    if (!/^[A-Z]{2}$/.test(standort)) continue;
+    const loc = (c.location ?? "").toUpperCase();
+    if (!/^[A-Z]{2}$/.test(loc)) continue;
     const company = c.company ?? "";
     const doms = buildDomainCandidates(company);
     if (doms.length === 0) continue;
@@ -314,7 +317,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       lookupByDomain.set(d, arr);
     }
     if (filtered.length > 0) {
-      candidates.push({ customer: { ...c, standort }, domains: filtered });
+      candidates.push({ customer: { ...c, location: loc }, domains: filtered });
     }
   }
 
@@ -326,7 +329,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         days,
         modesTried: modes,
         customers: [],
-        info: "Keine Kunden mit Standort + Firmenname gefunden.",
+        info: "Keine Kunden mit Land (`location`/`standort`) + Firmenname gefunden.",
       },
       { status: 200 },
     );
@@ -401,7 +404,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     id: string;
     email: string;
     company: string;
-    standort: string;
+    location: string;
     domain: string;
     domainsMatched: string[];
     viewers: Record<string, number>;
@@ -434,7 +437,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       id: cand.customer.id,
       email: cand.customer.email,
       company: cand.customer.company ?? "",
-      standort: cand.customer.standort ?? "",
+      location: cand.customer.location ?? "",
       domain: matchedDomains[0] ?? cand.domains[0],
       domainsMatched: matchedDomains,
       viewers,

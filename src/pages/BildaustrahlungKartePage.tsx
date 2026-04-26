@@ -310,7 +310,7 @@ export default function BildaustrahlungKartePage() {
                 )}
               </div>
               <p className="mt-0.5 text-[11.5px] text-ink-500">
-                Kunde mit gesetzter <code>standort</code> + passendem{" "}
+                Kunde mit gesetzter <code>location</code> + passendem{" "}
                 <code>company</code> (= index1-Domain). Klick filtert die
                 Bögen auf einen Kunden.
               </p>
@@ -337,7 +337,7 @@ export default function BildaustrahlungKartePage() {
                           {c.company || c.email}
                         </span>
                         <span className="text-[11px] text-ink-500">
-                          {iso2Name(c.standort)} ({c.standort}) →{" "}
+                          {iso2Name(c.location)} ({c.location}) →{" "}
                           {fmtNumber(c.viewersTotal)} Requests aus{" "}
                           {c.viewersCountryCount} Ländern
                         </span>
@@ -405,7 +405,7 @@ export default function BildaustrahlungKartePage() {
             <p className="shrink-0 border-b border-hair/80 px-4 py-2 text-[11.5px] text-ink-500">
               <strong className="text-ink-700">geo</strong>: gesamtes Bildaustrahlung-Aggregat (Domains, Länder).{" "}
               <strong className="text-ink-700">arcs</strong>: pro Kunde mit{" "}
-              <code className="text-ink-700">standort</code> +{" "}
+              <code className="text-ink-700">location</code> +{" "}
               <code className="text-ink-700">company</code>=index1-Domain das
               Country-Breakdown – Quelle für die Bögen auf Karte.
             </p>

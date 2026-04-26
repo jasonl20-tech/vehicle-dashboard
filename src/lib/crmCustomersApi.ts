@@ -6,8 +6,8 @@ export type CrmCustomerRow = {
   email: string;
   company: string;
   status: string;
-  /** ISO-3166-Alpha-2, leerer String wenn nicht gesetzt. */
-  standort: string;
+  /** ISO-3166-Alpha-2, leerer String wenn nicht gesetzt (DB-Spalte `location`). */
+  location: string;
 };
 
 export type CrmCustomersListResponse = {
@@ -15,7 +15,7 @@ export type CrmCustomersListResponse = {
   total: number;
   offset: number;
   limit: number;
-  /** Vorhanden, wenn `customers.standort` noch nicht existiert. */
+  /** Wenn weder `location` noch Legacy `standort` in D1 existiert. */
   schemaWarning?: string;
 };
 

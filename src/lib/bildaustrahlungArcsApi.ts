@@ -11,8 +11,8 @@ export type BildaustrahlungArcCustomer = {
   id: string;
   email: string;
   company: string;
-  /** ISO-3166-Alpha-2 (z. B. "DE"). */
-  standort: string;
+  /** ISO-3166-Alpha-2 (z. B. "DE"); DB-Spalte `location`. */
+  location: string;
   /** Erste gematchte index1-Domain (Anzeige). */
   domain: string;
   domainsMatched: string[];
@@ -72,17 +72,17 @@ export function arcsFromCustomers(
 ): BildaustrahlungArc[] {
   const out: BildaustrahlungArc[] = [];
   for (const c of customers) {
-    if (!/^[A-Z]{2}$/.test(c.standort)) continue;
+    if (!/^[A-Z]{2}$/.test(c.location)) continue;
     const max = c.viewerMax || 1;
     for (const [iso2, count] of Object.entries(c.viewers)) {
       if (!/^[A-Z]{2}$/.test(iso2)) continue;
-      if (iso2 === c.standort) continue;
+      if (iso2 === c.location) continue;
       out.push({
         customerId: c.id,
         customerEmail: c.email,
         company: c.company,
         domain: c.domain,
-        fromIso2: c.standort,
+        fromIso2: c.location,
         toIso2: iso2,
         count,
         weight: count > 0 && max > 0 ? Math.min(1, count / max) : 0,
