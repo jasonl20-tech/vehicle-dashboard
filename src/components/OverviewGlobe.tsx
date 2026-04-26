@@ -4,11 +4,27 @@ import { Maximize2, Minus, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import countries from "world-countries";
 
-/** three-globe example assets (jsDelivr, version pinned for stable caching) */
-const EARTH_DAY =
-  "https://cdn.jsdelivr.net/npm/three-globe@2.45.2/example/img/earth-day.jpg";
-const EARTH_TOPOLOGY =
-  "https://cdn.jsdelivr.net/npm/three-globe@2.45.2/example/img/earth-topology.png";
+/** ruhiger Ozean-Hintergrund (kein Satellitenbild) — three-globe Beispiel-Assets */
+const EARTH_OCEAN =
+  "https://cdn.jsdelivr.net/npm/three-globe@2.45.2/example/img/earth-water.png";
+
+const COUNTRIES_GEOJSON_URL = "/globe/ne_110m_admin_0_countries.geojson";
+
+type NeFeature = {
+  type: "Feature";
+  geometry: { type: string; coordinates: unknown };
+  properties: { ISO_A2?: string; ADMIN?: string };
+};
+
+function filterNeFeatures(
+  features: NeFeature[] | undefined,
+): NeFeature[] {
+  if (!features) return [];
+  return features.filter((f) => {
+    const iso = f.properties?.ISO_A2;
+    return iso && iso !== "AQ" && iso !== "-99";
+  });
+}
 
 type HexInput = { lat: number; lng: number; weight: number; iso: string };
 
@@ -84,11 +100,30 @@ export default function OverviewGlobe({
   const maxWRef = useRef(1);
   const globeRef = useRef<GlobeInstance | null>(null);
   const [ready, setReady] = useState(false);
+  const [countryPolys, setCountryPolys] = useState<NeFeature[] | null>(null);
   const hexPoints = useMemo(() => buildHexBinPoints(data), [data]);
 
   useEffect(() => {
     maxWRef.current = data?.max && data.max > 0 ? data.max : 1;
   }, [data?.max]);
+
+  useEffect(() => {
+    let ok = true;
+    fetch(COUNTRIES_GEOJSON_URL)
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json() as Promise<{ features?: NeFeature[] }>;
+      })
+      .then((gj) => {
+        if (ok) setCountryPolys(filterNeFeatures(gj.features));
+      })
+      .catch(() => {
+        if (ok) setCountryPolys([]);
+      });
+    return () => {
+      ok = false;
+    };
+  }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -113,13 +148,24 @@ export default function OverviewGlobe({
       g.width(w)
         .height(h)
         .backgroundColor("rgba(0,0,0,0)")
-        .globeImageUrl(EARTH_DAY)
-        .bumpImageUrl(EARTH_TOPOLOGY)
+        .globeImageUrl(EARTH_OCEAN)
+        .lineHoverPrecision(0)
         .showGraticules(false)
         .showAtmosphere(true)
-        .atmosphereColor("rgba(130, 200, 220, 0.35)")
-        .atmosphereAltitude(0.22)
-        .pointsData([]);
+        .atmosphereColor("rgba(200, 215, 232, 0.28)")
+        .atmosphereAltitude(0.18)
+        .pointsData([])
+        .polygonsData([])
+        .polygonGeoJsonGeometry("geometry")
+        .polygonAltitude(0.003)
+        .polygonCapColor(() => "rgba(240, 244, 248, 0.96)")
+        .polygonSideColor(() => "rgba(210, 220, 232, 0.85)")
+        .polygonStrokeColor(() => "rgba(80, 95, 115, 0.92)")
+        .polygonLabel((d) => {
+          const p = (d as NeFeature).properties;
+          return p?.ADMIN ? String(p.ADMIN) : "";
+        })
+        .polygonsTransitionDuration(300);
 
       g.hexBinPointsData([])
         .hexBinPointLat("lat")
@@ -172,6 +218,12 @@ export default function OverviewGlobe({
   }, [hexPoints, ready]);
 
   useEffect(() => {
+    const g = globeRef.current;
+    if (!g || !ready || !countryPolys) return;
+    g.polygonsData(countryPolys);
+  }, [countryPolys, ready]);
+
+  useEffect(() => {
     if (!ready || !containerRef.current || !globeRef.current) return;
     const ro = new ResizeObserver(() => {
       const box = containerRef.current;
@@ -222,8 +274,9 @@ export default function OverviewGlobe({
           Anfragen nach Land
         </h2>
         <p className="mt-0.5 max-w-3xl text-[13px] text-ink-600">
-          3D-Hex-Raster: desto mehr Einsendungen, desto höher und kräftiger der
-          Marker (Nicht-Spam, Ländercode in Metadaten).
+          Kartografische Kugel mit Ländergrenzen; die Säulen (Hex) zeigen
+          relative Anfragen (Nicht-Spam, Ländercode in Metadaten). Grenzen:
+          Natural Earth 110m.
         </p>
         {data && !error && (
           <p className="mt-1.5 text-[12.5px] text-ink-500">
