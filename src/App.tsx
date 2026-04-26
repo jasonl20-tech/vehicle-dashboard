@@ -11,6 +11,7 @@ import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
 import OverviewPage from "./pages/OverviewPage";
 import SettingsPage from "./pages/SettingsPage";
+import SystemePromptsPage from "./pages/SystemePromptsPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
@@ -47,7 +48,7 @@ export default function App() {
           path="/newsletter"
           element={<Navigate to="/kunden/newsletter" replace />}
         />
-        <Route path="/systeme/prompts" element={<ModulePage />} />
+        <Route path="/systeme/prompts" element={<SystemePromptsPage />} />
         <Route path="/systeme/mapping" element={<ModulePage />} />
         <Route
           path="/systeme"

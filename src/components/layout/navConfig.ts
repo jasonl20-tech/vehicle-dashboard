@@ -33,7 +33,6 @@ export const NAV_PRIMARY: NavItem[] = [
       { label: "Newsletter", to: "/kunden/newsletter" },
     ],
   },
-  { label: "Logs", icon: ScrollText, to: "/logs" },
   {
     label: "API Analytics",
     icon: BarChart3,
@@ -82,6 +81,7 @@ export const NAV_PRIMARY: NavItem[] = [
       { label: "Mapping", to: "/systeme/mapping" },
     ],
   },
+  { label: "Logs", icon: ScrollText, to: "/logs" },
 ];
 
 export const NAV_FOOTER: NavItem[] = [

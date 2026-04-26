@@ -67,6 +67,11 @@ export interface AuthEnv {
    */
   customer_keys?: KVNamespace;
   /**
+   * KV-Binding: System-Prompts pro Ansicht (z. B. `front_right` → JSON mit
+   * `prompt`, `aspect_ratio`, …). Binding-Name im Dashboard: `prompts` → `env.prompts`.
+   */
+  prompts?: KVNamespace;
+  /**
    * D1: Fahrzeug-/Bild-Metadaten (z. B. Tabelle `vehicleimagery_public_storage`). Nur SELECT im Code.
    * Binding-Name im Dashboard: `vehicledatabase` → `env.vehicledatabase`
    */
