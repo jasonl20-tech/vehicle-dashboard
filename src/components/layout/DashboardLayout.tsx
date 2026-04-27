@@ -1,8 +1,9 @@
+import { Menu } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import Sidebar from "./Sidebar";
-import DashboardHeader from "./DashboardHeader";
 import CommandPalette from "../CommandPalette";
+import DashboardHeader from "./DashboardHeader";
+import Sidebar from "./Sidebar";
 
 const COLLAPSE_KEY = "ui.sidebar.collapsed";
 
@@ -30,10 +31,12 @@ function useIsLg(): boolean {
 }
 
 const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/kunden/test-anfragen" as const;
+const FULLSCREEN_MAP_BILDBEMPFANG = "/ansichten/bildempfang" as const;
 
 export default function DashboardLayout() {
   const { pathname } = useLocation();
   const isKundenTestAnfragen = pathname === FULL_WIDTH_KUNDEN_TEST_ANFRAGEN;
+  const isBildempfangMap = pathname === FULLSCREEN_MAP_BILDBEMPFANG;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -79,11 +82,21 @@ export default function DashboardLayout() {
   const effectiveCollapsed = collapsed && isLg;
 
   return (
-    <div className="relative min-h-screen bg-paper text-ink-800">
+    <div
+      className={
+        isBildempfangMap
+          ? "relative h-[100dvh] min-h-0 bg-black text-ink-800"
+          : "relative min-h-screen bg-paper text-ink-800"
+      }
+    >
       {/* Layered background — sits behind everything, doesn't intercept clicks. */}
-      <BackgroundLayer />
+      {!isBildempfangMap && <BackgroundLayer />}
 
-      <div className="relative flex min-h-screen w-full min-w-0">
+      <div
+        className={`relative flex w-full min-w-0 ${
+          isBildempfangMap ? "h-[100dvh] min-h-0" : "min-h-screen"
+        }`}
+      >
         <Sidebar
           mobileOpen={mobileOpen}
           onClose={() => setMobileOpen(false)}
@@ -91,23 +104,43 @@ export default function DashboardLayout() {
           onToggleCollapse={toggleCollapse}
           onOpenPalette={() => setPaletteOpen(true)}
         />
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-          <DashboardHeader
-            onOpenMobileMenu={() => setMobileOpen(true)}
-            onOpenPalette={() => setPaletteOpen(true)}
-          />
+        <main
+          className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
+            isBildempfangMap ? "h-[100dvh] bg-black" : ""
+          }`}
+        >
+          {!isBildempfangMap && (
+            <DashboardHeader
+              onOpenMobileMenu={() => setMobileOpen(true)}
+              onOpenPalette={() => setPaletteOpen(true)}
+            />
+          )}
+          {isBildempfangMap && (
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              className="absolute left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-black/55 text-white/95 shadow-lg backdrop-blur-sm lg:hidden"
+              aria-label="Menü öffnen"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
           <div
             className={
-              isKundenTestAnfragen
-                ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 pb-0 pt-1 sm:px-4 lg:px-5"
-                : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
+              isBildempfangMap
+                ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
+                : isKundenTestAnfragen
+                  ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 pb-0 pt-1 sm:px-4 lg:px-5"
+                  : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
           >
             <div
               className={
-                isKundenTestAnfragen
-                  ? "min-h-0 w-full min-w-0 flex-1 flex flex-col"
-                  : ""
+                isBildempfangMap
+                  ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
+                  : isKundenTestAnfragen
+                    ? "min-h-0 w-full min-w-0 flex-1 flex flex-col"
+                    : ""
               }
             >
               <Outlet />
