@@ -28,10 +28,15 @@ body {
 html.bildempfang-ocean-bg {
   color-scheme: dark;
 }
+/* !important: tailwind `body { @apply bg-paper }` bzw. Leaflet `.leaflet-container { background:#ddd }` laden ggf. später */
 html.bildempfang-ocean-bg,
 html.bildempfang-ocean-bg body,
 html.bildempfang-ocean-bg #root {
-  background-color: #0b1324;
+  background-color: #0b1324 !important;
+}
+/* Leaflet-Standard (#ddd) — sonst graue Fläche zwischen Header und Kacheln */
+html.bildempfang-ocean-bg .leaflet-container {
+  background: #0b1324 !important;
 }
 
 /* Subtle scrollbar */
