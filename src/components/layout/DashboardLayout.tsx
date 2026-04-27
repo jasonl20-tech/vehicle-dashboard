@@ -1,4 +1,3 @@
-import { Menu } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import CommandPalette from "../CommandPalette";
@@ -106,25 +105,13 @@ export default function DashboardLayout() {
         />
         <main
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            isBildempfangMap ? "h-[100dvh] bg-black" : ""
+            isBildempfangMap ? "h-[100dvh] min-h-0 bg-black" : ""
           }`}
         >
-          {!isBildempfangMap && (
-            <DashboardHeader
-              onOpenMobileMenu={() => setMobileOpen(true)}
-              onOpenPalette={() => setPaletteOpen(true)}
-            />
-          )}
-          {isBildempfangMap && (
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              className="absolute left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-black/55 text-white/95 shadow-lg backdrop-blur-sm lg:hidden"
-              aria-label="Menü öffnen"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          )}
+          <DashboardHeader
+            onOpenMobileMenu={() => setMobileOpen(true)}
+            onOpenPalette={() => setPaletteOpen(true)}
+          />
           <div
             className={
               isBildempfangMap
