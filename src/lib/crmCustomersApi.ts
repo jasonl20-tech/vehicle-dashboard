@@ -23,11 +23,17 @@ export function crmCustomersListUrl(opts: {
   q?: string;
   limit?: number;
   offset?: number;
+  /** Exakter Status-String */
+  status?: string;
+  /** ISO-2 Standort */
+  location?: string;
 }): string {
   const p = new URLSearchParams();
   if (opts.q) p.set("q", opts.q);
   if (opts.limit != null) p.set("limit", String(opts.limit));
   if (opts.offset != null) p.set("offset", String(opts.offset));
+  if (opts.status) p.set("status", opts.status);
+  if (opts.location) p.set("location", opts.location);
   const qs = p.toString();
   return `${CRM_CUSTOMERS_API}${qs ? `?${qs}` : ""}`;
 }

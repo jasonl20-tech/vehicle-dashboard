@@ -1,7 +1,19 @@
-import { Plus, RefreshCw, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/ui/PageHeader";
+import {
+  Filter,
+  Plus,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useOutletContext } from "react-router-dom";
 import { useApi, fmtNumber } from "../lib/customerApi";
+import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
 import {
   CRM_CUSTOMERS_API,
   type CrmCustomerRow,
@@ -10,7 +22,7 @@ import {
 } from "../lib/crmCustomersApi";
 import { ISO2_COUNTRIES } from "../lib/iso2Countries";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const SELECT_IN =
@@ -168,9 +180,42 @@ function RowEditor({
   );
 }
 
+function useFilterClickOutside(
+  filterOpen: boolean,
+  setFilterOpen: (v: boolean) => void,
+) {
+  useEffect(() => {
+    if (!filterOpen) return;
+    let remove: (() => void) | undefined;
+    const id = requestAnimationFrame(() => {
+      const onDown = (e: MouseEvent) => {
+        const t = e.target as HTMLElement;
+        if (t.closest?.("[data-crm-filter]")) return;
+        setFilterOpen(false);
+      };
+      document.addEventListener("mousedown", onDown);
+      remove = () => document.removeEventListener("mousedown", onDown);
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      remove?.();
+    };
+  }, [filterOpen, setFilterOpen]);
+}
+
 export default function KundenCrmPage() {
+  const { setHeaderTrailing } = useOutletContext<DashboardOutletContext>();
+
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
+  const [statusF, setStatusF] = useState("");
+  const [locationF, setLocationF] = useState("");
+
+  const [draftStatus, setDraftStatus] = useState("");
+  const [draftLocation, setDraftLocation] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+
   const [offset, setOffset] = useState(0);
   const [formErr, setFormErr] = useState("");
   const [rowErr, setRowErr] = useState<Record<string, string>>({});
@@ -180,6 +225,8 @@ export default function KundenCrmPage() {
   const [newLocation, setNewLocation] = useState("");
   const [adding, setAdding] = useState(false);
 
+  useFilterClickOutside(filterOpen, setFilterOpen);
+
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
     return () => clearTimeout(t);
@@ -187,11 +234,18 @@ export default function KundenCrmPage() {
 
   useEffect(() => {
     setOffset(0);
-  }, [q]);
+  }, [q, statusF, locationF]);
 
   const listUrl = useMemo(
-    () => crmCustomersListUrl({ q, limit: PAGE_SIZE, offset }),
-    [q, offset],
+    () =>
+      crmCustomersListUrl({
+        q,
+        limit: PAGE_SIZE,
+        offset,
+        status: statusF || undefined,
+        location: locationF || undefined,
+      }),
+    [q, offset, statusF, locationF],
   );
 
   const { data, error, loading, reload } = useApi<CrmCustomersListResponse>(
@@ -203,6 +257,31 @@ export default function KundenCrmPage() {
     if (Array.isArray(data.rows)) return data.rows;
     return [];
   }, [data]);
+
+  const onRowSaved = useCallback(() => {
+    reload();
+  }, [reload]);
+
+  const applyFilter = useCallback(() => {
+    setStatusF(draftStatus.trim());
+    setLocationF(draftLocation.trim().toUpperCase());
+    setFilterOpen(false);
+  }, [draftStatus, draftLocation]);
+
+  const clearFilter = useCallback(() => {
+    setDraftStatus("");
+    setDraftLocation("");
+    setStatusF("");
+    setLocationF("");
+    setFilterOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (filterOpen) {
+      setDraftStatus(statusF);
+      setDraftLocation(locationF);
+    }
+  }, [filterOpen, statusF, locationF]);
 
   const create = useCallback(async () => {
     setFormErr("");
@@ -235,6 +314,7 @@ export default function KundenCrmPage() {
       setNewCompany("");
       setNewStatus("Neu");
       setNewLocation("");
+      setNewOpen(false);
       reload();
     } catch (e) {
       setFormErr((e as Error).message);
@@ -243,76 +323,150 @@ export default function KundenCrmPage() {
     }
   }, [newEmail, newCompany, newStatus, newLocation, reload]);
 
-  const onRowSaved = useCallback(() => {
-    reload();
-  }, [reload]);
+  const headerToolbar = useMemo(
+    () => (
+      <div className="flex min-w-0 w-full max-w-3xl flex-1 items-center justify-end gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-white/[0.1] bg-white/[0.04] px-2 py-1">
+          <Search className="h-3.5 w-3.5 shrink-0 text-night-500" />
+          <input
+            type="search"
+            value={qIn}
+            onChange={(e) => setQIn(e.target.value)}
+            placeholder="E-Mail oder Firma"
+            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-white placeholder:text-night-500 focus:outline-none"
+          />
+        </div>
+        <div className="relative" data-crm-filter>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFilterOpen((o) => !o);
+            }}
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-night-200 transition hover:bg-white/[0.08] hover:text-white ${
+              statusF || locationF
+                ? "border-brand-500/50 bg-brand-500/15 text-brand-200"
+                : "border-white/[0.1] bg-white/[0.04]"
+            }`}
+            title="Filter"
+            aria-expanded={filterOpen}
+          >
+            <Filter className="h-4 w-4" />
+          </button>
+          {filterOpen && (
+            <div
+              className="absolute right-0 top-full z-50 mt-1 w-72 max-w-[calc(100vw-1rem)] rounded-lg border border-white/[0.1] bg-night-800 p-3 shadow-xl"
+              data-crm-filter
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-night-500">
+                Filter
+              </p>
+              <label className="mb-1 block text-[11px] text-night-400">Status (exakt)</label>
+              <input
+                type="text"
+                className="mb-3 w-full rounded border border-white/[0.08] bg-night-900 px-2 py-1.5 text-[12.5px] text-white"
+                value={draftStatus}
+                onChange={(e) => setDraftStatus(e.target.value)}
+                placeholder="z. B. Neu"
+              />
+              <label className="mb-1 block text-[11px] text-night-400">Standort (ISO-2)</label>
+              <select
+                className="mb-3 w-full rounded border border-white/[0.08] bg-night-900 px-2 py-1.5 text-[12.5px] text-white"
+                value={draftLocation}
+                onChange={(e) => setDraftLocation(e.target.value)}
+                aria-label="Filter Standort"
+              >
+                <option value="">— alle —</option>
+                {ISO2_COUNTRIES.map((c) => (
+                  <option key={c.iso2} value={c.iso2}>
+                    {c.nameDe} ({c.iso2})
+                  </option>
+                ))}
+              </select>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={clearFilter}
+                  className="rounded px-2 py-1 text-[12px] text-night-400 hover:text-white"
+                >
+                  Zurücksetzen
+                </button>
+                <button
+                  type="button"
+                  onClick={applyFilter}
+                  className="rounded bg-white/10 px-2.5 py-1 text-[12.5px] text-white hover:bg-white/20"
+                >
+                  Anwenden
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => reload()}
+          disabled={loading}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          title="Aktualisieren"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setFormErr("");
+            setNewOpen(true);
+          }}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
+          title="Neuer Kunde"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </div>
+    ),
+    [
+      qIn,
+      filterOpen,
+      draftStatus,
+      draftLocation,
+      statusF,
+      locationF,
+      loading,
+      applyFilter,
+      clearFilter,
+      reload,
+    ],
+  );
+
+  useLayoutEffect(() => {
+    setHeaderTrailing(headerToolbar);
+    return () => setHeaderTrailing(null);
+  }, [setHeaderTrailing, headerToolbar]);
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Kundenmanagement"
-        title="CRM"
-        description="Kundenstammdaten: Tabelle `customers` in derselben D1-DB wie Anfragen/Newsletter (Binding `website`) — E-Mail, Firma, Status. Neuer Eintrag unten."
-      />
-
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
       {error && (
-        <p className="mb-3 text-[12.5px] text-accent-rose" role="alert">
+        <p className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose" role="alert">
           {error}
         </p>
       )}
 
       {data?.schemaWarning && (
         <p
-          className="mb-3 rounded border border-accent-amber/40 bg-accent-amber/10 px-2.5 py-1.5 text-[12.5px] text-accent-amber"
+          className="shrink-0 border-b border-accent-amber/40 bg-accent-amber/10 px-3 py-1.5 text-[12.5px] text-accent-amber"
           role="status"
         >
           {data.schemaWarning}
         </p>
       )}
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex min-w-[200px] max-w-md flex-1 items-center gap-2 rounded-md border border-hair bg-white px-2 py-1.5">
-          <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-          <input
-            type="search"
-            value={qIn}
-            onChange={(e) => setQIn(e.target.value)}
-            placeholder="Suche: E-Mail oder Firma"
-            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] outline-none"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={reload}
-          disabled={loading}
-          className="inline-flex h-8 items-center gap-1 rounded-md border border-hair bg-white px-2.5 text-[12.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-          />
-          Aktualisieren
-        </button>
-      </div>
-
-      <p className="mb-2 text-[12.5px] text-ink-500">
-        {data != null && typeof data.total === "number" && (
-          <>
-            {fmtNumber(data.total)} Einträge insgesamt
-            {loading && " · "}
-          </>
-        )}
-        {loading && "Laden…"}
-        {data && !Array.isArray(data.rows) && !error && !loading && (
-          <span className="ml-1 text-accent-amber">
-            API-Antwort unerwartet (kein <code>rows</code>).
-          </span>
-        )}
-      </p>
-
-      <div className="mb-6 overflow-x-auto rounded-md border border-hair">
+      <div className="min-h-0 flex-1 overflow-auto border-b border-hair">
         <table className="w-full min-w-[700px] border-collapse text-left text-[12.5px]">
-          <thead>
-            <tr className="border-b border-hair bg-ink-50/60">
+          <thead className="sticky top-0 z-10 border-b border-hair bg-ink-50/95 backdrop-blur-sm">
+            <tr>
               <th className={TH}>ID</th>
               <th className={TH}>E-Mail</th>
               <th className={TH}>Firma</th>
@@ -326,7 +480,7 @@ export default function KundenCrmPage() {
             {loading && listRows.length === 0 && !error && (
               <tr>
                 <td colSpan={7} className="px-2 py-6 text-center text-ink-500">
-                  Kundendaten werden geladen…
+                  Wird geladen…
                 </td>
               </tr>
             )}
@@ -351,108 +505,131 @@ export default function KundenCrmPage() {
         </table>
       </div>
 
-      {listRows.map((row) =>
-        rowErr[row.id] ? (
-          <p
-            key={`e-${row.id}`}
-            className="mb-1 text-[12px] text-accent-rose"
-            role="alert"
-          >
-            {row.id}: {rowErr[row.id]}
-          </p>
-        ) : null,
-      )}
-
-      {data && data.total > PAGE_SIZE && (
-        <div className="mb-6 flex items-center justify-center gap-2 text-[12.5px] text-ink-600">
-          <button
-            type="button"
-            className="rounded border border-hair bg-white px-2 py-1 enabled:hover:bg-ink-50 disabled:opacity-40"
-            disabled={offset < PAGE_SIZE}
-            onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
-          >
-            Zurück
-          </button>
-          <span>
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, data.total)} /{" "}
-            {data.total}
+      {(data != null || loading) && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hair bg-paper/90 px-2 py-1.5 text-[12px] text-ink-600 sm:px-3">
+          <span className="min-w-0 truncate">
+            {data && typeof data.total === "number" && (
+              <>
+                {fmtNumber(data.total)} insgesamt
+                {data.total > 0
+                  ? ` · ${offset + 1}–${Math.min(offset + PAGE_SIZE, data.total)}`
+                  : ""}
+                {loading && " · …"}
+              </>
+            )}
+            {loading && !data && "Laden…"}
+            {data && !Array.isArray(data.rows) && !error && !loading && (
+              <span className="ml-1 text-accent-amber">(Antwort unerwartet)</span>
+            )}
           </span>
-          <button
-            type="button"
-            className="rounded border border-hair bg-white px-2 py-1 enabled:hover:bg-ink-50 disabled:opacity-40"
-            disabled={offset + PAGE_SIZE >= data.total}
-            onClick={() => setOffset((o) => o + PAGE_SIZE)}
-          >
-            Weiter
-          </button>
+          {data && data.total > PAGE_SIZE && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                className="rounded border border-hair bg-white px-2 py-0.5 text-[12px] enabled:hover:bg-ink-50 disabled:opacity-40"
+                disabled={offset < PAGE_SIZE}
+                onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+              >
+                Zurück
+              </button>
+              <button
+                type="button"
+                className="rounded border border-hair bg-white px-2 py-0.5 text-[12px] enabled:hover:bg-ink-50 disabled:opacity-40"
+                disabled={offset + PAGE_SIZE >= data.total}
+                onClick={() => setOffset((o) => o + PAGE_SIZE)}
+              >
+                Weiter
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="border-t border-hair/80 pt-5">
-        <h2 className="text-[12px] font-medium uppercase tracking-[0.1em] text-ink-400">
-          Neuer Kunde
-        </h2>
-        <div className="mt-2 flex max-w-2xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-          <div className="min-w-0 flex-1">
-            <label className="mb-0.5 block text-[11px] text-ink-500">
-              E-Mail *
-            </label>
-            <input
-              type="email"
-              className={TEXT_IN}
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-          <div className="min-w-0 flex-1 sm:max-w-xs">
-            <label className="mb-0.5 block text-[11px] text-ink-500">
-              Firma
-            </label>
-            <input
-              type="text"
-              className={TEXT_IN}
-              value={newCompany}
-              onChange={(e) => setNewCompany(e.target.value)}
-            />
-          </div>
-          <div className="w-full min-w-0 sm:max-w-[160px]">
-            <label className="mb-0.5 block text-[11px] text-ink-500">
-              Status
-            </label>
-            <input
-              type="text"
-              className={TEXT_IN}
-              value={newStatus}
-              onChange={(e) => setNewStatus(e.target.value)}
-            />
-          </div>
-          <div className="w-full min-w-0 sm:max-w-[220px]">
-            <label className="mb-0.5 block text-[11px] text-ink-500">
-              Standort (optional)
-            </label>
-            <StandortSelect
-              value={newLocation}
-              onChange={setNewLocation}
-              ariaLabel="Standort des neuen Kunden"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={create}
-            disabled={adding}
-            className="inline-flex h-8 items-center gap-1 rounded-md border border-hair bg-ink-900 px-3 text-[12.5px] text-white hover:bg-ink-800 disabled:opacity-50"
+      {Object.entries(rowErr).map(([id, m]) => (
+        <p key={id} className="shrink-0 text-[12px] text-accent-rose" role="alert">
+          {id}: {m}
+        </p>
+      ))}
+
+      {newOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          onClick={() => setNewOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-lg rounded-lg border border-hair bg-paper p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="crm-new-title"
           >
-            <Plus className="h-3.5 w-3.5" />
-            Anlegen
-          </button>
+            <h2 id="crm-new-title" className="text-sm font-semibold text-ink-800">
+              Neuer Kunde
+            </h2>
+            <div className="mt-3 flex flex-col gap-2 sm:grid sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-0.5 block text-[11px] text-ink-500">E-Mail *</label>
+                <input
+                  type="email"
+                  className={TEXT_IN}
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[11px] text-ink-500">Firma</label>
+                <input
+                  type="text"
+                  className={TEXT_IN}
+                  value={newCompany}
+                  onChange={(e) => setNewCompany(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[11px] text-ink-500">Status</label>
+                <input
+                  type="text"
+                  className={TEXT_IN}
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-0.5 block text-[11px] text-ink-500">Standort (optional)</label>
+                <StandortSelect
+                  value={newLocation}
+                  onChange={setNewLocation}
+                  ariaLabel="Standort neuer Kunde"
+                />
+              </div>
+            </div>
+            {formErr && (
+              <p className="mt-2 text-[12.5px] text-accent-rose" role="alert">
+                {formErr}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNewOpen(false)}
+                className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:bg-ink-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={create}
+                disabled={adding}
+                className="inline-flex h-8 items-center gap-1 rounded-md border border-ink-900 bg-ink-900 px-3 text-[12.5px] text-white hover:bg-ink-800 disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {adding ? "…" : "Anlegen"}
+              </button>
+            </div>
+          </div>
         </div>
-        {formErr && (
-          <p className="mt-2 text-[12.5px] text-accent-rose" role="alert">
-            {formErr}
-          </p>
-        )}
-      </div>
-    </>
+      )}
+    </div>
   );
 }

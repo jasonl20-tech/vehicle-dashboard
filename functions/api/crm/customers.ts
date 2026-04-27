@@ -1,7 +1,7 @@
 /**
  * CRM-Kunden — Tabelle `customers` in derselben D1-DB wie `submissions` (Binding `website`).
  *
- *   GET  /api/crm/customers?q=&limit=&offset=
+ *   GET  /api/crm/customers?q=&limit=&offset=&status=&location=
  *   POST /api/crm/customers  { id?, email, company?, status?, location? }
  *   PUT  /api/crm/customers  { id, email?, company?, status?, location? }
  *
@@ -101,6 +101,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") || "").trim();
+  const statusF = (url.searchParams.get("status") || "").trim();
+  const locationF = (url.searchParams.get("location") || "").trim().toUpperCase();
   const limit = Math.min(
     MAX_LIMIT,
     Math.max(1, Number(url.searchParams.get("limit") || DEFAULT_LIMIT) || DEFAULT_LIMIT),
@@ -108,11 +110,21 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const offset = Math.max(0, Number(url.searchParams.get("offset") || 0) || 0);
   const pat = likeToken(q);
 
+  const geoCol = await getGeoColumn(db);
+
   const where: string[] = ["1=1"];
   const binds: (string | number)[] = [];
   if (pat) {
     where.push("(email LIKE ? OR IFNULL(company,'') LIKE ?)");
     binds.push(pat, pat);
+  }
+  if (statusF) {
+    where.push("IFNULL(status,'') = ?");
+    binds.push(statusF);
+  }
+  if (locationF && ISO2_RE.test(locationF) && geoCol) {
+    where.push(`${geoCol} = ?`);
+    binds.push(locationF);
   }
   const whereSql = ` WHERE ${where.join(" AND ")}`;
 
@@ -121,8 +133,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     .bind(...binds)
     .first<{ n: number }>();
   const total = countRow?.n ?? 0;
-
-  const geoCol = await getGeoColumn(db);
   const cols =
     geoCol != null
       ? `id, created_at, email, company, status, ${geoCol} AS location`

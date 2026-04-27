@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import type { DashboardOutletContext } from "./dashboardOutletContext";
 import {
   BILDBEMPFANG_HTML_CLASS,
   BILDBEMPFANG_OCEAN_BG,
@@ -35,12 +36,15 @@ function useIsLg(): boolean {
 
 const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/kunden/test-anfragen" as const;
 const FULLSCREEN_MAP_BILDBEMPFANG = "/ansichten/bildempfang" as const;
+const KUNDEN_CRM = "/kunden/crm" as const;
 
 export default function DashboardLayout() {
   const { pathname } = useLocation();
   const isKundenTestAnfragen = pathname === FULL_WIDTH_KUNDEN_TEST_ANFRAGEN;
   const isBildempfangMap = pathname === FULLSCREEN_MAP_BILDBEMPFANG;
+  const isCrmPage = pathname === KUNDEN_CRM;
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [headerTrailing, setHeaderTrailing] = useState<ReactNode | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const isLg = useIsLg();
@@ -94,6 +98,14 @@ export default function DashboardLayout() {
   // Only allow collapsed mode on desktop. Mobile always renders expanded sidebar.
   const effectiveCollapsed = collapsed && isLg;
 
+  const outletContext: DashboardOutletContext = useMemo(
+    () => ({ setHeaderTrailing }),
+    [],
+  );
+  useEffect(() => {
+    if (!isCrmPage) setHeaderTrailing(null);
+  }, [isCrmPage]);
+
   return (
     <div
       className={
@@ -124,7 +136,7 @@ export default function DashboardLayout() {
         />
         <main
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            isBildempfangMap ? "h-[100dvh] min-h-0" : ""
+            isBildempfangMap || isCrmPage ? "h-[100dvh] min-h-0" : ""
           }`}
           style={
             isBildempfangMap
@@ -135,26 +147,32 @@ export default function DashboardLayout() {
           <DashboardHeader
             onOpenMobileMenu={() => setMobileOpen(true)}
             onOpenPalette={() => setPaletteOpen(true)}
+            trailing={isCrmPage ? headerTrailing : null}
+            crmMode={isCrmPage}
           />
           <div
             className={
               isBildempfangMap
                 ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                : isKundenTestAnfragen
-                  ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 pb-0 pt-1 sm:px-4 lg:px-5"
-                  : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
+                : isCrmPage
+                  ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
+                  : isKundenTestAnfragen
+                    ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 pb-0 pt-1 sm:px-4 lg:px-5"
+                    : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
           >
             <div
               className={
                 isBildempfangMap
                   ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
-                  : isKundenTestAnfragen
-                    ? "min-h-0 w-full min-w-0 flex-1 flex flex-col"
-                    : ""
+                  : isCrmPage
+                    ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
+                    : isKundenTestAnfragen
+                      ? "min-h-0 w-full min-w-0 flex-1 flex flex-col"
+                      : ""
               }
             >
-              <Outlet />
+              <Outlet context={outletContext} />
             </div>
           </div>
         </main>

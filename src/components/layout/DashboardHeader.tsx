@@ -1,4 +1,5 @@
 import { Menu, Search } from "lucide-react";
+import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { flattenNav } from "./navConfig";
@@ -36,22 +37,31 @@ function usePageHeading(pathname: string): { page: string; section?: string } {
 type Props = {
   onOpenMobileMenu: () => void;
   onOpenPalette: () => void;
+  /** Rechts, vor der Kommando-Suche (z. B. CRM-Toolbar) */
+  trailing?: ReactNode;
+  /** Schlanke Titelleiste ohne Sektion-Zeile */
+  crmMode?: boolean;
 };
 
 /**
  * Fester oberer Balken in der Hauptspalte (neben der Sidebar) — dieselbe
  * Nacht-Optik wie `Sidebar`, sichtbar auf allen Dashboard-Seiten.
  */
-export default function DashboardHeader({ onOpenMobileMenu, onOpenPalette }: Props) {
+export default function DashboardHeader({
+  onOpenMobileMenu,
+  onOpenPalette,
+  trailing = null,
+  crmMode = false,
+}: Props) {
   const { pathname } = useLocation();
   const { page, section } = usePageHeading(pathname);
-  const showSection = section && section !== page;
+  const showSection = !crmMode && section && section !== page;
 
   return (
     <header
-      className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-white/[0.07] bg-night-900 px-3 sm:px-4 lg:px-5"
+      className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-night-900 px-2 sm:px-3 lg:px-4"
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={onOpenMobileMenu}
@@ -64,7 +74,7 @@ export default function DashboardHeader({ onOpenMobileMenu, onOpenPalette }: Pro
           className="hidden h-7 w-px bg-white/10 md:block"
           aria-hidden
         />
-        <div className="min-w-0 py-0.5">
+        <div className="min-w-0 max-w-[min(40vw,200px)] py-0.5 sm:max-w-none">
           {showSection && (
             <p className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-night-500">
               {section}
@@ -75,17 +85,27 @@ export default function DashboardHeader({ onOpenMobileMenu, onOpenPalette }: Pro
           </h1>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex min-w-0 max-w-[min(100%,520px)] flex-1 items-center justify-end gap-1.5 sm:gap-2 sm:pl-2">
+        {trailing}
         <button
           type="button"
           onClick={onOpenPalette}
-          className="inline-flex h-9 items-center gap-2 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12.5px] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
+          className={
+            crmMode
+              ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
+              : "inline-flex h-9 items-center gap-2 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12.5px] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
+          }
+          aria-label="Kommando-Suche"
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
-          <span className="hidden sm:inline">Suche</span>
-          <kbd className="hidden rounded border border-white/10 bg-black/30 px-1.5 font-mono text-[10px] text-night-500 md:inline">
-            ⌘K
-          </kbd>
+          {!crmMode && (
+            <>
+              <span className="hidden sm:inline">Suche</span>
+              <kbd className="hidden rounded border border-white/10 bg-black/30 px-1.5 font-mono text-[10px] text-night-500 md:inline">
+                ⌘K
+              </kbd>
+            </>
+          )}
         </button>
       </div>
     </header>
