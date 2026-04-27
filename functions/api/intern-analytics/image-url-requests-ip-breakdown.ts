@@ -9,9 +9,8 @@
  * Query: `days` (1–400), optional `from` / `to` (wie Geo-Endpoint).
  *
  * Response: sortierte Liste mit IP, ISO-2, Zählung, Klassifikation v4/v6,
- * optional: mittlere Antwortzeit `avgMs` (Spalte `double2` in `image_url_requests`,
- * in ms pro Bildaufruf), letzte gesehene Werte: `userAgent` (`blob5` / User-Agent-String
- * in eurer Engine), `edgeCode` (`blob9` / Edge-PoP z. B. LHR), `imagePath` (`argMax` aus `blob1`).
+ * optional: `avgMs` aus `double2`, `userAgent` (`blob5`), `edge` (`blob9`),
+ * `imagePath` typisch `index2` (URL-Pfad) oder `blob1` (Worker-Log), je nach Schema.
  */
 import {
   aeNumber,
@@ -52,6 +51,56 @@ function parseOptFloat(v: unknown): number | null {
   if (typeof v === "string" && v.trim() !== "") {
     const n = Number(v);
     if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+function pickStr(rec: Record<string, unknown>, ...want: string[]): string {
+  const tryVal = (v: unknown): string | null => {
+    if (v == null) return null;
+    if (typeof v === "string" && v.trim() !== "") return v.trim();
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
+    return null;
+  };
+  for (const w of want) {
+    for (const [k, v] of Object.entries(rec)) {
+      if (k === w || k.toLowerCase() === w.toLowerCase()) {
+        const s = tryVal(v);
+        if (s) return s;
+      }
+    }
+  }
+  const byCompact = new Map<string, string>();
+  for (const [k, v] of Object.entries(rec)) {
+    const s = tryVal(v);
+    if (s) byCompact.set(k.toLowerCase().replace(/_/g, ""), s);
+  }
+  for (const w of want) {
+    const s = byCompact.get(w.toLowerCase().replace(/_/g, ""));
+    if (s) return s;
+  }
+  return "";
+}
+
+/**
+ * `avgMs` aus Analytics-Response (0 erlaubt, diverse Schlüssel/Casing).
+ */
+function pickAvgMs(rec: Record<string, unknown>): number | null {
+  for (const k of [
+    "avgMs",
+    "avg_ms",
+    "AVGMS",
+    "avGMS",
+  ]) {
+    const v = (rec as Record<string, unknown>)[k];
+    if (v == null) continue;
+    const n = typeof v === "number" ? v : Number(String(v).trim());
+    if (Number.isFinite(n) && n >= 0 && n < 1e7) return n;
+  }
+  const c = pickStr(rec, "avgms", "avg_ms");
+  if (c) {
+    const n = Number(c);
+    if (Number.isFinite(n) && n >= 0 && n < 1e7) return n;
   }
   return null;
 }
@@ -176,12 +225,16 @@ LIMIT ${MAX_IP_SQL_ROWS}
 FORMAT JSON`;
 }
 
+const D_OK = "double2 >= 0 AND double2 < 1000000";
+
+function avgMsExpr(): string {
+  return `if(sumIf(_sample_interval, ${D_OK}) = 0, NULL, sumIf(double2 * _sample_interval, ${D_OK}) / sumIf(_sample_interval, ${D_OK})) AS avgMs`;
+}
+
 /**
- * `double2` = Antwortzeit ms; `blob5` = UA; `blob9` = Edge; `blob1` = Pfad.
- * Nur `sum`/`if`/`any` — wie in `customer-keys` (kein `argMax`/`sumIf`, die in AE
- * fehlen oder anders heißen).
+ * `index2` bevorzugt (viele Worker speichern den URL-Pfad dort), sonst `blob1`.
  */
-function buildIpSqlEnriched(
+function buildIpSqlEnrichedPathIndex2(
   fromIso: string,
   toIso: string,
   fromDataset: string,
@@ -194,12 +247,62 @@ function buildIpSqlEnriched(
     "NA",
   )}`;
   const colNotEmpty = `${ipCol} != ${sqlString("")}`;
-  const dOk = "double2 > 0 AND double2 < 1000000";
+  const pathExpr = `argMax(
+  if(
+    (index2 != ${sqlString("")}) AND (index2 != ${sqlString("NA")}),
+    index2,
+    blob1
+  ),
+  timestamp
+) AS imagePath`;
   const agg = `SELECT
   ${ipCol} AS ip,
   blob3 AS iso2,
   SUM(_sample_interval) AS c,
-  sumIf(double2 * _sample_interval, ${dOk}) / nullIf(sumIf(_sample_interval, ${dOk}), 0) AS avgMs,
+  ${avgMsExpr()},
+  argMax(blob5, timestamp) AS ua,
+  argMax(blob9, timestamp) AS edge,
+  ${pathExpr}`;
+  if (mode === "dedicated") {
+    return `${agg}
+FROM ${name}
+WHERE ${tw}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
+  }
+  return `${agg}
+FROM ${fromDataset}
+WHERE ${tw} AND dataset = ${sqlString(name)}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
+}
+
+function buildIpSqlEnrichedBlobPath(
+  fromIso: string,
+  toIso: string,
+  fromDataset: string,
+  mode: Mode,
+  name: string,
+  ipCol: IpBlobCol,
+): string {
+  const tw = buildTimeWhere(fromIso, toIso);
+  const blob3NotEmpty = `blob3 != ${sqlString("")} AND blob3 != ${sqlString(
+    "NA",
+  )}`;
+  const colNotEmpty = `${ipCol} != ${sqlString("")}`;
+  const agg = `SELECT
+  ${ipCol} AS ip,
+  blob3 AS iso2,
+  SUM(_sample_interval) AS c,
+  ${avgMsExpr()},
   argMax(blob5, timestamp) AS ua,
   argMax(blob9, timestamp) AS edge,
   argMax(blob1, timestamp) AS imagePath`;
@@ -273,18 +376,30 @@ function mergeRows(parts: RawIpRow[][]): Map<string, MergedIp> {
       const n = aeNumber(r.c);
       if (n <= 0) continue;
       const k = `${ip.toLowerCase()}|${iso2}`;
-      const avgMs = parseOptFloat(rec.avgMs);
-      const ua = String(rec.ua ?? rec.UA ?? "").trim();
-      const edge = String(rec.edge ?? rec.EDGE ?? "").trim();
-      const imagePath = String(rec.imagePath ?? rec.imagepath ?? "").trim();
+      const avgMs = pickAvgMs(rec) ?? parseOptFloat(rec);
+      const ua = pickStr(rec, "ua", "UA", "userAgent", "useragent", "BLOB5", "blob5");
+      const edge = pickStr(rec, "edge", "EDGE", "edgeCode", "edgecode", "BLOB9", "blob9");
+      const imagePath = pickStr(
+        rec,
+        "imagePath",
+        "imagepath",
+        "IMAGEPATH",
+        "index2",
+        "INDEX2",
+        "blob1",
+        "BLOB1",
+        "path",
+        "PATH",
+      );
       const cur = m.get(k);
+      const hasAvg = avgMs != null && Number.isFinite(avgMs);
       if (!cur) {
         m.set(k, {
           ip,
           iso2,
           c: n,
-          msNum: avgMs != null ? avgMs * n : 0,
-          msDen: avgMs != null ? n : 0,
+          msNum: hasAvg ? avgMs! * n : 0,
+          msDen: hasAvg ? n : 0,
           userAgent: ua,
           edgeCode: edge,
           imagePath,
@@ -293,8 +408,8 @@ function mergeRows(parts: RawIpRow[][]): Map<string, MergedIp> {
       }
       const prevC = cur.c;
       cur.c += n;
-      if (avgMs != null) {
-        cur.msNum += avgMs * n;
+      if (hasAvg) {
+        cur.msNum += avgMs! * n;
         cur.msDen += n;
       }
       if (n >= prevC) {
@@ -355,18 +470,42 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   for (const s of runSources) {
     const fromTable = fromKeyAnalyticsForBinding(env, s.binding);
     for (const mode of modes) {
-      const tryEnriched = async () => {
-        const sql = buildIpSqlEnriched(
-          from,
-          to,
-          fromTable,
-          mode,
-          name,
-          ipCol,
-        );
-        const r = await runAeSql<RawIpRow>(env, sql, { binding: s.binding });
-        ipRowParts.push(r.data);
-        if (r.data.length > 0) hadAnyOk = true;
+      const tryEnrichedCascade = async () => {
+        const builders = [
+          () =>
+            buildIpSqlEnrichedPathIndex2(
+              from,
+              to,
+              fromTable,
+              mode,
+              name,
+              ipCol,
+            ),
+          () =>
+            buildIpSqlEnrichedBlobPath(
+              from,
+              to,
+              fromTable,
+              mode,
+              name,
+              ipCol,
+            ),
+        ];
+        let lastErr: Error | null = null;
+        for (const build of builders) {
+          try {
+            const sql = build();
+            const r = await runAeSql<RawIpRow>(env, sql, {
+              binding: s.binding,
+            });
+            ipRowParts.push(r.data);
+            if (r.data.length > 0) hadAnyOk = true;
+            return;
+          } catch (e) {
+            lastErr = e as Error;
+          }
+        }
+        throw lastErr ?? new Error("enriched SQL failed");
       };
       const trySimple = async () => {
         const sql = buildIpSqlSimple(
@@ -382,13 +521,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         if (r.data.length > 0) hadAnyOk = true;
       };
       try {
-        await tryEnriched();
+        await tryEnrichedCascade();
       } catch (e1) {
         const msg1 = (e1 as Error).message || String(e1);
         try {
           await trySimple();
           errors.push(
-            `ip ${s.binding}/${mode}: Enriched-SQL nicht nutzbar (${msg1.slice(0, 180)}); Fallback simple OK`,
+            `ip ${s.binding}/${mode}: Anreicherung fehlgeschlagen (${msg1.slice(0, 160)}); nur Zählung`,
           );
         } catch (e2) {
           ipRowParts.push([]);

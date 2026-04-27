@@ -8,7 +8,9 @@ export function parseVehicleFromImagePath(path: string): {
 } | null {
   const p = path.trim();
   if (!p) return null;
-  const m = /\/default\/([^/]+)\/([^/]+)\//.exec(p);
+  const m =
+    /\/default\/([^/]+)\/([^/]+)(?:\/|$)/.exec(p) ||
+    /(?:^|\/)png\/default\/([^/]+)\/([^/]+)(?:\/|$)/i.exec(p);
   if (!m) return null;
   const brand = m[1]!.replace(/_/g, " ").trim();
   const model = m[2]!.replace(/_/g, " ").trim();
