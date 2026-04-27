@@ -27,22 +27,30 @@ const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const SELECT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
-const TH = "px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
-const TH_TR = "px-2 py-2 text-right text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
-const TD = "px-2 py-2 align-top text-[12.5px] text-ink-800";
+const SELECT_CELL =
+  "w-full min-h-[2.5rem] min-w-0 border-0 border-black bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:outline-none focus:ring-0";
+const TH =
+  "border border-black bg-ink-100 px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-600";
+const TD = "border border-black p-0 align-top";
+const TD_TEXT =
+  "min-h-[2.5rem] break-words px-2 py-1.5 text-[12.5px] text-ink-800";
+const IN_CELL =
+  "min-h-[2.5rem] w-full min-w-0 border-0 bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:outline-none focus:ring-0";
 
 function StandortSelect({
   value,
   onChange,
   ariaLabel,
+  className: selectClassName = SELECT_IN,
 }: {
   value: string;
   onChange: (v: string) => void;
   ariaLabel: string;
+  className?: string;
 }) {
   return (
     <select
-      className={SELECT_IN}
+      className={selectClassName}
       value={value || ""}
       onChange={(e) => onChange(e.target.value)}
       aria-label={ariaLabel}
@@ -74,107 +82,135 @@ function fmtWhen(s: string | null | undefined): string {
   }).format(new Date(t));
 }
 
-function RowEditor({
+function fmtLocationDe(iso2: string | null | undefined): string {
+  const s = (iso2 || "").trim().toUpperCase();
+  if (!s) return "—";
+  const c = ISO2_COUNTRIES.find((x) => x.iso2 === s);
+  return c ? `${c.nameDe} (${c.iso2})` : s;
+}
+
+type CrmRowDraft = {
+  id: string;
+  email: string;
+  company: string;
+  status: string;
+  location: string;
+};
+
+function rowToDraft(r: CrmCustomerRow): CrmRowDraft {
+  return {
+    id: r.id,
+    email: r.email,
+    company: r.company ?? "",
+    status: r.status ?? "",
+    location: (r.location ?? "").trim().toUpperCase(),
+  };
+}
+
+function isDraftDirty(d: CrmRowDraft, r: CrmCustomerRow): boolean {
+  return (
+    d.email.trim() !== (r.email || "").trim() ||
+    d.company.trim() !== (r.company || "").trim() ||
+    d.status.trim() !== (r.status || "").trim() ||
+    d.location.trim().toUpperCase() !== (r.location || "").trim().toUpperCase()
+  );
+}
+
+function CrmTableRow({
   row,
-  onSaved,
-  onError,
+  editing,
+  draft,
+  onField,
+  onActivate,
 }: {
   row: CrmCustomerRow;
-  onSaved: () => void;
-  onError: (m: string) => void;
+  editing: boolean;
+  draft: CrmRowDraft | null;
+  onField: (patch: Partial<Pick<CrmRowDraft, "email" | "company" | "status" | "location">>) => void;
+  onActivate: (row: CrmCustomerRow) => void;
 }) {
-  const [email, setEmail] = useState(row.email);
-  const [company, setCompany] = useState(row.company);
-  const [status, setStatus] = useState(row.status);
-  const [location, setLocation] = useState(row.location);
-  const [saving, setSaving] = useState(false);
+  const d = draft && draft.id === row.id ? draft : null;
+  const show = editing && d;
 
-  useEffect(() => {
-    setEmail(row.email);
-    setCompany(row.company);
-    setStatus(row.status);
-    setLocation(row.location);
-  }, [row.id, row.email, row.company, row.status, row.location]);
-
-  const save = useCallback(async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(CRM_CUSTOMERS_API, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: row.id,
-          email: email.trim(),
-          company: company.trim() || null,
-          status: status.trim() || "Neu",
-          location: location.trim() ? location.trim().toUpperCase() : null,
-        }),
-      });
-      const j = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        onError(j.error || `HTTP ${res.status}`);
-        return;
-      }
-      onSaved();
-    } catch (e) {
-      onError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }, [row.id, email, company, status, location, onSaved, onError]);
+  const idShort =
+    row.id.length > 12 ? `${row.id.slice(0, 8)}…` : row.id;
 
   return (
-    <tr>
-      <td className={`${TD} max-w-[100px] font-mono text-[11px] text-ink-500`}>
-        {row.id.length > 12 ? `${row.id.slice(0, 8)}…` : row.id}
+    <tr
+      className={`${editing ? "bg-ink-100/50" : "hover:bg-ink-50/80"} cursor-pointer`}
+      onClick={() => onActivate(row)}
+    >
+      <td className={`${TD} max-w-[120px] font-mono text-[11px] text-ink-600`}>
+        <div className={TD_TEXT}>{idShort}</div>
       </td>
-      <td className={TD}>
-        <input
-          type="email"
-          className={TEXT_IN}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="off"
-        />
+      <td
+        className={TD}
+        onClick={show ? (e) => e.stopPropagation() : undefined}
+      >
+        {show && d ? (
+          <input
+            type="email"
+            className={IN_CELL}
+            value={d.email}
+            onChange={(e) => onField({ email: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            autoComplete="off"
+          />
+        ) : (
+          <div className={TD_TEXT}>{row.email || "—"}</div>
+        )}
       </td>
-      <td className={TD}>
-        <input
-          type="text"
-          className={TEXT_IN}
-          value={company}
-          onChange={(e) => setCompany(e.target.value)}
-          placeholder="Firma"
-        />
+      <td
+        className={TD}
+        onClick={show ? (e) => e.stopPropagation() : undefined}
+      >
+        {show && d ? (
+          <input
+            type="text"
+            className={IN_CELL}
+            value={d.company}
+            onChange={(e) => onField({ company: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Firma"
+          />
+        ) : (
+          <div className={TD_TEXT}>{(row.company || "").trim() || "—"}</div>
+        )}
       </td>
-      <td className={TD}>
-        <input
-          type="text"
-          className={TEXT_IN}
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          placeholder="z. B. Neu"
-        />
+      <td
+        className={TD}
+        onClick={show ? (e) => e.stopPropagation() : undefined}
+      >
+        {show && d ? (
+          <input
+            type="text"
+            className={IN_CELL}
+            value={d.status}
+            onChange={(e) => onField({ status: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="Status"
+          />
+        ) : (
+          <div className={TD_TEXT}>{(row.status || "").trim() || "—"}</div>
+        )}
       </td>
-      <td className={TD}>
-        <StandortSelect
-          value={location}
-          onChange={setLocation}
-          ariaLabel="Standort des Kunden"
-        />
+      <td
+        className={TD}
+        onClick={show ? (e) => e.stopPropagation() : undefined}
+      >
+        {show && d ? (
+          <StandortSelect
+            value={d.location}
+            onChange={(v) => onField({ location: v })}
+            ariaLabel="Standort"
+            className={SELECT_CELL}
+          />
+        ) : (
+          <div className={TD_TEXT}>{fmtLocationDe(row.location)}</div>
+        )}
       </td>
-      <td className={`${TD} whitespace-nowrap text-ink-500`}>
-        {fmtWhen(row.created_at)}
-      </td>
-      <td className={`${TD} text-right`}>
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className="rounded border border-hair bg-white px-2 py-1 text-[11.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
-        >
-          {saving ? "…" : "Speichern"}
-        </button>
+      <td className={`${TD} whitespace-nowrap`}>
+        <div className={`${TD_TEXT} text-ink-500`}>{fmtWhen(row.created_at)}</div>
       </td>
     </tr>
   );
@@ -225,6 +261,10 @@ export default function KundenCrmPage() {
   const [newLocation, setNewLocation] = useState("");
   const [adding, setAdding] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [rowDraft, setRowDraft] = useState<CrmRowDraft | null>(null);
+  const [savingRow, setSavingRow] = useState(false);
+
   useFilterClickOutside(filterOpen, setFilterOpen);
 
   useEffect(() => {
@@ -258,9 +298,109 @@ export default function KundenCrmPage() {
     return [];
   }, [data]);
 
-  const onRowSaved = useCallback(() => {
-    reload();
-  }, [reload]);
+  const updateDraft = useCallback(
+    (patch: Partial<Pick<CrmRowDraft, "email" | "company" | "status" | "location">>) => {
+      setRowDraft((d) => (d ? { ...d, ...patch } : d));
+    },
+    [],
+  );
+
+  const saveDraft = useCallback(async () => {
+    if (!rowDraft) return;
+    setSavingRow(true);
+    setRowErr((e) => {
+      const n = { ...e };
+      delete n[rowDraft.id];
+      return n;
+    });
+    const id = rowDraft.id;
+    try {
+      const res = await fetch(CRM_CUSTOMERS_API, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: rowDraft.id,
+          email: rowDraft.email.trim(),
+          company: rowDraft.company.trim() || null,
+          status: rowDraft.status.trim() || "Neu",
+          location: rowDraft.location.trim()
+            ? rowDraft.location.trim().toUpperCase()
+            : null,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setRowErr((e) => ({
+          ...e,
+          [id]: j.error || `HTTP ${res.status}`,
+        }));
+        return;
+      }
+      setRowDraft(null);
+      setEditingId(null);
+      reload();
+    } catch (e) {
+      setRowErr((err) => ({
+        ...err,
+        [id]: (e as Error).message,
+      }));
+    } finally {
+      setSavingRow(false);
+    }
+  }, [rowDraft, reload]);
+
+  const discardDraft = useCallback(() => {
+    setRowDraft(null);
+    setEditingId(null);
+  }, []);
+
+  const handleRowClick = useCallback(
+    (row: CrmCustomerRow) => {
+      if (editingId === row.id) return;
+      if (editingId) {
+        const currentRow = listRows.find((r) => r.id === editingId);
+        if (
+          rowDraft &&
+          currentRow &&
+          isDraftDirty(rowDraft, currentRow)
+        ) {
+          return;
+        }
+      }
+      setEditingId(row.id);
+      setRowDraft(rowToDraft(row));
+    },
+    [editingId, rowDraft, listRows],
+  );
+
+  const rowDirty = useMemo(() => {
+    if (!rowDraft || !editingId) return false;
+    const r = listRows.find((x) => x.id === rowDraft.id);
+    if (!r) return false;
+    return isDraftDirty(rowDraft, r);
+  }, [rowDraft, editingId, listRows]);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      if (!rowDraft) {
+        setEditingId(null);
+        return;
+      }
+      const r = listRows.find((x) => x.id === rowDraft.id);
+      if (r && isDraftDirty(rowDraft, r)) {
+        discardDraft();
+      } else {
+        setRowDraft(null);
+        setEditingId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editingId, rowDraft, listRows, discardDraft]);
 
   const applyFilter = useCallback(() => {
     setStatusF(draftStatus.trim());
@@ -464,8 +604,8 @@ export default function KundenCrmPage() {
       )}
 
       <div className="min-h-0 flex-1 overflow-auto border-b border-hair">
-        <table className="w-full min-w-[700px] border-collapse text-left text-[12.5px]">
-          <thead className="sticky top-0 z-10 border-b border-hair bg-ink-50/95 backdrop-blur-sm">
+        <table className="w-full min-w-[640px] border-collapse border border-black text-left text-[12.5px]">
+          <thead className="sticky top-0 z-10 bg-ink-100/95 backdrop-blur-sm">
             <tr>
               <th className={TH}>ID</th>
               <th className={TH}>E-Mail</th>
@@ -473,30 +613,35 @@ export default function KundenCrmPage() {
               <th className={TH}>Status</th>
               <th className={TH}>Standort</th>
               <th className={TH}>Angelegt</th>
-              <th className={TH_TR}>Aktion</th>
             </tr>
           </thead>
           <tbody>
             {loading && listRows.length === 0 && !error && (
               <tr>
-                <td colSpan={7} className="px-2 py-6 text-center text-ink-500">
+                <td
+                  colSpan={6}
+                  className="border border-black bg-white px-2 py-6 text-center text-ink-500"
+                >
                   Wird geladen…
                 </td>
               </tr>
             )}
             {listRows.map((row) => (
-              <RowEditor
+              <CrmTableRow
                 key={row.id}
                 row={row}
-                onSaved={onRowSaved}
-                onError={(m) =>
-                  setRowErr((e) => ({ ...e, [row.id]: m }))
-                }
+                editing={editingId === row.id}
+                draft={rowDraft}
+                onField={updateDraft}
+                onActivate={handleRowClick}
               />
             ))}
             {listRows.length === 0 && !loading && !error && (
               <tr>
-                <td colSpan={7} className="px-2 py-6 text-center text-ink-500">
+                <td
+                  colSpan={6}
+                  className="border border-black bg-white px-2 py-6 text-center text-ink-500"
+                >
                   Keine Einträge
                 </td>
               </tr>
@@ -504,6 +649,38 @@ export default function KundenCrmPage() {
           </tbody>
         </table>
       </div>
+
+      {rowDirty && (
+        <div
+          className="pointer-events-auto fixed bottom-20 left-1/2 z-[80] w-[min(100vw-1.5rem,28rem)] -translate-x-1/2 px-2"
+          role="dialog"
+          aria-label="Nicht gespeicherte Änderungen"
+        >
+          <div className="flex flex-col items-stretch justify-center gap-2 rounded-sm border-2 border-black bg-white p-3 shadow-lg sm:flex-row sm:items-center sm:gap-3">
+            <span className="shrink-0 text-center text-[12.5px] font-medium text-ink-800 sm:text-left">
+              Ungespeicherte Änderungen
+            </span>
+            <div className="flex w-full min-w-0 justify-center gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={discardDraft}
+                disabled={savingRow}
+                className="min-w-0 flex-1 rounded-sm border-2 border-black bg-white px-3 py-2 text-[12.5px] text-ink-800 hover:bg-ink-100 disabled:opacity-50 sm:flex-initial"
+              >
+                Nicht speichern
+              </button>
+              <button
+                type="button"
+                onClick={saveDraft}
+                disabled={savingRow}
+                className="min-w-0 flex-1 rounded-sm border-2 border-black bg-ink-900 px-3 py-2 text-[12.5px] font-medium text-white hover:bg-ink-800 disabled:opacity-50 sm:flex-initial"
+              >
+                {savingRow ? "…" : "Speichern"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(data != null || loading) && (
         <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hair bg-paper/90 px-2 py-1.5 text-[12px] text-ink-600 sm:px-3">
