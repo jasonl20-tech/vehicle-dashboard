@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
-import { Menu } from "lucide-react";
+import DashboardHeader from "./DashboardHeader";
 import CommandPalette from "../CommandPalette";
 
 const COLLAPSE_KEY = "ui.sidebar.collapsed";
@@ -92,34 +92,17 @@ export default function DashboardLayout() {
           onOpenPalette={() => setPaletteOpen(true)}
         />
         <main className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <DashboardHeader
+            onOpenMobileMenu={() => setMobileOpen(true)}
+            onOpenPalette={() => setPaletteOpen(true)}
+          />
           <div
             className={
               isKundenTestAnfragen
-                ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 py-0 sm:px-4 lg:px-5"
-                : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 py-8 sm:px-10 sm:py-8 lg:px-14 lg:py-12"
+                ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 pb-0 pt-1 sm:px-4 lg:px-5"
+                : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
           >
-            {isKundenTestAnfragen ? (
-              <div className="shrink-0 border-b border-hair/60 py-2.5 lg:hidden">
-                <button
-                  type="button"
-                  onClick={() => setMobileOpen(true)}
-                  className="inline-flex items-center gap-2 text-sm text-ink-600 hover:text-ink-900"
-                >
-                  <Menu className="h-4 w-4" />
-                  Menü
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setMobileOpen(true)}
-                className="mb-6 inline-flex items-center gap-2 text-sm text-ink-600 hover:text-ink-900 lg:hidden"
-              >
-                <Menu className="h-4 w-4" />
-                Menü
-              </button>
-            )}
             <div
               className={
                 isKundenTestAnfragen
