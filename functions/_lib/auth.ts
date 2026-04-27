@@ -68,8 +68,8 @@ export interface AuthEnv {
   /** Wie `CONTROLLING_AE_ACCOUNT`: `secondary` = nur Zweitkonto, sonst primär. */
   IMAGE_URL_AE_ACCOUNT?: string;
   /**
-   * Spalte in `image_url_requests`, in der die Client-IP steht: `blob1` (Default)
-   * oder `blob2`, je nach Bildaustrahlungs-Worker-Schema.
+   * Spalte in `image_url_requests` für die Client-IP: `blob4` (Default in diesem Projekt),
+   * oder `blob1` / `blob2` je nach Worker-Schema.
    */
   IMAGE_URL_REQUESTS_IP_BLOB?: string;
   /** Stripe Secret Key (`sk_…`, nur serverseitig). */

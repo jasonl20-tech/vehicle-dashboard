@@ -3,8 +3,8 @@
  *
  * Aggregiert Bild-URL-Requests aus Analytics Engine `image_url_requests` nach
  * Client-IP und Land (`blob3` = ISO-2), analog zu `image-url-requests-geo`.
- * Die IP liegt typischerweise in `blob1` (Standard); per Env
- * `IMAGE_URL_REQUESTS_IP_BLOB=blob2` umschaltbar, falls der Worker dort loggt.
+ * Die Client-IP liegt im Bildaustrahlungs-Worker in `blob4` (Standard). Per Env
+ * `IMAGE_URL_REQUESTS_IP_BLOB` umschaltbar: `blob1` | `blob2` | `blob4`.
  *
  * Query: `days` (1–400), optional `from` / `to` (wie Geo-Endpoint).
  *
@@ -58,9 +58,12 @@ function getDatasetName(env: AuthEnv): string {
   return raw;
 }
 
-function getIpBlobColumn(env: AuthEnv): "blob1" | "blob2" {
-  const v = (env.IMAGE_URL_REQUESTS_IP_BLOB ?? "blob1").trim().toLowerCase();
-  return v === "blob2" ? "blob2" : "blob1";
+type IpBlobCol = "blob1" | "blob2" | "blob4";
+
+function getIpBlobColumn(env: AuthEnv): IpBlobCol {
+  const v = (env.IMAGE_URL_REQUESTS_IP_BLOB ?? "blob4").trim().toLowerCase();
+  if (v === "blob1" || v === "blob2" || v === "blob4") return v;
+  return "blob4";
 }
 
 function sourcesToRun(
@@ -103,7 +106,7 @@ function buildIpSql(
   fromDataset: string,
   mode: Mode,
   name: string,
-  ipCol: "blob1" | "blob2",
+  ipCol: IpBlobCol,
 ): string {
   const tw = buildTimeWhere(fromIso, toIso);
   const blob3NotEmpty = `blob3 != ${sqlString("")} AND blob3 != ${sqlString(
