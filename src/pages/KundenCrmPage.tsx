@@ -1,4 +1,8 @@
 import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronsUpDown,
   Filter,
   Plus,
   RefreshCw,
@@ -9,8 +13,10 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useOutletContext } from "react-router-dom";
 import { useApi, fmtNumber } from "../lib/customerApi";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
@@ -29,7 +35,7 @@ const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const SELECT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
-const TH = `${GRID} bg-ink-50/95 px-2.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-500`;
+const THSORT = `${GRID} bg-gradient-to-b from-ink-50 to-ink-100/90 p-0 align-middle`;
 const TD = `${GRID} p-0 align-middle bg-white`;
 const TD_INNER =
   "flex min-h-[3rem] w-full max-w-full items-center justify-center gap-1 px-3 py-2 text-center text-[12.5px] leading-snug text-ink-800";
@@ -37,20 +43,6 @@ const TD_INNER_ID =
   "flex min-h-[3rem] w-full max-w-full items-center justify-center px-2.5 py-2 text-center font-mono text-[11px] leading-tight text-ink-500";
 const IN_CELL =
   "min-h-[3rem] w-full min-w-0 border-0 bg-transparent px-2 py-2 text-center text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-0 focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-ink-300/50";
-
-const CRM_STANDORT_DATALIST_ID = "crm-standort-iso-datalist";
-
-function CrmStandortDatalist() {
-  return (
-    <datalist id={CRM_STANDORT_DATALIST_ID}>
-      {ISO2_COUNTRIES.map((c) => (
-        <option key={c.iso2} value={c.iso2}>
-          {c.nameDe} ({c.iso2})
-        </option>
-      ))}
-    </datalist>
-  );
-}
 
 function StandortSelect({
   value,
@@ -104,6 +96,191 @@ function fmtLocationDe(iso2: string | null | undefined): string {
   return c ? `${c.nameDe} (${c.iso2})` : s;
 }
 
+function CrmStandortSearchCombo({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (iso2: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const el = btnRef.current;
+    if (!el) return;
+    const update = () => setRect(el.getBoundingClientRect());
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setQ("");
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    let remove: (() => void) | undefined;
+    const id = requestAnimationFrame(() => {
+      const onDoc = (e: MouseEvent) => {
+        const t = e.target as Node;
+        if (btnRef.current?.contains(t)) return;
+        if ((e.target as HTMLElement).closest?.("[data-standort-panel]"))
+          return;
+        setOpen(false);
+      };
+      document.addEventListener("mousedown", onDoc);
+      remove = () => document.removeEventListener("mousedown", onDoc);
+    });
+    return () => {
+      cancelAnimationFrame(id);
+      remove?.();
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return ISO2_COUNTRIES;
+    return ISO2_COUNTRIES.filter(
+      (c) =>
+        c.nameDe.toLowerCase().includes(s) || c.iso2.toLowerCase().includes(s),
+    );
+  }, [q]);
+
+  const display =
+    (value || "").trim() ? fmtLocationDe(value) : "Standort wählen…";
+
+  const panel =
+    open &&
+    rect != null &&
+    createPortal(
+      <div
+        data-standort-panel
+        className="flex max-h-72 w-[min(100vw-1rem,22rem)] flex-col overflow-hidden rounded-xl border border-ink-200/90 bg-white py-1 shadow-lg shadow-ink-900/12 ring-1 ring-ink-100/60"
+        style={{
+          position: "fixed",
+          top: rect.bottom + 6,
+          left: (() => {
+            const w = Math.max(280, rect.width);
+            const maxL = window.innerWidth - w - 8;
+            return Math.max(8, Math.min(rect.left, maxL));
+          })(),
+          width: Math.max(280, rect.width),
+          maxHeight: "min(18rem, calc(100vh - 1rem))",
+          zIndex: 200,
+        }}
+      >
+        <div className="shrink-0 border-b border-ink-100 px-2 pb-1.5 pt-1.5">
+          <input
+            className="w-full rounded-lg border border-ink-200/90 bg-ink-50/40 px-2.5 py-2 text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:border-ink-300 focus:outline-none focus:ring-2 focus:ring-ink-200/50"
+            placeholder="Land oder ISO-2 suchen…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setOpen(false);
+            }}
+            autoFocus
+          />
+        </div>
+        <ul
+          className="min-h-0 max-h-52 flex-1 overflow-y-auto overscroll-contain p-1"
+          role="listbox"
+        >
+          <li>
+            <button
+              type="button"
+              className="w-full rounded-lg px-2.5 py-2 text-left text-[12.5px] text-ink-600 transition hover:bg-ink-100/80"
+              onClick={() => {
+                onChange("");
+                setOpen(false);
+              }}
+            >
+              — kein Standort —
+            </button>
+          </li>
+          {filtered.length === 0 ? (
+            <li className="px-2.5 py-3 text-center text-[12px] text-ink-500">
+              Keine Treffer
+            </li>
+          ) : (
+            filtered.map((c) => (
+              <li key={c.iso2}>
+                <button
+                  type="button"
+                  className="w-full rounded-lg px-2.5 py-2 text-left text-[12.5px] text-ink-800 transition hover:bg-ink-100/80"
+                  onClick={() => {
+                    onChange(c.iso2);
+                    setOpen(false);
+                  }}
+                >
+                  <span className="font-medium">{c.nameDe}</span>{" "}
+                  <span className="text-ink-500">({c.iso2})</span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>,
+      document.body,
+    );
+
+  return (
+    <div className="relative w-full" data-standort-combo>
+      <button
+        ref={btnRef}
+        type="button"
+        className="flex min-h-[3rem] w-full min-w-0 items-center justify-center gap-1.5 border-0 bg-transparent px-2 py-2 text-center text-[12.5px] text-ink-800 focus:outline-none focus-visible:ring-1 focus-visible:ring-ink-300/50"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <span className="min-w-0 flex-1 text-center [text-wrap:balance] sm:line-clamp-2">
+          {display}
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 shrink-0 text-ink-400 transition ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      {panel}
+    </div>
+  );
+}
+
+type SortKey = "id" | "email" | "company" | "status" | "location" | "created_at";
+
+function SortGlyph({ active, asc }: { active: boolean; asc: boolean }) {
+  if (!active) {
+    return (
+      <ChevronsUpDown
+        className="h-3 w-3 shrink-0 text-ink-300 opacity-50"
+        aria-hidden
+      />
+    );
+  }
+  return asc ? (
+    <ArrowUp className="h-3 w-3 shrink-0 text-brand-600" aria-hidden />
+  ) : (
+    <ArrowDown className="h-3 w-3 shrink-0 text-brand-600" aria-hidden />
+  );
+}
+
 type CrmRowDraft = {
   id: string;
   email: string;
@@ -154,8 +331,8 @@ function CrmTableRow({
     <tr
       className={`${
         editing
-          ? "bg-ink-50/90 ring-1 ring-inset ring-ink-200/90"
-          : "hover:bg-ink-50/60"
+          ? "bg-violet-50/80 ring-1 ring-inset ring-brand-500/25"
+          : "even:bg-ink-50/[0.45] hover:bg-ink-100/70"
       } cursor-pointer transition-colors`}
       onClick={() => onActivate(row)}
     >
@@ -229,27 +406,9 @@ function CrmTableRow({
         onClick={show ? (e) => e.stopPropagation() : undefined}
       >
         {show && d ? (
-          <input
-            type="text"
-            list={CRM_STANDORT_DATALIST_ID}
-            className={IN_CELL}
+          <CrmStandortSearchCombo
             value={d.location}
-            onChange={(e) => {
-              const v = e.target.value
-                .replace(/[^a-zA-Z]/g, "")
-                .slice(0, 2)
-                .toUpperCase();
-              onField({ location: v });
-            }}
-            onClick={(e) => e.stopPropagation()}
-            placeholder="z. B. DE"
-            maxLength={2}
-            inputMode="text"
-            autoCapitalize="characters"
-            spellCheck={false}
-            autoComplete="off"
-            title="Zwei Buchstaben ISO- oder Vorschlag wählen"
-            aria-label="Standort (ISO-2)"
+            onChange={(iso2) => onField({ location: iso2 })}
           />
         ) : (
           <div className={TD_INNER}>
@@ -316,6 +475,8 @@ export default function KundenCrmPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [rowDraft, setRowDraft] = useState<CrmRowDraft | null>(null);
   const [savingRow, setSavingRow] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
+  const [sortAsc, setSortAsc] = useState(false);
 
   useFilterClickOutside(filterOpen, setFilterOpen);
 
@@ -349,6 +510,60 @@ export default function KundenCrmPage() {
     if (Array.isArray(data.rows)) return data.rows;
     return [];
   }, [data]);
+
+  const handleSort = useCallback(
+    (k: SortKey) => {
+      if (k === sortKey) {
+        setSortAsc((prev) => !prev);
+      } else {
+        setSortKey(k);
+        setSortAsc(k === "created_at" ? false : true);
+      }
+    },
+    [sortKey],
+  );
+
+  const sortedRows = useMemo(() => {
+    const rows = [...listRows];
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "id":
+          cmp = a.id.localeCompare(b.id);
+          break;
+        case "email":
+          cmp = (a.email || "").localeCompare(b.email || "", "de", {
+            sensitivity: "base",
+          });
+          break;
+        case "company":
+          cmp = (a.company || "").localeCompare(b.company || "", "de", {
+            sensitivity: "base",
+          });
+          break;
+        case "status":
+          cmp = (a.status || "").localeCompare(b.status || "", "de", {
+            sensitivity: "base",
+          });
+          break;
+        case "location":
+          cmp = (a.location || "").localeCompare(b.location || "", "de", {
+            sensitivity: "base",
+          });
+          break;
+        case "created_at": {
+          const ta = new Date(a.created_at).getTime() || 0;
+          const tb = new Date(b.created_at).getTime() || 0;
+          cmp = ta === tb ? 0 : ta < tb ? -1 : 1;
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+      return sortAsc ? cmp : -cmp;
+    });
+    return rows;
+  }, [listRows, sortKey, sortAsc]);
 
   const updateDraft = useCallback(
     (patch: Partial<Pick<CrmRowDraft, "email" | "company" | "status" | "location">>) => {
@@ -518,14 +733,14 @@ export default function KundenCrmPage() {
   const headerToolbar = useMemo(
     () => (
       <div className="flex min-w-0 w-full max-w-3xl flex-1 items-center justify-end gap-1.5">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-white/[0.1] bg-white/[0.04] px-2 py-1">
-          <Search className="h-3.5 w-3.5 shrink-0 text-night-500" />
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-200/85 bg-white px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.05]">
+          <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
           <input
             type="search"
             value={qIn}
             onChange={(e) => setQIn(e.target.value)}
             placeholder="E-Mail oder Firma"
-            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-white placeholder:text-night-500 focus:outline-none"
+            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
           />
         </div>
         <div className="relative" data-crm-filter>
@@ -640,7 +855,6 @@ export default function KundenCrmPage() {
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
-      <CrmStandortDatalist />
       {error && (
         <p className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose" role="alert">
           {error}
@@ -656,16 +870,72 @@ export default function KundenCrmPage() {
         </p>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto border-b border-hair bg-white">
-        <table className="w-full min-w-[640px] border-collapse border border-ink-200/90 text-[12.5px]">
-          <thead className="sticky top-0 z-10 shadow-[0_1px_0_0_rgba(15,15,15,0.06)] backdrop-blur-sm">
+      <div className="min-h-0 flex-1 overflow-auto border-b border-hair bg-gradient-to-b from-ink-50/25 via-white to-ink-50/20 px-2 py-2 sm:px-3 sm:py-2.5">
+        <div className="mx-auto w-full max-w-[min(100%,90rem)] overflow-hidden rounded-2xl border border-ink-200/70 bg-white shadow-sm shadow-ink-900/[0.06] ring-1 ring-ink-100/90">
+        <table className="w-full min-w-[640px] border-collapse text-[12.5px]">
+          <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 backdrop-blur-sm shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
             <tr>
-              <th className={TH}>ID</th>
-              <th className={TH}>E-Mail</th>
-              <th className={TH}>Firma</th>
-              <th className={TH}>Status</th>
-              <th className={TH}>Standort</th>
-              <th className={TH}>Angelegt</th>
+              <th className={THSORT} scope="col">
+                <button
+                  type="button"
+                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  onClick={() => handleSort("id")}
+                >
+                  <span>ID</span>
+                  <SortGlyph active={sortKey === "id"} asc={sortAsc} />
+                </button>
+              </th>
+              <th className={THSORT} scope="col">
+                <button
+                  type="button"
+                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  onClick={() => handleSort("email")}
+                >
+                  <span className="max-[420px]:hidden">E-Mail</span>
+                  <span className="min-[421px]:hidden">Mail</span>
+                  <SortGlyph active={sortKey === "email"} asc={sortAsc} />
+                </button>
+              </th>
+              <th className={THSORT} scope="col">
+                <button
+                  type="button"
+                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  onClick={() => handleSort("company")}
+                >
+                  <span>Firma</span>
+                  <SortGlyph active={sortKey === "company"} asc={sortAsc} />
+                </button>
+              </th>
+              <th className={THSORT} scope="col">
+                <button
+                  type="button"
+                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  onClick={() => handleSort("status")}
+                >
+                  <span>Status</span>
+                  <SortGlyph active={sortKey === "status"} asc={sortAsc} />
+                </button>
+              </th>
+              <th className={THSORT} scope="col">
+                <button
+                  type="button"
+                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  onClick={() => handleSort("location")}
+                >
+                  <span>Standort</span>
+                  <SortGlyph active={sortKey === "location"} asc={sortAsc} />
+                </button>
+              </th>
+              <th className={THSORT} scope="col">
+                <button
+                  type="button"
+                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  onClick={() => handleSort("created_at")}
+                >
+                  <span>Angelegt</span>
+                  <SortGlyph active={sortKey === "created_at"} asc={sortAsc} />
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -673,13 +943,13 @@ export default function KundenCrmPage() {
               <tr>
                 <td
                   colSpan={6}
-                  className={`${GRID} bg-white px-2 py-8 text-center text-[12.5px] text-ink-500`}
+                  className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                 >
                   Wird geladen…
                 </td>
               </tr>
             )}
-            {listRows.map((row) => (
+            {sortedRows.map((row) => (
               <CrmTableRow
                 key={row.id}
                 row={row}
@@ -693,7 +963,7 @@ export default function KundenCrmPage() {
               <tr>
                 <td
                   colSpan={6}
-                  className={`${GRID} bg-white px-2 py-8 text-center text-[12.5px] text-ink-500`}
+                  className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                 >
                   Keine Einträge
                 </td>
@@ -701,6 +971,7 @@ export default function KundenCrmPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {rowDirty && (
