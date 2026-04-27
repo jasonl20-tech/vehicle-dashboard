@@ -154,6 +154,10 @@ export default function AnfragenPage({
       ? "0 / 0"
       : `${offset + 1}–${offset + rows.length} / ${fmtNumber(total)}`;
 
+  /** Wenig inhalt: Block (Suche + Tabelle) vertikal in der Fläche zentrieren. */
+  const shouldCenterBlock =
+    isTrial && !api.loading && (total === 0 || total <= 16);
+
   const SPAM_OPTIONS = (
     [
       { id: "all" as const, label: "Alle" },
@@ -162,10 +166,21 @@ export default function AnfragenPage({
     ] as const
   );
 
+  const thP = isTrial
+    ? `${TH} pl-3 pr-2.5 sm:pl-4 sm:pr-3`
+    : TH;
+  const tdP = isTrial
+    ? `${TD} pl-3 pr-2.5 sm:pl-4 sm:pr-3`
+    : TD;
+
   const tableBlock = (
     <>
       {api.error && (
-        <p className="mb-2 rounded border border-accent-rose/30 bg-accent-rose/5 px-3 py-2 text-[12.5px] text-accent-rose">
+        <p
+          className={`mb-2 rounded border border-accent-rose/30 bg-accent-rose/5 py-2 text-[12.5px] text-accent-rose ${
+            isTrial ? "mx-4 px-3 sm:mx-6" : "px-3"
+          }`}
+        >
           {api.error}
         </p>
       )}
@@ -178,13 +193,13 @@ export default function AnfragenPage({
         <table className="w-full min-w-[900px] table-auto text-left">
           <thead className="bg-ink-50/80">
             <tr>
-              <th className={`${TH} w-[11rem]`}>zeit (UTC)</th>
-              <th className={TH}>formular</th>
-              <th className={TH}>kontakt</th>
-              <th className={`${TH} w-36`}>ip</th>
-              <th className={`${TH} w-20`}>land</th>
-              <th className={`${TH} w-20`}>spam</th>
-              <th className={`${TH} w-20 text-right`} />
+              <th className={`${thP} w-[11rem]`}>zeit (UTC)</th>
+              <th className={thP}>formular</th>
+              <th className={thP}>kontakt</th>
+              <th className={`${thP} w-36`}>ip</th>
+              <th className={`${thP} w-20`}>land</th>
+              <th className={`${thP} w-20`}>spam</th>
+              <th className={`${thP} w-20 text-right`} />
             </tr>
           </thead>
           <tbody className="divide-y divide-hair">
@@ -192,7 +207,11 @@ export default function AnfragenPage({
               <tr>
                 <td
                   colSpan={7}
-                  className="px-2 py-10 text-center text-[13px] text-ink-400"
+                  className={
+                    isTrial
+                      ? "px-3 py-10 text-center text-[13px] text-ink-400 sm:px-4"
+                      : "px-2 py-10 text-center text-[13px] text-ink-400"
+                  }
                 >
                   Laden…
                 </td>
@@ -201,7 +220,11 @@ export default function AnfragenPage({
               <tr>
                 <td
                   colSpan={7}
-                  className="px-2 py-10 text-center text-[13px] text-ink-500"
+                  className={
+                    isTrial
+                      ? "px-3 py-10 text-center text-[13px] text-ink-500 sm:px-4"
+                      : "px-2 py-10 text-center text-[13px] text-ink-500"
+                  }
                 >
                   {isTrial
                     ? "Keine Test-Einsendungen (Tabelle leer oder Migration fehlt)."
@@ -216,15 +239,15 @@ export default function AnfragenPage({
                 const country = pickMetaString(r.metadata, "country");
                 return (
                   <tr key={r.id} className="hover:bg-ink-50/50">
-                    <td className={`${TD} whitespace-nowrap text-ink-600`}>
+                    <td className={`${tdP} whitespace-nowrap text-ink-600`}>
                       {fmtWhen(r.created_at)}
                     </td>
-                    <td className={TD}>
+                    <td className={tdP}>
                       <span className="inline-block rounded border border-hair bg-ink-50/80 px-1.5 py-0.5 text-[11.5px]">
                         {r.form_tag}
                       </span>
                     </td>
-                    <td className={`${TD} min-w-0`}>
+                    <td className={`${tdP} min-w-0`}>
                       {email ? (
                         <a
                           href={`mailto:${email}`}
@@ -242,18 +265,18 @@ export default function AnfragenPage({
                         </div>
                       )}
                     </td>
-                    <td className={`${TD} font-mono text-[11.5px]`}>
+                    <td className={`${tdP} font-mono text-[11.5px]`}>
                       {ip || "—"}
                     </td>
-                    <td className={TD}>{country || "—"}</td>
-                    <td className={TD}>
+                    <td className={tdP}>{country || "—"}</td>
+                    <td className={tdP}>
                       {r.spam ? (
                         <span className="text-accent-amber">Spam</span>
                       ) : (
                         <span className="text-brand-700">ok</span>
                       )}
                     </td>
-                    <td className={`${TD} text-right`}>
+                    <td className={`${tdP} text-right`}>
                       <button
                         type="button"
                         onClick={() => setDetail(r as WebsiteSubmissionRow)}
@@ -271,8 +294,10 @@ export default function AnfragenPage({
       </div>
 
       <div
-        className={`mt-0 flex flex-wrap items-center justify-between gap-2 border border-t-0 border-hair bg-paper px-2 py-2 text-[12.5px] text-ink-600 ${
-          isTrial ? "rounded-none border-x-0" : "rounded-b-md"
+        className={`mt-0 flex flex-wrap items-center justify-between gap-2 border border-t-0 border-hair bg-paper text-[12.5px] text-ink-600 ${
+          isTrial
+            ? "rounded-none border-x-0 px-3 py-2.5 sm:px-4"
+            : "rounded-b-md px-2 py-2"
         }`}
       >
         <span className="tabular-nums">{pageLabel}</span>
@@ -300,79 +325,90 @@ export default function AnfragenPage({
     </>
   );
 
-  if (isTrial) {
-    return (
-      <div
-        className="relative -mx-5 w-[calc(100%+2.5rem)] sm:-mx-10 sm:w-[calc(100%+5rem)] lg:-mx-14 lg:w-[calc(100%+7rem)]
-          -mt-6 flex min-h-[calc(100vh-8rem)] flex-col sm:-mt-8 lg:-mt-10"
-      >
-        <div className="flex w-full min-w-0 shrink-0 items-stretch gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-            <input
-              type="search"
-              className={`${TEXT_IN} h-9 w-full pl-8`}
-              placeholder="Suchen: E-Mail, Formular, Begriffe…"
-              value={qIn}
-              onChange={(e) => setQIn(e.target.value)}
-              aria-label="Suche"
-            />
-          </div>
-          <div className="relative shrink-0" ref={filterWrapRef}>
-            <button
-              type="button"
-              onClick={() => setFilterOpen((v) => !v)}
-              title="Filter"
-              aria-expanded={filterOpen}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-hair bg-white text-ink-600 transition hover:border-ink-300 hover:bg-ink-50"
-            >
-              <ListFilter className="h-4 w-4" />
-            </button>
-            {filterOpen && (
-              <div
-                className="absolute right-0 z-40 mt-1 w-[min(100vw-2rem,16rem)] rounded-lg border border-hair bg-paper p-2 shadow-lg"
-                role="menu"
-              >
-                <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-400">
-                  Spam
-                </p>
-                <div className="flex flex-col gap-1">
-                  {SPAM_OPTIONS.map((o) => (
-                    <button
-                      key={o.id}
-                      type="button"
-                      onClick={() => {
-                        setSpam(o.id);
-                        closeFilters();
-                      }}
-                      className={`rounded-md px-2 py-1.5 text-left text-[12.5px] ${
-                        spam === o.id
-                          ? "bg-ink-900 text-white"
-                          : "text-ink-700 hover:bg-ink-50"
-                      }`}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+  const trialSearchBar = (
+    <div className="mx-auto w-full max-w-3xl px-4 py-3 sm:px-6 sm:py-4 lg:px-8">
+      <div className="flex w-full min-w-0 items-stretch gap-3">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+          <input
+            type="search"
+            className={`${TEXT_IN} h-10 w-full pl-8 shadow-sm`}
+            placeholder="Suchen: E-Mail, Formular, Begriffe…"
+            value={qIn}
+            onChange={(e) => setQIn(e.target.value)}
+            aria-label="Suche"
+          />
+        </div>
+        <div className="relative shrink-0" ref={filterWrapRef}>
           <button
             type="button"
-            onClick={() => api.reload()}
-            title="Aktualisieren"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition hover:border-ink-300 hover:bg-ink-50"
+            onClick={() => setFilterOpen((v) => !v)}
+            title="Filter"
+            aria-expanded={filterOpen}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-hair bg-white text-ink-600 shadow-sm transition hover:border-ink-300 hover:bg-ink-50"
           >
-            <RefreshCw
-              className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
-            />
+            <ListFilter className="h-4 w-4" />
           </button>
+          {filterOpen && (
+            <div
+              className="absolute right-0 z-40 mt-1.5 w-[min(100vw-2rem,16rem)] rounded-lg border border-hair bg-paper p-2 shadow-lg"
+              role="menu"
+            >
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+                Spam
+              </p>
+              <div className="flex flex-col gap-1">
+                {SPAM_OPTIONS.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => {
+                      setSpam(o.id);
+                      closeFilters();
+                    }}
+                    className={`rounded-md px-2 py-1.5 text-left text-[12.5px] ${
+                      spam === o.id
+                        ? "bg-ink-900 text-white"
+                        : "text-ink-700 hover:bg-ink-50"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => api.reload()}
+          title="Aktualisieren"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-hair bg-white text-ink-500 shadow-sm transition hover:border-ink-300 hover:bg-ink-50"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
+          />
+        </button>
+      </div>
+    </div>
+  );
 
-        <div className="mt-2 min-h-0 flex-1 flex flex-col overflow-hidden">
-          {tableBlock}
-        </div>
+  if (isTrial) {
+    return (
+      <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col">
+        {shouldCenterBlock ? (
+          <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col justify-center">
+            {trialSearchBar}
+            <div className="w-full min-w-0 shrink-0">{tableBlock}</div>
+          </div>
+        ) : (
+          <>
+            {trialSearchBar}
+            <div className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto">
+              {tableBlock}
+            </div>
+          </>
+        )}
 
         {detail && (
           <SubmissionDetailDialog row={detail} onClose={() => setDetail(null)} />
