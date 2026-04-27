@@ -134,8 +134,11 @@ function buildTimeWhere(fromIso: string, toIso: string): string {
   )}`;
 }
 
-/** `double2` = Antwortzeit ms; `blob5` = User-Agent; `blob9` = Edge (IATA); `blob1` = Bildpfad (Worker-Log). */
-function buildIpSql(
+/**
+ * Wie bisher: nur Zählung (immer kompatibel mit Analytics Engine).
+ * Dient als Fallback, falls die reichere Abfrage scheitert.
+ */
+function buildIpSqlSimple(
   fromIso: string,
   toIso: string,
   fromDataset: string,
@@ -148,11 +151,55 @@ function buildIpSql(
     "NA",
   )}`;
   const colNotEmpty = `${ipCol} != ${sqlString("")}`;
+  const core = `SELECT
+  ${ipCol} AS ip,
+  blob3 AS iso2,
+  SUM(_sample_interval) AS c
+`;
+  if (mode === "dedicated") {
+    return `${core}FROM ${name}
+WHERE ${tw}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
+  }
+  return `${core}FROM ${fromDataset}
+WHERE ${tw} AND dataset = ${sqlString(name)}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
+}
+
+/**
+ * `double2` = Antwortzeit ms; `blob5` = UA; `blob9` = Edge; `blob1` = Pfad.
+ * Nur `sum`/`if`/`any` — wie in `customer-keys` (kein `argMax`/`sumIf`, die in AE
+ * fehlen oder anders heißen).
+ */
+function buildIpSqlEnriched(
+  fromIso: string,
+  toIso: string,
+  fromDataset: string,
+  mode: Mode,
+  name: string,
+  ipCol: IpBlobCol,
+): string {
+  const tw = buildTimeWhere(fromIso, toIso);
+  const blob3NotEmpty = `blob3 != ${sqlString("")} AND blob3 != ${sqlString(
+    "NA",
+  )}`;
+  const colNotEmpty = `${ipCol} != ${sqlString("")}`;
+  const dOk = "double2 > 0 AND double2 < 1000000";
   const agg = `SELECT
   ${ipCol} AS ip,
   blob3 AS iso2,
   SUM(_sample_interval) AS c,
-  sumIf(double2 * _sample_interval, double2 > 0 AND double2 < 1000000) / nullIf(sumIf(_sample_interval, double2 > 0 AND double2 < 1000000), 0) AS avgMs,
+  sumIf(double2 * _sample_interval, ${dOk}) / nullIf(sumIf(_sample_interval, ${dOk}), 0) AS avgMs,
   argMax(blob5, timestamp) AS ua,
   argMax(blob9, timestamp) AS edge,
   argMax(blob1, timestamp) AS imagePath`;
@@ -308,15 +355,46 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   for (const s of runSources) {
     const fromTable = fromKeyAnalyticsForBinding(env, s.binding);
     for (const mode of modes) {
-      const sql = buildIpSql(from, to, fromTable, mode, name, ipCol);
-      try {
+      const tryEnriched = async () => {
+        const sql = buildIpSqlEnriched(
+          from,
+          to,
+          fromTable,
+          mode,
+          name,
+          ipCol,
+        );
         const r = await runAeSql<RawIpRow>(env, sql, { binding: s.binding });
         ipRowParts.push(r.data);
         if (r.data.length > 0) hadAnyOk = true;
-      } catch (e) {
-        ipRowParts.push([]);
-        const msg = (e as Error).message || String(e);
-        errors.push(`ip ${s.binding}/${mode}: ${msg}`);
+      };
+      const trySimple = async () => {
+        const sql = buildIpSqlSimple(
+          from,
+          to,
+          fromTable,
+          mode,
+          name,
+          ipCol,
+        );
+        const r = await runAeSql<RawIpRow>(env, sql, { binding: s.binding });
+        ipRowParts.push(r.data);
+        if (r.data.length > 0) hadAnyOk = true;
+      };
+      try {
+        await tryEnriched();
+      } catch (e1) {
+        const msg1 = (e1 as Error).message || String(e1);
+        try {
+          await trySimple();
+          errors.push(
+            `ip ${s.binding}/${mode}: Enriched-SQL nicht nutzbar (${msg1.slice(0, 180)}); Fallback simple OK`,
+          );
+        } catch (e2) {
+          ipRowParts.push([]);
+          const msg2 = (e2 as Error).message || String(e2);
+          errors.push(`ip ${s.binding}/${mode}: ${msg1} | Fallback: ${msg2}`);
+        }
       }
     }
   }
