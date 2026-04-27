@@ -81,6 +81,7 @@ export default function BildempfangPage() {
         error={geo.error}
         copy={BILDBEMPFANG_CHOROPLETH_UI}
         ipMarkers={ipMarkers}
+        tacticalMap
       />
 
       {ip.data && (

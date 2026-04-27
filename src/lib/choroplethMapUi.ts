@@ -36,11 +36,11 @@ export const BILDAUSTRAHLUNG_CHOROPLETH_UI: ChoroplethMapUi = {
 export const BILDBEMPFANG_CHOROPLETH_UI: ChoroplethMapUi = {
   cardTitle: "Bild-URL-Streams: Länder + Client-IP",
   cardDescription:
-    "Gleiche Quelle wie Bildaustrahlung (AE `image_url_requests`). Fläche: Umfang pro Land. Punkte: Client-IP aus `blob4` (per Env umschaltbar), Land aus `blob3`; grobe Lage = Land-Mittelpunkt mit Streuung (für exakte Orte bräuchte man GeoIP pro IP im Worker).",
+    "Gleiche Quelle wie Bildaustrahlung (AE `image_url_requests`). Fläche: Volumen pro Land (Cyan-Blau). IP: `blob4`, Land: `blob3` — Lage = Land + minimale Streuung; tiefes Zoom (Mausrad) bis lokal. Rote Hülle = IP-Hotspot, Linien = Referenz ab Ländermittelpunkt.",
   emptyGeoText: u.emptyGeoText,
   legendTitle: "Karte + IPs",
   legendBody:
-    "Choropleth: Volumen pro Land. Kreise: blau = IPv4, lila = IPv6, Größe = Anteil. Tooltip = IP, Typ, Land, Volumen.",
+    "Dunkle Basiskarte · Hell/Blau = stärkere Länder · Rot-Weiß = IP-Cluster · Weiß = Kanten. Scrollen/Zoomen: stark einzoomen. Städtenamen: Orientierung (nicht angebundene API).",
   globeCountLabel: "Bild-URL-Req.",
 };
 

@@ -24,6 +24,7 @@ export default function OverviewMap2D({
   copy,
   arcs,
   ipMarkers,
+  tacticalMap = false,
 }: {
   data: SubmissionsByCountryResponse | null;
   loading: boolean;
@@ -33,6 +34,11 @@ export default function OverviewMap2D({
   arcs?: BildaustrahlungArc[];
   /** Optional: IP-Marker (Bildempfang). */
   ipMarkers?: IpMapMarker[];
+  /**
+   * Dunkle taktische Karte, hoher Zoom, Städte-Labels, rote IP-Zonen, weiße
+   * Spoken — nur sinnvoll mit `ipMarkers` (Bildempfang).
+   */
+  tacticalMap?: boolean;
 }) {
   const empty =
     copy?.emptyGeoText ?? anfragenKarteMap2DModel.ui.emptyGeoText;
@@ -59,12 +65,24 @@ export default function OverviewMap2D({
   const dataKey = `${data?.total ?? 0}-${data?.max ?? 0}-ip${ipMarkers?.length ?? 0}`;
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-hair bg-gradient-to-b from-paper to-[#eef3f6]">
-      <Map2DChrome data={data} loading={loading} error={error} copy={copy} />
+    <div
+      className={
+        tacticalMap
+          ? "relative overflow-hidden rounded-xl border border-cyan-900/40 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950"
+          : "relative overflow-hidden rounded-xl border border-hair bg-gradient-to-b from-paper to-[#eef3f6]"
+      }
+    >
+      <Map2DChrome
+        data={data}
+        loading={loading}
+        error={error}
+        copy={copy}
+        tactical={tacticalMap}
+      />
 
       <div
         className="relative w-full"
-        style={{ minHeight: "min(72vh, 720px)" }}
+        style={{ minHeight: tacticalMap ? "min(80vh, 860px)" : "min(72vh, 720px)" }}
       >
         {geo && geo.features.length > 0 ? (
           <Map2DWorldSvg
@@ -73,17 +91,22 @@ export default function OverviewMap2D({
             dataKey={dataKey}
             arcs={arcs}
             ipMarkers={ipMarkers}
+            tacticalMode={tacticalMap}
           />
         ) : (
           <div
-            className="grid h-[min(72vh,720px)] min-h-[480px] place-items-center text-[13px] text-ink-500"
+            className={
+              tacticalMap
+                ? "grid h-[min(80vh,860px)] min-h-[520px] place-items-center text-[13px] text-slate-500"
+                : "grid h-[min(72vh,720px)] min-h-[480px] place-items-center text-[13px] text-ink-500"
+            }
             role="status"
           >
             {empty}
           </div>
         )}
 
-        <Map2DLegend copy={copy} />
+        <Map2DLegend copy={copy} tactical={tacticalMap} />
       </div>
     </div>
   );

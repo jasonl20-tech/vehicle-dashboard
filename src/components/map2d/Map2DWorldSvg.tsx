@@ -1,3 +1,4 @@
+import { bildempfangMap2DModel, TACTICAL_CITY_ANCHORS } from "../../config/bildempfangMap2DModel";
 import {
   anfragenKarteMap2DModel,
   getMap2DGeographyStyles,
@@ -11,6 +12,7 @@ import {
 } from "../../lib/anfragenKarteGeo";
 import type { BildaustrahlungArc } from "../../lib/bildaustrahlungArcsApi";
 import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
+import { getTacticalGeographyStyles } from "../../lib/tacticalChoropleth";
 import { iso2Latlng, iso2Name } from "../../lib/iso2Countries";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,8 +24,6 @@ import {
   ZoomableGroup,
 } from "react-simple-maps";
 
-const m = anfragenKarteMap2DModel.svg;
-
 type Props = {
   geo: NeFeatureCollection;
   data: SubmissionsByCountryResponse | null;
@@ -33,6 +33,8 @@ type Props = {
   arcs?: BildaustrahlungArc[];
   /** Optional: Client-IP-Näherung (Bildempfang, Land aus AE). */
   ipMarkers?: IpMapMarker[];
+  /** Dunkle „Command Center“-Optik + max. Zoom + Städte-Labels (Bildempfang). */
+  tacticalMode?: boolean;
 };
 
 type ArcLine = {
@@ -95,7 +97,37 @@ function buildArcGeometry(arcs: BildaustrahlungArc[] | undefined): {
   return { lines, markers: Array.from(markers.values()) };
 }
 
-export default function Map2DWorldSvg({ geo, data, dataKey, arcs, ipMarkers }: Props) {
+function buildTacticalSpokes(markers: IpMapMarker[]): {
+  key: string;
+  from: [number, number];
+  to: [number, number];
+}[] {
+  const byIso = new Map<string, IpMapMarker[]>();
+  for (const mk of markers) {
+    const arr = byIso.get(mk.iso2) ?? [];
+    arr.push(mk);
+    byIso.set(mk.iso2, arr);
+  }
+  const out: { key: string; from: [number, number]; to: [number, number] }[] = [];
+  for (const [iso, list] of byIso) {
+    const center = iso2Latlng(iso);
+    if (!center) continue;
+    const hub: [number, number] = [center[1], center[0]];
+    for (const mk of list) {
+      out.push({ key: `spoke-${mk.key}`, from: hub, to: mk.coordinates });
+    }
+  }
+  return out;
+}
+
+export default function Map2DWorldSvg({
+  geo,
+  data,
+  dataKey,
+  arcs,
+  ipMarkers,
+  tacticalMode = false,
+}: Props) {
   const [dims, setDims] = useState({ w: 900, h: 480 });
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -115,6 +147,7 @@ export default function Map2DWorldSvg({ geo, data, dataKey, arcs, ipMarkers }: P
     return () => ro.disconnect();
   }, []);
 
+  const m = tacticalMode ? bildempfangMap2DModel.svg : anfragenKarteMap2DModel.svg;
   const paper = m.canvasClassName ?? "bg-[#f2f4f7]";
   const projectionConfig = useMemo(
     () => ({
@@ -129,19 +162,32 @@ export default function Map2DWorldSvg({ geo, data, dataKey, arcs, ipMarkers }: P
     [arcs],
   );
 
+  const tacticalSpokes = useMemo(
+    () =>
+      tacticalMode && ipMarkers && ipMarkers.length > 0
+        ? buildTacticalSpokes(ipMarkers)
+        : [],
+    [tacticalMode, ipMarkers],
+  );
+
+  const mapFrameClass = tacticalMode
+    ? "h-[min(80vh,860px)] w-full min-h-[520px] md:min-h-[600px] [&_svg.rsm-svg]:h-auto [&_svg.rsm-svg]:w-full"
+    : "h-[min(72vh,720px)] w-full min-h-[480px] md:min-h-[560px] [&_svg.rsm-svg]:h-auto [&_svg.rsm-svg]:w-full";
+
   return (
-    <div
-      ref={wrapRef}
-      className={`h-[min(72vh,720px)] w-full min-h-[480px] md:min-h-[560px] [&_svg.rsm-svg]:h-auto [&_svg.rsm-svg]:w-full ${paper}`}
-    >
+    <div ref={wrapRef} className={`${mapFrameClass} ${paper}`}>
       <ComposableMap
         width={dims.w}
         height={dims.h}
         projection={m.projection}
         projectionConfig={projectionConfig}
-        className="text-ink-400"
+        className={tacticalMode ? "text-cyan-400/90" : "text-ink-400"}
         role="img"
-        aria-label="Anfragen nach Land, flache 2D-Länderkarte (SVG)"
+        aria-label={
+          tacticalMode
+            ? "Bildempfang, taktische Weltkarte"
+            : "Anfragen nach Land, flache 2D-Länderkarte (SVG)"
+        }
       >
         <ZoomableGroup
           center={m.zoom.center}
@@ -156,6 +202,15 @@ export default function Map2DWorldSvg({ geo, data, dataKey, arcs, ipMarkers }: P
             return !e.ctrlKey && !e.button;
           }}
         >
+          {tacticalMode && (
+            <defs>
+              <radialGradient id="tactical-ip-halo" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stopColor="rgb(248, 113, 113)" stopOpacity={0.55} />
+                <stop offset="70%" stopColor="rgb(185, 28, 28)" stopOpacity={0.12} />
+                <stop offset="100%" stopColor="rgb(15, 23, 42)" stopOpacity={0} />
+              </radialGradient>
+            </defs>
+          )}
           <Geographies key={dataKey} geography={geo}>
             {({ geographies }) =>
               geographies.map((g) => {
@@ -167,17 +222,65 @@ export default function Map2DWorldSvg({ geo, data, dataKey, arcs, ipMarkers }: P
                   c > 0
                     ? `${name} – ${c} Anfrage${c === 1 ? "" : "n"}`
                     : name;
+                const style = tacticalMode
+                  ? getTacticalGeographyStyles(data, iso)
+                  : getMap2DGeographyStyles(data, iso);
                 return (
                   <Geography
                     key={g.rsmKey}
                     geography={g}
                     title={title}
-                    style={getMap2DGeographyStyles(data, iso)}
+                    style={style}
                   />
                 );
               })
             }
           </Geographies>
+
+          {tacticalMode && tacticalSpokes.length > 0 && (
+            <g
+              className="pointer-events-none"
+              aria-label="Verbindung Ländermittelpunkt zu IP"
+            >
+              {tacticalSpokes.map((ln) => (
+                <Line
+                  key={ln.key}
+                  from={ln.from}
+                  to={ln.to}
+                  stroke="rgba(248, 250, 252, 0.42)"
+                  strokeWidth={0.28}
+                  strokeOpacity={0.85}
+                  fill="none"
+                />
+              ))}
+            </g>
+          )}
+
+          {tacticalMode && (
+            <g
+              className="pointer-events-none"
+              aria-label="Hauptstädte / Fernhandelsknoten"
+            >
+              {TACTICAL_CITY_ANCHORS.map((c) => (
+                <Marker key={c.name} coordinates={c.pos}>
+                  <text
+                    textAnchor="middle"
+                    y={-1.2}
+                    style={{
+                      fontSize: 2.15,
+                      fill: "rgba(226, 232, 240, 0.42)",
+                      fontFamily:
+                        "ui-sans-serif, system-ui, -apple-system, sans-serif",
+                      fontWeight: 500,
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {c.name}
+                  </text>
+                </Marker>
+              ))}
+            </g>
+          )}
 
           {arcLines.length > 0 && (
             <g
@@ -227,17 +330,41 @@ export default function Map2DWorldSvg({ geo, data, dataKey, arcs, ipMarkers }: P
               {ipMarkers.map((im) => (
                 <Marker key={im.key} coordinates={im.coordinates}>
                   <title>{im.title}</title>
-                  <circle
-                    r={im.r}
-                    fill={
-                      im.family === "v4"
-                        ? "rgb(45, 108, 223)"
-                        : "rgb(124, 58, 237)"
-                    }
-                    stroke="white"
-                    strokeWidth={0.9}
-                    opacity={0.82}
-                  />
+                  {tacticalMode ? (
+                    <g>
+                      <circle
+                        r={im.r * 2.5}
+                        fill="url(#tactical-ip-halo)"
+                        opacity={0.88}
+                      />
+                      <circle
+                        r={im.r * 1.2}
+                        fill="rgba(220, 38, 38, 0.38)"
+                        stroke="rgba(252, 165, 165, 0.55)"
+                        strokeWidth={0.45}
+                        opacity={0.95}
+                      />
+                      <circle
+                        r={Math.max(1, im.r * 0.38)}
+                        fill="white"
+                        stroke="rgb(15, 23, 42)"
+                        strokeWidth={0.5}
+                        opacity={1}
+                      />
+                    </g>
+                  ) : (
+                    <circle
+                      r={im.r}
+                      fill={
+                        im.family === "v4"
+                          ? "rgb(45, 108, 223)"
+                          : "rgb(124, 58, 237)"
+                      }
+                      stroke="white"
+                      strokeWidth={0.9}
+                      opacity={0.82}
+                    />
+                  )}
                 </Marker>
               ))}
             </g>

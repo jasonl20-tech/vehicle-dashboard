@@ -8,11 +8,13 @@ export type IpMapMarker = {
   title: string;
   family: "v4" | "v6";
   r: number;
+  /** ISO-2 — für Netz-Linien Land → Punkt */
+  iso2: string;
 };
 
 /**
- * Ländermittelpunkt + deterministische Streuung, damit viele IPs in einem Land
- * sichtbar bleiben (exakte Position pro IP wäre GeoIP nötig).
+ * Ländermittelpunkt + leichte Streuung (kleine Offsets = „genauer“ als breite Zufallsfläche).
+ * Ohne GeoIP im Worker bleibt es Näherung pro Land.
  */
 function jitter(
   ip: string,
@@ -28,7 +30,9 @@ function jitter(
   const u = h >>> 0;
   const a = (u & 0xffff) / 0xffff;
   const b = ((u >> 16) & 0xffff) / 0xffff;
-  return [base[0] + (a - 0.5) * 2.2, base[1] + (b - 0.5) * 3.2];
+  const dLat = (a - 0.5) * 0.55;
+  const dLng = (b - 0.5) * 0.75;
+  return [base[0] + dLat, base[1] + dLng];
 }
 
 export function buildIpMapMarkers(
@@ -60,6 +64,7 @@ export function buildIpMapMarkers(
       coordinates: [lng, lat] as [number, number],
       family: fam,
       r: rad,
+      iso2: r.iso2,
       title: `${r.ip} (${fam === "v4" ? "IPv4" : "IPv6"}) — ${r.iso2}: ${r.count}`,
     };
   });
