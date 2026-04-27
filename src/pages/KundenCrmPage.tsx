@@ -23,19 +23,34 @@ import {
 import { ISO2_COUNTRIES } from "../lib/iso2Countries";
 
 const PAGE_SIZE = 100;
+/** Dezenentes Raster, keine harten schwarzen Linien */
+const GRID = "border border-ink-200/85";
 const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const SELECT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
-const SELECT_CELL =
-  "w-full min-h-[2.5rem] min-w-0 border-0 border-black bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:outline-none focus:ring-0";
-const TH =
-  "border border-black bg-ink-100 px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-600";
-const TD = "border border-black p-0 align-top";
-const TD_TEXT =
-  "min-h-[2.5rem] break-words px-2 py-1.5 text-[12.5px] text-ink-800";
+const TH = `${GRID} bg-ink-50/95 px-2.5 py-2.5 text-center text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-500`;
+const TD = `${GRID} p-0 align-middle bg-white`;
+const TD_INNER =
+  "flex min-h-[3rem] w-full max-w-full items-center justify-center gap-1 px-3 py-2 text-center text-[12.5px] leading-snug text-ink-800";
+const TD_INNER_ID =
+  "flex min-h-[3rem] w-full max-w-full items-center justify-center px-2.5 py-2 text-center font-mono text-[11px] leading-tight text-ink-500";
 const IN_CELL =
-  "min-h-[2.5rem] w-full min-w-0 border-0 bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:outline-none focus:ring-0";
+  "min-h-[3rem] w-full min-w-0 border-0 bg-transparent px-2 py-2 text-center text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:outline-none focus:ring-0 focus-visible:rounded-sm focus-visible:ring-1 focus-visible:ring-ink-300/50";
+
+const CRM_STANDORT_DATALIST_ID = "crm-standort-iso-datalist";
+
+function CrmStandortDatalist() {
+  return (
+    <datalist id={CRM_STANDORT_DATALIST_ID}>
+      {ISO2_COUNTRIES.map((c) => (
+        <option key={c.iso2} value={c.iso2}>
+          {c.nameDe} ({c.iso2})
+        </option>
+      ))}
+    </datalist>
+  );
+}
 
 function StandortSelect({
   value,
@@ -137,11 +152,17 @@ function CrmTableRow({
 
   return (
     <tr
-      className={`${editing ? "bg-ink-100/50" : "hover:bg-ink-50/80"} cursor-pointer`}
+      className={`${
+        editing
+          ? "bg-ink-50/90 ring-1 ring-inset ring-ink-200/90"
+          : "hover:bg-ink-50/60"
+      } cursor-pointer transition-colors`}
       onClick={() => onActivate(row)}
     >
-      <td className={`${TD} max-w-[120px] font-mono text-[11px] text-ink-600`}>
-        <div className={TD_TEXT}>{idShort}</div>
+      <td className={`${TD} max-w-[7.5rem]`}>
+        <div className={TD_INNER_ID} title={row.id}>
+          {idShort}
+        </div>
       </td>
       <td
         className={TD}
@@ -155,9 +176,14 @@ function CrmTableRow({
             onChange={(e) => onField({ email: e.target.value })}
             onClick={(e) => e.stopPropagation()}
             autoComplete="off"
+            spellCheck={false}
           />
         ) : (
-          <div className={TD_TEXT}>{row.email || "—"}</div>
+          <div
+            className={`${TD_INNER} w-full min-w-0 break-words [overflow-wrap:anywhere] sm:px-2.5`}
+          >
+            {row.email || "—"}
+          </div>
         )}
       </td>
       <td
@@ -174,7 +200,11 @@ function CrmTableRow({
             placeholder="Firma"
           />
         ) : (
-          <div className={TD_TEXT}>{(row.company || "").trim() || "—"}</div>
+          <div
+            className={`${TD_INNER} w-full min-w-0 break-words [overflow-wrap:anywhere] sm:px-2.5`}
+          >
+            {(row.company || "").trim() || "—"}
+          </div>
         )}
       </td>
       <td
@@ -191,7 +221,7 @@ function CrmTableRow({
             placeholder="Status"
           />
         ) : (
-          <div className={TD_TEXT}>{(row.status || "").trim() || "—"}</div>
+          <div className={TD_INNER}>{(row.status || "").trim() || "—"}</div>
         )}
       </td>
       <td
@@ -199,18 +229,40 @@ function CrmTableRow({
         onClick={show ? (e) => e.stopPropagation() : undefined}
       >
         {show && d ? (
-          <StandortSelect
+          <input
+            type="text"
+            list={CRM_STANDORT_DATALIST_ID}
+            className={IN_CELL}
             value={d.location}
-            onChange={(v) => onField({ location: v })}
-            ariaLabel="Standort"
-            className={SELECT_CELL}
+            onChange={(e) => {
+              const v = e.target.value
+                .replace(/[^a-zA-Z]/g, "")
+                .slice(0, 2)
+                .toUpperCase();
+              onField({ location: v });
+            }}
+            onClick={(e) => e.stopPropagation()}
+            placeholder="z. B. DE"
+            maxLength={2}
+            inputMode="text"
+            autoCapitalize="characters"
+            spellCheck={false}
+            autoComplete="off"
+            title="Zwei Buchstaben ISO- oder Vorschlag wählen"
+            aria-label="Standort (ISO-2)"
           />
         ) : (
-          <div className={TD_TEXT}>{fmtLocationDe(row.location)}</div>
+          <div className={TD_INNER}>
+            {fmtLocationDe(row.location)}
+          </div>
         )}
       </td>
       <td className={`${TD} whitespace-nowrap`}>
-        <div className={`${TD_TEXT} text-ink-500`}>{fmtWhen(row.created_at)}</div>
+        <div
+          className={`${TD_INNER} tabular-nums text-ink-500`}
+        >
+          {fmtWhen(row.created_at)}
+        </div>
       </td>
     </tr>
   );
@@ -588,6 +640,7 @@ export default function KundenCrmPage() {
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+      <CrmStandortDatalist />
       {error && (
         <p className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose" role="alert">
           {error}
@@ -603,9 +656,9 @@ export default function KundenCrmPage() {
         </p>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto border-b border-hair">
-        <table className="w-full min-w-[640px] border-collapse border border-black text-left text-[12.5px]">
-          <thead className="sticky top-0 z-10 bg-ink-100/95 backdrop-blur-sm">
+      <div className="min-h-0 flex-1 overflow-auto border-b border-hair bg-white">
+        <table className="w-full min-w-[640px] border-collapse border border-ink-200/90 text-[12.5px]">
+          <thead className="sticky top-0 z-10 shadow-[0_1px_0_0_rgba(15,15,15,0.06)] backdrop-blur-sm">
             <tr>
               <th className={TH}>ID</th>
               <th className={TH}>E-Mail</th>
@@ -620,7 +673,7 @@ export default function KundenCrmPage() {
               <tr>
                 <td
                   colSpan={6}
-                  className="border border-black bg-white px-2 py-6 text-center text-ink-500"
+                  className={`${GRID} bg-white px-2 py-8 text-center text-[12.5px] text-ink-500`}
                 >
                   Wird geladen…
                 </td>
@@ -640,7 +693,7 @@ export default function KundenCrmPage() {
               <tr>
                 <td
                   colSpan={6}
-                  className="border border-black bg-white px-2 py-6 text-center text-ink-500"
+                  className={`${GRID} bg-white px-2 py-8 text-center text-[12.5px] text-ink-500`}
                 >
                   Keine Einträge
                 </td>
@@ -656,8 +709,8 @@ export default function KundenCrmPage() {
           role="dialog"
           aria-label="Nicht gespeicherte Änderungen"
         >
-          <div className="flex flex-col items-stretch justify-center gap-2 rounded-sm border-2 border-black bg-white p-3 shadow-lg sm:flex-row sm:items-center sm:gap-3">
-            <span className="shrink-0 text-center text-[12.5px] font-medium text-ink-800 sm:text-left">
+          <div className="flex flex-col items-stretch justify-center gap-2 rounded-lg border border-ink-200/90 bg-white p-3 shadow-md shadow-ink-900/8 ring-1 ring-ink-100 sm:flex-row sm:items-center sm:gap-3">
+            <span className="shrink-0 text-center text-[12.5px] font-medium text-ink-700 sm:text-left">
               Ungespeicherte Änderungen
             </span>
             <div className="flex w-full min-w-0 justify-center gap-2 sm:justify-end">
@@ -665,7 +718,7 @@ export default function KundenCrmPage() {
                 type="button"
                 onClick={discardDraft}
                 disabled={savingRow}
-                className="min-w-0 flex-1 rounded-sm border-2 border-black bg-white px-3 py-2 text-[12.5px] text-ink-800 hover:bg-ink-100 disabled:opacity-50 sm:flex-initial"
+                className="min-w-0 flex-1 rounded-md border border-ink-200/90 bg-white px-3 py-2 text-[12.5px] text-ink-800 shadow-sm transition hover:bg-ink-50 disabled:opacity-50 sm:flex-initial"
               >
                 Nicht speichern
               </button>
@@ -673,7 +726,7 @@ export default function KundenCrmPage() {
                 type="button"
                 onClick={saveDraft}
                 disabled={savingRow}
-                className="min-w-0 flex-1 rounded-sm border-2 border-black bg-ink-900 px-3 py-2 text-[12.5px] font-medium text-white hover:bg-ink-800 disabled:opacity-50 sm:flex-initial"
+                className="min-w-0 flex-1 rounded-md border border-ink-800 bg-ink-900 px-3 py-2 text-[12.5px] font-medium text-white shadow-sm transition hover:bg-ink-800 disabled:opacity-50 sm:flex-initial"
               >
                 {savingRow ? "…" : "Speichern"}
               </button>
