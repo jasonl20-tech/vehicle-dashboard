@@ -209,13 +209,13 @@ export default function AnfragenPage({
 
   const errBannerClass = (indent: "trial" | "prod") =>
     `mb-2 rounded border border-accent-rose/30 bg-accent-rose/5 py-2 text-[12.5px] text-accent-rose ${
-      indent === "trial" ? "mx-4 px-3 sm:mx-6" : "px-3"
+      indent === "trial" ? "" : "px-3"
     }`;
 
   const footerTw = (variant: "trial" | "prod") =>
     `mt-0 flex flex-wrap items-center justify-between gap-2 text-[12.5px] ${
       variant === "trial"
-        ? "border-t border-slate-200/90 bg-paper px-3 py-2.5 text-slate-600 sm:px-4"
+        ? "border-t border-slate-200/90 bg-paper py-2.5 text-slate-600"
         : "border border-t-0 border-hair bg-paper text-ink-600 rounded-b-md px-2 py-2"
     }`;
 
@@ -499,7 +499,7 @@ export default function AnfragenPage({
   const resTo = offset + rows.length;
 
   const trialSearchBar = (
-    <div className="w-full border-b border-slate-200/80 bg-paper/95 px-4 py-3 sm:px-6">
+    <div className="w-full border-b border-slate-200/80 bg-paper/95 py-3">
       <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
         <div className="relative min-w-0 flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />

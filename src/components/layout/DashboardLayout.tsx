@@ -95,12 +95,12 @@ export default function DashboardLayout() {
           <div
             className={
               isKundenTestAnfragen
-                ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-0 py-0"
+                ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 py-0 sm:px-4 lg:px-5"
                 : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 py-8 sm:px-10 sm:py-8 lg:px-14 lg:py-12"
             }
           >
             {isKundenTestAnfragen ? (
-              <div className="shrink-0 border-b border-hair/60 px-4 py-2.5 lg:hidden">
+              <div className="shrink-0 border-b border-hair/60 py-2.5 lg:hidden">
                 <button
                   type="button"
                   onClick={() => setMobileOpen(true)}
