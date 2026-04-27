@@ -8,6 +8,7 @@ import {
   useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import { BILDBEMPFANG_OCEAN_BG } from "../../lib/bildempfangMapTheme";
 import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
 import { iso2Latlng } from "../../lib/iso2Countries";
 
@@ -95,11 +96,20 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
   const spokeLines = useMemo(() => buildSpokeLines(ipMarkers), [ipMarkers]);
 
   if (!ready) {
-    return <div className="h-full min-h-0 w-full min-w-0 flex-1 bg-black" aria-hidden />;
+    return (
+      <div
+        className="h-full min-h-0 w-full min-w-0 flex-1"
+        style={{ backgroundColor: BILDBEMPFANG_OCEAN_BG }}
+        aria-hidden
+      />
+    );
   }
 
   return (
-    <div className="h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-black [&_.leaflet-control-attribution]:border-0 [&_.leaflet-control-attribution]:bg-transparent [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:text-white/35 [&_.leaflet-control-attribution]:shadow-none">
+    <div
+      className="h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden [&_.leaflet-control-attribution]:border-0 [&_.leaflet-control-attribution]:bg-transparent [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:text-white/35 [&_.leaflet-control-attribution]:shadow-none"
+      style={{ backgroundColor: BILDBEMPFANG_OCEAN_BG }}
+    >
       <MapContainer
         className="!h-full !w-full"
         style={{ minHeight: "100%" }}

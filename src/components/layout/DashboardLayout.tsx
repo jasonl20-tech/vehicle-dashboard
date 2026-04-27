@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import {
+  BILDBEMPFANG_HTML_CLASS,
+  BILDBEMPFANG_OCEAN_BG,
+} from "../../lib/bildempfangMapTheme";
 import CommandPalette from "../CommandPalette";
 import DashboardHeader from "./DashboardHeader";
 import Sidebar from "./Sidebar";
@@ -77,6 +81,16 @@ export default function DashboardLayout() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isBildempfangMap) {
+      root.classList.add(BILDBEMPFANG_HTML_CLASS);
+    } else {
+      root.classList.remove(BILDBEMPFANG_HTML_CLASS);
+    }
+    return () => root.classList.remove(BILDBEMPFANG_HTML_CLASS);
+  }, [isBildempfangMap]);
+
   // Only allow collapsed mode on desktop. Mobile always renders expanded sidebar.
   const effectiveCollapsed = collapsed && isLg;
 
@@ -84,8 +98,13 @@ export default function DashboardLayout() {
     <div
       className={
         isBildempfangMap
-          ? "relative h-[100dvh] min-h-0 bg-black text-ink-800"
+          ? "relative h-[100dvh] min-h-0 text-ink-800"
           : "relative min-h-screen bg-paper text-ink-800"
+      }
+      style={
+        isBildempfangMap
+          ? { backgroundColor: BILDBEMPFANG_OCEAN_BG }
+          : undefined
       }
     >
       {/* Layered background — sits behind everything, doesn't intercept clicks. */}
@@ -105,8 +124,13 @@ export default function DashboardLayout() {
         />
         <main
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            isBildempfangMap ? "h-[100dvh] min-h-0 bg-black" : ""
+            isBildempfangMap ? "h-[100dvh] min-h-0" : ""
           }`}
+          style={
+            isBildempfangMap
+              ? { backgroundColor: BILDBEMPFANG_OCEAN_BG }
+              : undefined
+          }
         >
           <DashboardHeader
             onOpenMobileMenu={() => setMobileOpen(true)}
