@@ -732,7 +732,7 @@ export default function KundenCrmPage() {
 
   const headerToolbar = useMemo(
     () => (
-      <div className="flex min-w-0 w-full max-w-3xl flex-1 items-center justify-end gap-1.5">
+      <div className="flex min-w-0 w-full flex-1 items-center justify-end gap-1.5">
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-200/85 bg-white px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.05]">
           <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
           <input
@@ -1007,7 +1007,7 @@ export default function KundenCrmPage() {
       )}
 
       {(data != null || loading) && (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hair bg-paper/90 px-2 py-1.5 text-[12px] text-ink-600 sm:px-3">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hair bg-paper/90 px-1.5 py-1.5 text-[12px] text-ink-600 sm:px-2">
           <span className="min-w-0 truncate">
             {data && typeof data.total === "number" && (
               <>

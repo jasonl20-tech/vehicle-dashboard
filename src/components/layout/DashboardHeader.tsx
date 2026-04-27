@@ -85,7 +85,11 @@ export default function DashboardHeader({
           </h1>
         </div>
       </div>
-      <div className="flex min-w-0 max-w-[min(100%,520px)] flex-1 items-center justify-end gap-1.5 sm:gap-2 sm:pl-2">
+      <div
+        className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 sm:pl-2 ${
+          crmMode ? "max-w-none" : "max-w-[min(100%,520px)]"
+        }`}
+      >
         {trailing}
         <button
           type="button"
