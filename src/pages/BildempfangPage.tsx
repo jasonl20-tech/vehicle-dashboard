@@ -1,9 +1,9 @@
-import { useMemo } from "react";
-import OverviewMap2D from "../components/OverviewMap2D";
+import { lazy, Suspense, useMemo } from "react";
 import PageHeader from "../components/ui/PageHeader";
-import {
-  BILDBEMPFANG_CHOROPLETH_UI,
-} from "../lib/choroplethMapUi";
+
+const BildempfangRealMap = lazy(
+  () => import("../components/bildempfang/BildempfangRealMap"),
+);
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   imageUrlRequestsGeoUrl,
@@ -32,7 +32,7 @@ export default function BildempfangPage() {
       <PageHeader
         eyebrow="Ansichten"
         title="Bildempfang"
-        description="Wo Bild-URL-Anfragen herkommen: Länder-Choropleth (wie in der Bildaustrahlung) plus Aufschlüsselung der Client-IPs (IPv4/IPv6) aus der Analytics Engine. Punkt-Positionen sind Näherungen nach Land, nicht Straßenebene."
+        description="Interaktive Kachel-Karte (Leaflet) mit OSM/CARTO Dark und IP-Punkten aus der Analytics Engine (IPv4/IPv6, Position weiterhin Näherung nach Land aus `blob3`, kein exaktes Geo pro Straße)."
       />
 
       <div className="mb-3 flex flex-wrap gap-4 text-[13px] text-ink-600">
@@ -75,14 +75,26 @@ export default function BildempfangPage() {
         </p>
       )}
 
-      <OverviewMap2D
-        data={geo.data}
-        loading={geo.loading}
-        error={geo.error}
-        copy={BILDBEMPFANG_CHOROPLETH_UI}
-        ipMarkers={ipMarkers}
-        tacticalMap
-      />
+      {geo.error && (
+        <p className="mb-2 text-[12.5px] text-accent-amber">
+          Länder-API: {geo.error} (Karte mit IP-Markern bleibt nutzbar.)
+        </p>
+      )}
+
+      <Suspense
+        fallback={
+          <div className="flex h-[min(78vh,720px)] min-h-[480px] items-center justify-center rounded-xl border border-cyan-900/35 bg-slate-950 text-[13px] text-slate-500">
+            Karten-Modul wird geladen…
+          </div>
+        }
+      >
+        <BildempfangRealMap ipMarkers={ipMarkers} geoLoading={geo.loading} />
+      </Suspense>
+
+      <p className="mt-2 text-[11px] text-slate-500">
+        Basiskarte: CARTO Dark (OpenStreetMap). Starke Vergrößerung per Maus/Touch. Kreise: IPv4 (blau) /
+        IPv6 (violet), Größe ~ Volumen. Graue Linien: Länder-Mittelpunkt → Näherung.
+      </p>
 
       {ip.data && (
         <div className="mt-6 min-w-0">
