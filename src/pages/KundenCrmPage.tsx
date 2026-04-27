@@ -29,6 +29,8 @@ import {
 import { ISO2_COUNTRIES } from "../lib/iso2Countries";
 
 const PAGE_SIZE = 100;
+/** Gleicher horizontaler Inset wie `DashboardHeader` in der Hauptspalte */
+const CRM_MAIN_INSET_X = "px-2 sm:px-3 lg:px-4";
 /** Dezenentes Raster, keine harten schwarzen Linien */
 const GRID = "border border-ink-200/85";
 const TEXT_IN =
@@ -856,22 +858,27 @@ export default function KundenCrmPage() {
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
       {error && (
-        <p className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose" role="alert">
+        <p
+          className={`shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 py-1.5 text-[12.5px] text-accent-rose ${CRM_MAIN_INSET_X}`}
+          role="alert"
+        >
           {error}
         </p>
       )}
 
       {data?.schemaWarning && (
         <p
-          className="shrink-0 border-b border-accent-amber/40 bg-accent-amber/10 px-3 py-1.5 text-[12.5px] text-accent-amber"
+          className={`shrink-0 border-b border-accent-amber/40 bg-accent-amber/10 py-1.5 text-[12.5px] text-accent-amber ${CRM_MAIN_INSET_X}`}
           role="status"
         >
           {data.schemaWarning}
         </p>
       )}
 
-      <div className="min-h-0 flex-1 overflow-auto border-b border-hair bg-gradient-to-b from-ink-50/25 via-white to-ink-50/20 px-2 py-2 sm:px-3 sm:py-2.5">
-        <div className="mx-auto w-full max-w-[min(100%,90rem)] overflow-hidden rounded-2xl border border-ink-200/70 bg-white shadow-sm shadow-ink-900/[0.06] ring-1 ring-ink-100/90">
+      <div
+        className={`min-h-0 flex-1 overflow-auto border-b border-hair bg-gradient-to-b from-ink-50/25 via-white to-ink-50/20 py-2 sm:py-2.5 ${CRM_MAIN_INSET_X}`}
+      >
+        <div className="w-full min-w-0 overflow-hidden rounded-xl border border-ink-200/70 bg-white shadow-sm shadow-ink-900/[0.06] ring-1 ring-ink-100/90 sm:rounded-2xl">
         <table className="w-full min-w-[640px] border-collapse text-[12.5px]">
           <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 backdrop-blur-sm shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
             <tr>
@@ -1007,7 +1014,9 @@ export default function KundenCrmPage() {
       )}
 
       {(data != null || loading) && (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-hair bg-paper/90 px-1.5 py-1.5 text-[12px] text-ink-600 sm:px-2">
+        <div
+          className={`flex shrink-0 items-center justify-between gap-2 border-t border-hair bg-paper/90 py-1.5 text-[12px] text-ink-600 ${CRM_MAIN_INSET_X}`}
+        >
           <span className="min-w-0 truncate">
             {data && typeof data.total === "number" && (
               <>
