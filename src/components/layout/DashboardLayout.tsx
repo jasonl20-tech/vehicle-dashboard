@@ -37,12 +37,16 @@ function useIsLg(): boolean {
 const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/kunden/test-anfragen" as const;
 const FULLSCREEN_MAP_BILDBEMPFANG = "/ansichten/bildempfang" as const;
 const KUNDEN_CRM = "/kunden/crm" as const;
+const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
 
 export default function DashboardLayout() {
   const { pathname } = useLocation();
   const isKundenTestAnfragen = pathname === FULL_WIDTH_KUNDEN_TEST_ANFRAGEN;
+  const isKundenAnfragenPage = pathname === KUNDEN_ANFRAGEN;
   const isBildempfangMap = pathname === FULLSCREEN_MAP_BILDBEMPFANG;
   const isCrmPage = pathname === KUNDEN_CRM;
+  /** Vollflächig + Header-Toolbar (wie CRM): Anfragen + Test Anfragen */
+  const isKundenAnfragenLayout = isKundenAnfragenPage || isKundenTestAnfragen;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [headerTrailing, setHeaderTrailing] = useState<ReactNode | null>(null);
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed);
@@ -103,8 +107,8 @@ export default function DashboardLayout() {
     [],
   );
   useEffect(() => {
-    if (!isCrmPage) setHeaderTrailing(null);
-  }, [isCrmPage]);
+    if (!isCrmPage && !isKundenAnfragenLayout) setHeaderTrailing(null);
+  }, [isCrmPage, isKundenAnfragenLayout]);
 
   return (
     <div
@@ -136,7 +140,7 @@ export default function DashboardLayout() {
         />
         <main
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            isBildempfangMap || isCrmPage || isKundenTestAnfragen
+            isBildempfangMap || isCrmPage || isKundenAnfragenLayout
               ? "h-[100dvh] min-h-0"
               : ""
           }`}
@@ -148,29 +152,27 @@ export default function DashboardLayout() {
         >
           <DashboardHeader
             onOpenMobileMenu={() => setMobileOpen(true)}
-            trailing={isCrmPage ? headerTrailing : null}
-            crmMode={isCrmPage}
+            trailing={
+              isCrmPage || isKundenAnfragenLayout ? headerTrailing : null
+            }
+            crmMode={isCrmPage || isKundenAnfragenLayout}
           />
           <div
             className={
               isBildempfangMap
                 ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                : isCrmPage
+                : isCrmPage || isKundenAnfragenLayout
                   ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                  : isKundenTestAnfragen
-                    ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                    : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
+                  : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
           >
             <div
               className={
                 isBildempfangMap
                   ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
-                  : isCrmPage
-                    ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
-                    : isKundenTestAnfragen
-                      ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
-                      : ""
+                  : isCrmPage || isKundenAnfragenLayout
+                    ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
+                    : ""
               }
             >
               <Outlet context={outletContext} />

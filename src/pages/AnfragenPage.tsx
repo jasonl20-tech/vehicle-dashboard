@@ -2,15 +2,22 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
-  ListFilter,
+  Filter,
   Mail,
   MoreHorizontal,
   RefreshCw,
   Search,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import PageHeader from "../components/ui/PageHeader";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
+import { useOutletContext } from "react-router-dom";
+import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   DASHBOARD_MAIN_INSET_X,
@@ -30,8 +37,6 @@ import {
 
 const PAGE_SIZE = 35;
 
-const TEXT_IN =
-  "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const TH = `${DASH_TH} px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500`;
 const TD = `${DASH_TD} px-2 py-2 align-top text-[12.5px] text-ink-800`;
 const TABLE_CARD_WRAP = `min-h-0 overflow-x-auto border-b border-hair bg-gradient-to-b from-ink-50/25 via-white to-ink-50/20 py-2 sm:py-2.5 ${DASHBOARD_MAIN_INSET_X}`;
@@ -149,8 +154,8 @@ export default function AnfragenPage({
   const [offset, setOffset] = useState(0);
   const [spam, setSpam] = useState<"all" | "0" | "1">("all");
   const [filterOpen, setFilterOpen] = useState(false);
-  const filterWrapRef = useRef<HTMLDivElement>(null);
   const [detail, setDetail] = useState<WebsiteSubmissionRow | null>(null);
+  const { setHeaderTrailing } = useOutletContext<DashboardOutletContext>();
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -163,18 +168,26 @@ export default function AnfragenPage({
 
   useEffect(() => {
     if (!filterOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      const el = filterWrapRef.current;
-      if (el && !el.contains(e.target as Node)) setFilterOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFilterOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    window.addEventListener("keydown", onKey);
+    let remove: (() => void) | undefined;
+    const id = requestAnimationFrame(() => {
+      const onDoc = (e: MouseEvent) => {
+        const t = e.target as HTMLElement;
+        if (t.closest?.("[data-anfragen-filter]")) return;
+        setFilterOpen(false);
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setFilterOpen(false);
+      };
+      document.addEventListener("mousedown", onDoc);
+      window.addEventListener("keydown", onKey);
+      remove = () => {
+        document.removeEventListener("mousedown", onDoc);
+        window.removeEventListener("keydown", onKey);
+      };
+    });
     return () => {
-      document.removeEventListener("mousedown", onDoc);
-      window.removeEventListener("keydown", onKey);
+      cancelAnimationFrame(id);
+      remove?.();
     };
   }, [filterOpen]);
 
@@ -204,10 +217,6 @@ export default function AnfragenPage({
     total === 0
       ? "0 / 0"
       : `${offset + 1}–${offset + rows.length} / ${fmtNumber(total)}`;
-
-  /** Wenig inhalt: Block (Suche + Tabelle) vertikal in der Fläche zentrieren. */
-  const shouldCenterBlock =
-    isTrial && !api.loading && (total === 0 || total <= 16);
 
   const SPAM_OPTIONS = (
     [
@@ -241,6 +250,91 @@ export default function AnfragenPage({
       </button>
     </div>
   );
+
+  const headerToolbar = useMemo(
+    () => (
+      <div className="flex min-w-0 w-full flex-1 items-center justify-end gap-1.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-200/85 bg-white px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.05]">
+          <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          <input
+            type="search"
+            value={qIn}
+            onChange={(e) => setQIn(e.target.value)}
+            placeholder={
+              isTrial ? "Suchen" : "Begriffe, E-Mail, Formular …"
+            }
+            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+            aria-label="Suche"
+          />
+        </div>
+        <div className="relative" data-anfragen-filter>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFilterOpen((o) => !o);
+            }}
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-night-200 transition hover:bg-white/[0.08] hover:text-white ${
+              spam !== "all"
+                ? "border-brand-500/50 bg-brand-500/15 text-brand-200"
+                : "border-white/[0.1] bg-white/[0.04]"
+            }`}
+            title="Spam-Filter"
+            aria-expanded={filterOpen}
+          >
+            <Filter className="h-4 w-4" />
+          </button>
+          {filterOpen && (
+            <div
+              className="absolute right-0 top-full z-50 mt-1 w-[min(100vw-1rem,16rem)] rounded-lg border border-white/[0.1] bg-night-800 p-3 shadow-xl"
+              data-anfragen-filter
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-night-500">
+                Spam
+              </p>
+              <div className="flex flex-col gap-1">
+                {SPAM_OPTIONS.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => {
+                      setSpam(o.id);
+                      closeFilters();
+                    }}
+                    className={`rounded-md px-2 py-1.5 text-left text-[12.5px] ${
+                      spam === o.id
+                        ? "bg-white/15 text-white"
+                        : "text-night-200 hover:bg-white/10"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => api.reload()}
+          disabled={api.loading}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          title="Aktualisieren"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${api.loading ? "animate-spin" : ""}`}
+          />
+        </button>
+      </div>
+    ),
+    [qIn, filterOpen, spam, isTrial, api.loading, closeFilters],
+  );
+
+  useLayoutEffect(() => {
+    setHeaderTrailing(headerToolbar);
+    return () => setHeaderTrailing(null);
+  }, [setHeaderTrailing, headerToolbar]);
 
   const productionTableBlock = (
     <>
@@ -491,177 +585,11 @@ export default function AnfragenPage({
 
   const tableBlock = isTrial ? trialTableBlock : productionTableBlock;
 
-  const resFrom = total === 0 ? 0 : offset + 1;
-  const resTo = offset + rows.length;
-
-  const trialSearchBar = (
-    <div className="w-full shrink-0 border-b border-hair bg-paper/95 py-3">
-      <div
-        className={`flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 ${DASHBOARD_MAIN_INSET_X}`}
-      >
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-          <input
-            type="search"
-            className="h-10 w-full min-w-0 rounded-lg border border-ink-200/85 bg-white pl-9 pr-3 text-[13px] text-ink-900 shadow-sm ring-1 ring-black/[0.05] placeholder:text-ink-400 focus:border-ink-300 focus:outline-none focus:ring-2 focus:ring-ink-200/50"
-            placeholder="Suchen"
-            value={qIn}
-            onChange={(e) => setQIn(e.target.value)}
-            aria-label="Suche"
-          />
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3">
-          <p className="shrink-0 text-sm tabular-nums text-ink-500">
-            Zeige {String(resFrom).padStart(2, "0")}–{String(resTo).padStart(2, "0")}{" "}
-            von {fmtNumber(total)}
-          </p>
-          <div className="flex items-center gap-2">
-            <div className="relative shrink-0" ref={filterWrapRef}>
-              <button
-                type="button"
-                onClick={() => setFilterOpen((v) => !v)}
-                title="Filter"
-                aria-expanded={filterOpen}
-                className="inline-flex h-10 items-center gap-2 rounded-lg border border-ink-200/90 bg-white px-3 text-sm font-medium text-ink-800 shadow-sm transition hover:border-ink-300 hover:bg-ink-50"
-              >
-                <ListFilter className="h-4 w-4 text-ink-500" />
-                Alle Filter
-              </button>
-              {filterOpen && (
-                <div
-                  className="absolute right-0 z-40 mt-1.5 w-[min(100vw-2rem,16rem)] rounded-lg border border-ink-200/90 bg-white p-2 shadow-lg"
-                  role="menu"
-                >
-                  <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-400">
-                    Spam
-                  </p>
-                  <div className="flex flex-col gap-1">
-                    {SPAM_OPTIONS.map((o) => (
-                      <button
-                        key={o.id}
-                        type="button"
-                        onClick={() => {
-                          setSpam(o.id);
-                          closeFilters();
-                        }}
-                        className={`rounded-md px-2 py-1.5 text-left text-[12.5px] ${
-                          spam === o.id
-                            ? "bg-ink-900 text-white"
-                            : "text-ink-700 hover:bg-ink-50"
-                        }`}
-                      >
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => api.reload()}
-              title="Aktualisieren"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-200/90 bg-white text-ink-500 shadow-sm transition hover:border-ink-300 hover:bg-ink-50"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
-              />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  if (isTrial) {
-    return (
-      <div className="flex w-full min-h-0 min-w-0 flex-1 flex-col">
-        {shouldCenterBlock ? (
-          <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col justify-center">
-            {trialSearchBar}
-            <div className="w-full min-w-0 shrink-0">{tableBlock}</div>
-          </div>
-        ) : (
-          <>
-            {trialSearchBar}
-            <div className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto">
-              {tableBlock}
-            </div>
-          </>
-        )}
-
-        {detail && (
-          <SubmissionDetailDialog row={detail} onClose={() => setDetail(null)} />
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <PageHeader
-        eyebrow="Kundenmanagement"
-        title="Anfragen"
-        description={
-          <span>
-            Einsendungen aus dem Formular-Backend (D1{" "}
-            <code className="font-mono text-[11.5px]">website</code>, Tabelle{" "}
-            <code className="font-mono text-[11.5px]">submissions</code>).
-          </span>
-        }
-      />
-
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="w-full min-w-[200px] max-w-[400px]">
-          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-            Suche
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-            <input
-              type="search"
-              className={`${TEXT_IN} pl-8`}
-              placeholder="Begriffe (alle müssen vorkommen), E-Mail, Formular, …"
-              value={qIn}
-              onChange={(e) => setQIn(e.target.value)}
-            />
-          </div>
-        </div>
-        <div>
-          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-            Spam
-          </label>
-          <div className="inline-flex overflow-hidden rounded-md border border-hair bg-white">
-            {SPAM_OPTIONS.map((o, i) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => setSpam(o.id)}
-                className={`px-2.5 py-1.5 text-[12px] transition-colors ${
-                  spam === o.id
-                    ? "bg-ink-900 text-white"
-                    : "text-ink-600 hover:bg-ink-50"
-                } ${i > 0 ? "border-l border-hair" : ""}`}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => api.reload()}
-          title="Aktualisieren"
-          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair text-ink-500 hover:bg-ink-50"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
-          />
-        </button>
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        {tableBlock}
       </div>
-
-      {tableBlock}
-
       {detail && (
         <SubmissionDetailDialog row={detail} onClose={() => setDetail(null)} />
       )}
