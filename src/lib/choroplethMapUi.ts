@@ -33,6 +33,17 @@ export const BILDAUSTRAHLUNG_CHOROPLETH_UI: ChoroplethMapUi = {
   globeCountLabel: "Bild-URL-Req.",
 };
 
+export const BILDBEMPFANG_CHOROPLETH_UI: ChoroplethMapUi = {
+  cardTitle: "Bild-URL-Streams: Länder + Client-IP",
+  cardDescription:
+    "Gleiche Quelle wie Bildaustrahlung (AE `image_url_requests`). Fläche: Umfang pro Land. Punkte: Client-IP aus konfigurierbarer Spalte (meist `blob1`), Land aus `blob3`; grobe Lage = Land-Mittelpunkt mit Streuung (für exakte Orte bräuchte man GeoIP pro IP im Worker).",
+  emptyGeoText: u.emptyGeoText,
+  legendTitle: "Karte + IPs",
+  legendBody:
+    "Choropleth: Volumen pro Land. Kreise: blau = IPv4, lila = IPv6, Größe = Anteil. Tooltip = IP, Typ, Land, Volumen.",
+  globeCountLabel: "Bild-URL-Req.",
+};
+
 export function mergeChoroplethUi(
   base: ChoroplethMapUi,
   partial?: Partial<ChoroplethMapUi>,

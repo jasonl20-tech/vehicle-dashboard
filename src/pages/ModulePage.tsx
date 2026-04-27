@@ -10,11 +10,6 @@ const META: Record<
     eyebrow: "Ansichten",
     description: "Ausgabe und Verteilung von Fahrzeugbildern – Inhalte folgen.",
   },
-  "/ansichten/bildempfang": {
-    title: "Bildempfang",
-    eyebrow: "Ansichten",
-    description: "Eingang eingehender Bilder und Verarbeitung – Inhalte folgen.",
-  },
   "/leads": {
     title: "Leads",
     eyebrow: "Leads",

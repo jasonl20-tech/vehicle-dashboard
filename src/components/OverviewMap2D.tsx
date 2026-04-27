@@ -3,6 +3,7 @@ import { Map2DChrome, Map2DLegend } from "./map2d/Map2DChrome";
 import { anfragenKarteMap2DModel } from "../config/anfragenKarteMap2DModel";
 import type { ChoroplethMapUi } from "../lib/choroplethMapUi";
 import type { SubmissionsByCountryResponse } from "../lib/overviewGlobeApi";
+import type { IpMapMarker } from "../lib/bildempfangMapMarkers";
 import type { BildaustrahlungArc } from "../lib/bildaustrahlungArcsApi";
 import {
   COUNTRIES_GEOJSON_URL,
@@ -22,6 +23,7 @@ export default function OverviewMap2D({
   error,
   copy,
   arcs,
+  ipMarkers,
 }: {
   data: SubmissionsByCountryResponse | null;
   loading: boolean;
@@ -29,6 +31,8 @@ export default function OverviewMap2D({
   copy?: Partial<ChoroplethMapUi>;
   /** Bögen vom Kundenstandort zum Viewer-Land (Bildaustrahlung). */
   arcs?: BildaustrahlungArc[];
+  /** Optional: IP-Marker (Bildempfang). */
+  ipMarkers?: IpMapMarker[];
 }) {
   const empty =
     copy?.emptyGeoText ?? anfragenKarteMap2DModel.ui.emptyGeoText;
@@ -52,7 +56,7 @@ export default function OverviewMap2D({
     };
   }, []);
 
-  const dataKey = `${data?.total ?? 0}-${data?.max ?? 0}`;
+  const dataKey = `${data?.total ?? 0}-${data?.max ?? 0}-ip${ipMarkers?.length ?? 0}`;
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-hair bg-gradient-to-b from-paper to-[#eef3f6]">
@@ -63,7 +67,13 @@ export default function OverviewMap2D({
         style={{ minHeight: "min(72vh, 720px)" }}
       >
         {geo && geo.features.length > 0 ? (
-          <Map2DWorldSvg geo={geo} data={data} dataKey={dataKey} arcs={arcs} />
+          <Map2DWorldSvg
+            geo={geo}
+            data={data}
+            dataKey={dataKey}
+            arcs={arcs}
+            ipMarkers={ipMarkers}
+          />
         ) : (
           <div
             className="grid h-[min(72vh,720px)] min-h-[480px] place-items-center text-[13px] text-ink-500"

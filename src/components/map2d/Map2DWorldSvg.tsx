@@ -10,6 +10,7 @@ import {
   effectiveNeIso2,
 } from "../../lib/anfragenKarteGeo";
 import type { BildaustrahlungArc } from "../../lib/bildaustrahlungArcsApi";
+import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
 import { iso2Latlng, iso2Name } from "../../lib/iso2Countries";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -30,6 +31,8 @@ type Props = {
   dataKey: string;
   /** Bögen vom Kundenstandort zum Viewer-Land. */
   arcs?: BildaustrahlungArc[];
+  /** Optional: Client-IP-Näherung (Bildempfang, Land aus AE). */
+  ipMarkers?: IpMapMarker[];
 };
 
 type ArcLine = {
@@ -92,7 +95,7 @@ function buildArcGeometry(arcs: BildaustrahlungArc[] | undefined): {
   return { lines, markers: Array.from(markers.values()) };
 }
 
-export default function Map2DWorldSvg({ geo, data, dataKey, arcs }: Props) {
+export default function Map2DWorldSvg({ geo, data, dataKey, arcs, ipMarkers }: Props) {
   const [dims, setDims] = useState({ w: 900, h: 480 });
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -210,6 +213,30 @@ export default function Map2DWorldSvg({ geo, data, dataKey, arcs }: Props) {
                     stroke="white"
                     strokeWidth={mk.kind === "from" ? 1.1 : 0.8}
                     opacity={0.95}
+                  />
+                </Marker>
+              ))}
+            </g>
+          )}
+
+          {ipMarkers && ipMarkers.length > 0 && (
+            <g
+              className="pointer-events-auto"
+              aria-label="Bild-URL Client-IP (Näherung nach Land)"
+            >
+              {ipMarkers.map((im) => (
+                <Marker key={im.key} coordinates={im.coordinates}>
+                  <title>{im.title}</title>
+                  <circle
+                    r={im.r}
+                    fill={
+                      im.family === "v4"
+                        ? "rgb(45, 108, 223)"
+                        : "rgb(124, 58, 237)"
+                    }
+                    stroke="white"
+                    strokeWidth={0.9}
+                    opacity={0.82}
                   />
                 </Marker>
               ))}

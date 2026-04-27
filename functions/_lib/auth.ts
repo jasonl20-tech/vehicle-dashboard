@@ -58,10 +58,20 @@ export interface AuthEnv {
    * `0`/leer = `key_analytics` / `api_analytics` mit `AND dataset = …` (siehe `IMAGE_URL_REQUESTS_DATASET`).
    */
   IMAGE_URL_REQUESTS_DEDICATED?: string;
+  /**
+   * Wenn gesetzt: Modus mit `key_analytics`/`api_analytics` + `dataset = …` nicht abfragen
+   * (nur dedicated-Tabelle, falls konfiguriert).
+   */
+  IMAGE_URL_REQUESTS_FILTER_DISABLE?: string;
   /** Name der AE-Quelle (Tabellen- oder `dataset`-Wert, Standard `image_url_requests`). */
   IMAGE_URL_REQUESTS_DATASET?: string;
   /** Wie `CONTROLLING_AE_ACCOUNT`: `secondary` = nur Zweitkonto, sonst primär. */
   IMAGE_URL_AE_ACCOUNT?: string;
+  /**
+   * Spalte in `image_url_requests`, in der die Client-IP steht: `blob1` (Default)
+   * oder `blob2`, je nach Bildaustrahlungs-Worker-Schema.
+   */
+  IMAGE_URL_REQUESTS_IP_BLOB?: string;
   /** Stripe Secret Key (`sk_…`, nur serverseitig). */
   STRIPE_SECRET_KEY?: string;
   /**
