@@ -29,15 +29,15 @@ html.bildempfang-ocean-bg {
   color-scheme: dark;
 }
 /* !important: tailwind `body { @apply bg-paper }` bzw. Leaflet `.leaflet-container { background:#ddd }` laden ggf. später */
-/* Farbe = CARTO-Dark-Meer (#2C353C), siehe `bildempfangMapTheme.ts` */
+/* Farbe siehe `bildempfangMapTheme.ts` (BILDBEMPFANG_OCEAN_BG) */
 html.bildempfang-ocean-bg,
 html.bildempfang-ocean-bg body,
 html.bildempfang-ocean-bg #root {
-  background-color: #2c353c !important;
+  background-color: #262626 !important;
 }
 /* Leaflet-Standard (#ddd) — sonst graue Fläche zwischen Header und Kacheln */
 html.bildempfang-ocean-bg .leaflet-container {
-  background: #2c353c !important;
+  background: #262626 !important;
 }
 
 /* Subtle scrollbar */
