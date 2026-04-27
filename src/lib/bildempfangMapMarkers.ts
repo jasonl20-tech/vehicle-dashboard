@@ -1,15 +1,26 @@
 import type { ImageUrlIpRow } from "./bildempfangIpApi";
+import { msToRgba } from "./bildempfangMsColor";
 import { iso2Latlng } from "./iso2Countries";
 
 export type IpMapMarker = {
   key: string;
+  ip: string;
   /** `react-simple-maps` Marker: [lng, lat] */
   coordinates: [number, number];
   title: string;
   family: "v4" | "v6";
   r: number;
-  /** ISO-2 — für Netz-Linien Land → Punkt */
+  /** ISO-2 */
   iso2: string;
+  /** Mittlere Latenz (ms) pro IP/Land, für Farbe */
+  avgMs: number | null;
+  userAgent: string;
+  edgeCode: string;
+  imagePath: string;
+  /** RGBA aus avgMs (grün…rot) */
+  signalColor: string;
+  /** Größere Aura (px), innen folgt kleiner IP-Punkt */
+  auraRadius: number;
 };
 
 /**
@@ -55,16 +66,36 @@ export function buildIpMapMarkers(
   const sorted = [...placed].sort((a, b) => b.r.count - a.r.count);
   const take = sorted.slice(0, max);
   const maxCount = Math.max(1, ...take.map((x) => x.r.count));
+  const mss = take
+    .map((x) => x.r.avgMs)
+    .filter((v): v is number => v != null && v > 0);
+  const msLo = mss.length ? Math.min(...mss) : 50;
+  const msHi = mss.length ? Math.max(...mss) : 800;
+
   return take.map(({ r, lat, lng }) => {
     const t = Math.log(1 + r.count) / Math.log(1 + maxCount);
     const rad = 2 + 7 * t;
     const fam = r.family === "v4" ? "v4" : "v6";
+    const rawAvg = r.avgMs;
+    const avg =
+      rawAvg != null && rawAvg > 0
+        ? rawAvg
+        : null;
+    const signalColor = msToRgba(avg, { lo: msLo, hi: msHi });
+    const auraRadius = 10 + 20 * t;
     return {
       key: `${r.ip}|${r.iso2}`,
+      ip: r.ip,
       coordinates: [lng, lat] as [number, number],
       family: fam,
       r: rad,
       iso2: r.iso2,
+      avgMs: avg,
+      userAgent: (r.userAgent ?? "").trim(),
+      edgeCode: (r.edgeCode ?? "").trim().toUpperCase().slice(0, 3),
+      imagePath: (r.imagePath ?? "").trim(),
+      signalColor,
+      auraRadius,
       title: `${r.ip} (${fam === "v4" ? "IPv4" : "IPv6"}) — ${r.iso2}: ${r.count}`,
     };
   });

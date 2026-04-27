@@ -1,10 +1,11 @@
-import { lazy, Suspense, useMemo } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
+import BildempfangDetailPanel from "../components/bildempfang/BildempfangDetailPanel";
 import { useApi } from "../lib/customerApi";
 import {
   type ImageUrlIpBreakdownResponse,
   imageUrlRequestsIpBreakdownUrl,
 } from "../lib/bildempfangIpApi";
-import { buildIpMapMarkers } from "../lib/bildempfangMapMarkers";
+import { buildIpMapMarkers, type IpMapMarker } from "../lib/bildempfangMapMarkers";
 import { BILDBEMPFANG_OCEAN_BG } from "../lib/bildempfangMapTheme";
 
 const BildempfangRealMap = lazy(
@@ -17,6 +18,7 @@ const BildempfangRealMap = lazy(
 export default function BildempfangPage() {
   const ipUrl = useMemo(() => imageUrlRequestsIpBreakdownUrl(), []);
   const ip = useApi<ImageUrlIpBreakdownResponse>(ipUrl);
+  const [selected, setSelected] = useState<IpMapMarker | null>(null);
 
   const ipMarkers = useMemo(
     () => buildIpMapMarkers(ip.data?.rows ?? []),
@@ -25,7 +27,7 @@ export default function BildempfangPage() {
 
   return (
     <div
-      className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col"
+      className="relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col"
       style={{ backgroundColor: BILDBEMPFANG_OCEAN_BG }}
     >
       <Suspense
@@ -37,8 +39,16 @@ export default function BildempfangPage() {
           />
         }
       >
-        <BildempfangRealMap ipMarkers={ipMarkers} />
+        <BildempfangRealMap
+          ipMarkers={ipMarkers}
+          selectedKey={selected?.key ?? null}
+          onSelect={setSelected}
+        />
       </Suspense>
+      <BildempfangDetailPanel
+        marker={selected}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }

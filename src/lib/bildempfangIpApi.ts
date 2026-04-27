@@ -7,6 +7,13 @@ export type ImageUrlIpRow = {
   iso2: string;
   count: number;
   family: "v4" | "v6" | "unknown";
+  /** Mittlere Antwortzeit (ms) aus `double2`, falls vorhanden */
+  avgMs?: number | null;
+  userAgent?: string;
+  /** Edge-PoP / IATA, z. B. LHR (aus `blob9`) */
+  edgeCode?: string;
+  /** Letzter Bild-URL-Pfad (aus `blob1` im Log) */
+  imagePath?: string;
 };
 
 export type ImageUrlIpBreakdownResponse = {

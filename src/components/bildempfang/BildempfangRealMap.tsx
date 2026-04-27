@@ -1,17 +1,18 @@
 import L from "leaflet";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   CircleMarker,
   MapContainer,
   Polyline,
   TileLayer,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { BILDBEMPFANG_OCEAN_BG } from "../../lib/bildempfangMapTheme";
 import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
-import { iso2Latlng } from "../../lib/iso2Countries";
-
+import { iataToLatLng } from "../../lib/iataEdgeCodes";
+import { msToRgbaGloss } from "../../lib/bildempfangMsColor";
 const TILE = {
   url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
   attribution:
@@ -37,54 +38,51 @@ function MapResizeWatcher() {
   return null;
 }
 
-function FitBounds({ points }: { points: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (points.length === 0) {
-      map.setView([20, 0], 2);
-      return;
-    }
-    if (points.length === 1) {
-      map.setView(points[0]!, 5);
-      return;
-    }
-    const b = L.latLngBounds(points);
-    map.fitBounds(b, { padding: [56, 56], maxZoom: 12 });
-  }, [map, points]);
+function MapClickDeselect({ onDeselect }: { onDeselect: () => void }) {
+  useMapEvents({
+    click: () => onDeselect(),
+  });
   return null;
 }
 
-function buildSpokeLines(
-  markers: IpMapMarker[],
-): [number, number][][] {
-  const by = new Map<string, IpMapMarker[]>();
-  for (const m of markers) {
-    const a = by.get(m.iso2) ?? [];
-    a.push(m);
-    by.set(m.iso2, a);
-  }
-  const out: [number, number][][] = [];
-  for (const [, list] of by) {
-    const hub = iso2Latlng(list[0]!.iso2);
-    if (!hub) continue;
-    const hubPos: [number, number] = [hub[0], hub[1]];
-    for (const mk of list) {
-      const p = toLatLng(mk);
-      out.push([hubPos, p]);
+function FitBounds({
+  points,
+  edgePoints,
+}: {
+  points: [number, number][];
+  edgePoints: [number, number][];
+}) {
+  const map = useMap();
+  const all = useMemo(
+    () => [...points, ...edgePoints],
+    [points, edgePoints],
+  );
+  useEffect(() => {
+    if (all.length === 0) {
+      map.setView([20, 0], 2);
+      return;
     }
-  }
-  return out;
+    if (all.length === 1) {
+      map.setView(all[0]!, 5);
+      return;
+    }
+    const b = L.latLngBounds(all);
+    map.fitBounds(b, { padding: [56, 80], maxZoom: 12 });
+  }, [map, all]);
+  return null;
 }
 
 type Props = {
   ipMarkers: IpMapMarker[];
+  selectedKey: string | null;
+  onSelect: (m: IpMapMarker | null) => void;
 };
 
-/**
- * Vollbild-Kachel (Leaflet). Kein Zoom-+, keine Text-Overlays; OSM-Attribution
- * bleibt rechtlich im Leaflet-Standard-Widget (sehr klein).
- */
-export default function BildempfangRealMap({ ipMarkers }: Props) {
+export default function BildempfangRealMap({
+  ipMarkers,
+  selectedKey,
+  onSelect,
+}: Props) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
 
@@ -93,7 +91,48 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
     [ipMarkers],
   );
 
-  const spokeLines = useMemo(() => buildSpokeLines(ipMarkers), [ipMarkers]);
+  const msRange = useMemo(() => {
+    const mss = ipMarkers
+      .map((m) => m.avgMs)
+      .filter((v): v is number => v != null && v > 0);
+    if (mss.length === 0) return { lo: 20, hi: 900 };
+    return { lo: Math.min(...mss), hi: Math.max(...mss) };
+  }, [ipMarkers]);
+
+  const edgeLines = useMemo(() => {
+    const out: {
+      key: string;
+      positions: [number, number][];
+      ms: number | null;
+    }[] = [];
+    for (const m of ipMarkers) {
+      if (!m.edgeCode) continue;
+      const el = iataToLatLng(m.edgeCode);
+      if (!el) continue;
+      const b = toLatLng(m);
+      out.push({ key: m.key, positions: [b, el], ms: m.avgMs });
+    }
+    return out;
+  }, [ipMarkers]);
+
+  const edgeSites = useMemo(() => {
+    const seen = new Set<string>();
+    const sites: { code: string; pos: [number, number] }[] = [];
+    for (const m of ipMarkers) {
+      if (!m.edgeCode) continue;
+      if (seen.has(m.edgeCode)) continue;
+      const ll = iataToLatLng(m.edgeCode);
+      if (!ll) continue;
+      seen.add(m.edgeCode);
+      sites.push({ code: m.edgeCode, pos: ll });
+    }
+    return sites;
+  }, [ipMarkers]);
+
+  const edgePoints = useMemo(
+    () => edgeSites.map((s) => s.pos),
+    [edgeSites],
+  );
 
   if (!ready) {
     return (
@@ -123,36 +162,89 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
       >
         <TileLayer url={TILE.url} attribution={TILE.attribution} />
         <MapResizeWatcher />
-        <FitBounds points={points} />
-        {spokeLines.map((pos) => (
-          <Polyline
-            key={`spoke-${pos[0]![0]}-${pos[0]![1]}-${pos[1]![0]}-${pos[1]![1]}`}
-            positions={pos}
+        <MapClickDeselect onDeselect={() => onSelect(null)} />
+        <FitBounds points={points} edgePoints={edgePoints} />
+        {edgeLines.map((line) => {
+          const { line: c, glow } = msToRgbaGloss(line.ms, msRange);
+          return (
+            <Fragment key={line.key}>
+              <Polyline
+                key={`${line.key}-glow`}
+                positions={line.positions}
+                pathOptions={{
+                  color: glow,
+                  weight: 10,
+                  lineCap: "round",
+                  lineJoin: "round",
+                  opacity: 1,
+                }}
+              />
+              <Polyline
+                key={`${line.key}-line`}
+                positions={line.positions}
+                pathOptions={{
+                  color: c,
+                  weight: 1.8,
+                  lineCap: "round",
+                  lineJoin: "round",
+                  opacity: 0.95,
+                }}
+              />
+            </Fragment>
+          );
+        })}
+        {ipMarkers.map((m) => {
+          const [lat, lng] = toLatLng(m);
+          const isSel = m.key === selectedKey;
+          const col = m.signalColor;
+          return (
+            <Fragment key={m.key}>
+              <CircleMarker
+                key={`${m.key}-aura`}
+                center={[lat, lng]}
+                radius={m.auraRadius + (isSel ? 4 : 0)}
+                pathOptions={{
+                  fillColor: col,
+                  color: "transparent",
+                  weight: 0,
+                  fillOpacity: isSel ? 0.28 : 0.2,
+                }}
+              />
+              <CircleMarker
+                key={`${m.key}-dot`}
+                center={[lat, lng]}
+                radius={isSel ? 6 : 4}
+                eventHandlers={{
+                  click: (e) => {
+                    if (e.originalEvent) {
+                      L.DomEvent.stopPropagation(e.originalEvent);
+                    }
+                    onSelect(m);
+                  },
+                }}
+                pathOptions={{
+                  fillColor: col,
+                  color: isSel ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.8)",
+                  weight: isSel ? 2.2 : 1.1,
+                  fillOpacity: 0.95,
+                }}
+              />
+            </Fragment>
+          );
+        })}
+        {edgeSites.map((s) => (
+          <CircleMarker
+            key={`edge-${s.code}`}
+            center={s.pos}
+            radius={5}
             pathOptions={{
-              color: "rgba(248, 250, 252, 0.35)",
-              weight: 1,
-              lineCap: "round",
+              fillColor: "rgba(250, 204, 21, 0.5)",
+              color: "rgba(250, 204, 21, 0.85)",
+              weight: 1.2,
+              fillOpacity: 0.55,
             }}
           />
         ))}
-        {ipMarkers.map((m) => {
-          const [lat, lng] = toLatLng(m);
-          const pxR = Math.max(5, Math.min(22, m.r * 1.4));
-          const fill = m.family === "v4" ? "#2d6cdf" : "#7c3aed";
-          return (
-            <CircleMarker
-              key={m.key}
-              center={[lat, lng]}
-              radius={pxR}
-              pathOptions={{
-                fillColor: fill,
-                color: "rgba(255,255,255,0.8)",
-                weight: 1.2,
-                fillOpacity: 0.88,
-              }}
-            />
-          );
-        })}
       </MapContainer>
     </div>
   );

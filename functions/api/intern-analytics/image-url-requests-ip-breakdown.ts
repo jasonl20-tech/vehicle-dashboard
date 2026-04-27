@@ -8,7 +8,10 @@
  *
  * Query: `days` (1–400), optional `from` / `to` (wie Geo-Endpoint).
  *
- * Response: sortierte Liste mit IP, ISO-2, Zählung, Klassifikation v4/v6.
+ * Response: sortierte Liste mit IP, ISO-2, Zählung, Klassifikation v4/v6,
+ * optional: mittlere Antwortzeit `avgMs` (Spalte `double2` in `image_url_requests`,
+ * in ms pro Bildaufruf), letzte gesehene Werte: `userAgent` (`blob5` / User-Agent-String
+ * in eurer Engine), `edgeCode` (`blob9` / Edge-PoP z. B. LHR), `imagePath` (`argMax` aus `blob1`).
  */
 import {
   aeNumber,
@@ -32,7 +35,38 @@ const MAX_IP_SQL_ROWS = 8000;
 
 type Mode = "filter" | "dedicated";
 
-type RawIpRow = { ip?: string; iso2?: string; c?: number };
+type RawIpRow = {
+  ip?: string;
+  iso2?: string;
+  c?: number;
+  /** Gewichteter Mittelwert `double2` (ms) im Bucket */
+  avgMs?: number | null;
+  ua?: string;
+  edge?: string;
+  imagePath?: string;
+};
+
+function parseOptFloat(v: unknown): number | null {
+  if (v == null) return null;
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return null;
+}
+
+type MergedIp = {
+  ip: string;
+  iso2: string;
+  c: number;
+  /** Summe(avgPart * cPart) für gewichtete Gesamt-avgMs */
+  msNum: number;
+  msDen: number;
+  userAgent: string;
+  edgeCode: string;
+  imagePath: string;
+};
 
 function defaultRange(days: number): { from: string; to: string } {
   const d = Math.min(MAX_DAYS, Math.max(1, days));
@@ -100,6 +134,7 @@ function buildTimeWhere(fromIso: string, toIso: string): string {
   )}`;
 }
 
+/** `double2` = Antwortzeit ms; `blob5` = User-Agent; `blob9` = Edge (IATA); `blob1` = Bildpfad (Worker-Log). */
 function buildIpSql(
   fromIso: string,
   toIso: string,
@@ -113,11 +148,16 @@ function buildIpSql(
     "NA",
   )}`;
   const colNotEmpty = `${ipCol} != ${sqlString("")}`;
-  if (mode === "dedicated") {
-    return `SELECT
+  const agg = `SELECT
   ${ipCol} AS ip,
   blob3 AS iso2,
-  SUM(_sample_interval) AS c
+  SUM(_sample_interval) AS c,
+  sumIf(double2 * _sample_interval, double2 > 0 AND double2 < 1000000) / nullIf(sumIf(_sample_interval, double2 > 0 AND double2 < 1000000), 0) AS avgMs,
+  argMax(blob5, timestamp) AS ua,
+  argMax(blob9, timestamp) AS edge,
+  argMax(blob1, timestamp) AS imagePath`;
+  if (mode === "dedicated") {
+    return `${agg}
 FROM ${name}
 WHERE ${tw}
   AND ${colNotEmpty}
@@ -127,10 +167,7 @@ ORDER BY c DESC
 LIMIT ${MAX_IP_SQL_ROWS}
 FORMAT JSON`;
   }
-  return `SELECT
-  ${ipCol} AS ip,
-  blob3 AS iso2,
-  SUM(_sample_interval) AS c
+  return `${agg}
 FROM ${fromDataset}
 WHERE ${tw} AND dataset = ${sqlString(name)}
   AND ${colNotEmpty}
@@ -170,8 +207,8 @@ function classifyIpFamily(
   return "unknown";
 }
 
-function mergeRows(parts: RawIpRow[][]): Map<string, { ip: string; iso2: string; c: number }> {
-  const m = new Map<string, { ip: string; iso2: string; c: number }>();
+function mergeRows(parts: RawIpRow[][]): Map<string, MergedIp> {
+  const m = new Map<string, MergedIp>();
   for (const part of parts) {
     for (const r of part) {
       const rec = r as Record<string, unknown>;
@@ -189,9 +226,35 @@ function mergeRows(parts: RawIpRow[][]): Map<string, { ip: string; iso2: string;
       const n = aeNumber(r.c);
       if (n <= 0) continue;
       const k = `${ip.toLowerCase()}|${iso2}`;
+      const avgMs = parseOptFloat(rec.avgMs);
+      const ua = String(rec.ua ?? rec.UA ?? "").trim();
+      const edge = String(rec.edge ?? rec.EDGE ?? "").trim();
+      const imagePath = String(rec.imagePath ?? rec.imagepath ?? "").trim();
       const cur = m.get(k);
-      if (cur) cur.c += n;
-      else m.set(k, { ip, iso2, c: n });
+      if (!cur) {
+        m.set(k, {
+          ip,
+          iso2,
+          c: n,
+          msNum: avgMs != null ? avgMs * n : 0,
+          msDen: avgMs != null ? n : 0,
+          userAgent: ua,
+          edgeCode: edge,
+          imagePath,
+        });
+        continue;
+      }
+      const prevC = cur.c;
+      cur.c += n;
+      if (avgMs != null) {
+        cur.msNum += avgMs * n;
+        cur.msDen += n;
+      }
+      if (n >= prevC) {
+        if (ua) cur.userAgent = ua;
+        if (edge) cur.edgeCode = edge;
+        if (imagePath) cur.imagePath = imagePath;
+      }
     }
   }
   return m;
@@ -264,14 +327,30 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     iso2: string;
     count: number;
     family: "v4" | "v6" | "unknown";
+    avgMs: number | null;
+    userAgent: string;
+    edgeCode: string;
+    imagePath: string;
   }[] = [];
   let totalV4 = 0;
   let totalV6 = 0;
   let totalUnknown = 0;
 
-  for (const { ip, iso2, c } of merged.values()) {
+  for (const row of merged.values()) {
+    const { ip, iso2, c, msNum, msDen, userAgent, edgeCode, imagePath } = row;
     const family = classifyIpFamily(ip);
-    rows.push({ ip, iso2, count: c, family });
+    const avgMs =
+      msDen > 0 && Number.isFinite(msNum / msDen) ? msNum / msDen : null;
+    rows.push({
+      ip,
+      iso2,
+      count: c,
+      family,
+      avgMs,
+      userAgent,
+      edgeCode,
+      imagePath,
+    });
     if (family === "v4") totalV4 += c;
     else if (family === "v6") totalV6 += c;
     else totalUnknown += c;
