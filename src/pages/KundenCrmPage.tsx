@@ -26,19 +26,19 @@ import {
   type CrmCustomersListResponse,
   crmCustomersListUrl,
 } from "../lib/crmCustomersApi";
+import {
+  DASHBOARD_MAIN_INSET_X as CRM_MAIN_INSET_X,
+  DASH_TABLE_GRID as GRID,
+  DASH_TH_SORT as THSORT,
+  DASH_TD as TD,
+} from "../lib/dashboardTableStyle";
 import { ISO2_COUNTRIES } from "../lib/iso2Countries";
 
 const PAGE_SIZE = 100;
-/** Gleicher horizontaler Inset wie `DashboardHeader` in der Hauptspalte */
-const CRM_MAIN_INSET_X = "px-2 sm:px-3 lg:px-4";
-/** Dezenentes Raster, keine harten schwarzen Linien */
-const GRID = "border border-ink-200/85";
 const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const SELECT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
-const THSORT = `${GRID} bg-gradient-to-b from-ink-50 to-ink-100/90 p-0 align-middle`;
-const TD = `${GRID} p-0 align-middle bg-white`;
 const TD_INNER =
   "flex min-h-[3rem] w-full max-w-full items-center justify-center gap-1 px-3 py-2 text-center text-[12.5px] leading-snug text-ink-800";
 const TD_INNER_ID =

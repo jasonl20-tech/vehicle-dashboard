@@ -1,4 +1,4 @@
-import { Menu, Search } from "lucide-react";
+import { Menu } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
@@ -36,8 +36,7 @@ function usePageHeading(pathname: string): { page: string; section?: string } {
 
 type Props = {
   onOpenMobileMenu: () => void;
-  onOpenPalette: () => void;
-  /** Rechts, vor der Kommando-Suche (z. B. CRM-Toolbar) */
+  /** Rechts (z. B. CRM-Toolbar); Kommando-Suche nur in der Sidebar */
   trailing?: ReactNode;
   /** Schlanke Titelleiste ohne Sektion-Zeile */
   crmMode?: boolean;
@@ -49,7 +48,6 @@ type Props = {
  */
 export default function DashboardHeader({
   onOpenMobileMenu,
-  onOpenPalette,
   trailing = null,
   crmMode = false,
 }: Props) {
@@ -91,26 +89,6 @@ export default function DashboardHeader({
         }`}
       >
         {trailing}
-        <button
-          type="button"
-          onClick={onOpenPalette}
-          className={
-            crmMode
-              ? "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
-              : "inline-flex h-9 items-center gap-2 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12.5px] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
-          }
-          aria-label="Kommando-Suche"
-        >
-          <Search className="h-3.5 w-3.5 shrink-0" />
-          {!crmMode && (
-            <>
-              <span className="hidden sm:inline">Suche</span>
-              <kbd className="hidden rounded border border-white/10 bg-black/30 px-1.5 font-mono text-[10px] text-night-500 md:inline">
-                ⌘K
-              </kbd>
-            </>
-          )}
-        </button>
       </div>
     </header>
   );

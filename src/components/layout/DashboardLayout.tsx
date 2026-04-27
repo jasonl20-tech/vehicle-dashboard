@@ -136,7 +136,9 @@ export default function DashboardLayout() {
         />
         <main
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            isBildempfangMap || isCrmPage ? "h-[100dvh] min-h-0" : ""
+            isBildempfangMap || isCrmPage || isKundenTestAnfragen
+              ? "h-[100dvh] min-h-0"
+              : ""
           }`}
           style={
             isBildempfangMap
@@ -146,7 +148,6 @@ export default function DashboardLayout() {
         >
           <DashboardHeader
             onOpenMobileMenu={() => setMobileOpen(true)}
-            onOpenPalette={() => setPaletteOpen(true)}
             trailing={isCrmPage ? headerTrailing : null}
             crmMode={isCrmPage}
           />
@@ -157,7 +158,7 @@ export default function DashboardLayout() {
                 : isCrmPage
                   ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
                   : isKundenTestAnfragen
-                    ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col px-3 pb-0 pt-1 sm:px-4 lg:px-5"
+                    ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
                     : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
           >
@@ -168,7 +169,7 @@ export default function DashboardLayout() {
                   : isCrmPage
                     ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
                     : isKundenTestAnfragen
-                      ? "min-h-0 w-full min-w-0 flex-1 flex flex-col"
+                      ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
                       : ""
               }
             >
