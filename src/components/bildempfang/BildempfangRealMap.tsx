@@ -1,4 +1,5 @@
 import L from "leaflet";
+import type { LeafletMouseEvent } from "leaflet";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   CircleMarker,
@@ -172,6 +173,7 @@ export default function BildempfangRealMap({
                 key={`${line.key}-glow`}
                 positions={line.positions}
                 pathOptions={{
+                  interactive: false,
                   color: glow,
                   weight: 10,
                   lineCap: "round",
@@ -183,50 +185,12 @@ export default function BildempfangRealMap({
                 key={`${line.key}-line`}
                 positions={line.positions}
                 pathOptions={{
+                  interactive: false,
                   color: c,
                   weight: 1.8,
                   lineCap: "round",
                   lineJoin: "round",
                   opacity: 0.95,
-                }}
-              />
-            </Fragment>
-          );
-        })}
-        {ipMarkers.map((m) => {
-          const [lat, lng] = toLatLng(m);
-          const isSel = m.key === selectedKey;
-          const col = m.signalColor;
-          return (
-            <Fragment key={m.key}>
-              <CircleMarker
-                key={`${m.key}-aura`}
-                center={[lat, lng]}
-                radius={m.auraRadius + (isSel ? 4 : 0)}
-                pathOptions={{
-                  fillColor: col,
-                  color: "transparent",
-                  weight: 0,
-                  fillOpacity: isSel ? 0.28 : 0.2,
-                }}
-              />
-              <CircleMarker
-                key={`${m.key}-dot`}
-                center={[lat, lng]}
-                radius={isSel ? 6 : 4}
-                eventHandlers={{
-                  click: (e) => {
-                    if (e.originalEvent) {
-                      L.DomEvent.stopPropagation(e.originalEvent);
-                    }
-                    onSelect(m);
-                  },
-                }}
-                pathOptions={{
-                  fillColor: col,
-                  color: isSel ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.8)",
-                  weight: isSel ? 2.2 : 1.1,
-                  fillOpacity: 0.95,
                 }}
               />
             </Fragment>
@@ -238,6 +202,7 @@ export default function BildempfangRealMap({
             center={s.pos}
             radius={5}
             pathOptions={{
+              interactive: false,
               fillColor: "rgba(250, 204, 21, 0.5)",
               color: "rgba(250, 204, 21, 0.85)",
               weight: 1.2,
@@ -245,6 +210,58 @@ export default function BildempfangRealMap({
             }}
           />
         ))}
+        {ipMarkers.map((m) => {
+          const [lat, lng] = toLatLng(m);
+          const isSel = m.key === selectedKey;
+          const col = m.signalColor;
+          const select = (e: LeafletMouseEvent) => {
+            L.DomEvent.stop(e);
+            onSelect(m);
+          };
+          const hitR = Math.max(16, m.auraRadius + (isSel ? 4 : 0));
+          return (
+            <Fragment key={m.key}>
+              <CircleMarker
+                key={`${m.key}-aura`}
+                center={[lat, lng]}
+                radius={m.auraRadius + (isSel ? 4 : 0)}
+                pathOptions={{
+                  interactive: false,
+                  fillColor: col,
+                  color: "transparent",
+                  weight: 0,
+                  fillOpacity: isSel ? 0.28 : 0.2,
+                }}
+              />
+              <CircleMarker
+                key={`${m.key}-hit`}
+                center={[lat, lng]}
+                radius={hitR}
+                className="bildempfang-ip-hit"
+                eventHandlers={{ click: select }}
+                pathOptions={{
+                  fillColor: col,
+                  color: "transparent",
+                  weight: 0,
+                  fillOpacity: 0.08,
+                }}
+              />
+              <CircleMarker
+                key={`${m.key}-dot`}
+                center={[lat, lng]}
+                radius={isSel ? 7 : 5}
+                className="bildempfang-ip-hit"
+                eventHandlers={{ click: select }}
+                pathOptions={{
+                  fillColor: col,
+                  color: isSel ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.8)",
+                  weight: isSel ? 2.2 : 1.1,
+                  fillOpacity: 0.95,
+                }}
+              />
+            </Fragment>
+          );
+        })}
       </MapContainer>
     </div>
   );
