@@ -1,8 +1,10 @@
 /**
  * GET /api/website/trial-submissions
+ * PATCH /api/website/trial-submissions
  *
- * D1 `website` → Tabelle `trial_submissions` (nur SELECT).
- * Query: q, limit, offset, spam=all|0|1
+ * D1 `website` → Tabelle `trial_submissions`.
+ * Query: q, limit, offset, spam=all|0|1, ansicht=offen|alle (Standard: nur offene)
+ * PATCH Body: { id: string, erledigt: 0 | 1 }
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -16,6 +18,7 @@ type SubmissionRowDb = {
   payload: string;
   metadata: string;
   spam: number;
+  erledigt: number;
 };
 
 function requireWebsiteDb(env: AuthEnv): D1Database | Response {
@@ -73,6 +76,7 @@ function mapRow(
   payload: unknown;
   metadata: unknown;
   spam: boolean;
+  erledigt: boolean;
 } {
   return {
     id: r.id,
@@ -81,6 +85,7 @@ function mapRow(
     payload: tryParseJson(r.payload),
     metadata: tryParseJson(r.metadata),
     spam: Number(r.spam) === 1,
+    erledigt: Number(r.erledigt) === 1,
   };
 }
 
@@ -114,8 +119,20 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     );
   }
 
+  const ansichtRaw = (url.searchParams.get("ansicht") || "offen").trim().toLowerCase();
+  if (!["offen", "alle"].includes(ansichtRaw)) {
+    return jsonResponse(
+      { error: "ansicht muss offen oder alle sein" },
+      { status: 400 },
+    );
+  }
+
   const where: string[] = ["1=1"];
   const binds: (string | number)[] = [];
+
+  if (ansichtRaw === "offen") {
+    where.push("(ifnull(erledigt, 0) = 0)");
+  }
 
   if (spamRaw === "0" || spamRaw === "1") {
     where.push("spam = ?");
@@ -136,7 +153,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const total = countRow?.n ?? 0;
 
   const listSql = `SELECT
-  id, created_at, form_tag, payload, metadata, spam
+  id, created_at, form_tag, payload, metadata, spam, erledigt
 FROM trial_submissions
 ${whereSql}
 ORDER BY created_at DESC
@@ -148,4 +165,62 @@ LIMIT ? OFFSET ?`;
 
   const rows = (results ?? []).map(mapRow);
   return jsonResponse({ rows, total, offset, limit }, { status: 200 });
+};
+
+export const onRequestPatch: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  const db = requireWebsiteDb(env);
+  if (db instanceof Response) return db;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "JSON erwartet" }, { status: 400 });
+  }
+
+  const b = body && typeof body === "object" && !Array.isArray(body)
+    ? (body as Record<string, unknown>)
+    : {};
+
+  const id = typeof b.id === "string" ? b.id.trim() : "";
+  if (!id) {
+    return jsonResponse({ error: "id fehlt" }, { status: 400 });
+  }
+
+  const erRaw = b.erledigt;
+  const erNum =
+    erRaw === true || erRaw === 1
+      ? 1
+      : erRaw === false || erRaw === 0
+        ? 0
+        : null;
+
+  if (erNum === null) {
+    return jsonResponse(
+      { error: "erledigt muss boolean oder 0 bzw. 1 sein" },
+      { status: 400 },
+    );
+  }
+
+  const res = await db
+    .prepare("UPDATE trial_submissions SET erledigt = ? WHERE id = ?")
+    .bind(erNum, id)
+    .run();
+
+  const changed = res.meta?.changes ?? 0;
+  if (changed === 0) {
+    return jsonResponse(
+      { error: "Keine Zeile aktualisiert (ID unbekannt?)" },
+      { status: 404 },
+    );
+  }
+
+  return jsonResponse({ ok: true }, { status: 200 });
 };

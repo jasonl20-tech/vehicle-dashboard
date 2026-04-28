@@ -1,6 +1,7 @@
 import {
   ExternalLink,
   Filter,
+  ListFilter,
   Mail,
   MoreHorizontal,
   RefreshCw,
@@ -30,6 +31,7 @@ import {
 import {
   type WebsiteSubmissionRow,
   type WebsiteSubmissionsListResponse,
+  patchWebsiteSubmissionErledigt,
   websiteSubmissionsListUrl,
 } from "../lib/websiteSubmissionsApi";
 import {
@@ -338,7 +340,10 @@ export default function AnfragenPage({
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [spam, setSpam] = useState<"all" | "0" | "1">("all");
+  const [ansicht, setAnsicht] = useState<"offen" | "alle">("offen");
   const [filterOpen, setFilterOpen] = useState(false);
+  const [ansichtOpen, setAnsichtOpen] = useState(false);
+  const [patchingId, setPatchingId] = useState<string | null>(null);
   const [detail, setDetail] = useState<WebsiteSubmissionRow | null>(null);
   const { setHeaderTrailing } = useOutletContext<DashboardOutletContext>();
 
@@ -361,19 +366,24 @@ export default function AnfragenPage({
 
   useEffect(() => {
     setOffset(0);
-  }, [q, spam]);
+  }, [q, spam, ansicht]);
 
   useEffect(() => {
-    if (!filterOpen) return;
+    if (!filterOpen && !ansichtOpen) return;
     let remove: (() => void) | undefined;
     const id = requestAnimationFrame(() => {
       const onDoc = (e: MouseEvent) => {
         const t = e.target as HTMLElement;
         if (t.closest?.("[data-anfragen-filter]")) return;
+        if (t.closest?.("[data-anfragen-ansicht]")) return;
         setFilterOpen(false);
+        setAnsichtOpen(false);
       };
       const onKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") setFilterOpen(false);
+        if (e.key === "Escape") {
+          setFilterOpen(false);
+          setAnsichtOpen(false);
+        }
       };
       document.addEventListener("mousedown", onDoc);
       window.addEventListener("keydown", onKey);
@@ -386,9 +396,10 @@ export default function AnfragenPage({
       cancelAnimationFrame(id);
       remove?.();
     };
-  }, [filterOpen]);
+  }, [filterOpen, ansichtOpen]);
 
   const closeFilters = useCallback(() => setFilterOpen(false), []);
+  const closeAnsicht = useCallback(() => setAnsichtOpen(false), []);
 
   const handleProdSort = useCallback(
     (k: ProdSortKey) => {
@@ -422,13 +433,39 @@ export default function AnfragenPage({
             limit: PAGE_SIZE,
             offset,
             spam,
+            ansicht,
           })
-        : websiteSubmissionsListUrl({ q, limit: PAGE_SIZE, offset, spam }),
-    [q, offset, spam, isTrial],
+        : websiteSubmissionsListUrl({
+            q,
+            limit: PAGE_SIZE,
+            offset,
+            spam,
+            ansicht,
+          }),
+    [q, offset, spam, ansicht, isTrial],
   );
   const api = useApi<
     WebsiteSubmissionsListResponse | WebsiteTrialSubmissionsListResponse
   >(url);
+
+  const toggleErledigt = useCallback(
+    async (id: string, next: boolean) => {
+      setPatchingId(id);
+      try {
+        await patchWebsiteSubmissionErledigt({
+          trial: isTrial,
+          id,
+          erledigt: next,
+        });
+        api.reload();
+      } catch (e) {
+        alert((e as Error)?.message || "Speichern fehlgeschlagen");
+      } finally {
+        setPatchingId(null);
+      }
+    },
+    [isTrial, api],
+  );
 
   const rows = api.data?.rows ?? [];
   const sortedRows = useMemo(() => {
@@ -460,6 +497,13 @@ export default function AnfragenPage({
       { id: "all" as const, label: "Alle" },
       { id: "0" as const, label: "Nur gültig" },
       { id: "1" as const, label: "Nur Spam" },
+    ] as const
+  );
+
+  const ANSICHT_OPTIONS = (
+    [
+      { id: "offen" as const, label: "Nur offene" },
+      { id: "alle" as const, label: "Alle anzeigen" },
     ] as const
   );
 
@@ -507,6 +551,7 @@ export default function AnfragenPage({
             onClick={(e) => {
               e.stopPropagation();
               setFilterOpen((o) => !o);
+              setAnsichtOpen(false);
             }}
             className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-night-200 transition hover:bg-white/[0.08] hover:text-white ${
               spam !== "all"
@@ -549,6 +594,55 @@ export default function AnfragenPage({
             </div>
           )}
         </div>
+        <div className="relative" data-anfragen-ansicht>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setAnsichtOpen((o) => !o);
+              setFilterOpen(false);
+            }}
+            className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border text-night-200 transition hover:bg-white/[0.08] hover:text-white ${
+              ansicht !== "offen"
+                ? "border-brand-500/50 bg-brand-500/15 text-brand-200"
+                : "border-white/[0.1] bg-white/[0.04]"
+            }`}
+            title="Welche Einträge anzeigen?"
+            aria-expanded={ansichtOpen}
+          >
+            <ListFilter className="h-4 w-4" />
+          </button>
+          {ansichtOpen && (
+            <div
+              className="absolute right-0 top-full z-50 mt-1 w-[min(100vw-1rem,16rem)] rounded-lg border border-white/[0.1] bg-night-800 p-3 shadow-xl"
+              data-anfragen-ansicht
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-night-500">
+                Erledigt
+              </p>
+              <div className="flex flex-col gap-1">
+                {ANSICHT_OPTIONS.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => {
+                      setAnsicht(o.id);
+                      closeAnsicht();
+                    }}
+                    className={`rounded-md px-2 py-1.5 text-left text-[12.5px] ${
+                      ansicht === o.id
+                        ? "bg-white/15 text-white"
+                        : "text-night-200 hover:bg-white/10"
+                    }`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={() => api.reload()}
@@ -562,7 +656,17 @@ export default function AnfragenPage({
         </button>
       </div>
     ),
-    [qIn, filterOpen, spam, isTrial, api.loading, closeFilters],
+    [
+      qIn,
+      filterOpen,
+      ansichtOpen,
+      spam,
+      ansicht,
+      isTrial,
+      api.loading,
+      closeFilters,
+      closeAnsicht,
+    ],
   );
 
   useLayoutEffect(() => {
@@ -580,6 +684,11 @@ export default function AnfragenPage({
           <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
             <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 backdrop-blur-sm shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
               <tr>
+                <th className={`${THSORT} w-14 shrink-0`} scope="col">
+                  <div className={DASH_TH_LABEL}>
+                    <span title="Erledigt">✓</span>
+                  </div>
+                </th>
                 <th className={`${THSORT} max-w-[9rem]`} scope="col">
                   <button
                     type="button"
@@ -651,7 +760,7 @@ export default function AnfragenPage({
               {api.loading && rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                   >
                     Wird geladen…
@@ -660,7 +769,7 @@ export default function AnfragenPage({
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                   >
                     Keine Einsendungen.
@@ -676,6 +785,27 @@ export default function AnfragenPage({
                       key={r.id}
                       className="even:bg-ink-50/[0.45] transition-colors hover:bg-ink-100/70"
                     >
+                      <td className={`${TD} w-14 shrink-0`}>
+                        <div className={DASH_TD_INNER}>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-hair text-brand-600 focus:ring-2 focus:ring-brand-500/35"
+                            checked={!!r.erledigt}
+                            disabled={patchingId === r.id || api.loading}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleErledigt(r.id, e.target.checked);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            title={
+                              r.erledigt
+                                ? "Als offen markieren"
+                                : "Als erledigt markieren"
+                            }
+                            aria-label="Erledigt"
+                          />
+                        </div>
+                      </td>
                       <td className={`${TD} whitespace-nowrap`}>
                         <div className={`${DASH_TD_INNER} tabular-nums text-ink-500`}>
                           {fmtWhen(r.created_at)}
@@ -744,6 +874,11 @@ export default function AnfragenPage({
           <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
             <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 backdrop-blur-sm shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
               <tr>
+                <th className={`${THSORT} w-14 shrink-0`} scope="col">
+                  <div className={DASH_TH_LABEL}>
+                    <span title="Erledigt">✓</span>
+                  </div>
+                </th>
                 <th className={`${THSORT} min-w-[11rem]`} scope="col">
                   <button
                     type="button"
@@ -837,7 +972,7 @@ export default function AnfragenPage({
               {api.loading && rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                   >
                     Wird geladen…
@@ -846,7 +981,7 @@ export default function AnfragenPage({
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={9}
                     className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                   >
                     Keine Test-Einsendungen (Tabelle leer oder Migration fehlt).
@@ -868,6 +1003,27 @@ export default function AnfragenPage({
                       key={r.id}
                       className="even:bg-ink-50/[0.45] transition-colors hover:bg-ink-100/70"
                     >
+                      <td className={`${TD} w-14 shrink-0`}>
+                        <div className={DASH_TD_INNER}>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-hair text-brand-600 focus:ring-2 focus:ring-brand-500/35"
+                            checked={!!r.erledigt}
+                            disabled={patchingId === r.id || api.loading}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              toggleErledigt(r.id, e.target.checked);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            title={
+                              r.erledigt
+                                ? "Als offen markieren"
+                                : "Als erledigt markieren"
+                            }
+                            aria-label="Erledigt"
+                          />
+                        </div>
+                      </td>
                       <td className={TD}>
                         <div className={DASH_TD_INNER}>
                           <span className="line-clamp-2 font-medium [overflow-wrap:anywhere]">
@@ -1030,6 +1186,9 @@ function SubmissionDetailDialog({
             </p>
             <p className="text-[12px] text-ink-500">
               {fmtWhen(row.created_at)} UTC · {row.spam ? "Spam" : "Gültig"}
+              {typeof row.erledigt === "boolean" && (
+                <> · {row.erledigt ? "Erledigt" : "Offen"}</>
+              )}
             </p>
           </div>
           <button

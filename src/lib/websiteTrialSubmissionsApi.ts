@@ -1,3 +1,5 @@
+import type { AnfragenAnsicht } from "./websiteSubmissionsApi";
+
 export const WEBSITE_TRIAL_SUBMISSIONS_API = "/api/website/trial-submissions";
 
 export type TrialWebsiteSubmissionRow = {
@@ -7,6 +9,7 @@ export type TrialWebsiteSubmissionRow = {
   payload: unknown;
   metadata: unknown;
   spam: boolean;
+  erledigt: boolean;
 };
 
 export type WebsiteTrialSubmissionsListResponse = {
@@ -21,10 +24,12 @@ export function websiteTrialSubmissionsListUrl(p: {
   limit: number;
   offset: number;
   spam: "all" | "0" | "1";
+  ansicht?: AnfragenAnsicht;
 }): string {
   const u = new URL(WEBSITE_TRIAL_SUBMISSIONS_API, "https://x");
   u.searchParams.set("limit", String(p.limit));
   u.searchParams.set("offset", String(p.offset));
+  u.searchParams.set("ansicht", p.ansicht ?? "offen");
   if (p.q.trim()) u.searchParams.set("q", p.q.trim());
   if (p.spam !== "all") u.searchParams.set("spam", p.spam);
   return u.pathname + u.search;
