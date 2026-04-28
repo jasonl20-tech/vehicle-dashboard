@@ -1,6 +1,4 @@
 import {
-  ChevronLeft,
-  ChevronRight,
   ExternalLink,
   Filter,
   Mail,
@@ -17,13 +15,18 @@ import {
   useState,
 } from "react";
 import { useOutletContext } from "react-router-dom";
+import SortGlyph from "../components/ui/SortGlyph";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   DASHBOARD_MAIN_INSET_X,
-  DASH_TABLE_GRID,
-  DASH_TD,
-  DASH_TH,
+  DASH_SORT_COLUMN_BTN,
+  DASH_TABLE_GRID as GRID,
+  DASH_TD as TD,
+  DASH_TD_INNER,
+  DASH_TD_INNER_MONO,
+  DASH_TH_LABEL,
+  DASH_TH_SORT as THSORT,
 } from "../lib/dashboardTableStyle";
 import {
   type WebsiteSubmissionRow,
@@ -37,12 +40,10 @@ import {
 
 const PAGE_SIZE = 35;
 
-const TH = `${DASH_TH} px-2 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500`;
-const TD = `${DASH_TD} px-2 py-2 align-top text-[12.5px] text-ink-800`;
-const TABLE_CARD_WRAP = `min-h-0 overflow-x-auto border-b border-hair bg-gradient-to-b from-ink-50/25 via-white to-ink-50/20 py-2 sm:py-2.5 ${DASHBOARD_MAIN_INSET_X}`;
+const TABLE_SCROLL = `min-h-0 flex-1 overflow-auto border-b border-hair bg-gradient-to-b from-ink-50/25 via-white to-ink-50/20 py-2 sm:py-2.5 ${DASHBOARD_MAIN_INSET_X}`;
 const TABLE_CARD =
   "w-full min-w-0 overflow-hidden rounded-xl border border-ink-200/70 bg-white shadow-sm shadow-ink-900/[0.06] ring-1 ring-ink-100/90 sm:rounded-2xl";
-const FOOT_ROW = `mt-0 flex flex-wrap items-center justify-between gap-2 border-t border-hair bg-paper/90 py-1.5 text-[12.5px] text-ink-600 ${DASHBOARD_MAIN_INSET_X}`;
+const FOOT_ROW = `flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-hair bg-paper/90 py-1.5 text-[12px] text-ink-600 ${DASHBOARD_MAIN_INSET_X}`;
 
 function fmtWhen(s: string | null | undefined): string {
   if (!s?.trim()) return "—";
@@ -57,7 +58,6 @@ function fmtWhen(s: string | null | undefined): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
     timeZone: "UTC",
   }).format(new Date(t));
 }
@@ -114,30 +114,130 @@ function pickPayloadCompanyOrDomain(payload: unknown): string | null {
   return null;
 }
 
-/** Kompakte Uhrzeit für Tabellen-„Untertitel“ (de-DE, UTC). */
-function fmtWhenShort(s: string | null | undefined): string {
-  if (!s?.trim()) return "—";
-  const raw = s.trim();
-  const t = raw.includes("T")
-    ? Date.parse(raw)
-    : Date.parse(raw.replace(" ", "T") + "Z");
-  if (isNaN(t)) return raw;
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(new Date(t));
-}
-
 function jsonPretty(x: unknown): string {
   try {
     return JSON.stringify(x, null, 2);
   } catch {
     return String(x);
   }
+}
+
+type ProdSortKey =
+  | "created_at"
+  | "form_tag"
+  | "contact"
+  | "ip"
+  | "country"
+  | "spam";
+
+type TrialSortKey =
+  | "created_at"
+  | "eingang"
+  | "kontakt"
+  | "formular"
+  | "herkunft"
+  | "spam";
+
+function rowProdParts(r: WebsiteSubmissionRow) {
+  return {
+    created_at: r.created_at,
+    form_tag: (r.form_tag || "").trim(),
+    contact: (pickEmail(r.payload) || pickName(r.payload) || "").trim(),
+    ip: (pickMetaString(r.metadata, "ip") || "").trim(),
+    country: (pickMetaString(r.metadata, "country") || "").trim(),
+    spam: r.spam,
+  };
+}
+
+function cmpProd(
+  a: WebsiteSubmissionRow,
+  b: WebsiteSubmissionRow,
+  key: ProdSortKey,
+): number {
+  const pa = rowProdParts(a);
+  const pb = rowProdParts(b);
+  let c = 0;
+  switch (key) {
+    case "created_at": {
+      const ta = new Date(pa.created_at).getTime() || 0;
+      const tb = new Date(pb.created_at).getTime() || 0;
+      c = ta === tb ? 0 : ta < tb ? -1 : 1;
+      break;
+    }
+    case "form_tag":
+      c = pa.form_tag.localeCompare(pb.form_tag, "de", { sensitivity: "base" });
+      break;
+    case "contact":
+      c = pa.contact.localeCompare(pb.contact, "de", { sensitivity: "base" });
+      break;
+    case "ip":
+      c = pa.ip.localeCompare(pb.ip);
+      break;
+    case "country":
+      c = pa.country.localeCompare(pb.country, "de", { sensitivity: "base" });
+      break;
+    case "spam":
+      c = Number(pa.spam) - Number(pb.spam);
+      break;
+    default:
+      c = 0;
+  }
+  return c;
+}
+
+function trialLeadTitle(r: WebsiteSubmissionRow): string {
+  const email = pickEmail(r.payload);
+  const name = pickName(r.payload);
+  if (name && name !== email) return name.trim();
+  return (email || name || "").trim();
+}
+
+function rowTrialParts(r: WebsiteSubmissionRow) {
+  const companyLine = pickPayloadCompanyOrDomain(r.payload);
+  return {
+    created_at: r.created_at,
+    eingang: trialLeadTitle(r),
+    kontakt: (pickEmail(r.payload) || "").trim(),
+    formular: `${(r.form_tag || "").trim()}\u0000${(companyLine || "").trim()}`,
+    herkunft: `${(pickMetaString(r.metadata, "country") || "").trim()}\u0000${(pickMetaString(r.metadata, "ip") || "").trim()}`,
+    spam: r.spam,
+  };
+}
+
+function cmpTrial(
+  a: WebsiteSubmissionRow,
+  b: WebsiteSubmissionRow,
+  key: TrialSortKey,
+): number {
+  const pa = rowTrialParts(a);
+  const pb = rowTrialParts(b);
+  let c = 0;
+  switch (key) {
+    case "created_at": {
+      const ta = new Date(pa.created_at).getTime() || 0;
+      const tb = new Date(pb.created_at).getTime() || 0;
+      c = ta === tb ? 0 : ta < tb ? -1 : 1;
+      break;
+    }
+    case "eingang":
+      c = pa.eingang.localeCompare(pb.eingang, "de", { sensitivity: "base" });
+      break;
+    case "kontakt":
+      c = pa.kontakt.localeCompare(pb.kontakt, "de", { sensitivity: "base" });
+      break;
+    case "formular":
+      c = pa.formular.localeCompare(pb.formular, "de", { sensitivity: "base" });
+      break;
+    case "herkunft":
+      c = pa.herkunft.localeCompare(pb.herkunft, "de", { sensitivity: "base" });
+      break;
+    case "spam":
+      c = Number(pa.spam) - Number(pb.spam);
+      break;
+    default:
+      c = 0;
+  }
+  return c;
 }
 
 type AnfragenVariant = "production" | "trial";
@@ -156,6 +256,18 @@ export default function AnfragenPage({
   const [filterOpen, setFilterOpen] = useState(false);
   const [detail, setDetail] = useState<WebsiteSubmissionRow | null>(null);
   const { setHeaderTrailing } = useOutletContext<DashboardOutletContext>();
+
+  const [prodSortKey, setProdSortKey] = useState<ProdSortKey>("created_at");
+  const [prodSortAsc, setProdSortAsc] = useState(false);
+  const [trialSortKey, setTrialSortKey] = useState<TrialSortKey>("created_at");
+  const [trialSortAsc, setTrialSortAsc] = useState(false);
+
+  useEffect(() => {
+    setProdSortKey("created_at");
+    setProdSortAsc(false);
+    setTrialSortKey("created_at");
+    setTrialSortAsc(false);
+  }, [isTrial]);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -193,6 +305,30 @@ export default function AnfragenPage({
 
   const closeFilters = useCallback(() => setFilterOpen(false), []);
 
+  const handleProdSort = useCallback(
+    (k: ProdSortKey) => {
+      if (k === prodSortKey) setProdSortAsc((p) => !p);
+      else {
+        setProdSortKey(k);
+        setProdSortAsc(k === "created_at" ? false : k === "spam" ? false : true);
+      }
+    },
+    [prodSortKey],
+  );
+
+  const handleTrialSort = useCallback(
+    (k: TrialSortKey) => {
+      if (k === trialSortKey) setTrialSortAsc((p) => !p);
+      else {
+        setTrialSortKey(k);
+        setTrialSortAsc(
+          k === "created_at" ? false : k === "spam" ? false : true,
+        );
+      }
+    },
+    [trialSortKey],
+  );
+
   const url = useMemo(
     () =>
       isTrial
@@ -210,6 +346,22 @@ export default function AnfragenPage({
   >(url);
 
   const rows = api.data?.rows ?? [];
+  const sortedRows = useMemo(() => {
+    const copy = [...rows];
+    if (isTrial) {
+      copy.sort((a, b) => {
+        const c = cmpTrial(a, b, trialSortKey);
+        return trialSortAsc ? c : -c;
+      });
+    } else {
+      copy.sort((a, b) => {
+        const c = cmpProd(a, b, prodSortKey);
+        return prodSortAsc ? c : -c;
+      });
+    }
+    return copy;
+  }, [rows, isTrial, trialSortKey, trialSortAsc, prodSortKey, prodSortAsc]);
+
   const total = api.data?.total ?? 0;
   const limit = api.data?.limit ?? PAGE_SIZE;
   const atEnd = offset + rows.length >= total;
@@ -226,30 +378,27 @@ export default function AnfragenPage({
     ] as const
   );
 
-  const errBannerClass = `mb-2 rounded border border-accent-rose/30 bg-accent-rose/5 py-2 text-[12.5px] text-accent-rose ${DASHBOARD_MAIN_INSET_X}`;
-
-  const paginationControls = (
-    <div className="flex items-center gap-1">
-      <button
-        type="button"
-        disabled={offset === 0 || api.loading}
-        onClick={() => setOffset((o) => Math.max(0, o - limit))}
-        className="inline-flex h-8 items-center gap-0.5 rounded-md border border-ink-200/90 bg-white px-2.5 text-[12.5px] text-ink-800 shadow-sm enabled:hover:bg-ink-50 disabled:opacity-40"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Zurück
-      </button>
-      <button
-        type="button"
-        disabled={atEnd || api.loading}
-        onClick={() => setOffset((o) => o + limit)}
-        className="inline-flex h-8 items-center gap-0.5 rounded-md border border-ink-200/90 bg-white px-2.5 text-[12.5px] text-ink-800 shadow-sm enabled:hover:bg-ink-50 disabled:opacity-40"
-      >
-        Weiter
-        <ChevronRight className="h-4 w-4" />
-      </button>
-    </div>
-  );
+  const paginationControls =
+    total > limit ? (
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          disabled={offset === 0 || api.loading}
+          onClick={() => setOffset((o) => Math.max(0, o - limit))}
+          className="rounded border border-hair bg-white px-2 py-0.5 text-[12px] enabled:hover:bg-ink-50 disabled:opacity-40"
+        >
+          Zurück
+        </button>
+        <button
+          type="button"
+          disabled={atEnd || api.loading}
+          onClick={() => setOffset((o) => o + limit)}
+          className="rounded border border-hair bg-white px-2 py-0.5 text-[12px] enabled:hover:bg-ink-50 disabled:opacity-40"
+        >
+          Weiter
+        </button>
+      </div>
+    ) : null;
 
   const headerToolbar = useMemo(
     () => (
@@ -336,115 +485,203 @@ export default function AnfragenPage({
     return () => setHeaderTrailing(null);
   }, [setHeaderTrailing, headerToolbar]);
 
+  const CELL_STACK =
+    "flex min-h-[3rem] w-full max-w-full flex-col items-center justify-center gap-0.5 px-3 py-2 text-center text-[12.5px] leading-snug text-ink-800";
+
   const productionTableBlock = (
     <>
-      {api.error && <p className={errBannerClass}>{api.error}</p>}
-
-      <div className={TABLE_CARD_WRAP}>
+      <div className={TABLE_SCROLL}>
         <div className={TABLE_CARD}>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-left">
-              <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
+          <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
+            <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 backdrop-blur-sm shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
+              <tr>
+                <th className={`${THSORT} max-w-[9rem]`} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleProdSort("created_at")}
+                  >
+                    <span>Zeit (UTC)</span>
+                    <SortGlyph
+                      active={prodSortKey === "created_at"}
+                      asc={prodSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={THSORT} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleProdSort("form_tag")}
+                  >
+                    <span>Formular</span>
+                    <SortGlyph
+                      active={prodSortKey === "form_tag"}
+                      asc={prodSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={THSORT} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleProdSort("contact")}
+                  >
+                    <span>Kontakt</span>
+                    <SortGlyph
+                      active={prodSortKey === "contact"}
+                      asc={prodSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={`${THSORT} max-w-[8rem]`} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleProdSort("ip")}
+                  >
+                    <span>IP</span>
+                    <SortGlyph active={prodSortKey === "ip"} asc={prodSortAsc} />
+                  </button>
+                </th>
+                <th className={`${THSORT} w-28`} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleProdSort("country")}
+                  >
+                    <span>Land</span>
+                    <SortGlyph
+                      active={prodSortKey === "country"}
+                      asc={prodSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={`${THSORT} w-24`} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleProdSort("spam")}
+                  >
+                    <span>Spam</span>
+                    <SortGlyph
+                      active={prodSortKey === "spam"}
+                      asc={prodSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={THSORT} scope="col">
+                  <div className={DASH_TH_LABEL}>
+                    <span>Details</span>
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {api.loading && rows.length === 0 ? (
                 <tr>
-                  <th className={`${TH} w-[11rem]`}>zeit (UTC)</th>
-                  <th className={TH}>formular</th>
-                  <th className={TH}>kontakt</th>
-                  <th className={`${TH} w-36`}>ip</th>
-                  <th className={`${TH} w-20`}>land</th>
-                  <th className={`${TH} w-20`}>spam</th>
-                  <th className={`${TH} w-20 text-right`} />
+                  <td
+                    colSpan={7}
+                    className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
+                  >
+                    Wird geladen…
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {api.loading && rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className={`${DASH_TABLE_GRID} bg-white/90 px-2 py-10 text-center text-[13px] text-ink-400`}
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
+                  >
+                    Keine Einsendungen.
+                  </td>
+                </tr>
+              ) : (
+                sortedRows.map((r) => {
+                  const email = pickEmail(r.payload);
+                  const name = pickName(r.payload);
+                  const ip = pickMetaString(r.metadata, "ip");
+                  const country = pickMetaString(r.metadata, "country");
+                  return (
+                    <tr
+                      key={r.id}
+                      className="even:bg-ink-50/[0.45] transition-colors hover:bg-ink-100/70"
                     >
-                      Laden…
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className={`${DASH_TABLE_GRID} bg-white/90 px-2 py-10 text-center text-[13px] text-ink-500`}
-                    >
-                      Keine Einsendungen.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r) => {
-                    const email = pickEmail(r.payload);
-                    const name = pickName(r.payload);
-                    const ip = pickMetaString(r.metadata, "ip");
-                    const country = pickMetaString(r.metadata, "country");
-                    return (
-                      <tr
-                        key={r.id}
-                        className="even:bg-ink-50/[0.45] transition-colors hover:bg-ink-100/70"
-                      >
-                        <td
-                          className={`${TD} whitespace-nowrap text-ink-600`}
-                        >
-                      {fmtWhen(r.created_at)}
-                    </td>
-                    <td className={TD}>
-                      <span className="inline-block rounded border border-hair bg-ink-50/80 px-1.5 py-0.5 text-[11.5px]">
-                        {r.form_tag}
-                      </span>
-                    </td>
-                    <td className={`${TD} min-w-0`}>
-                      {email ? (
-                        <a
-                          href={`mailto:${email}`}
-                          className="inline-flex max-w-full items-center gap-1 truncate text-brand-600 hover:underline"
-                        >
-                          <Mail className="h-3 w-3 shrink-0" />
-                          {email}
-                        </a>
-                      ) : (
-                        <span className="text-ink-400">—</span>
-                      )}
-                      {name && name !== email && (
-                        <div className="mt-0.5 line-clamp-1 text-[11.5px] text-ink-500">
-                          {name}
+                      <td className={`${TD} whitespace-nowrap`}>
+                        <div className={`${DASH_TD_INNER} tabular-nums text-ink-500`}>
+                          {fmtWhen(r.created_at)}
                         </div>
-                      )}
-                    </td>
-                    <td className={`${TD} font-mono text-[11.5px]`}>
-                      {ip || "—"}
-                    </td>
-                    <td className={TD}>{country || "—"}</td>
-                    <td className={TD}>
-                      {r.spam ? (
-                        <span className="text-accent-amber">Spam</span>
-                      ) : (
-                        <span className="text-brand-700">ok</span>
-                      )}
-                    </td>
-                    <td className={`${TD} text-right`}>
-                      <button
-                        type="button"
-                        onClick={() => setDetail(r as WebsiteSubmissionRow)}
-                        className="text-[12px] text-brand-600 hover:underline"
-                      >
-                        Details
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-          </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={DASH_TD_INNER}>
+                          <span className="inline-block rounded border border-hair bg-ink-50/80 px-1.5 py-0.5 text-[11.5px]">
+                            {r.form_tag}
+                          </span>
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={CELL_STACK}>
+                          {email ? (
+                            <a
+                              href={`mailto:${email}`}
+                              className="inline-flex max-w-full items-center justify-center gap-1 break-words text-brand-600 [overflow-wrap:anywhere] hover:underline sm:px-1"
+                            >
+                              <Mail className="h-3 w-3 shrink-0" />
+                              <span>{email}</span>
+                            </a>
+                          ) : (
+                            <span className="text-ink-400">—</span>
+                          )}
+                          {name && name !== email && (
+                            <span className="line-clamp-2 text-[11.5px] text-ink-500">
+                              {name}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={`${DASH_TD_INNER_MONO}`}>
+                          {ip || "—"}
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={DASH_TD_INNER}>
+                          {country || "—"}
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={DASH_TD_INNER}>
+                          {r.spam ? (
+                            <span className="text-accent-amber">Spam</span>
+                          ) : (
+                            <span className="text-brand-700">ok</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={DASH_TD_INNER}>
+                          <button
+                            type="button"
+                            onClick={() => setDetail(r)}
+                            className="text-[12.5px] font-medium text-brand-600 underline-offset-2 hover:underline"
+                          >
+                            Details
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       <div className={FOOT_ROW}>
-        <span className="tabular-nums">{pageLabel}</span>
+        <span className="min-w-0 truncate tabular-nums">
+          {api.loading ? pageLabel + " · …" : pageLabel}
+        </span>
         {paginationControls}
       </div>
     </>
@@ -452,71 +689,148 @@ export default function AnfragenPage({
 
   const trialTableBlock = (
     <>
-      {api.error && <p className={errBannerClass}>{api.error}</p>}
-
-      <div className={TABLE_CARD_WRAP}>
+      <div className={TABLE_SCROLL}>
         <div className={TABLE_CARD}>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-left">
-              <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
+          <table className="w-full min-w-[900px] border-collapse text-[12.5px]">
+            <thead className="sticky top-0 z-10 bg-gradient-to-b from-ink-50/95 to-ink-100/90 backdrop-blur-sm shadow-[0_1px_0_0_rgba(15,15,15,0.05)]">
+              <tr>
+                <th className={`${THSORT} min-w-[11rem]`} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleTrialSort("eingang")}
+                  >
+                    <span>Eingang</span>
+                    <SortGlyph
+                      active={trialSortKey === "eingang"}
+                      asc={trialSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={THSORT} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleTrialSort("kontakt")}
+                  >
+                    <span>Kontakt</span>
+                    <SortGlyph
+                      active={trialSortKey === "kontakt"}
+                      asc={trialSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={THSORT} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleTrialSort("formular")}
+                  >
+                    <span>Formular</span>
+                    <SortGlyph
+                      active={trialSortKey === "formular"}
+                      asc={trialSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={THSORT} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleTrialSort("herkunft")}
+                  >
+                    <span>Herkunft</span>
+                    <SortGlyph
+                      active={trialSortKey === "herkunft"}
+                      asc={trialSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={`${THSORT} w-28`} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleTrialSort("spam")}
+                  >
+                    <span>Status</span>
+                    <SortGlyph
+                      active={trialSortKey === "spam"}
+                      asc={trialSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={`${THSORT} max-w-[10rem]`} scope="col">
+                  <button
+                    type="button"
+                    className={DASH_SORT_COLUMN_BTN}
+                    onClick={() => handleTrialSort("created_at")}
+                  >
+                    <span>Angelegt (UTC)</span>
+                    <SortGlyph
+                      active={trialSortKey === "created_at"}
+                      asc={trialSortAsc}
+                    />
+                  </button>
+                </th>
+                <th className={THSORT} scope="col">
+                  <div className={DASH_TH_LABEL}>
+                    <span className="sr-only">Aktion</span>
+                    <MoreHorizontal
+                      className="h-3.5 w-3.5 text-ink-400"
+                      aria-hidden
+                    />
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {api.loading && rows.length === 0 ? (
                 <tr>
-                  <th className={`${TH} min-w-[10rem] sm:px-3`}>Eingang</th>
-                  <th className={TH}>Kontakt</th>
-                  <th className={TH}>Formular</th>
-                  <th className={TH}>Herkunft</th>
-                  <th className={TH}>Status</th>
-                  <th className={`${TH} w-12 text-right`} />
+                  <td
+                    colSpan={8}
+                    className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
+                  >
+                    Wird geladen…
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {api.loading && rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className={`${DASH_TABLE_GRID} bg-white/90 px-2 py-12 text-center text-[13px] text-ink-400 sm:px-4`}
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
+                  >
+                    Keine Test-Einsendungen (Tabelle leer oder Migration fehlt).
+                  </td>
+                </tr>
+              ) : (
+                sortedRows.map((r) => {
+                  const email = pickEmail(r.payload);
+                  const name = pickName(r.payload);
+                  const companyLine = pickPayloadCompanyOrDomain(r.payload);
+                  const ip = pickMetaString(r.metadata, "ip");
+                  const country = pickMetaString(r.metadata, "country");
+                  const leadTitle =
+                    name && name !== email
+                      ? name
+                      : email || name || "—";
+                  return (
+                    <tr
+                      key={r.id}
+                      className="even:bg-ink-50/[0.45] transition-colors hover:bg-ink-100/70"
                     >
-                      Laden…
-                    </td>
-                  </tr>
-                ) : rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className={`${DASH_TABLE_GRID} bg-white/90 px-2 py-12 text-center text-[13px] text-ink-500 sm:px-4`}
-                    >
-                      Keine Test-Einsendungen (Tabelle leer oder Migration
-                      fehlt).
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((r) => {
-                    const email = pickEmail(r.payload);
-                    const name = pickName(r.payload);
-                    const companyLine = pickPayloadCompanyOrDomain(r.payload);
-                    const ip = pickMetaString(r.metadata, "ip");
-                    const country = pickMetaString(r.metadata, "country");
-                    const leadTitle =
-                      name && name !== email
-                        ? name
-                        : email || name || "—";
-                    return (
-                      <tr
-                        key={r.id}
-                        className="even:bg-ink-50/[0.45] transition-colors hover:bg-ink-100/70"
-                      >
-                        <td className={`${TD} sm:px-3`}>
-                          <p className="line-clamp-1 text-[13px] font-medium text-ink-900">
+                      <td className={TD}>
+                        <div className={DASH_TD_INNER}>
+                          <span className="line-clamp-2 font-medium [overflow-wrap:anywhere]">
                             {leadTitle}
-                          </p>
-                          <p className="mt-0.5 text-[11.5px] text-ink-500">
-                            {fmtWhenShort(r.created_at)}
-                          </p>
-                        </td>
-                        <td className={TD}>
+                          </span>
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={CELL_STACK}>
                           {email ? (
                             <a
                               href={`mailto:${email}`}
-                              className="line-clamp-1 break-all text-[13px] font-medium text-brand-600 hover:underline"
+                              className="line-clamp-2 break-words font-medium text-brand-600 [overflow-wrap:anywhere] hover:underline"
                             >
                               {email}
                             </a>
@@ -524,28 +838,34 @@ export default function AnfragenPage({
                             <span className="text-ink-400">—</span>
                           )}
                           {name && name !== email && (
-                            <p className="mt-0.5 line-clamp-1 text-[11.5px] text-ink-500">
+                            <span className="line-clamp-2 text-[11.5px] text-ink-500">
                               {name}
-                            </p>
+                            </span>
                           )}
-                        </td>
-                        <td className={TD}>
-                          <p className="line-clamp-1 text-[13px] font-medium text-ink-800">
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={CELL_STACK}>
+                          <span className="line-clamp-2 font-medium [overflow-wrap:anywhere]">
                             {r.form_tag}
-                          </p>
-                          <p className="mt-0.5 line-clamp-1 text-[11.5px] text-ink-500">
+                          </span>
+                          <span className="line-clamp-2 text-[11.5px] text-ink-500">
                             {companyLine || "—"}
-                          </p>
-                        </td>
-                        <td className={TD}>
-                          <p className="line-clamp-1 text-[13px] text-ink-800">
+                          </span>
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={CELL_STACK}>
+                          <span className="line-clamp-2 [overflow-wrap:anywhere]">
                             {country || "—"}
-                          </p>
-                          <p className="mt-0.5 line-clamp-1 font-mono text-[11.5px] text-ink-500">
+                          </span>
+                          <span className="line-clamp-2 font-mono text-[11.5px] text-ink-500">
                             {ip || "—"}
-                          </p>
-                        </td>
-                        <td className={TD}>
+                          </span>
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={DASH_TD_INNER}>
                           {r.spam ? (
                             <span className="inline-flex rounded-md border border-amber-200/80 bg-amber-50 px-2 py-0.5 text-[11.5px] font-medium text-amber-900">
                               Spam
@@ -555,35 +875,56 @@ export default function AnfragenPage({
                               Gültig
                             </span>
                           )}
-                        </td>
-                        <td className={`${TD} text-right`}>
+                        </div>
+                      </td>
+                      <td className={`${TD} whitespace-nowrap`}>
+                        <div className={`${DASH_TD_INNER} tabular-nums text-ink-500`}>
+                          {fmtWhen(r.created_at)}
+                        </div>
+                      </td>
+                      <td className={TD}>
+                        <div className={DASH_TD_INNER}>
                           <button
                             type="button"
-                            onClick={() => setDetail(r as WebsiteSubmissionRow)}
+                            onClick={() => setDetail(r)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-500 transition hover:bg-ink-100 hover:text-ink-800"
                             title="Details"
                           >
                             <MoreHorizontal className="h-4 w-4" />
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
       <div className={FOOT_ROW}>
-        <span className="tabular-nums">{pageLabel}</span>
+        <span className="min-w-0 truncate tabular-nums">
+          {api.loading ? pageLabel + " · …" : pageLabel}
+        </span>
         {paginationControls}
       </div>
     </>
   );
 
-  const tableBlock = isTrial ? trialTableBlock : productionTableBlock;
+  const tableBlock = (
+    <>
+      {api.error && (
+        <p
+          className={`shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 py-1.5 text-[12.5px] text-accent-rose ${DASHBOARD_MAIN_INSET_X}`}
+          role="alert"
+        >
+          {api.error}
+        </p>
+      )}
+      {isTrial ? trialTableBlock : productionTableBlock}
+    </>
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">

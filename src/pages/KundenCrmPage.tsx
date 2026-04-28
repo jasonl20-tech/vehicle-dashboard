@@ -1,13 +1,4 @@
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronDown,
-  ChevronsUpDown,
-  Filter,
-  Plus,
-  RefreshCw,
-  Search,
-} from "lucide-react";
+import { ChevronDown, Filter, Plus, RefreshCw, Search } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -28,11 +19,13 @@ import {
 } from "../lib/crmCustomersApi";
 import {
   DASHBOARD_MAIN_INSET_X as CRM_MAIN_INSET_X,
+  DASH_SORT_COLUMN_BTN,
   DASH_TABLE_GRID as GRID,
   DASH_TH_SORT as THSORT,
   DASH_TD as TD,
 } from "../lib/dashboardTableStyle";
 import { ISO2_COUNTRIES } from "../lib/iso2Countries";
+import SortGlyph from "../components/ui/SortGlyph";
 
 const PAGE_SIZE = 100;
 const TEXT_IN =
@@ -265,23 +258,13 @@ function CrmStandortSearchCombo({
   );
 }
 
-type SortKey = "id" | "email" | "company" | "status" | "location" | "created_at";
-
-function SortGlyph({ active, asc }: { active: boolean; asc: boolean }) {
-  if (!active) {
-    return (
-      <ChevronsUpDown
-        className="h-3 w-3 shrink-0 text-ink-300 opacity-50"
-        aria-hidden
-      />
-    );
-  }
-  return asc ? (
-    <ArrowUp className="h-3 w-3 shrink-0 text-brand-600" aria-hidden />
-  ) : (
-    <ArrowDown className="h-3 w-3 shrink-0 text-brand-600" aria-hidden />
-  );
-}
+type SortKey =
+  | "id"
+  | "email"
+  | "company"
+  | "status"
+  | "location"
+  | "created_at";
 
 type CrmRowDraft = {
   id: string;
@@ -885,7 +868,7 @@ export default function KundenCrmPage() {
               <th className={THSORT} scope="col">
                 <button
                   type="button"
-                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  className={DASH_SORT_COLUMN_BTN}
                   onClick={() => handleSort("id")}
                 >
                   <span>ID</span>
@@ -895,7 +878,7 @@ export default function KundenCrmPage() {
               <th className={THSORT} scope="col">
                 <button
                   type="button"
-                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  className={DASH_SORT_COLUMN_BTN}
                   onClick={() => handleSort("email")}
                 >
                   <span className="max-[420px]:hidden">E-Mail</span>
@@ -906,7 +889,7 @@ export default function KundenCrmPage() {
               <th className={THSORT} scope="col">
                 <button
                   type="button"
-                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  className={DASH_SORT_COLUMN_BTN}
                   onClick={() => handleSort("company")}
                 >
                   <span>Firma</span>
@@ -916,7 +899,7 @@ export default function KundenCrmPage() {
               <th className={THSORT} scope="col">
                 <button
                   type="button"
-                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  className={DASH_SORT_COLUMN_BTN}
                   onClick={() => handleSort("status")}
                 >
                   <span>Status</span>
@@ -926,7 +909,7 @@ export default function KundenCrmPage() {
               <th className={THSORT} scope="col">
                 <button
                   type="button"
-                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  className={DASH_SORT_COLUMN_BTN}
                   onClick={() => handleSort("location")}
                 >
                   <span>Standort</span>
@@ -936,7 +919,7 @@ export default function KundenCrmPage() {
               <th className={THSORT} scope="col">
                 <button
                   type="button"
-                  className="flex w-full min-h-[2.85rem] items-center justify-center gap-0.5 px-1.5 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.05em] text-ink-500 transition hover:bg-ink-200/30 hover:text-ink-700"
+                  className={DASH_SORT_COLUMN_BTN}
                   onClick={() => handleSort("created_at")}
                 >
                   <span>Angelegt</span>
