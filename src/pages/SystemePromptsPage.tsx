@@ -13,6 +13,7 @@ import {
   type PromptOneResponse,
   type SystemPromptValue,
 } from "../lib/promptsApi";
+import { analyzePromptJsonSafety } from "../lib/promptJsonSafety";
 
 export default function SystemePromptsPage() {
   const list = useJsonApi<PromptsListResponse>(SYSTEM_PROMPTS_URL);
@@ -28,6 +29,11 @@ export default function SystemePromptsPage() {
   const [newKeyError, setNewKeyError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+
+  const promptJsonSafety = useMemo(
+    () => analyzePromptJsonSafety(form.prompt),
+    [form.prompt],
+  );
 
   const keys = list.data?.keys ?? [];
   const filtered = useMemo(() => {
@@ -265,6 +271,7 @@ export default function SystemePromptsPage() {
                           value={form.prompt}
                           onChange={(v) => setForm((f) => ({ ...f, prompt: v }))}
                           className="w-full"
+                          promptJsonSafety={promptJsonSafety}
                         />
                       </div>
                     </div>

@@ -1,4 +1,8 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
+import {
+  analyzePromptJsonSafety,
+  type PromptJsonSafetyResult,
+} from "../../lib/promptJsonSafety";
 import {
   PROMPT_PLACEHOLDER_NAMES,
   type PromptPlaceholderName,
@@ -8,6 +12,8 @@ type Props = {
   value: string;
   onChange: (v: string) => void;
   className?: string;
+  /** Optional: vom Parent (z. B. eine gemeinsame `useMemo`-Berechnung pro Prompt). */
+  promptJsonSafety?: PromptJsonSafetyResult;
 };
 
 const LABEL: Record<PromptPlaceholderName, string> = {
@@ -26,9 +32,16 @@ export default function PromptFieldWithPlaceholders({
   value,
   onChange,
   className = "",
+  promptJsonSafety: safetyProp,
 }: Props) {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const cursorAfterInsert = useRef<number | null>(null);
+
+  const safetyInternal = useMemo(
+    () => analyzePromptJsonSafety(value),
+    [value],
+  );
+  const safety = safetyProp ?? safetyInternal;
 
   useLayoutEffect(() => {
     const el = taRef.current;
@@ -80,16 +93,40 @@ export default function PromptFieldWithPlaceholders({
           </button>
         ))}
       </aside>
-      <textarea
-        ref={taRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={18}
-        spellCheck
-        className="order-1 min-h-[20rem] w-full rounded-md border border-hair bg-white px-3 py-2.5 text-[13px] leading-relaxed text-ink-800 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none lg:order-2"
-        placeholder="Prompt tippen; Variablen links per Klick an der Cursor-Position einfügen."
-        aria-label="Prompt"
-      />
+      <div className="order-1 space-y-2 lg:order-2">
+        <textarea
+          ref={taRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={18}
+          spellCheck
+          aria-invalid={!safety.ok}
+          className={
+            safety.ok
+              ? "min-h-[20rem] w-full rounded-md border border-hair bg-white px-3 py-2.5 text-[13px] leading-relaxed text-ink-800 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none"
+              : "min-h-[20rem] w-full rounded-md border-2 border-accent-rose bg-rose-50/40 px-3 py-2.5 text-[13px] leading-relaxed text-ink-800 placeholder:text-ink-400 focus:border-accent-rose focus:outline-none"
+          }
+          placeholder="Prompt tippen; Variablen links per Klick an der Cursor-Position einfügen."
+          aria-label="Prompt"
+        />
+        {!safety.ok && safety.reasons.length > 0 && (
+          <div
+            className="rounded-md border border-accent-rose/60 bg-rose-50/80 px-3 py-2 text-[12px] leading-snug text-accent-rose"
+            role="alert"
+          >
+            <p className="font-medium text-ink-800">
+              JSON-/Pipeline-Hinweis (Platzhalter{" "}
+              <span className="font-mono text-ink-700">{`{{…}}`}</span> sind
+              unkritisch):
+            </p>
+            <ul className="mt-1.5 list-disc space-y-1 pl-4 text-ink-800">
+              {safety.reasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
