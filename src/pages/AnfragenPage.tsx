@@ -24,7 +24,6 @@ import {
   DASH_TABLE_GRID as GRID,
   DASH_TD as TD,
   DASH_TD_INNER,
-  DASH_TD_INNER_MONO,
   DASH_TH_LABEL,
   DASH_TH_SORT as THSORT,
 } from "../lib/dashboardTableStyle";
@@ -122,13 +121,103 @@ function jsonPretty(x: unknown): string {
   }
 }
 
+function formatPayloadValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return JSON.stringify(v, null, 2);
+}
+
+function payloadKvList(payload: unknown): { key: string; value: string }[] {
+  if (payload == null) return [];
+  if (typeof payload === "object" && !Array.isArray(payload)) {
+    const o = payload as Record<string, unknown>;
+    return Object.keys(o)
+      .sort((a, b) => a.localeCompare(b, "de", { sensitivity: "base" }))
+      .map((key) => ({ key, value: formatPayloadValue(o[key]) }));
+  }
+  return [{ key: "Inhalt", value: formatPayloadValue(payload) }];
+}
+
+function payloadSortString(payload: unknown): string {
+  return payloadKvList(payload)
+    .map((r) => `${r.key}:${r.value}`)
+    .join("\u0001");
+}
+
+function PayloadAnfrageCell({
+  payload,
+  onOpenFull,
+}: {
+  payload: unknown;
+  onOpenFull: () => void;
+}) {
+  const rows = payloadKvList(payload);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className="group relative w-full min-w-[12rem] max-w-xl cursor-pointer rounded-lg border border-transparent px-2 py-1.5 text-left transition hover:border-ink-200 hover:bg-ink-50/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-300/60"
+      onClick={onOpenFull}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpenFull();
+        }
+      }}
+      aria-label="Anfrage vollständig anzeigen"
+    >
+      <div className="max-h-[min(50vh,26rem)] overflow-y-auto overflow-x-hidden overscroll-contain pr-0.5">
+        <dl className="space-y-2.5 text-left">
+          {rows.map(({ key: k, value: v }) => (
+            <div key={k} className="min-w-0">
+              <dt className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-400">
+                {k}
+              </dt>
+              <dd className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-ink-800">
+                {v}
+              </dd>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <p className="text-[12.5px] text-ink-400">—</p>
+          )}
+        </dl>
+      </div>
+      <p className="pointer-events-none mt-1.5 text-[10px] text-ink-400 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+        Klicken für Vollansicht
+      </p>
+    </div>
+  );
+}
+
+function PayloadKvDetail({ payload }: { payload: unknown }) {
+  const rows = payloadKvList(payload);
+  return (
+    <dl className="space-y-3.5">
+      {rows.map(({ key: k, value: v }) => (
+        <div key={k} className="min-w-0">
+          <dt className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-ink-400">
+            {k}
+          </dt>
+          <dd className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink-800">
+            {v}
+          </dd>
+        </div>
+      ))}
+      {rows.length === 0 && (
+        <p className="text-[13px] text-ink-400">—</p>
+      )}
+    </dl>
+  );
+}
+
 type ProdSortKey =
   | "created_at"
   | "form_tag"
   | "contact"
-  | "ip"
   | "country"
-  | "spam";
+  | "anfrage";
 
 type TrialSortKey =
   | "created_at"
@@ -143,9 +232,8 @@ function rowProdParts(r: WebsiteSubmissionRow) {
     created_at: r.created_at,
     form_tag: (r.form_tag || "").trim(),
     contact: (pickEmail(r.payload) || pickName(r.payload) || "").trim(),
-    ip: (pickMetaString(r.metadata, "ip") || "").trim(),
     country: (pickMetaString(r.metadata, "country") || "").trim(),
-    spam: r.spam,
+    anfrage: payloadSortString(r.payload),
   };
 }
 
@@ -170,14 +258,11 @@ function cmpProd(
     case "contact":
       c = pa.contact.localeCompare(pb.contact, "de", { sensitivity: "base" });
       break;
-    case "ip":
-      c = pa.ip.localeCompare(pb.ip);
-      break;
     case "country":
       c = pa.country.localeCompare(pb.country, "de", { sensitivity: "base" });
       break;
-    case "spam":
-      c = Number(pa.spam) - Number(pb.spam);
+    case "anfrage":
+      c = pa.anfrage.localeCompare(pb.anfrage, "de", { sensitivity: "base" });
       break;
     default:
       c = 0;
@@ -310,7 +395,7 @@ export default function AnfragenPage({
       if (k === prodSortKey) setProdSortAsc((p) => !p);
       else {
         setProdSortKey(k);
-        setProdSortAsc(k === "created_at" ? false : k === "spam" ? false : true);
+        setProdSortAsc(k === "created_at" ? false : true);
       }
     },
     [prodSortKey],
@@ -534,17 +619,7 @@ export default function AnfragenPage({
                     />
                   </button>
                 </th>
-                <th className={`${THSORT} max-w-[8rem]`} scope="col">
-                  <button
-                    type="button"
-                    className={DASH_SORT_COLUMN_BTN}
-                    onClick={() => handleProdSort("ip")}
-                  >
-                    <span>IP</span>
-                    <SortGlyph active={prodSortKey === "ip"} asc={prodSortAsc} />
-                  </button>
-                </th>
-                <th className={`${THSORT} w-28`} scope="col">
+                <th className={`${THSORT} w-32`} scope="col">
                   <button
                     type="button"
                     className={DASH_SORT_COLUMN_BTN}
@@ -557,23 +632,18 @@ export default function AnfragenPage({
                     />
                   </button>
                 </th>
-                <th className={`${THSORT} w-24`} scope="col">
+                <th className={`${THSORT} min-w-[16rem]`} scope="col">
                   <button
                     type="button"
                     className={DASH_SORT_COLUMN_BTN}
-                    onClick={() => handleProdSort("spam")}
+                    onClick={() => handleProdSort("anfrage")}
                   >
-                    <span>Spam</span>
+                    <span>Anfrage</span>
                     <SortGlyph
-                      active={prodSortKey === "spam"}
+                      active={prodSortKey === "anfrage"}
                       asc={prodSortAsc}
                     />
                   </button>
-                </th>
-                <th className={THSORT} scope="col">
-                  <div className={DASH_TH_LABEL}>
-                    <span>Details</span>
-                  </div>
                 </th>
               </tr>
             </thead>
@@ -581,7 +651,7 @@ export default function AnfragenPage({
               {api.loading && rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={5}
                     className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                   >
                     Wird geladen…
@@ -590,7 +660,7 @@ export default function AnfragenPage({
               ) : rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={5}
                     className={`${GRID} bg-white/90 px-2 py-10 text-center text-[12.5px] text-ink-500`}
                   >
                     Keine Einsendungen.
@@ -600,7 +670,6 @@ export default function AnfragenPage({
                 sortedRows.map((r) => {
                   const email = pickEmail(r.payload);
                   const name = pickName(r.payload);
-                  const ip = pickMetaString(r.metadata, "ip");
                   const country = pickMetaString(r.metadata, "country");
                   return (
                     <tr
@@ -640,34 +709,15 @@ export default function AnfragenPage({
                         </div>
                       </td>
                       <td className={TD}>
-                        <div className={`${DASH_TD_INNER_MONO}`}>
-                          {ip || "—"}
-                        </div>
-                      </td>
-                      <td className={TD}>
                         <div className={DASH_TD_INNER}>
                           {country || "—"}
                         </div>
                       </td>
-                      <td className={TD}>
-                        <div className={DASH_TD_INNER}>
-                          {r.spam ? (
-                            <span className="text-accent-amber">Spam</span>
-                          ) : (
-                            <span className="text-brand-700">ok</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className={TD}>
-                        <div className={DASH_TD_INNER}>
-                          <button
-                            type="button"
-                            onClick={() => setDetail(r)}
-                            className="text-[12.5px] font-medium text-brand-600 underline-offset-2 hover:underline"
-                          >
-                            Details
-                          </button>
-                        </div>
+                      <td className={`${TD} align-top`}>
+                        <PayloadAnfrageCell
+                          payload={r.payload}
+                          onOpenFull={() => setDetail(r)}
+                        />
                       </td>
                     </tr>
                   );
@@ -969,7 +1019,7 @@ function SubmissionDetailDialog({
         aria-label="Schließen"
         onClick={onClose}
       />
-      <div className="relative z-10 flex max-h-[min(92vh,900px)] w-full max-w-[640px] flex-col overflow-hidden rounded-t-lg border border-hair bg-paper shadow-2xl sm:rounded-lg">
+      <div className="relative z-10 flex max-h-[min(92vh,920px)] w-full max-w-[min(96vw,720px)] flex-col overflow-hidden rounded-t-lg border border-hair bg-paper shadow-2xl sm:rounded-lg">
         <div className="flex items-center justify-between gap-2 border-b border-hair px-4 py-3">
           <div className="min-w-0">
             <p className="text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
@@ -991,12 +1041,12 @@ function SubmissionDetailDialog({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <h3 className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-            Inhalt (payload)
+          <h3 className="mb-2 text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
+            Anfrage (Payload)
           </h3>
-          <pre className="mb-4 max-h-48 overflow-auto rounded border border-hair bg-ink-50/50 p-2 font-mono text-[11.5px] text-ink-800">
-            {jsonPretty(row.payload)}
-          </pre>
+          <div className="mb-5 rounded-lg border border-hair bg-ink-50/40 px-3 py-3">
+            <PayloadKvDetail payload={row.payload} />
+          </div>
           <h3 className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
             Technische Metadaten
           </h3>
