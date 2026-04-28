@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   LineChart,
   type LucideIcon,
+  Mail,
   ScrollText,
   Server,
   Settings,
@@ -69,6 +70,16 @@ export const NAV_PRIMARY: NavItem[] = [
     children: [
       { label: "Zahlungslinks", to: "/zahlungen/zahlungslinks" },
       { label: "Pläne", to: "/zahlungen/plaene" },
+    ],
+  },
+  {
+    label: "Emails",
+    icon: Mail,
+    children: [
+      { label: "Email Logs", to: "/emails/logs" },
+      { label: "Email Tracking", to: "/emails/tracking" },
+      { label: "Email Templates", to: "/emails/templates" },
+      { label: "Email Automator", to: "/emails/automator" },
     ],
   },
   {

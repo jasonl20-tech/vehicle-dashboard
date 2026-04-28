@@ -35,6 +35,26 @@ const META: Record<
     eyebrow: "Logs",
     description: "Protokolle und Einstellungen des Generierungs-Workers – Inhalte folgen.",
   },
+  "/emails/logs": {
+    title: "Email Logs",
+    eyebrow: "Emails",
+    description: "Versand- und Zustellprotokolle – Inhalte folgen.",
+  },
+  "/emails/tracking": {
+    title: "Email Tracking",
+    eyebrow: "Emails",
+    description: "Öffnungs- und Klick-Tracking – Inhalte folgen.",
+  },
+  "/emails/templates": {
+    title: "Email Templates",
+    eyebrow: "Emails",
+    description: "Vorlagen für Transaktions- und Marketing-Mails – Inhalte folgen.",
+  },
+  "/emails/automator": {
+    title: "Email Automator",
+    eyebrow: "Emails",
+    description: "Regeln und Abläufe für automatisierte E-Mails – Inhalte folgen.",
+  },
   "/website/blogs": {
     title: "Blogs",
     eyebrow: "Webseite",
