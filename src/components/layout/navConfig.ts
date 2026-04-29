@@ -98,7 +98,10 @@ export const NAV_PRIMARY: NavItem[] = [
   {
     label: "Datenbanken",
     icon: Database,
-    children: [{ label: "Produktions Datenbank", to: "/databases/production" }],
+    children: [
+      { label: "Produktions Datenbank", to: "/databases/production" },
+      { label: "Assets", to: "/databases/assets" },
+    ],
   },
   {
     label: "Systeme",

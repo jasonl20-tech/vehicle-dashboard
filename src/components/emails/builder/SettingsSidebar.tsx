@@ -11,6 +11,7 @@
  */
 import { useMemo } from "react";
 import { Trash2 } from "lucide-react";
+import AssetUrlInput from "../../assets/AssetUrlInput";
 import {
   SOCIAL_NETWORKS,
   newId,
@@ -783,16 +784,16 @@ function ImageSettings({
       <FieldGroup title="Bild">
         <div className="space-y-1">
           <p className="text-[11.5px] text-ink-700">Bild-URL</p>
-          <input
-            type="text"
+          <AssetUrlInput
             value={block.src}
-            onChange={(e) => update({ src: e.target.value })}
+            onChange={(src) => update({ src })}
             placeholder="https://…/bild.png"
-            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+            accept={["image/"]}
+            preview
           />
           <p className="text-[10.5px] leading-snug text-ink-500">
-            Lade das Bild bei einem Hoster (R2/S3/Cloudinary) hoch und füge die
-            öffentliche URL hier ein. Das Dashboard speichert keine Bilder selbst.
+            Klicke auf <strong>Assets</strong>, um ein Bild aus dem
+            R2-Bucket (`assets.vehicleimagery.com`) auszuwählen oder hochzuladen.
           </p>
         </div>
         <div className="space-y-1">
@@ -1154,12 +1155,12 @@ function VideoSettings({
       <FieldGroup title="Video">
         <div className="space-y-1">
           <p className="text-[11.5px] text-ink-700">Thumbnail-URL</p>
-          <input
-            type="text"
+          <AssetUrlInput
             value={block.thumbnailUrl}
-            onChange={(e) => update({ thumbnailUrl: e.target.value })}
+            onChange={(thumbnailUrl) => update({ thumbnailUrl })}
             placeholder="https://…/thumbnail.png"
-            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+            accept={["image/"]}
+            preview
           />
         </div>
         <div className="space-y-1">
@@ -1391,12 +1392,12 @@ function AvatarSettings({
       <FieldGroup title="Person">
         <div className="space-y-1">
           <p className="text-[11.5px] text-ink-700">Foto-URL</p>
-          <input
-            type="text"
+          <AssetUrlInput
             value={block.imageUrl}
-            onChange={(e) => update({ imageUrl: e.target.value })}
+            onChange={(imageUrl) => update({ imageUrl })}
             placeholder="https://…/profil.jpg"
-            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+            accept={["image/"]}
+            preview
           />
         </div>
         <div className="space-y-1">

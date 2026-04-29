@@ -22,6 +22,7 @@ import KundenCrmPage from "./pages/KundenCrmPage";
 import AnfragenPage from "./pages/AnfragenPage";
 import EmailTemplatesPage from "./pages/EmailTemplatesPage";
 import NewsletterPage from "./pages/NewsletterPage";
+import AssetsPage from "./pages/AssetsPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
@@ -158,6 +159,11 @@ export default function App() {
         <Route
           path="/databases/production"
           element={<ProductionDatabasePage />}
+        />
+        <Route path="/databases/assets" element={<AssetsPage />} />
+        <Route
+          path="/databases"
+          element={<Navigate to="/databases/production" replace />}
         />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

@@ -116,9 +116,22 @@ export interface AuthEnv {
   mapping?: D1Database;
   /**
    * D1: Webseite (z. B. Tabelle `submissions` für Formular-Einsendungen). Variable `website`.
-   * Tabelle `customers` (CRM) und `email_templates` liegen in derselben Datenbank.
+   * Tabellen `customers` (CRM), `email_templates` und `assets` liegen in derselben Datenbank.
    */
   website?: D1Database;
+  /**
+   * R2-Bucket für Asset-Speicherung (Bilder, PDFs etc., die in Mails/auf
+   * der Webseite verlinkt werden). Binding-Name im Pages-Dashboard:
+   * `assets` → `env.assets`. Public-Domain: `assets.vehicleimagery.com`
+   * (Custom-Domain auf den Bucket).
+   */
+  assets?: R2Bucket;
+  /**
+   * Optional: Basis-URL für öffentliche Asset-Links. Standard:
+   * `https://assets.vehicleimagery.com`. Wird vom API zurückgegeben,
+   * damit der Browser den Public-Link direkt verwendet.
+   */
+  ASSETS_PUBLIC_BASE?: string;
 }
 
 // ---------- base64url helpers ----------

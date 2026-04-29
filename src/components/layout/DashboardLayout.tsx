@@ -39,6 +39,7 @@ const FULLSCREEN_MAP_BILDBEMPFANG = "/ansichten/bildempfang" as const;
 const KUNDEN_CRM = "/kunden/crm" as const;
 const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
 const EMAIL_TEMPLATES = "/emails/templates" as const;
+const ASSETS_PAGE = "/databases/assets" as const;
 
 export default function DashboardLayout() {
   const { pathname } = useLocation();
@@ -47,6 +48,7 @@ export default function DashboardLayout() {
   const isBildempfangMap = pathname === FULLSCREEN_MAP_BILDBEMPFANG;
   const isCrmPage = pathname === KUNDEN_CRM;
   const isEmailEditor = pathname === EMAIL_TEMPLATES;
+  const isAssetsPage = pathname === ASSETS_PAGE;
   /** Vollflächig + Header-Toolbar (wie CRM): Anfragen + Test Anfragen */
   const isKundenAnfragenLayout = isKundenAnfragenPage || isKundenTestAnfragen;
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -109,10 +111,15 @@ export default function DashboardLayout() {
     [],
   );
   useEffect(() => {
-    if (!isCrmPage && !isKundenAnfragenLayout && !isEmailEditor) {
+    if (
+      !isCrmPage &&
+      !isKundenAnfragenLayout &&
+      !isEmailEditor &&
+      !isAssetsPage
+    ) {
       setHeaderTrailing(null);
     }
-  }, [isCrmPage, isKundenAnfragenLayout, isEmailEditor]);
+  }, [isCrmPage, isKundenAnfragenLayout, isEmailEditor, isAssetsPage]);
 
   return (
     <div
@@ -147,7 +154,8 @@ export default function DashboardLayout() {
             isBildempfangMap ||
             isCrmPage ||
             isKundenAnfragenLayout ||
-            isEmailEditor
+            isEmailEditor ||
+            isAssetsPage
               ? "h-[100dvh] min-h-0"
               : ""
           }`}
@@ -160,17 +168,28 @@ export default function DashboardLayout() {
           <DashboardHeader
             onOpenMobileMenu={() => setMobileOpen(true)}
             trailing={
-              isCrmPage || isKundenAnfragenLayout || isEmailEditor
+              isCrmPage ||
+              isKundenAnfragenLayout ||
+              isEmailEditor ||
+              isAssetsPage
                 ? headerTrailing
                 : null
             }
-            crmMode={isCrmPage || isKundenAnfragenLayout || isEmailEditor}
+            crmMode={
+              isCrmPage ||
+              isKundenAnfragenLayout ||
+              isEmailEditor ||
+              isAssetsPage
+            }
           />
           <div
             className={
               isBildempfangMap
                 ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                : isCrmPage || isKundenAnfragenLayout || isEmailEditor
+                : isCrmPage ||
+                    isKundenAnfragenLayout ||
+                    isEmailEditor ||
+                    isAssetsPage
                   ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
                   : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
@@ -179,7 +198,10 @@ export default function DashboardLayout() {
               className={
                 isBildempfangMap
                   ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
-                  : isCrmPage || isKundenAnfragenLayout || isEmailEditor
+                  : isCrmPage ||
+                      isKundenAnfragenLayout ||
+                      isEmailEditor ||
+                      isAssetsPage
                     ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
                     : ""
               }
