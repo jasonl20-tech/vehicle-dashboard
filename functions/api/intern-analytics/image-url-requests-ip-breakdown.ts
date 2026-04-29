@@ -610,67 +610,121 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (tryFilter) modes.push("filter");
   if (tryDedicated) modes.push("dedicated");
 
+  /**
+   * Detail-Log jedes Versuchs — wird per `debug.attempts` ans Frontend
+   * mitgegeben, damit Probleme in der Engine-SQL ohne Worker-Logs
+   * nachvollziehbar sind. Reihenfolge entspricht der Versuchs-Reihenfolge.
+   */
+  type TriedAttempt = {
+    source: AeAccountBinding;
+    mode: Mode;
+    builder: string;
+    ok: boolean;
+    rows: number;
+    sample?: string;
+    error?: string;
+    sqlPreview: string;
+  };
+  const attempts: TriedAttempt[] = [];
+
+  const previewSql = (sql: string): string => {
+    const oneLine = sql.replace(/\s+/g, " ").trim();
+    return oneLine.slice(0, 280) + (oneLine.length > 280 ? "…" : "");
+  };
+
   for (const s of runSources) {
     const fromTable = fromKeyAnalyticsForBinding(env, s.binding);
     for (const mode of modes) {
       const tryEnrichedCascade = async () => {
-        const builders = [
-          // 1) any() + avgIf, ohne `argMax`/`index2` — am robustesten,
-          //    funktioniert auch wenn die Engine-Subset-SQL kein
-          //    argMax(string, ts) oder kein `index2`-Feld kennt.
-          () =>
-            buildIpSqlEnrichedRobust(
-              from,
-              to,
-              fromTable,
-              mode,
-              name,
-              ipCol,
-            ),
-          // 2) any() inkl. index2 — wenn das Schema beide Pfad-Quellen hat.
-          () =>
-            buildIpSqlEnrichedAny(
-              from,
-              to,
-              fromTable,
-              mode,
-              name,
-              ipCol,
-            ),
-          // 3) argMax + blob1 — präziser (jüngste Werte), aber argMax
-          //    ist anfälliger für Type-Issues.
-          () =>
-            buildIpSqlEnrichedBlobPath(
-              from,
-              to,
-              fromTable,
-              mode,
-              name,
-              ipCol,
-            ),
-          // 4) argMax + index2 — präziseste Variante, falls verfügbar.
-          () =>
-            buildIpSqlEnrichedPathIndex2(
-              from,
-              to,
-              fromTable,
-              mode,
-              name,
-              ipCol,
-            ),
+        const builders: { name: string; build: () => string }[] = [
+          {
+            name: "enriched-robust (any+avgIf, blob1)",
+            build: () =>
+              buildIpSqlEnrichedRobust(
+                from,
+                to,
+                fromTable,
+                mode,
+                name,
+                ipCol,
+              ),
+          },
+          {
+            name: "enriched-any (index2 + blob1)",
+            build: () =>
+              buildIpSqlEnrichedAny(
+                from,
+                to,
+                fromTable,
+                mode,
+                name,
+                ipCol,
+              ),
+          },
+          {
+            name: "enriched-argmax-blob1",
+            build: () =>
+              buildIpSqlEnrichedBlobPath(
+                from,
+                to,
+                fromTable,
+                mode,
+                name,
+                ipCol,
+              ),
+          },
+          {
+            name: "enriched-argmax-index2",
+            build: () =>
+              buildIpSqlEnrichedPathIndex2(
+                from,
+                to,
+                fromTable,
+                mode,
+                name,
+                ipCol,
+              ),
+          },
         ];
         let lastErr: Error | null = null;
-        for (const build of builders) {
+        for (const b of builders) {
+          const sql = b.build();
           try {
-            const sql = build();
             const r = await runAeSql<RawIpRow>(env, sql, {
               binding: s.binding,
             });
             ipRowParts.push(r.data);
             if (r.data.length > 0) hadAnyOk = true;
+            // Sample der ersten Zeile (max ~200 chars) zur Diagnose, ob
+            // alle Felder befüllt sind oder nur ein Subset.
+            let sample: string | undefined;
+            try {
+              const first = r.data[0] as unknown;
+              if (first) sample = JSON.stringify(first).slice(0, 240);
+            } catch {
+              /* ignore */
+            }
+            attempts.push({
+              source: s.binding,
+              mode,
+              builder: b.name,
+              ok: true,
+              rows: r.data.length,
+              sample,
+              sqlPreview: previewSql(sql),
+            });
             return;
           } catch (e) {
             lastErr = e as Error;
+            attempts.push({
+              source: s.binding,
+              mode,
+              builder: b.name,
+              ok: false,
+              rows: 0,
+              error: (e as Error).message?.slice(0, 480),
+              sqlPreview: previewSql(sql),
+            });
           }
         }
         throw lastErr ?? new Error("enriched SQL failed");
@@ -684,9 +738,30 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
           name,
           ipCol,
         );
-        const r = await runAeSql<RawIpRow>(env, sql, { binding: s.binding });
-        ipRowParts.push(r.data);
-        if (r.data.length > 0) hadAnyOk = true;
+        try {
+          const r = await runAeSql<RawIpRow>(env, sql, { binding: s.binding });
+          ipRowParts.push(r.data);
+          if (r.data.length > 0) hadAnyOk = true;
+          attempts.push({
+            source: s.binding,
+            mode,
+            builder: "simple (count only)",
+            ok: true,
+            rows: r.data.length,
+            sqlPreview: previewSql(sql),
+          });
+        } catch (e) {
+          attempts.push({
+            source: s.binding,
+            mode,
+            builder: "simple (count only)",
+            ok: false,
+            rows: 0,
+            error: (e as Error).message?.slice(0, 480),
+            sqlPreview: previewSql(sql),
+          });
+          throw e;
+        }
       };
       try {
         await tryEnrichedCascade();
@@ -762,6 +837,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         details: errors.slice(0, 4),
         hint: `Gleiche Quelle wie /image-url-requests-geo. Spalte für IP: ${ipCol} (Env IMAGE_URL_REQUESTS_IP_BLOB).`,
         engine: { name, days, ipColumn: ipCol, accounts: accountLabel },
+        debug: { attempts },
       },
       { status: 502 },
     );
@@ -793,6 +869,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
             ? "Einige Zeilen in der gewählten Spalte sind keine gültigen IPs (z. B. Pfade) — werden als „non-IP“ gezählt."
             : undefined,
       queryWarnings: errors.length > 0 ? errors : undefined,
+      debug: { attempts },
     },
     { status: 200 },
   );

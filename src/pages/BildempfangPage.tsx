@@ -12,12 +12,17 @@ const BildempfangScene = lazy(
 );
 
 /**
- * Bildempfang — Vollbild-3D-Szene auf MapLibre + deck.gl.
+ * Bildempfang — Vollbild-3D-Szene auf deck.gl.
  *
  * Bewusst kein zusätzlicher Header, keine Sidebar, keine Toolbar an der
  * Seite: der Seitenname steht schon im globalen `DashboardHeader`,
  * Detaildaten zur jeweiligen IP/Edge werden direkt am Punkt im
  * Click-Detail-Panel der Szene angezeigt (siehe `BildempfangScene`).
+ *
+ * Die rohen API-Daten (`ip.data`, `ip.error`, …) werden an die Scene
+ * mitgegeben, damit das eingebaute Debug-Panel die Engine-Versuche und
+ * Fehler aus `/image-url-requests-ip-breakdown` direkt im Frontend
+ * inspizieren kann (Bug-Button in der Toolbar).
  */
 export default function BildempfangPage() {
   const ipUrl = useMemo(() => imageUrlRequestsIpBreakdownUrl(), []);
@@ -42,7 +47,13 @@ export default function BildempfangPage() {
           />
         }
       >
-        <BildempfangScene ipMarkers={ipMarkers} />
+        <BildempfangScene
+          ipMarkers={ipMarkers}
+          apiResponse={ip.data}
+          apiError={ip.error}
+          apiLoading={ip.loading}
+          apiUrl={ipUrl}
+        />
       </Suspense>
     </div>
   );

@@ -21,6 +21,25 @@ export type ImageUrlIpRow = {
   status?: string;
 };
 
+/**
+ * Detail-Log eines einzelnen Engine-SQL-Versuchs. Wird vom Backend
+ * pro Builder/Mode/Source angehängt — perfekt für ein Debug-Panel,
+ * wenn keine Daten ankommen.
+ */
+export type ImageUrlIpBreakdownAttempt = {
+  source: string;
+  mode: string;
+  builder: string;
+  ok: boolean;
+  rows: number;
+  /** JSON.stringify der ersten Zeile (max ~240 chars), wenn vorhanden. */
+  sample?: string;
+  /** Fehlermeldung bei `ok=false`, gekürzt auf ~480 chars. */
+  error?: string;
+  /** Erste ~280 chars der ausgeführten SQL (eine Zeile). */
+  sqlPreview: string;
+};
+
 export type ImageUrlIpBreakdownResponse = {
   range: { from: string; to: string };
   days: number;
@@ -42,6 +61,7 @@ export type ImageUrlIpBreakdownResponse = {
   queryWarnings?: string[];
   error?: string;
   details?: string[];
+  debug?: { attempts: ImageUrlIpBreakdownAttempt[] };
 };
 
 export function imageUrlRequestsIpBreakdownUrl(

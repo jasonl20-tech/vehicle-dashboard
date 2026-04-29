@@ -9,6 +9,7 @@ import {
 import { TileLayer, TripsLayer } from "@deck.gl/geo-layers";
 import {
   Activity,
+  Bug,
   Maximize2,
   Minus,
   Plus,
@@ -16,12 +17,17 @@ import {
   Compass,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import type {
+  ImageUrlIpBreakdownAttempt,
+  ImageUrlIpBreakdownResponse,
+} from "../../lib/bildempfangIpApi";
 import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
 import { iataToLatLng } from "../../lib/iataEdgeCodes";
 import {
@@ -140,13 +146,25 @@ function buildTimestamps(): number[] {
 
 type Props = {
   ipMarkers: IpMapMarker[];
+  /** Roh-Response von `/image-url-requests-ip-breakdown` für das Debug-Panel. */
+  apiResponse?: ImageUrlIpBreakdownResponse | null;
+  apiError?: string | null;
+  apiLoading?: boolean;
+  apiUrl?: string;
 };
 
-export default function BildempfangScene({ ipMarkers }: Props) {
+export default function BildempfangScene({
+  ipMarkers,
+  apiResponse,
+  apiError,
+  apiLoading,
+  apiUrl,
+}: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [viewState, setViewState] = useState<MapViewState>(INITIAL_VIEW);
   const [selected, setSelected] = useState<IpMapMarker | null>(null);
   const [tripTime, setTripTime] = useState(0);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   // Animations-Loop für TripsLayer.currentTime — flüssiger Daten-Puls.
   useEffect(() => {
@@ -257,6 +275,36 @@ export default function BildempfangScene({ ipMarkers }: Props) {
     return out;
   }, [ipMarkers]);
 
+  // ---------- Zoom-abhängige Geometrie -----------------------------------
+  // Damit Säulen bei Welt-Zoom sichtbar sind und beim Reinzoomen nicht zum
+  // Wand-Block werden, skalieren wir Radius und Höhe mit `2^(refZoom - z)`.
+  const zoomScale = useMemo(() => {
+    const z = viewState.zoom ?? INITIAL_VIEW.zoom ?? 1.5;
+    const refZoom = 2.5;
+    return Math.pow(2, refZoom - z);
+  }, [viewState.zoom]);
+
+  const colRadius = useMemo(
+    () => Math.min(140_000, Math.max(700, 60_000 * zoomScale)),
+    [zoomScale],
+  );
+  const colElevationScale = useMemo(
+    () => Math.min(1.6, Math.max(0.05, zoomScale)),
+    [zoomScale],
+  );
+  const haloRadius = useMemo(
+    () => Math.min(220_000, Math.max(2000, 80_000 * zoomScale)),
+    [zoomScale],
+  );
+  const edgeHaloRadius = useMemo(
+    () => Math.min(280_000, Math.max(4000, 110_000 * zoomScale)),
+    [zoomScale],
+  );
+  const edgeCoreRadius = useMemo(
+    () => Math.min(60_000, Math.max(700, 22_000 * zoomScale)),
+    [zoomScale],
+  );
+
   // ---------- Layer-Bau --------------------------------------------------
   const layers = useMemo(() => {
     // CARTO-Dark-Raster-Tiles als Basemap.
@@ -290,9 +338,9 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       data: columnData,
       getPosition: (d) => d.position,
       getFillColor: (d) => d.haloColor,
-      getRadius: 50000,
+      getRadius: haloRadius,
       radiusMinPixels: 3,
-      radiusMaxPixels: 14,
+      radiusMaxPixels: 18,
       stroked: false,
       filled: true,
       pickable: false,
@@ -333,9 +381,9 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       data: edgeSites,
       getPosition: (s) => [s.pos[1], s.pos[0]],
       getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 55],
-      getRadius: 80000,
-      radiusMinPixels: 10,
-      radiusMaxPixels: 26,
+      getRadius: edgeHaloRadius,
+      radiusMinPixels: 8,
+      radiusMaxPixels: 30,
       stroked: true,
       getLineColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 220],
       getLineWidth: 1500,
@@ -348,9 +396,9 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       data: edgeSites,
       getPosition: (s) => [s.pos[1], s.pos[0]],
       getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 255],
-      getRadius: 18000,
-      radiusMinPixels: 3,
-      radiusMaxPixels: 5,
+      getRadius: edgeCoreRadius,
+      radiusMinPixels: 2,
+      radiusMaxPixels: 6,
       stroked: false,
       pickable: false,
     });
@@ -359,13 +407,13 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       id: "bg-ip-cols",
       data: columnData,
       diskResolution: 22,
-      radius: 28000,
+      radius: colRadius,
       radiusUnits: "meters",
       extruded: true,
       pickable: true,
       autoHighlight: true,
       highlightColor: [255, 255, 255, 60],
-      elevationScale: 1,
+      elevationScale: colElevationScale,
       getPosition: (d) => d.position,
       getFillColor: (d) => d.color,
       getElevation: (d) => d.elevation,
@@ -390,7 +438,18 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       edgeCoreLayer,
       columnLayer,
     ];
-  }, [columnData, arcData, tripData, edgeSites, tripTime]);
+  }, [
+    columnData,
+    arcData,
+    tripData,
+    edgeSites,
+    tripTime,
+    colRadius,
+    colElevationScale,
+    haloRadius,
+    edgeHaloRadius,
+    edgeCoreRadius,
+  ]);
 
   // ---------- Toolbar-Aktionen ------------------------------------------
   const zoomBy = useCallback((delta: number) => {
@@ -495,6 +554,24 @@ export default function BildempfangScene({ ipMarkers }: Props) {
         >
           <Maximize2 className="h-4 w-4" />
         </button>
+        <button
+          type="button"
+          className="bg-scene__btn"
+          aria-label="Debug-Logs anzeigen"
+          aria-pressed={debugOpen}
+          onClick={() => setDebugOpen((v) => !v)}
+          style={
+            debugOpen
+              ? {
+                  background: "rgba(34, 211, 238, 0.18)",
+                  borderColor: "rgba(34, 211, 238, 0.7)",
+                  color: "#e6fbff",
+                }
+              : undefined
+          }
+        >
+          <Bug className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Legende */}
@@ -511,6 +588,20 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       {/* Detail-Panel rechts */}
       {selected && (
         <DetailPanel marker={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {/* Debug-Panel — zeigt Engine-Versuche, Errors, Sample-Row, SQL-Preview. */}
+      {debugOpen && (
+        <DebugPanel
+          response={apiResponse ?? null}
+          error={apiError ?? null}
+          loading={!!apiLoading}
+          url={apiUrl}
+          ipMarkersCount={ipMarkers.length}
+          edgeSitesCount={edgeSites.length}
+          zoom={viewState.zoom ?? 0}
+          onClose={() => setDebugOpen(false)}
+        />
       )}
 
       {/* Empty-Hinweis, wenn keine Marker */}
@@ -615,5 +706,398 @@ function DetailPanel({
         </dd>
       </dl>
     </aside>
+  );
+}
+
+function DebugPanel({
+  response,
+  error,
+  loading,
+  url,
+  ipMarkersCount,
+  edgeSitesCount,
+  zoom,
+  onClose,
+}: {
+  response: ImageUrlIpBreakdownResponse | null;
+  error: string | null;
+  loading: boolean;
+  url?: string;
+  ipMarkersCount: number;
+  edgeSitesCount: number;
+  zoom: number;
+  onClose: () => void;
+}) {
+  const attempts: ImageUrlIpBreakdownAttempt[] =
+    response?.debug?.attempts ?? [];
+  const sample = (response?.rows ?? [])[0];
+
+  const copyJson = () => {
+    try {
+      const text = JSON.stringify(
+        { url, error, response },
+        null,
+        2,
+      );
+      void navigator.clipboard.writeText(text);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <aside
+      className="bg-detail"
+      role="dialog"
+      aria-label="Debug-Logs"
+      style={{
+        right: 60,
+        width: 460,
+        maxWidth: "calc(100% - 80px)",
+        maxHeight: "calc(100% - 28px)",
+        overflow: "auto",
+      }}
+    >
+      <div className="bg-detail__head">
+        <div className="min-w-0">
+          <div className="bg-detail__title">Debug · Bildempfang</div>
+          <div className="bg-detail__sub">
+            {loading
+              ? "lädt…"
+              : error
+                ? `Error: ${error}`
+                : "API-Antwort + Engine-Versuche"}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="bg-detail__close"
+            aria-label="JSON kopieren"
+            title="JSON kopieren"
+            onClick={copyJson}
+            style={{ width: "auto", padding: "0 8px", fontSize: 11 }}
+          >
+            JSON
+          </button>
+          <button
+            type="button"
+            className="bg-detail__close"
+            aria-label="Schließen"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      <div style={{ padding: "10px 14px 4px" }}>
+        <DebugSection title="Übersicht">
+          <DebugKV
+            entries={[
+              ["URL", url ?? "—"],
+              ["Loading", loading ? "true" : "false"],
+              ["Error", error ?? "—"],
+              ["IP-Marker (Frontend)", String(ipMarkersCount)],
+              ["Edges (Frontend)", String(edgeSitesCount)],
+              ["Zoom (View)", zoom.toFixed(2)],
+            ]}
+          />
+        </DebugSection>
+
+        {response?.engine && (
+          <DebugSection title="Engine">
+            <DebugKV
+              entries={[
+                ["Dataset", response.engine.name],
+                ["Modes geprüft", response.engine.modesTried.join(", ")],
+                ["Accounts", response.engine.accounts],
+                ["IP-Spalte", response.engine.ipColumn],
+                ["Range", response.range
+                  ? `${response.range.from} → ${response.range.to}`
+                  : "—"],
+                ["Days", response.days != null ? String(response.days) : "—"],
+              ]}
+            />
+          </DebugSection>
+        )}
+
+        {response?.totals && (
+          <DebugSection title="Totals">
+            <DebugKV
+              entries={[
+                ["IPv4 Requests", String(response.totals.v4)],
+                ["IPv6 Requests", String(response.totals.v6)],
+                ["non-IP Requests", String(response.totals.nonIp)],
+                ["Eindeutige IP-Zeilen", String(response.totals.uniqueIpRows)],
+                ["Total Requests", String(response.totals.requests)],
+              ]}
+            />
+          </DebugSection>
+        )}
+
+        {response?.hint && (
+          <DebugSection title="Hint">
+            <div
+              style={{
+                fontSize: 11,
+                color: "rgba(255, 220, 130, 0.92)",
+                background: "rgba(255, 200, 90, 0.08)",
+                border: "1px solid rgba(255, 200, 90, 0.25)",
+                borderRadius: 4,
+                padding: "6px 8px",
+                lineHeight: 1.45,
+              }}
+            >
+              {response.hint}
+            </div>
+          </DebugSection>
+        )}
+
+        {response?.queryWarnings && response.queryWarnings.length > 0 && (
+          <DebugSection title="Query-Warnings">
+            <ul
+              style={{
+                fontSize: 11,
+                lineHeight: 1.5,
+                color: "rgba(255, 200, 110, 0.95)",
+                margin: 0,
+                paddingLeft: 16,
+              }}
+            >
+              {response.queryWarnings.map((w, i) => (
+                <li
+                  key={i}
+                  style={{ wordBreak: "break-word", marginBottom: 4 }}
+                >
+                  {w}
+                </li>
+              ))}
+            </ul>
+          </DebugSection>
+        )}
+
+        {sample && (
+          <DebugSection title="Sample-Row (erste IP, vom Backend gesehen)">
+            <pre
+              style={{
+                margin: 0,
+                fontFamily:
+                  "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                fontSize: 10.5,
+                lineHeight: 1.4,
+                color: "rgba(186, 232, 240, 0.85)",
+                background: "rgba(0,0,0,0.35)",
+                border: "1px solid rgba(34,211,238,0.18)",
+                borderRadius: 4,
+                padding: "6px 8px",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {JSON.stringify(sample, null, 2)}
+            </pre>
+          </DebugSection>
+        )}
+
+        <DebugSection
+          title={`SQL-Versuche (${attempts.length})`}
+          subtitle="Erste OK-Variante hat gewonnen — alle davorigen Errors sind hier dokumentiert."
+        >
+          {attempts.length === 0 && (
+            <div
+              style={{ fontSize: 11, color: "rgba(186, 232, 240, 0.5)" }}
+            >
+              Keine Versuche aufgezeichnet (Backend hat nichts geliefert).
+            </div>
+          )}
+          {attempts.map((a, i) => (
+            <div
+              key={i}
+              style={{
+                marginBottom: 8,
+                border: `1px solid ${a.ok ? "rgba(34,211,238,0.25)" : "rgba(217,70,239,0.4)"}`,
+                background: a.ok
+                  ? "rgba(34,211,238,0.05)"
+                  : "rgba(217,70,239,0.06)",
+                borderRadius: 4,
+                padding: "6px 8px",
+                fontSize: 11,
+                lineHeight: 1.4,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  alignItems: "baseline",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontWeight: 600,
+                    color: a.ok ? "rgb(125,225,238)" : "rgb(228,150,245)",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  {a.ok ? "OK" : "FAIL"} · {a.builder}
+                </span>
+                <span style={{ color: "rgba(186,232,240,0.6)" }}>
+                  source={a.source} · mode={a.mode} · rows={a.rows}
+                </span>
+              </div>
+              {a.error && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    color: "rgb(245, 175, 235)",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {a.error}
+                </div>
+              )}
+              {a.sample && (
+                <div
+                  style={{
+                    marginTop: 4,
+                    color: "rgba(186,232,240,0.85)",
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: 10,
+                    wordBreak: "break-word",
+                  }}
+                >
+                  sample: {a.sample}
+                </div>
+              )}
+              <details style={{ marginTop: 4 }}>
+                <summary
+                  style={{
+                    cursor: "pointer",
+                    color: "rgba(186,232,240,0.5)",
+                    fontSize: 10.5,
+                  }}
+                >
+                  SQL anzeigen
+                </summary>
+                <pre
+                  style={{
+                    margin: "4px 0 0",
+                    fontFamily:
+                      "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontSize: 10,
+                    color: "rgba(186, 232, 240, 0.75)",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {a.sqlPreview}
+                </pre>
+              </details>
+            </div>
+          ))}
+        </DebugSection>
+
+        {response?.details && response.details.length > 0 && (
+          <DebugSection title="Details (502)">
+            <ul
+              style={{
+                fontSize: 11,
+                lineHeight: 1.5,
+                color: "rgb(245,175,235)",
+                margin: 0,
+                paddingLeft: 16,
+              }}
+            >
+              {response.details.map((d, i) => (
+                <li
+                  key={i}
+                  style={{ wordBreak: "break-word", marginBottom: 4 }}
+                >
+                  {d}
+                </li>
+              ))}
+            </ul>
+          </DebugSection>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function DebugSection({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section style={{ marginBottom: 12 }}>
+      <div
+        style={{
+          fontFamily:
+            "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: "rgba(34, 211, 238, 0.85)",
+          marginBottom: 4,
+        }}
+      >
+        {title}
+      </div>
+      {subtitle && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "rgba(186,232,240,0.55)",
+            marginBottom: 6,
+            lineHeight: 1.4,
+          }}
+        >
+          {subtitle}
+        </div>
+      )}
+      {children}
+    </section>
+  );
+}
+
+function DebugKV({ entries }: { entries: [string, string][] }) {
+  return (
+    <dl
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto minmax(0, 1fr)",
+        gap: "4px 12px",
+        margin: 0,
+        fontSize: 11,
+      }}
+    >
+      {entries.map(([k, v], i) => (
+        <Fragment key={i}>
+          <dt style={{ color: "rgba(186,232,240,0.55)" }}>{k}</dt>
+          <dd
+            style={{
+              margin: 0,
+              color: "rgba(186,232,240,0.95)",
+              fontFamily:
+                "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+              wordBreak: "break-word",
+            }}
+          >
+            {v}
+          </dd>
+        </Fragment>
+      ))}
+    </dl>
   );
 }
