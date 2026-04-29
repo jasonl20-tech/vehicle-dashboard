@@ -1,34 +1,40 @@
 /**
- * Asset-Liste.
+ * Asset-Listen-Endpoint — direkt gegen R2.
  *
  *   GET /api/assets?folder=&q=&limit=&offset=&sort=
- *     → { rows, total, limit, offset, public_base, folder }
+ *     → { rows, total, limit, offset, folder, public_base }
  *
- * Filter:
- *   - `folder`  → exakter Folder-Pfad (Default: ""=Root). Listet nur
- *                  Direkt-Kinder, keine rekursive Sub-Ordner-Inhalte.
- *   - `q`       → freitext-Suche über `name`, `alt_text`, `description`
- *                  (case-insensitive). Wenn gesetzt, werden Ordner
- *                  ignoriert und die Suche geht über ALLE Folders.
- *   - `sort`    → "newest" (default), "name", "size"
- *   - `limit`   → 1..200 (Default: 100)
- *   - `offset`  → ≥ 0
+ * Verhalten:
+ *   - Ohne `q`: listet die DIREKTEN Kinder von `folder` (delimited list).
+ *     Sub-Folders erscheinen als `kind:"folder"`-Einträge.
+ *   - Mit `q`: rekursive Suche über alle Schlüssel mit Prefix `folder`,
+ *     filtert nach Substring (case-insensitive) im Namen.
+ *   - `sort`: "newest" (default, nach `uploaded`), "name", "size".
+ *   - `limit`/`offset`: clientseitige Slicing-Parameter (R2 paginiert
+ *     intern selbst über cursor).
+ *
+ * Hinweis: R2 liefert pro Aufruf max. 1000 Objekte. `_lib/assets.ts:
+ * listAllUnderPrefix` paginiert bis 5000, was für Email-Asset-Mengen
+ * mehr als ausreicht. Sollte das ausgereizt werden, gibt's eine `next`-
+ * Marke im Response (TODO falls nötig).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 import {
   ASSETS_DEFAULT_PUBLIC_BASE,
   HIDDEN_NAMES,
+  isHidden,
+  listAllUnderPrefix,
   normalizeFolder,
-  rowToAsset,
-  requireBindings,
-  tableMissingHint,
+  publicBase,
+  r2ObjectToAsset,
+  requireAssetsBucket,
+  splitKey,
+  syntheticFolder,
   type AssetRow,
 } from "../../_lib/assets";
 
-const MAX_LIMIT = 200;
-const DEFAULT_LIMIT = 100;
-
-type DbRow = Omit<AssetRow, "url">;
+const MAX_LIMIT = 500;
+const DEFAULT_LIMIT = 200;
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -38,19 +44,17 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
-  const fail = requireBindings(env);
-  if (fail) return fail;
+  const bucketOrErr = requireAssetsBucket(env);
+  if (bucketOrErr instanceof Response) return bucketOrErr;
+  const bucket = bucketOrErr;
 
   const url = new URL(request.url);
-  const q = (url.searchParams.get("q") || "").trim();
+  const q = (url.searchParams.get("q") || "").trim().toLowerCase();
   let folder = "";
   try {
     folder = normalizeFolder(url.searchParams.get("folder") || "");
   } catch (e) {
-    return jsonResponse(
-      { error: (e as Error).message },
-      { status: 400 },
-    );
+    return jsonResponse({ error: (e as Error).message }, { status: 400 });
   }
   const limit = Math.min(
     MAX_LIMIT,
@@ -64,75 +68,74 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     Number(url.searchParams.get("offset") || 0) || 0,
   );
   const sortKey = url.searchParams.get("sort") || "newest";
-  const order =
-    sortKey === "name"
-      ? "kind DESC, name COLLATE NOCASE ASC"
-      : sortKey === "size"
-        ? "kind DESC, size DESC"
-        : "kind DESC, datetime(uploaded_at) DESC";
 
-  const where: string[] = [];
-  const binds: (string | number)[] = [];
-
-  if (q) {
-    const pat = `%${q.replace(/[%_]/g, "")}%`;
-    where.push(
-      "(name LIKE ? COLLATE NOCASE OR IFNULL(alt_text,'') LIKE ? COLLATE NOCASE OR IFNULL(description,'') LIKE ? COLLATE NOCASE)",
-    );
-    binds.push(pat, pat, pat);
-  } else {
-    // Nur Direktkinder des Folders. Ein leerer folder = Root.
-    where.push("folder = ?");
-    binds.push(folder);
-  }
-
-  // Marker-/Hidden-Files niemals listen.
-  if (HIDDEN_NAMES.size > 0) {
-    const placeholders = Array.from(HIDDEN_NAMES)
-      .map(() => "?")
-      .join(",");
-    where.push(`name NOT IN (${placeholders})`);
-    for (const n of HIDDEN_NAMES) binds.push(n);
-  }
-
-  const whereSql = ` WHERE ${where.join(" AND ")}`;
+  const prefix = folder ? `${folder}/` : "";
 
   try {
-    const total =
-      (
-        await env
-          .website!.prepare(`SELECT COUNT(*) AS n FROM assets${whereSql}`)
-          .bind(...binds)
-          .first<{ n: number }>()
-      )?.n ?? 0;
+    const rows: AssetRow[] = [];
 
-    const { results } = await env
-      .website!.prepare(
-        `SELECT id, key, folder, name, size, content_type, kind, alt_text, description,
-                uploaded_by, uploaded_at, updated_at
-         FROM assets${whereSql}
-         ORDER BY ${order}
-         LIMIT ? OFFSET ?`,
-      )
-      .bind(...binds, limit, offset)
-      .all<DbRow>();
+    if (q) {
+      // Rekursiv durchsuchen
+      const { objects } = await listAllUnderPrefix(bucket, prefix);
+      for (const obj of objects) {
+        const { name } = splitKey(obj.key);
+        if (isHidden(name)) continue;
+        if (!name.toLowerCase().includes(q)) continue;
+        rows.push(r2ObjectToAsset(env, obj));
+      }
+    } else {
+      // Nur direkte Kinder
+      const { objects, delimitedPrefixes } = await listAllUnderPrefix(
+        bucket,
+        prefix,
+        { delimiter: "/" },
+      );
+
+      // Files
+      for (const obj of objects) {
+        const { name } = splitKey(obj.key);
+        if (isHidden(name)) continue;
+        rows.push(r2ObjectToAsset(env, obj));
+      }
+
+      // Folders aus delimitedPrefixes
+      for (const p of delimitedPrefixes) {
+        const path = p.replace(/\/+$/, "");
+        if (!path) continue;
+        rows.push(syntheticFolder(env, path));
+      }
+    }
+
+    // Sortierung
+    rows.sort((a, b) => {
+      // Folders immer oben
+      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
+      if (sortKey === "name") {
+        return a.name.localeCompare(b.name, "de", { sensitivity: "base" });
+      }
+      if (sortKey === "size") {
+        return b.size - a.size;
+      }
+      // newest
+      return b.uploaded_at.localeCompare(a.uploaded_at);
+    });
+
+    const total = rows.length;
+    const sliced = rows.slice(offset, offset + limit);
 
     return jsonResponse({
-      rows: (results ?? []).map((r) => rowToAsset(env, r)),
+      rows: sliced,
       total,
       limit,
       offset,
       folder,
-      public_base: env.ASSETS_PUBLIC_BASE || ASSETS_DEFAULT_PUBLIC_BASE,
+      public_base: publicBase(env) || ASSETS_DEFAULT_PUBLIC_BASE,
+      hidden: Array.from(HIDDEN_NAMES),
     });
   } catch (e) {
-    const hint = tableMissingHint(e);
     return jsonResponse(
-      {
-        error: (e as Error).message || String(e),
-        ...(hint ? { hint } : null),
-      },
-      { status: hint ? 503 : 500 },
+      { error: (e as Error).message || String(e) },
+      { status: 500 },
     );
   }
 };

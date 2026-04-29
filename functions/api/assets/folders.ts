@@ -1,30 +1,36 @@
 /**
- * Folder-Operations.
+ * Folder-Operationen — abgeleitet aus den R2-Object-Keys.
  *
- *   GET  /api/assets/folders
- *     → { folders: { path, parent, count }[] }
- *     Liefert ALLE bekannten Folder (von Root abwärts), inklusive ihrer
- *     direkten Kinder-Anzahl. Reicht für einen Folder-Tree mit Lazy-
- *     Expansion.
+ *   GET    /api/assets/folders
+ *     → { folders: { path, name, parent, count }[] }
+ *     Listet alle bekannten Ordnerpfade. Ein Ordner existiert, sobald
+ *     mindestens ein Objekt mit dem entsprechenden Prefix vorliegt
+ *     (inkl. der `<folder>/.keep`-Marker für leere Ordner).
  *
- *   POST /api/assets/folders   { path: "email/team" }
- *     → 201 mit dem neuen Folder-Marker
- *     Legt einen leeren Ordner an (D1-Eintrag mit kind='folder' ohne R2-
- *     Object). Ist der Ordner durch eine Datei sowieso schon "implizit"
- *     vorhanden, ist die Operation idempotent.
+ *   POST   /api/assets/folders   { path: "email/team" }
+ *     → 201 mit dem Marker-Asset (`<folder>/.keep`)
+ *     Legt einen leeren Ordner an, indem ein 0-Byte-Marker
+ *     `<path>/.keep` mit `customMetadata.foldermarker=1` hochgeladen
+ *     wird. Idempotent — falls der Marker schon existiert.
+ *
+ *   DELETE /api/assets/folders?path=email/team&recursive=1
+ *     → 204
+ *     Ohne `recursive=1`: nur möglich, wenn der Ordner leer ist
+ *     (max. der `.keep`-Marker drin). Mit `recursive=1`: löscht ALLE
+ *     Objekte unter dem Prefix.
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 import {
+  FOLDER_MARKER,
+  buildCustomMetadata,
+  isHidden,
   joinKey,
+  listAllUnderPrefix,
   normalizeFolder,
-  requireBindings,
-  rowToAsset,
+  r2ObjectToAsset,
+  requireAssetsBucket,
   splitKey,
-  tableMissingHint,
-  type AssetRow,
 } from "../../_lib/assets";
-
-type DbRow = Omit<AssetRow, "url">;
 
 /** Erzeugt aus `email/team/sub` die Liste aller übergeordneten Pfade
  *  (`email`, `email/team`, `email/team/sub`). */
@@ -48,79 +54,45 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
-  const fail = requireBindings(env);
-  if (fail) return fail;
+  const bucketOrErr = requireAssetsBucket(env);
+  if (bucketOrErr instanceof Response) return bucketOrErr;
+  const bucket = bucketOrErr;
 
   try {
-    // Ein Ordner ist entweder explizit als kind='folder'-Datensatz
-    // angelegt, oder implizit durch mindestens eine Datei mit
-    // folder=<pfad> präsent. Wir sammeln beide Quellen.
-    const explicit = await env
-      .website!.prepare(
-        `SELECT id, key AS path FROM assets WHERE kind = 'folder' ORDER BY key`,
-      )
-      .all<{ id: number; path: string }>();
-
-    const implicit = await env
-      .website!.prepare(
-        `SELECT DISTINCT folder AS path FROM assets WHERE folder != '' ORDER BY folder`,
-      )
-      .all<{ path: string }>();
+    // Wir listen ALLE Objekte (paginiert intern bis 5000) und leiten die
+    // Folder-Struktur aus den Keys ab. Für Email-Asset-Mengen ausreichend.
+    const { objects } = await listAllUnderPrefix(bucket, "");
 
     const pathSet = new Set<string>();
-    const explicitIds = new Map<string, number>();
-    for (const r of explicit.results ?? []) {
-      if (r.path) {
-        pathSet.add(r.path);
-        explicitIds.set(r.path, r.id);
+    const directCounts = new Map<string, number>();
+
+    for (const obj of objects) {
+      const { folder, name } = splitKey(obj.key);
+      if (folder) {
+        for (const p of expandPaths(folder)) pathSet.add(p);
       }
-    }
-    for (const r of implicit.results ?? []) {
-      if (r.path) {
-        // Auch alle Eltern-Pfade zur Set hinzufügen, damit der
-        // Tree konsistent ist (`email/team/sub` impliziert `email`
-        // und `email/team`).
-        for (const p of expandPaths(r.path)) pathSet.add(p);
+      // Direkt-Kinder zählen (Marker ausnehmen)
+      if (folder && !isHidden(name)) {
+        directCounts.set(folder, (directCounts.get(folder) ?? 0) + 1);
       }
     }
 
     const paths = Array.from(pathSet).sort();
-    // Pro Folder: Kinder-Anzahl (nur direkte Kinder)
-    const counts = new Map<string, number>();
-    if (paths.length > 0) {
-      const placeholders = paths.map(() => "?").join(",");
-      const { results } = await env
-        .website!.prepare(
-          `SELECT folder, COUNT(*) AS n
-             FROM assets
-            WHERE folder IN (${placeholders})
-              AND name NOT IN ('.keep', '.placeholder')
-            GROUP BY folder`,
-        )
-        .bind(...paths)
-        .all<{ folder: string; n: number }>();
-      for (const r of results ?? []) {
-        counts.set(r.folder, r.n);
-      }
-    }
-
     const folders = paths.map((path) => {
       const { folder: parent, name } = splitKey(path);
       return {
         path,
         name,
         parent: parent || null,
-        count: counts.get(path) ?? 0,
-        id: explicitIds.get(path) ?? null,
+        count: directCounts.get(path) ?? 0,
       };
     });
 
     return jsonResponse({ folders });
   } catch (e) {
-    const hint = tableMissingHint(e);
     return jsonResponse(
-      { error: (e as Error).message, ...(hint ? { hint } : null) },
-      { status: hint ? 503 : 500 },
+      { error: (e as Error).message || String(e) },
+      { status: 500 },
     );
   }
 };
@@ -135,8 +107,9 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
-  const fail = requireBindings(env);
-  if (fail) return fail;
+  const bucketOrErr = requireAssetsBucket(env);
+  if (bucketOrErr instanceof Response) return bucketOrErr;
+  const bucket = bucketOrErr;
 
   let body: PostBody;
   try {
@@ -159,82 +132,87 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   try {
-    // Existiert bereits ein Folder-Marker oder eine Datei in diesem Ordner?
-    const existsMarker = await env
-      .website!.prepare(
-        "SELECT id FROM assets WHERE kind = 'folder' AND key = ? LIMIT 1",
-      )
-      .bind(path)
-      .first<{ id: number }>();
-    if (existsMarker) {
-      const row = await env
-        .website!.prepare(
-          `SELECT id, key, folder, name, size, content_type, kind, alt_text,
-                  description, uploaded_by, uploaded_at, updated_at
-             FROM assets WHERE id = ? LIMIT 1`,
-        )
-        .bind(existsMarker.id)
-        .first<DbRow>();
-      if (row) return jsonResponse(rowToAsset(env, row));
+    const markerKey = joinKey(path, FOLDER_MARKER);
+    const existing = await bucket.head(markerKey);
+    if (existing) {
+      return jsonResponse(r2ObjectToAsset(env, existing));
     }
-
-    const { folder: parent, name } = splitKey(path);
-    await env
-      .website!.prepare(
-        `INSERT INTO assets (
-           key, folder, name, size, content_type, kind, uploaded_by, uploaded_at, updated_at
-         ) VALUES (?, ?, ?, 0, 'inode/directory', 'folder', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      )
-      .bind(path, parent, name, user.id)
-      .run();
-
-    // Marker in R2 anlegen (nicht zwingend, hilft aber bei direkter
-    // R2-Inspektion). Wir legen `<path>/.keep` mit 0-Bytes an. Dieser
-    // Marker hat KEINEN D1-Eintrag und wird vom Listing-Filter
-    // ausgeblendet (HIDDEN_NAMES enthält `.keep`).
-    try {
-      await env.assets!.put(joinKey(path, ".keep"), new Uint8Array(0), {
-        httpMetadata: { contentType: "text/plain" },
-        customMetadata: { folderMarker: "1" },
-      });
-    } catch {
-      // R2 nicht erreichbar → der D1-Eintrag reicht; Folder ist trotzdem
-      // sichtbar im Browser.
-    }
-
-    const row = await env
-      .website!.prepare(
-        `SELECT id, key, folder, name, size, content_type, kind, alt_text,
-                description, uploaded_by, uploaded_at, updated_at
-           FROM assets WHERE key = ? LIMIT 1`,
-      )
-      .bind(path)
-      .first<DbRow>();
-    if (!row) {
+    const written = await bucket.put(markerKey, new Uint8Array(0), {
+      httpMetadata: {
+        contentType: "text/plain",
+        cacheControl: "no-store",
+      },
+      customMetadata: buildCustomMetadata({
+        folderMarker: true,
+        uploadedBy: user.id,
+      }),
+    });
+    if (!written) {
       return jsonResponse(
-        { error: "Folder verschwunden nach Insert" },
-        { status: 500 },
+        { error: "Folder-Marker konnte nicht angelegt werden" },
+        { status: 502 },
       );
     }
-    return jsonResponse(rowToAsset(env, row), { status: 201 });
+    return jsonResponse(r2ObjectToAsset(env, written), { status: 201 });
   } catch (e) {
-    const msg = (e as Error).message;
-    if (msg && (msg.includes("UNIQUE") || msg.includes("unique"))) {
-      // Race-Bedingung: gleichzeitig angelegt — wir werten es als idempotent.
-      const row = await env
-        .website!.prepare(
-          `SELECT id, key, folder, name, size, content_type, kind, alt_text,
-                  description, uploaded_by, uploaded_at, updated_at
-             FROM assets WHERE key = ? LIMIT 1`,
-        )
-        .bind(path)
-        .first<DbRow>();
-      if (row) return jsonResponse(rowToAsset(env, row));
+    return jsonResponse({ error: (e as Error).message }, { status: 500 });
+  }
+};
+
+export const onRequestDelete: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  const bucketOrErr = requireAssetsBucket(env);
+  if (bucketOrErr instanceof Response) return bucketOrErr;
+  const bucket = bucketOrErr;
+
+  const url = new URL(request.url);
+  let path: string;
+  try {
+    path = normalizeFolder(url.searchParams.get("path") || "");
+  } catch (e) {
+    return jsonResponse({ error: (e as Error).message }, { status: 400 });
+  }
+  if (!path) {
+    return jsonResponse({ error: "path fehlt" }, { status: 400 });
+  }
+  const recursive = url.searchParams.get("recursive") === "1";
+
+  try {
+    // Alle Keys unter dem Prefix sammeln
+    const prefix = `${path}/`;
+    const { objects } = await listAllUnderPrefix(bucket, prefix);
+    const realChildren = objects.filter((o) => {
+      const { name } = splitKey(o.key);
+      return !isHidden(name);
+    });
+
+    if (realChildren.length > 0 && !recursive) {
+      return jsonResponse(
+        {
+          error: `Ordner \`${path}\` ist nicht leer (${realChildren.length} Datei${realChildren.length === 1 ? "" : "en"})`,
+          hint: "Setze recursive=1, um den Ordner mit allen Inhalten zu löschen.",
+        },
+        { status: 409 },
+      );
     }
-    const hint = tableMissingHint(e);
+
+    // Alle Objekte (auch Marker) unter dem Prefix löschen
+    const keys = objects.map((o) => o.key);
+    if (keys.length > 0) {
+      // R2 hat einen Bulk-Delete: `bucket.delete(keys: string[])`.
+      await bucket.delete(keys);
+    }
+    return new Response(null, { status: 204 });
+  } catch (e) {
     return jsonResponse(
-      { error: msg, ...(hint ? { hint } : null) },
-      { status: hint ? 503 : 500 },
+      { error: `Folder-Delete fehlgeschlagen: ${(e as Error).message}` },
+      { status: 502 },
     );
   }
 };

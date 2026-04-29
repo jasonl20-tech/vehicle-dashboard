@@ -2,14 +2,18 @@
  * Frontend-Client für die Asset-Manager-API
  * (`functions/api/assets/*`).
  *
- * Public-URLs werden vom Server bereits in jeder Asset-Zeile (`url`)
- * mitgeliefert, basierend auf `assets.vehicleimagery.com`.
+ * Datenquelle ist der R2-Bucket `env.assets` (Custom-Domain
+ * `assets.vehicleimagery.com`). Die "ID" eines Assets ist der R2-Key
+ * (z. B. `email/banner.png`). Folders sind virtuell (abgeleitet aus
+ * Slash-Trennung der Keys); leere Folders werden über einen
+ * `<folder>/.keep`-Marker repräsentiert.
  */
 
 export const ASSETS_API = "/api/assets" as const;
 
 export type Asset = {
-  id: number;
+  /** R2-Object-Key — gleichzeitig der eindeutige Identifier. */
+  id: string;
   key: string;
   folder: string;
   name: string;
@@ -18,11 +22,12 @@ export type Asset = {
   kind: "file" | "folder";
   alt_text: string | null;
   description: string | null;
-  uploaded_by: number | null;
+  uploaded_by: string | null;
   uploaded_at: string;
   updated_at: string;
-  /** Öffentliche URL (Custom-Domain auf den R2-Bucket). */
+  /** Öffentliche URL via Custom-Domain. */
   url: string;
+  etag: string | null;
 };
 
 export type AssetListResponse = {
@@ -32,6 +37,7 @@ export type AssetListResponse = {
   offset: number;
   folder: string;
   public_base: string;
+  hidden: string[];
 };
 
 export type AssetFolder = {
@@ -39,8 +45,6 @@ export type AssetFolder = {
   name: string;
   parent: string | null;
   count: number;
-  /** Wenn der Ordner explizit als Marker existiert (für Delete) */
-  id: number | null;
 };
 
 export type AssetFoldersResponse = {
@@ -111,6 +115,27 @@ export async function createFolder(path: string): Promise<Asset> {
   return asJson<Asset>(res);
 }
 
+export async function deleteFolder(
+  path: string,
+  opts: { recursive?: boolean } = {},
+): Promise<void> {
+  const params = new URLSearchParams({ path });
+  if (opts.recursive) params.set("recursive", "1");
+  const res = await fetch(`${ASSETS_API}/folders?${params.toString()}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const j = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      hint?: string;
+    };
+    const parts: string[] = [j.error || `HTTP ${res.status}`];
+    if (j.hint) parts.push(`Hinweis: ${j.hint}`);
+    throw new Error(parts.join(" • "));
+  }
+}
+
 export async function uploadAsset(input: {
   file: File;
   folder?: string;
@@ -118,7 +143,6 @@ export async function uploadAsset(input: {
   alt_text?: string;
   description?: string;
   overwrite?: boolean;
-  /** Optional: Progress-Callback (XHR fallback). */
   onProgress?: (loaded: number, total: number) => void;
   signal?: AbortSignal;
 }): Promise<Asset> {
@@ -184,8 +208,17 @@ function uploadWithProgress(
   });
 }
 
+function itemUrl(key: string): string {
+  return `${ASSETS_API}/item?key=${encodeURIComponent(key)}`;
+}
+
+export async function getAsset(key: string): Promise<Asset> {
+  const res = await fetch(itemUrl(key), { credentials: "include" });
+  return asJson<Asset>(res);
+}
+
 export async function updateAsset(
-  id: number,
+  key: string,
   patch: {
     name?: string;
     folder?: string;
@@ -193,7 +226,7 @@ export async function updateAsset(
     description?: string | null;
   },
 ): Promise<Asset> {
-  const res = await fetch(`${ASSETS_API}/${id}`, {
+  const res = await fetch(itemUrl(key), {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -202,8 +235,8 @@ export async function updateAsset(
   return asJson<Asset>(res);
 }
 
-export async function deleteAsset(id: number): Promise<void> {
-  const res = await fetch(`${ASSETS_API}/${id}`, {
+export async function deleteAsset(key: string): Promise<void> {
+  const res = await fetch(itemUrl(key), {
     method: "DELETE",
     credentials: "include",
   });
@@ -218,12 +251,10 @@ export async function deleteAsset(id: number): Promise<void> {
   }
 }
 
-/** Liefert true, wenn der Content-Type ein Bild ist. */
 export function isImage(asset: { content_type: string }): boolean {
   return asset.content_type.startsWith("image/");
 }
 
-/** Liefert true, wenn der Content-Type Video ist. */
 export function isVideo(asset: { content_type: string }): boolean {
   return asset.content_type.startsWith("video/");
 }

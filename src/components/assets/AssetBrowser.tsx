@@ -58,6 +58,7 @@ import {
   type AssetFolder,
   createFolder as apiCreateFolder,
   deleteAsset,
+  deleteFolder,
   formatBytes,
   isImage,
   isVideo,
@@ -118,7 +119,7 @@ export default function AssetBrowser({
   const [uploads, setUploads] = useState<UploadJob[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
-  const [renameId, setRenameId] = useState<number | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [dragActive, setDragActive] = useState(false);
 
@@ -299,8 +300,47 @@ export default function AssetBrowser({
 
   const onDeleteAsset = useCallback(
     async (a: Asset) => {
-      const label = a.kind === "folder" ? `den Ordner` : `die Datei`;
-      if (!window.confirm(`${a.kind === "folder" ? `Ordner \`${a.key}\`` : `Datei \`${a.name}\``} wirklich löschen?\n\nDies kann nicht rückgängig gemacht werden.`)) {
+      if (a.kind === "folder") {
+        if (
+          !window.confirm(
+            `Ordner \`${a.key}\` wirklich löschen?\n\nDies kann nicht rückgängig gemacht werden.`,
+          )
+        ) {
+          return;
+        }
+        try {
+          await deleteFolder(a.key);
+          setAssets((arr) => arr.filter((x) => x.id !== a.id));
+          if (selected?.id === a.id) setSelected(null);
+          reloadFolders();
+        } catch (e) {
+          const msg = (e as Error).message;
+          if (
+            /nicht leer/i.test(msg) &&
+            window.confirm(
+              `${msg}\n\nMöchtest du den Ordner inkl. aller Dateien rekursiv löschen?`,
+            )
+          ) {
+            try {
+              await deleteFolder(a.key, { recursive: true });
+              setAssets((arr) => arr.filter((x) => x.id !== a.id));
+              if (selected?.id === a.id) setSelected(null);
+              reloadFolders();
+              reloadAssets();
+            } catch (e2) {
+              alert(`Ordner-Delete fehlgeschlagen: ${(e2 as Error).message}`);
+            }
+            return;
+          }
+          alert(`Ordner-Delete fehlgeschlagen: ${msg}`);
+        }
+        return;
+      }
+      if (
+        !window.confirm(
+          `Datei \`${a.name}\` wirklich löschen?\n\nDies kann nicht rückgängig gemacht werden.`,
+        )
+      ) {
         return;
       }
       try {
@@ -309,10 +349,10 @@ export default function AssetBrowser({
         if (selected?.id === a.id) setSelected(null);
         reloadFolders();
       } catch (e) {
-        alert(`Löschen ${label} fehlgeschlagen: ${(e as Error).message}`);
+        alert(`Löschen der Datei fehlgeschlagen: ${(e as Error).message}`);
       }
     },
-    [reloadFolders, selected],
+    [reloadFolders, reloadAssets, selected],
   );
 
   const onSubmitRename = useCallback(
@@ -925,9 +965,9 @@ function AssetCard({
   onClick: () => void;
   onCopy: () => void;
   onDelete: () => void;
-  renameId: number | null;
+  renameId: string | null;
   renameValue: string;
-  setRenameId: (n: number | null) => void;
+  setRenameId: (n: string | null) => void;
   setRenameValue: (s: string) => void;
   onSubmitRename: () => void;
   showActions: boolean;

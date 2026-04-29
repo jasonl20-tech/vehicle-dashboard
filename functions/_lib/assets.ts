@@ -1,20 +1,20 @@
 /**
- * Gemeinsame Helpers für die Asset-Manager-API.
+ * Helpers für die Asset-Manager-API. Datenquelle ist ausschließlich
+ * der R2-Bucket `env.assets` (Custom-Domain `assets.vehicleimagery.com`)
+ * — KEINE eigene D1-Tabelle.
  *
  * Konventionen:
- *  - Pfade sind POSIX-Style (`/`-getrennt), case-sensitive, ohne führenden
- *    oder schließenden Slash.
- *  - Erlaubte Zeichen in Path-Segmenten: `[a-zA-Z0-9._-]`. Leerzeichen
- *    werden bei Bedarf vom Frontend zu `-` konvertiert.
- *  - Ordnernamen entsprechen der Pfad-Segmentierung; `email/team` ist
- *    der Ordner `team` innerhalb von `email`.
- *  - R2 hat keine echten Ordner. Wir rendern leere Ordner über einen
- *    `kind='folder'`-Eintrag in D1, der KEIN R2-Objekt referenziert.
- *
- * Limits:
- *  - Maximale Datei-Größe: 25 MB (Schutz gegen Versehen, Cloudflare
- *    Workers haben 100 MB Body-Limit, R2 selbst kann TB).
- *  - Maximale Pfadlänge: 1024 Zeichen.
+ *   - Pfade sind POSIX (`/`-getrennt), case-sensitive, ohne führenden
+ *     oder schließenden Slash.
+ *   - Erlaubte Zeichen pro Path-Segment: `[a-zA-Z0-9._-]`. Leerzeichen
+ *     werden in `normalizeName` zu `-` reduziert.
+ *   - Ein Folder existiert genau dann, wenn mindestens ein R2-Objekt
+ *     mit dem entsprechenden Prefix vorliegt. Leere Folders bekommen
+ *     einen Marker `<folder>/.keep` (0 Bytes), den die Listing-API
+ *     beim Anzeigen filtert.
+ *   - Datei-Metadaten (`alt_text`, `description`, `uploadedBy`) leben in
+ *     `customMetadata` des R2-Objekts (URI-encoded, da R2 die Werte
+ *     in HTTP-Headern transportiert).
  */
 import { jsonResponse, type AuthEnv } from "./auth";
 
@@ -22,16 +22,21 @@ export const ASSETS_DEFAULT_PUBLIC_BASE = "https://assets.vehicleimagery.com";
 
 export const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
 export const MAX_PATH_LEN = 1024;
-/** Schwarzliste: Marker-Dateien, die intern verwendet werden und in der
- *  UI nicht als echte Datei zählen sollen. */
-export const HIDDEN_NAMES = new Set<string>([".keep", ".placeholder"]);
+
+/** Marker-Dateien, die intern verwendet und in der UI ausgeblendet
+ *  werden. */
+export const HIDDEN_NAMES: ReadonlySet<string> = new Set<string>([
+  ".keep",
+  ".placeholder",
+]);
+/** Marker-Dateiname, der angelegt wird, wenn ein leerer Ordner via UI
+ *  erstellt wird. */
+export const FOLDER_MARKER = ".keep";
 
 const SEGMENT_RE = /^[a-zA-Z0-9._-]+$/;
 
-/**
- * Bereinigt einen Folder-Pfad (`email/team` → `email/team`,
- * `/email/` → `email`, `..` → fehler). Ungültige Pfade werfen.
- */
+// ─── Path-Validation ─────────────────────────────────────────────────
+
 export function normalizeFolder(input: unknown): string {
   if (input == null) return "";
   if (typeof input !== "string") {
@@ -39,7 +44,6 @@ export function normalizeFolder(input: unknown): string {
   }
   let s = input.trim();
   if (!s) return "";
-  // Slashes vorne/hinten entfernen.
   s = s.replace(/^\/+/, "").replace(/\/+$/, "");
   if (!s) return "";
   if (s.length > MAX_PATH_LEN) {
@@ -59,17 +63,12 @@ export function normalizeFolder(input: unknown): string {
   return segs.join("/");
 }
 
-/**
- * Bereinigt einen Dateinamen (kein Pfad-Separator erlaubt). Erlaubt
- * sind a–z, A–Z, 0–9 sowie `.`, `_`, `-`. Maximal 200 Zeichen.
- */
 export function normalizeName(input: unknown): string {
   if (typeof input !== "string") {
     throw new Error("name muss ein String sein");
   }
   let s = input.trim();
   if (!s) throw new Error("name darf nicht leer sein");
-  // Umlaute / Sonderzeichen → ASCII-tauglich
   s = s
     .replace(/ä/g, "ae")
     .replace(/ö/g, "oe")
@@ -87,83 +86,132 @@ export function normalizeName(input: unknown): string {
   return s;
 }
 
-/**
- * Setzt Folder + Name zum vollständigen R2-Key zusammen.
- */
 export function joinKey(folder: string, name: string): string {
   if (!folder) return name;
   return `${folder}/${name}`;
 }
 
-/**
- * Trennt einen Key in Folder + Name.
- */
 export function splitKey(key: string): { folder: string; name: string } {
   const idx = key.lastIndexOf("/");
   if (idx < 0) return { folder: "", name: key };
   return { folder: key.slice(0, idx), name: key.slice(idx + 1) };
 }
 
-/**
- * Liefert die öffentliche URL für ein Asset (Custom-Domain auf R2).
- * Encoding: Slashes bleiben, sonstige Zeichen werden encodeURI-Style
- * geescaped. So bleiben `email/banner.png`-Pfade lesbar.
- */
-export function publicUrl(env: AuthEnv, key: string): string {
-  const base = (env.ASSETS_PUBLIC_BASE || ASSETS_DEFAULT_PUBLIC_BASE).replace(
+export function isHidden(name: string): boolean {
+  return HIDDEN_NAMES.has(name);
+}
+
+// ─── Public-URL ──────────────────────────────────────────────────────
+
+export function publicBase(env: AuthEnv): string {
+  return (env.ASSETS_PUBLIC_BASE || ASSETS_DEFAULT_PUBLIC_BASE).replace(
     /\/+$/,
     "",
   );
+}
+
+export function publicUrl(env: AuthEnv, key: string): string {
   const safeKey = key
     .split("/")
     .map((seg) => encodeURIComponent(seg))
     .join("/");
-  return `${base}/${safeKey}`;
+  return `${publicBase(env)}/${safeKey}`;
 }
 
-/**
- * Stellt sicher, dass beide Bindings (D1 + R2) gesetzt sind.
- * Liefert `Response` zurück, wenn etwas fehlt — sonst `null`.
- */
-export function requireBindings(env: AuthEnv): Response | null {
-  if (!env.website) {
-    return jsonResponse(
-      {
-        error:
-          "D1-Binding `website` fehlt. Im Cloudflare-Dashboard → Functions → D1, Variable `website` (env.website) setzen.",
-      },
-      { status: 503 },
-    );
-  }
+// ─── Bindings-Check ──────────────────────────────────────────────────
+
+export function requireAssetsBucket(env: AuthEnv): R2Bucket | Response {
   if (!env.assets) {
     return jsonResponse(
       {
         error:
-          "R2-Binding `assets` fehlt. Im Cloudflare-Dashboard → Functions → R2, Variable `assets` (env.assets) setzen.",
+          "R2-Binding `assets` fehlt. Im Cloudflare-Dashboard → Functions → R2, Variable `assets` (env.assets) auf den Bucket setzen.",
       },
       { status: 503 },
     );
   }
-  return null;
+  return env.assets;
 }
 
-export function tableMissingHint(e: unknown): string | null {
-  const msg = (e as Error)?.message || String(e);
-  if (/no such table/i.test(msg) && /assets/i.test(msg)) {
-    return "Tabelle `assets` fehlt. Migration ausführen: `wrangler d1 execute <DB-NAME> --file=./d1/migrations/0008_assets.sql`.";
+// ─── customMetadata-Helpers ──────────────────────────────────────────
+// R2 transportiert customMetadata in HTTP-Headern (S3-kompatibel).
+// Damit Umlaute/Sonderzeichen verlustfrei round-trippen, encoden wir
+// nicht-ASCII-Werte per `encodeURIComponent`. Beim Lesen wird umgekehrt
+// `decodeURIComponent` angewendet.
+
+const META_KEYS = {
+  altText: "alttext",
+  description: "description",
+  uploadedBy: "uploadedby",
+  originalName: "originalname",
+  folderMarker: "foldermarker",
+} as const;
+
+export type MetaInput = {
+  altText?: string | null;
+  description?: string | null;
+  uploadedBy?: string | number | null;
+  originalName?: string | null;
+  folderMarker?: boolean;
+};
+
+function isAscii(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) > 0x7e) return false;
   }
-  if (/no such column/i.test(msg)) {
-    return "Tabellenspalte fehlt — bitte Migration 0008_assets.sql erneut ausführen.";
-  }
-  return null;
+  return true;
 }
 
-/**
- * Datentyp, der pro Asset im API-JSON zurückgegeben wird (Frontend-
- * Compatibility). `url` ist die öffentliche URL aus dem Public-Bucket.
- */
+function encodeMetaValue(v: string): string {
+  if (isAscii(v)) return v;
+  return `enc:${encodeURIComponent(v)}`;
+}
+
+function decodeMetaValue(v: string | undefined): string | null {
+  if (v == null || v === "") return null;
+  if (v.startsWith("enc:")) {
+    try {
+      return decodeURIComponent(v.slice(4));
+    } catch {
+      return v.slice(4);
+    }
+  }
+  return v;
+}
+
+export function buildCustomMetadata(
+  input: MetaInput,
+  base?: Record<string, string>,
+): Record<string, string> {
+  const m: Record<string, string> = { ...(base ?? {}) };
+  if (input.altText !== undefined) {
+    if (input.altText) m[META_KEYS.altText] = encodeMetaValue(input.altText);
+    else delete m[META_KEYS.altText];
+  }
+  if (input.description !== undefined) {
+    if (input.description)
+      m[META_KEYS.description] = encodeMetaValue(input.description);
+    else delete m[META_KEYS.description];
+  }
+  if (input.uploadedBy !== undefined && input.uploadedBy !== null) {
+    m[META_KEYS.uploadedBy] = String(input.uploadedBy);
+  }
+  if (input.originalName !== undefined && input.originalName) {
+    m[META_KEYS.originalName] = encodeMetaValue(
+      input.originalName.slice(0, 255),
+    );
+  }
+  if (input.folderMarker) {
+    m[META_KEYS.folderMarker] = "1";
+  }
+  return m;
+}
+
+// ─── Asset-Shape für die API ─────────────────────────────────────────
+
 export type AssetRow = {
-  id: number;
+  /** Der R2-Object-Key — wird auch als ID verwendet. */
+  id: string;
   key: string;
   folder: string;
   name: string;
@@ -172,12 +220,105 @@ export type AssetRow = {
   kind: "file" | "folder";
   alt_text: string | null;
   description: string | null;
-  uploaded_by: number | null;
+  uploaded_by: string | null;
   uploaded_at: string;
   updated_at: string;
+  /** Öffentliche URL (Custom-Domain). */
   url: string;
+  /** R2-ETag (für Caching/Konflikt-Erkennung). */
+  etag: string | null;
 };
 
-export function rowToAsset(env: AuthEnv, r: Omit<AssetRow, "url">): AssetRow {
-  return { ...r, url: publicUrl(env, r.key) };
+/**
+ * Erzeugt eine Asset-Zeile aus einem R2Object. Hidden-Marker (`.keep`)
+ * werden vom Aufrufer ausgefiltert.
+ */
+export function r2ObjectToAsset(env: AuthEnv, obj: R2Object): AssetRow {
+  const { folder, name } = splitKey(obj.key);
+  const meta = obj.customMetadata ?? {};
+  const isFolderMarker =
+    name === FOLDER_MARKER && meta[META_KEYS.folderMarker] === "1";
+  // ISO-Datum
+  const uploadedISO =
+    obj.uploaded instanceof Date
+      ? obj.uploaded.toISOString()
+      : new Date(obj.uploaded).toISOString();
+  return {
+    id: obj.key,
+    key: obj.key,
+    folder,
+    name,
+    size: obj.size,
+    content_type: obj.httpMetadata?.contentType ?? "application/octet-stream",
+    kind: isFolderMarker ? "folder" : "file",
+    alt_text: decodeMetaValue(meta[META_KEYS.altText]),
+    description: decodeMetaValue(meta[META_KEYS.description]),
+    uploaded_by: meta[META_KEYS.uploadedBy] ?? null,
+    uploaded_at: uploadedISO,
+    updated_at: uploadedISO,
+    url: publicUrl(env, obj.key),
+    etag: obj.etag ?? null,
+  };
+}
+
+/**
+ * Erzeugt einen synthetischen "Folder"-Eintrag für die UI (z. B. wenn
+ * ein Folder-Tree aus delimitedPrefixes konstruiert wird, ohne eigenes
+ * R2-Object zu kennen).
+ */
+export function syntheticFolder(
+  env: AuthEnv,
+  path: string,
+  uploadedAt = new Date(0).toISOString(),
+): AssetRow {
+  const { folder, name } = splitKey(path);
+  return {
+    id: path,
+    key: path,
+    folder,
+    name,
+    size: 0,
+    content_type: "inode/directory",
+    kind: "folder",
+    alt_text: null,
+    description: null,
+    uploaded_by: null,
+    uploaded_at: uploadedAt,
+    updated_at: uploadedAt,
+    url: publicUrl(env, path),
+    etag: null,
+  };
+}
+
+// ─── List-Helper ─────────────────────────────────────────────────────
+
+/**
+ * Listet alle R2-Objekte unter einem Prefix (mit optionalem Delimiter)
+ * über mehrere Cursor-Seiten hinweg. Limitiert auf `maxObjects`, um
+ * runaway-Listings zu vermeiden.
+ */
+export async function listAllUnderPrefix(
+  bucket: R2Bucket,
+  prefix: string,
+  opts: { delimiter?: string; maxObjects?: number } = {},
+): Promise<{ objects: R2Object[]; delimitedPrefixes: string[] }> {
+  const { delimiter, maxObjects = 5000 } = opts;
+  const objects: R2Object[] = [];
+  const prefixSet = new Set<string>();
+  let cursor: string | undefined;
+  while (true) {
+    const r = await bucket.list({
+      prefix,
+      delimiter,
+      cursor,
+      limit: 1000,
+    });
+    objects.push(...r.objects);
+    for (const p of r.delimitedPrefixes ?? []) prefixSet.add(p);
+    if (objects.length >= maxObjects) break;
+    if (!r.truncated) break;
+    cursor = (r as R2Objects & { cursor?: string }).cursor;
+    if (!cursor) break;
+  }
+  return { objects, delimitedPrefixes: Array.from(prefixSet) };
 }
