@@ -1,5 +1,7 @@
 import {
   ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
   Copy,
   Loader2,
   Pencil,
@@ -42,6 +44,25 @@ const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
 
 const noopSetHeader: DashboardOutletContext["setHeaderTrailing"] = () => {};
 
+const ASIDE_COLLAPSE_KEY = "ui.emailTemplates.asideCollapsed";
+
+function readAsideCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(ASIDE_COLLAPSE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeAsideCollapsed(v: boolean): void {
+  try {
+    window.localStorage.setItem(ASIDE_COLLAPSE_KEY, v ? "1" : "0");
+  } catch {
+    // bewusst leer
+  }
+}
+
 function fmtWhen(s: string | null | undefined): string {
   if (!s?.trim()) return "—";
   const raw = s.trim();
@@ -67,6 +88,18 @@ export default function EmailTemplatesPage() {
   const setHeaderTrailing = ctx?.setHeaderTrailing ?? noopSetHeader;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get("id") ?? "";
+
+  // ---- Aside einklappbar ----
+  const [asideCollapsed, setAsideCollapsed] = useState<boolean>(
+    readAsideCollapsed,
+  );
+  const toggleAside = useCallback(() => {
+    setAsideCollapsed((v) => {
+      const next = !v;
+      writeAsideCollapsed(next);
+      return next;
+    });
+  }, []);
 
   // ---- Liste ----
   const [qIn, setQIn] = useState("");
@@ -435,102 +468,132 @@ export default function EmailTemplatesPage() {
       )}
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {/* Linke Liste */}
-        <aside className="flex w-full shrink-0 flex-col border-b border-hair bg-white md:w-[300px] md:border-b-0 md:border-r">
-          <div className="shrink-0 border-b border-hair p-3">
-            <div className="flex items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
-              <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-              <input
-                type="search"
-                value={qIn}
-                onChange={(e) => setQIn(e.target.value)}
-                placeholder="id oder Betreff…"
-                className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
-              />
-            </div>
-            <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-ink-500">
-              <span>
-                {fmtNumber(total)} Vorlagen
-                {q ? ` · ${rows.length} Treffer` : ""}
-              </span>
-              {list.loading && <Loader2 className="h-3 w-3 animate-spin" />}
-            </div>
-          </div>
-          <ul className="min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
-            {!list.loading && rows.length === 0 && (
-              <li className="px-4 py-6 text-center text-[12.5px] text-ink-500">
-                Keine Vorlagen.{" "}
+        {/* Linke Liste – einklappbar */}
+        {asideCollapsed ? (
+          <button
+            type="button"
+            onClick={toggleAside}
+            title="Vorlagenliste einblenden"
+            aria-label="Vorlagenliste einblenden"
+            aria-expanded={false}
+            className="group hidden w-9 shrink-0 items-center justify-center border-b border-hair bg-white text-ink-500 transition hover:bg-ink-50/60 hover:text-ink-800 md:flex md:border-b-0 md:border-r"
+          >
+            <ChevronsRight className="h-4 w-4" />
+          </button>
+        ) : (
+          <aside className="flex w-full shrink-0 flex-col border-b border-hair bg-white md:w-[300px] md:border-b-0 md:border-r">
+            <div className="shrink-0 border-b border-hair p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-500">
+                  Vorlagen
+                </p>
                 <button
                   type="button"
-                  onClick={() => setNewOpen(true)}
-                  className="text-ink-700 underline underline-offset-2 hover:text-ink-900"
+                  onClick={toggleAside}
+                  title="Liste einklappen"
+                  aria-label="Vorlagenliste einklappen"
+                  aria-expanded
+                  className="hidden h-6 w-6 items-center justify-center rounded text-ink-400 transition hover:bg-ink-100 hover:text-ink-700 md:inline-flex"
                 >
-                  Jetzt anlegen
+                  <ChevronsLeft className="h-3.5 w-3.5" />
                 </button>
-              </li>
-            )}
-            {rows.map((r) => {
-              const active = r.id === selectedId;
-              return (
-                <li key={r.id}>
-                  <div
-                    className={`group flex w-full items-center gap-1.5 px-3 py-2 transition ${
-                      active
-                        ? "bg-ink-50/70"
-                        : "hover:bg-ink-50/50"
-                    }`}
+              </div>
+              <div className="flex items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
+                <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                <input
+                  type="search"
+                  value={qIn}
+                  onChange={(e) => setQIn(e.target.value)}
+                  placeholder="id oder Betreff…"
+                  className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-ink-500">
+                <span>
+                  {fmtNumber(total)} Vorlagen
+                  {q ? ` · ${rows.length} Treffer` : ""}
+                </span>
+                {list.loading && (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                )}
+              </div>
+            </div>
+            <ul className="min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
+              {!list.loading && rows.length === 0 && (
+                <li className="px-4 py-6 text-center text-[12.5px] text-ink-500">
+                  Keine Vorlagen.{" "}
+                  <button
+                    type="button"
+                    onClick={() => setNewOpen(true)}
+                    className="text-ink-700 underline underline-offset-2 hover:text-ink-900"
                   >
-                    <button
-                      type="button"
-                      onClick={() => setSearchParams({ id: r.id })}
-                      className="flex min-w-0 flex-1 flex-col items-start text-left"
-                    >
-                      <span
-                        className={`block max-w-full truncate font-mono text-[12px] ${
-                          active ? "text-ink-900" : "text-ink-700"
-                        }`}
-                        title={r.id}
-                      >
-                        {r.id}
-                      </span>
-                      <span
-                        className="mt-0.5 block max-w-full truncate text-[11.5px] text-ink-500"
-                        title={r.subject}
-                      >
-                        {r.subject || "—"}
-                      </span>
-                    </button>
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 [&>button]:h-6 [&>button]:w-6">
-                      <button
-                        type="button"
-                        title="Duplizieren"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDuplicate(r.id);
-                        }}
-                        className="inline-flex items-center justify-center rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800"
-                      >
-                        <Copy className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Löschen"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteErr(null);
-                          setConfirmDelete(r.id);
-                        }}
-                        className="inline-flex items-center justify-center rounded text-ink-500 hover:bg-ink-100 hover:text-accent-rose"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
+                    Jetzt anlegen
+                  </button>
                 </li>
-              );
-            })}
-          </ul>
-        </aside>
+              )}
+              {rows.map((r) => {
+                const active = r.id === selectedId;
+                return (
+                  <li key={r.id}>
+                    <div
+                      className={`group flex w-full items-center gap-1.5 px-3 py-2 transition ${
+                        active
+                          ? "bg-ink-50/70"
+                          : "hover:bg-ink-50/50"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSearchParams({ id: r.id })}
+                        className="flex min-w-0 flex-1 flex-col items-start text-left"
+                      >
+                        <span
+                          className={`block max-w-full truncate font-mono text-[12px] ${
+                            active ? "text-ink-900" : "text-ink-700"
+                          }`}
+                          title={r.id}
+                        >
+                          {r.id}
+                        </span>
+                        <span
+                          className="mt-0.5 block max-w-full truncate text-[11.5px] text-ink-500"
+                          title={r.subject}
+                        >
+                          {r.subject || "—"}
+                        </span>
+                      </button>
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 [&>button]:h-6 [&>button]:w-6">
+                        <button
+                          type="button"
+                          title="Duplizieren"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDuplicate(r.id);
+                          }}
+                          className="inline-flex items-center justify-center rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Löschen"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteErr(null);
+                            setConfirmDelete(r.id);
+                          }}
+                          className="inline-flex items-center justify-center rounded text-ink-500 hover:bg-ink-100 hover:text-accent-rose"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </aside>
+        )}
 
         {/* Rechter Bereich: Editor */}
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
