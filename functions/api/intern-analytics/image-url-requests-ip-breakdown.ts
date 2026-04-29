@@ -229,10 +229,75 @@ LIMIT ${MAX_IP_SQL_ROWS}
 FORMAT JSON`;
 }
 
-const D_OK = "double2 >= 0 AND double2 < 1000000";
+const D_OK = "double2 > 0 AND double2 < 1000000";
 
 function avgMsExpr(): string {
   return `if(sumIf(_sample_interval, ${D_OK}) = 0, NULL, sumIf(double2 * _sample_interval, ${D_OK}) / sumIf(_sample_interval, ${D_OK})) AS avgMs`;
+}
+
+/**
+ * Robusteste avgMs-Variante — `avgIf` ist deutlich verträglicher mit der
+ * Analytics-Engine-SQL-Subset als `if(sumIf=0, NULL, sumIf/sumIf)`, weil
+ * der NULL-Branch bei manchen Engine-Konfigurationen einen Type-Inferenz-
+ * Fehler erzeugt. Dafür ignoriert sie `_sample_interval`, was für die
+ * UI-Heatmap völlig ausreicht.
+ */
+function avgMsExprIf(): string {
+  return `avgIf(double2, ${D_OK}) AS avgMs`;
+}
+
+/**
+ * Robuste Anreicherung mit minimal-set:
+ * - Aggregat: `sum`, `avgIf`, `any`
+ * - Keine `argMax(...)`, kein `index2` (manche Datasets haben weder)
+ * - Pfad nur aus `blob1`
+ *
+ * Wir setzen das als ERSTE Variante der Cascade ein, damit auch
+ * Schemata, in denen `argMax`/`index2` nicht funktionieren, sofort
+ * eine vollständige Antwort liefern.
+ */
+function buildIpSqlEnrichedRobust(
+  fromIso: string,
+  toIso: string,
+  fromDataset: string,
+  mode: Mode,
+  name: string,
+  ipCol: IpBlobCol,
+): string {
+  const tw = buildTimeWhere(fromIso, toIso);
+  const blob3NotEmpty = `blob3 != ${sqlString("")} AND blob3 != ${sqlString(
+    "NA",
+  )}`;
+  const colNotEmpty = `${ipCol} != ${sqlString("")}`;
+  const agg = `SELECT
+  ${ipCol} AS ip,
+  blob3 AS iso2,
+  SUM(_sample_interval) AS c,
+  ${avgMsExprIf()},
+  any(blob5) AS ua,
+  any(blob9) AS edge,
+  any(blob8) AS status,
+  any(blob1) AS imagePath`;
+  if (mode === "dedicated") {
+    return `${agg}
+FROM ${name}
+WHERE ${tw}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
+  }
+  return `${agg}
+FROM ${fromDataset}
+WHERE ${tw} AND dataset = ${sqlString(name)}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
 }
 
 /**
@@ -550,9 +615,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     for (const mode of modes) {
       const tryEnrichedCascade = async () => {
         const builders = [
-          // 1) argMax + index2 — präziseste Variante (jüngste Werte)
+          // 1) any() + avgIf, ohne `argMax`/`index2` — am robustesten,
+          //    funktioniert auch wenn die Engine-Subset-SQL kein
+          //    argMax(string, ts) oder kein `index2`-Feld kennt.
           () =>
-            buildIpSqlEnrichedPathIndex2(
+            buildIpSqlEnrichedRobust(
               from,
               to,
               fromTable,
@@ -560,7 +627,18 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
               name,
               ipCol,
             ),
-          // 2) argMax + blob1 — Fallback wenn index2 nicht da ist
+          // 2) any() inkl. index2 — wenn das Schema beide Pfad-Quellen hat.
+          () =>
+            buildIpSqlEnrichedAny(
+              from,
+              to,
+              fromTable,
+              mode,
+              name,
+              ipCol,
+            ),
+          // 3) argMax + blob1 — präziser (jüngste Werte), aber argMax
+          //    ist anfälliger für Type-Issues.
           () =>
             buildIpSqlEnrichedBlobPath(
               from,
@@ -570,9 +648,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
               name,
               ipCol,
             ),
-          // 3) any() — robust gegen Engine-Limitationen, weniger präzise
+          // 4) argMax + index2 — präziseste Variante, falls verfügbar.
           () =>
-            buildIpSqlEnrichedAny(
+            buildIpSqlEnrichedPathIndex2(
               from,
               to,
               fromTable,

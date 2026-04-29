@@ -183,12 +183,14 @@ export default function BildempfangScene({ ipMarkers }: Props) {
     return ipMarkers.map((m) => {
       const [r, g, b] = msToRgbArray(m.avgMs, msRange);
       const t = Math.log(1 + m.count) / Math.max(0.0001, logMax);
-      const elevation = 220_000 + 2_300_000 * t;
+      // Säulen kompakter: 120 km Basis-Höhe, bis 1.500 km — die Welt-
+      // Übersicht bleibt lesbar, ohne dass alles wie ein Wall wirkt.
+      const elevation = 120_000 + 1_400_000 * t;
       return {
         marker: m,
         position: [m.coordinates[0], m.coordinates[1]],
-        color: [r, g, b, 235],
-        haloColor: [r, g, b, 110],
+        color: [r, g, b, 230],
+        haloColor: [r, g, b, 90],
         elevation,
       };
     });
@@ -288,9 +290,9 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       data: columnData,
       getPosition: (d) => d.position,
       getFillColor: (d) => d.haloColor,
-      getRadius: 90000,
-      radiusMinPixels: 6,
-      radiusMaxPixels: 36,
+      getRadius: 50000,
+      radiusMinPixels: 3,
+      radiusMaxPixels: 14,
       stroked: false,
       filled: true,
       pickable: false,
@@ -330,14 +332,14 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       id: "bg-edge-halo",
       data: edgeSites,
       getPosition: (s) => [s.pos[1], s.pos[0]],
-      getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 70],
-      getRadius: 130000,
-      radiusMinPixels: 16,
-      radiusMaxPixels: 48,
+      getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 55],
+      getRadius: 80000,
+      radiusMinPixels: 10,
+      radiusMaxPixels: 26,
       stroked: true,
-      getLineColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 230],
-      getLineWidth: 2200,
-      lineWidthMinPixels: 1.2,
+      getLineColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 220],
+      getLineWidth: 1500,
+      lineWidthMinPixels: 1,
       pickable: false,
     });
 
@@ -346,9 +348,9 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       data: edgeSites,
       getPosition: (s) => [s.pos[1], s.pos[0]],
       getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 255],
-      getRadius: 30000,
-      radiusMinPixels: 4,
-      radiusMaxPixels: 8,
+      getRadius: 18000,
+      radiusMinPixels: 3,
+      radiusMaxPixels: 5,
       stroked: false,
       pickable: false,
     });
@@ -357,7 +359,7 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       id: "bg-ip-cols",
       data: columnData,
       diskResolution: 22,
-      radius: 55000,
+      radius: 28000,
       radiusUnits: "meters",
       extruded: true,
       pickable: true,

@@ -13,7 +13,12 @@ type RGB = { r: number; g: number; b: number };
 const CYAN: RGB = { r: 34, g: 211, b: 238 }; // #22d3ee
 const VIOLET: RGB = { r: 167, g: 139, b: 250 }; // #a78bfa
 const MAGENTA: RGB = { r: 217, g: 70, b: 239 }; // #d946ef
-const NEUTRAL: RGB = { r: 148, g: 163, b: 184 }; // #94a3b8 — slate-400
+/**
+ * Wenn keine Latenz vorhanden ist, nutzen wir ein dezent abgesättigtes
+ * Cyan (statt Slate-Grau): das fügt sich besser in den Cyan→Magenta-
+ * Look der Karte ein und sieht im 3D-Säulen-Stil weniger „leblos" aus.
+ */
+const NEUTRAL: RGB = { r: 84, g: 168, b: 200 };
 
 /** Cloudflare-Brand-Orange für Edge-PoPs auf der Karte. */
 export const EDGE_PRIMARY = { r: 243, g: 130, b: 31 } as const; // #f3821f
