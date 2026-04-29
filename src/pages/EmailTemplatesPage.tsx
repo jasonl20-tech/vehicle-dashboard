@@ -1,18 +1,18 @@
 /**
- * Email-Templates: kombinierte Liste + MJML-Editor in einem Split-View.
+ * Email-Templates: kombinierte Liste + visueller Editor in einem Split-View.
  *
  * Linke Spalte: Vorlagen-Liste (suchbar, einklappbar).
  * Rechte Spalte: gewählte Vorlage – mit zwei Bearbeitungsmodi:
- *   - "MJML": Markup-Editor inkl. Live-Preview (kompiliert via mjml-browser)
- *   - "HTML": rohe HTML-Body-Textarea (für Custom-Mails ohne MJML)
+ *   - "Builder": visueller Drag-and-Drop-Editor (Unlayer / react-email-editor)
+ *   - "HTML":    rohe HTML-Body-Textarea für Custom-Mails
+ *
+ * Speicher-Strategie (ohne Schema-Wechsel):
+ *   body_html in der DB enthält **vorne** einen unsichtbaren HTML-Kommentar
+ *   mit dem Builder-Design-JSON (base64), gefolgt vom gerenderten HTML.
+ *   Der externe Mail-Worker schickt body_html unverändert raus — Mail-
+ *   Clients ignorieren HTML-Kommentare.
  *
  * Persistenz: aside-collapse + viewMode in localStorage.
- *
- * Datenmodell (D1):
- *   - body_mjml : optionaler MJML-Quelltext (NULL möglich)
- *   - body_html : tatsächlich versandtes HTML (vom externen Mail-Worker
- *                 verschickt). Wird im MJML-Modus beim Speichern aus dem
- *                 MJML kompiliert; im HTML-Modus direkt vom User.
  */
 import {
   ChevronDown,
@@ -20,7 +20,7 @@ import {
   ChevronsRight,
   Code2,
   Copy,
-  FileCode,
+  LayoutGrid,
   Loader2,
   Pencil,
   Plus,
@@ -42,7 +42,7 @@ import {
 } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
-import type { EmailMjmlEditorHandle } from "../components/emails/EmailMjmlEditor";
+import type { EmailUnlayerEditorHandle } from "../components/emails/EmailUnlayerEditor";
 import { useApi, fmtNumber } from "../lib/customerApi";
 import {
   EMAIL_TEMPLATE_VARIABLES,
@@ -54,10 +54,10 @@ import {
   type EmailTemplate,
   type EmailTemplatesListResponse,
 } from "../lib/emailTemplatesApi";
-import { MJML_STARTERS, MJML_STARTER_SIMPLE } from "../lib/mjmlStarters";
+import { embedDesign, extractDesign } from "../lib/unlayerDesign";
 
-const EmailMjmlEditor = lazy(
-  () => import("../components/emails/EmailMjmlEditor"),
+const EmailUnlayerEditor = lazy(
+  () => import("../components/emails/EmailUnlayerEditor"),
 );
 
 const PAGE_SIZE = 200;
@@ -68,7 +68,7 @@ const noopSetHeader: DashboardOutletContext["setHeaderTrailing"] = () => {};
 const ASIDE_COLLAPSE_KEY = "ui.emailTemplates.asideCollapsed";
 const VIEW_MODE_KEY = "ui.emailTemplates.viewMode";
 
-type ViewMode = "mjml" | "html";
+type ViewMode = "builder" | "html";
 
 function readAsideCollapsed(): boolean {
   if (typeof window === "undefined") return false;
@@ -88,12 +88,12 @@ function writeAsideCollapsed(v: boolean): void {
 }
 
 function readViewMode(): ViewMode {
-  if (typeof window === "undefined") return "mjml";
+  if (typeof window === "undefined") return "builder";
   try {
     const v = window.localStorage.getItem(VIEW_MODE_KEY);
-    return v === "html" ? "html" : "mjml";
+    return v === "html" ? "html" : "builder";
   } catch {
-    return "mjml";
+    return "builder";
   }
 }
 
@@ -123,9 +123,7 @@ function fmtWhen(s: string | null | undefined): string {
 }
 
 export default function EmailTemplatesPage() {
-  // Fail-safe: bei geschachtelten Outlet-Layouts kann der Context auf
-  // undefined fallen (innerer <Outlet /> ohne `context`-Prop überschreibt
-  // den DashboardLayout-Context). Deshalb defensiv gegen `undefined`.
+  // Defensive gegen `undefined` (Fallback für verschachtelte Outlet-Layouts).
   const ctx = useOutletContext<DashboardOutletContext | undefined>();
   const setHeaderTrailing = ctx?.setHeaderTrailing ?? noopSetHeader;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -165,19 +163,27 @@ export default function EmailTemplatesPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  // ---- MJML / HTML-Modus ----
+  // ---- Builder / HTML-Modus ----
   const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
-  /** Aktueller body_html — Source of Truth, wenn der HTML-Modus aktiv ist. */
-  const [bodyHtml, setBodyHtml] = useState("");
-  /** Aktueller MJML-Source. Leer-String bedeutet "kein MJML hinterlegt". */
-  const [bodyMjml, setBodyMjml] = useState("");
+  /**
+   * `htmlOnly` ist body_html ohne den UNLAYER_DESIGN-Marker — das ist,
+   * was der HTML-Modus dem User zeigt und was beim direkten HTML-Save
+   * geschickt wird (ggf. wieder mit Design-Marker versehen).
+   */
+  const [htmlOnly, setHtmlOnly] = useState("");
+  /**
+   * Letztes geladenes Builder-Design. Source-of-Truth wenn Builder aktiv
+   * ist (in dem Fall liefert der Editor selbst den frischesten Stand).
+   */
+  const [design, setDesign] = useState<unknown | null>(null);
 
   useEffect(() => {
     if (!one.data) return;
     setSubject(one.data.subject);
     setSavedAt(one.data.updated_at);
-    setBodyHtml(one.data.body_html);
-    setBodyMjml(one.data.body_mjml ?? "");
+    const { design: d, htmlWithoutMarker } = extractDesign(one.data.body_html);
+    setHtmlOnly(htmlWithoutMarker);
+    setDesign(d);
     setDirty(false);
   }, [one.data?.id, one.data?.updated_at]);
 
@@ -269,87 +275,96 @@ export default function EmailTemplatesPage() {
   );
 
   // ---- Speichern + Rename ----
-  const editorRef = useRef<EmailMjmlEditorHandle | null>(null);
+  const editorRef = useRef<EmailUnlayerEditorHandle | null>(null);
   const htmlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
   /**
-   * Liefert den finalen (mjml, html)-Stand für ein Save:
-   * - MJML-Modus: aktueller MJML-Source aus dem Editor + frisch kompiliertes HTML
-   * - HTML-Modus: aktueller Textarea-HTML, MJML-Source bleibt unverändert (`bodyMjml`)
+   * Sammelt den finalen body_html-String je nach aktivem Modus.
+   *
+   * - Builder: Editor liefert frisches HTML + Design via Callback. Wir
+   *   verpacken Design vorne als HTML-Kommentar, und schicken alles als
+   *   `body_html`.
+   * - HTML: User-Textarea ist die Quelle. Wenn ein Builder-Design noch
+   *   existiert (frühere Bearbeitung), behalten wir es — beim erneuten
+   *   Öffnen im Builder-Modus ist das Design wieder da (das sichtbare
+   *   HTML wurde direkt editiert, das Design ist evtl. nicht mehr deckungs-
+   *   gleich → der User wird über ein Banner gewarnt).
    */
-  const collectSaveBodies = useCallback((): {
-    mjml: string | null;
-    html: string;
-  } => {
-    if (viewMode === "mjml") {
-      const fromEd = editorRef.current?.getMjml() ?? bodyMjml;
-      const html = editorRef.current?.getHtml() ?? "";
-      return {
-        mjml: fromEd && fromEd.trim() ? fromEd : null,
-        html: html || bodyHtml || one.data?.body_html || "",
-      };
-    }
-    // HTML-Modus
-    return {
-      mjml: bodyMjml && bodyMjml.trim() ? bodyMjml : null,
-      html: bodyHtml || one.data?.body_html || "",
-    };
-  }, [viewMode, bodyMjml, bodyHtml, one.data?.body_html]);
+  const collectBodyHtml = useCallback(
+    (cb: (final: string) => void) => {
+      if (viewMode === "builder") {
+        const ed = editorRef.current;
+        if (!ed) {
+          cb(embedDesign(design, htmlOnly || one.data?.body_html || ""));
+          return;
+        }
+        ed.getResult(({ design: d, html }) => {
+          cb(embedDesign(d ?? design, html || htmlOnly));
+        });
+        return;
+      }
+      // HTML-Modus
+      cb(embedDesign(design, htmlOnly || one.data?.body_html || ""));
+    },
+    [viewMode, design, htmlOnly, one.data?.body_html],
+  );
 
   const switchViewMode = useCallback(
     (next: ViewMode) => {
       setViewMode((prev) => {
         if (prev === next) return prev;
-        if (prev === "mjml" && next === "html") {
-          // MJML → HTML: aktuellen MJML-Source merken, HTML aus Compile-Output ziehen
+        if (prev === "builder" && next === "html") {
+          // Builder → HTML: aktuellen Stand aus dem Editor ziehen
           const ed = editorRef.current;
           if (ed) {
-            const mjml = ed.getMjml();
-            if (typeof mjml === "string") setBodyMjml(mjml);
-            const html = ed.getHtml();
-            if (typeof html === "string" && html) setBodyHtml(html);
+            ed.getResult(({ design: d, html }) => {
+              if (d) setDesign(d);
+              if (typeof html === "string") setHtmlOnly(html);
+            });
           }
-        } else if (prev === "html" && next === "mjml") {
-          // HTML → MJML: nichts zu konvertieren. Wenn kein MJML vorhanden,
-          // fragt der Editor selbst danach.
-          editorRef.current?.reload(bodyMjml || "");
+        } else if (prev === "html" && next === "builder") {
+          // HTML → Builder: Design wieder in Editor laden (falls vorhanden)
+          editorRef.current?.loadDesign(design);
         }
         writeViewMode(next);
         return next;
       });
     },
-    [bodyMjml],
+    [design],
   );
 
   const onSave = useCallback(async () => {
     if (!one.data) return;
     setSaving(true);
     setSaveErr(null);
-    try {
-      const { mjml, html } = collectSaveBodies();
-      const updated = await updateEmailTemplate(one.data.id, {
-        subject: subject.trim() || one.data.subject,
-        body_html: html,
-        body_mjml: mjml,
-      });
-      setSavedAt(updated.updated_at);
-      setBodyHtml(updated.body_html);
-      setBodyMjml(updated.body_mjml ?? "");
-      setDirty(false);
-      list.reload();
-    } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  }, [one.data, subject, list, collectSaveBodies]);
+    collectBodyHtml(async (finalHtml) => {
+      try {
+        const updated = await updateEmailTemplate(one.data!.id, {
+          subject: subject.trim() || one.data!.subject,
+          body_html: finalHtml,
+        });
+        const { design: d, htmlWithoutMarker } = extractDesign(
+          updated.body_html,
+        );
+        setSavedAt(updated.updated_at);
+        setHtmlOnly(htmlWithoutMarker);
+        setDesign(d);
+        setDirty(false);
+        list.reload();
+      } catch (e) {
+        setSaveErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        setSaving(false);
+      }
+    });
+  }, [one.data, subject, list, collectBodyHtml]);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
 
-  const onRename = useCallback(async () => {
+  const onRename = useCallback(() => {
     if (!one.data) return;
     const next = renameValue.trim();
     if (!next || next === one.data.id) {
@@ -358,26 +373,29 @@ export default function EmailTemplatesPage() {
     }
     setSaving(true);
     setSaveErr(null);
-    try {
-      const { mjml, html } = collectSaveBodies();
-      const updated = await updateEmailTemplate(one.data.id, {
-        new_id: next,
-        subject: subject.trim() || one.data.subject,
-        body_html: html,
-        body_mjml: mjml,
-      });
-      setRenameOpen(false);
-      setBodyHtml(updated.body_html);
-      setBodyMjml(updated.body_mjml ?? "");
-      setDirty(false);
-      list.reload();
-      setSearchParams({ id: updated.id }, { replace: true });
-    } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  }, [one.data, renameValue, subject, list, setSearchParams, collectSaveBodies]);
+    collectBodyHtml(async (finalHtml) => {
+      try {
+        const updated = await updateEmailTemplate(one.data!.id, {
+          new_id: next,
+          subject: subject.trim() || one.data!.subject,
+          body_html: finalHtml,
+        });
+        const { design: d, htmlWithoutMarker } = extractDesign(
+          updated.body_html,
+        );
+        setRenameOpen(false);
+        setHtmlOnly(htmlWithoutMarker);
+        setDesign(d);
+        setDirty(false);
+        list.reload();
+        setSearchParams({ id: updated.id }, { replace: true });
+      } catch (e) {
+        setSaveErr(e instanceof Error ? e.message : String(e));
+      } finally {
+        setSaving(false);
+      }
+    });
+  }, [one.data, renameValue, subject, list, setSearchParams, collectBodyHtml]);
 
   // ---- Variablen-Dropdown ----
   const [varOpen, setVarOpen] = useState(false);
@@ -391,19 +409,22 @@ export default function EmailTemplatesPage() {
           const end = ta.selectionEnd ?? ta.value.length;
           const next =
             ta.value.slice(0, start) + token + ta.value.slice(end);
-          setBodyHtml(next);
+          setHtmlOnly(next);
           requestAnimationFrame(() => {
             ta.focus();
             const pos = start + token.length;
             ta.setSelectionRange(pos, pos);
           });
         } else {
-          setBodyHtml((b) => b + token);
+          setHtmlOnly((b) => b + token);
         }
+        setDirty(true);
       } else {
-        editorRef.current?.insertMjml(token);
+        // Builder: Token wird in die Zwischenablage gelegt — der User
+        // kann ihn dann in Text-Tools einfügen (oder die nativen
+        // Merge-Tag-Pillen aus der Editor-Toolbar nutzen).
+        editorRef.current?.insertMergeTag(token);
       }
-      setDirty(true);
     },
     [viewMode],
   );
@@ -419,32 +440,6 @@ export default function EmailTemplatesPage() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [varOpen]);
-
-  // ---- Starter-Vorlagen-Dropdown (nur MJML-Modus relevant) ----
-  const [starterOpen, setStarterOpen] = useState(false);
-  const applyStarter = useCallback(
-    (source: string) => {
-      setStarterOpen(false);
-      if (
-        bodyMjml.trim() &&
-        !window.confirm(
-          "Aktueller MJML-Inhalt wird durch die Vorlage ersetzt. Fortfahren?",
-        )
-      ) {
-        return;
-      }
-      setBodyMjml(source);
-      editorRef.current?.reload(source);
-      setDirty(true);
-    },
-    [bodyMjml],
-  );
-  useEffect(() => {
-    if (!starterOpen) return;
-    const onDoc = () => setStarterOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [starterOpen]);
 
   // ⌘S / Ctrl+S Shortcut
   useEffect(() => {
@@ -489,7 +484,7 @@ export default function EmailTemplatesPage() {
                 setVarOpen((o) => !o);
               }}
               className="inline-flex h-9 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12.5px] text-night-200 transition hover:bg-white/[0.08] hover:text-white"
-              title="Variable einfügen"
+              title="Variable einfügen / kopieren"
             >
               {`{{var}}`}
               <ChevronDown className="h-3.5 w-3.5" />
@@ -501,7 +496,9 @@ export default function EmailTemplatesPage() {
                 role="dialog"
               >
                 <p className="px-2 pb-1 pt-1 text-[10.5px] uppercase tracking-wider text-night-500">
-                  In Email-Body einfügen
+                  {viewMode === "html"
+                    ? "In HTML einfügen"
+                    : "In Zwischenablage kopieren"}
                 </p>
                 <div className="max-h-72 overflow-y-auto">
                   {EMAIL_TEMPLATE_VARIABLES.map((v) => (
@@ -535,51 +532,12 @@ export default function EmailTemplatesPage() {
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-        {one.data && viewMode === "mjml" && (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setStarterOpen((o) => !o);
-              }}
-              className="inline-flex h-9 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12.5px] text-night-200 transition hover:bg-white/[0.08] hover:text-white"
-              title="MJML-Starter-Vorlage einfügen"
-            >
-              <FileCode className="h-3.5 w-3.5" />
-              Starter
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-            {starterOpen && (
-              <div
-                className="absolute right-0 top-full z-50 mt-1 w-80 rounded-lg border border-white/[0.1] bg-night-800 p-1 shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-                role="dialog"
-              >
-                <p className="px-2 pb-1 pt-1 text-[10.5px] uppercase tracking-wider text-night-500">
-                  Vorlage auswählen
-                </p>
-                <div className="max-h-80 overflow-y-auto">
-                  {MJML_STARTERS.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => applyStarter(s.source)}
-                      className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-white/[0.06]"
-                    >
-                      <span className="text-[12.5px] font-medium text-night-100">
-                        {s.label}
-                      </span>
-                      <span className="truncate text-[11.5px] text-night-400">
-                        {s.description}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                {viewMode === "builder" && (
+                  <p className="border-t border-white/[0.08] px-2 py-1.5 text-[10.5px] text-night-500">
+                    Im Builder selbst kannst du Merge-Tags auch direkt aus
+                    dem Text-Tool-Menü einfügen.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -630,7 +588,6 @@ export default function EmailTemplatesPage() {
       savedAt,
       dirty,
       varOpen,
-      starterOpen,
       viewMode,
       list.loading,
       saving,
@@ -638,7 +595,6 @@ export default function EmailTemplatesPage() {
       list,
       insertVariable,
       insertVariableIntoSubject,
-      applyStarter,
     ],
   );
 
@@ -649,11 +605,6 @@ export default function EmailTemplatesPage() {
 
   const rows = list.data?.rows ?? [];
   const total = list.data?.total ?? 0;
-
-  // Wenn die Vorlage in den MJML-Modus geschaltet wird, aber kein
-  // MJML-Source existiert, bieten wir einen "Starter einfügen"-Helper.
-  const showStarterHelper =
-    viewMode === "mjml" && one.data != null && !bodyMjml.trim();
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-paper">
@@ -844,17 +795,17 @@ export default function EmailTemplatesPage() {
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={viewMode === "mjml"}
-                    onClick={() => switchViewMode("mjml")}
+                    aria-selected={viewMode === "builder"}
+                    onClick={() => switchViewMode("builder")}
                     disabled={!one.data}
                     className={`inline-flex items-center gap-1 rounded-[5px] px-2.5 py-1 text-[12px] font-medium transition disabled:opacity-50 ${
-                      viewMode === "mjml"
+                      viewMode === "builder"
                         ? "bg-ink-900 text-white"
                         : "text-ink-600 hover:text-ink-900"
                     }`}
                   >
-                    <FileCode className="h-3.5 w-3.5" />
-                    MJML
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Builder
                   </button>
                   <button
                     type="button"
@@ -874,10 +825,10 @@ export default function EmailTemplatesPage() {
                 </div>
                 <span className="text-[11px] tabular-nums text-ink-400">
                   {viewMode === "html"
-                    ? `${bodyHtml.length.toLocaleString("de-DE")} Zeichen HTML`
-                    : bodyMjml
-                      ? `${bodyMjml.length.toLocaleString("de-DE")} Zeichen MJML`
-                      : "kein MJML — Starter wählen"}
+                    ? `${htmlOnly.length.toLocaleString("de-DE")} Zeichen HTML`
+                    : design
+                      ? "Drag-and-Drop · Vorschau · Merge-Tags"
+                      : "leeres Layout — links Block reinziehen"}
                 </span>
               </div>
               {(one.error || saveErr) && (
@@ -888,15 +839,15 @@ export default function EmailTemplatesPage() {
                   {one.error || saveErr}
                 </p>
               )}
-              {viewMode === "html" && bodyMjml.trim() && (
+              {viewMode === "html" && design != null && (
                 <p
                   className="shrink-0 border-b border-accent-amber/30 bg-accent-amber/10 px-3 py-1.5 text-[11.5px] text-accent-amber sm:px-5"
                   role="status"
                 >
-                  Hinweis: Diese Vorlage hat einen MJML-Source. Wenn du im
-                  HTML-Modus speicherst, weicht das HTML vom MJML-Compile-Ergebnis
-                  ab. Beim nächsten Wechsel zurück in den MJML-Modus überschreibt
-                  ein erneutes Speichern den HTML-Stand.
+                  Hinweis: Diese Vorlage hat einen Builder-Layout. Wenn du
+                  hier direkt das HTML editierst, weicht es vom Builder-Stand
+                  ab. Beim nächsten Speichern im Builder-Modus überschreibt
+                  der Builder dein Custom-HTML wieder.
                 </p>
               )}
               <div className="relative min-h-0 flex-1 bg-white">
@@ -911,80 +862,40 @@ export default function EmailTemplatesPage() {
                 {one.data && (
                   <>
                     {/*
-                      MJML-Editor wird montiert sobald ein Template geladen ist
-                      und bleibt montiert, auch wenn der HTML-Modus aktiv ist —
-                      so behält er seinen Compile-Output. Nur sichtbar im
-                      MJML-Modus.
+                      Unlayer-Editor wird montiert sobald ein Template geladen
+                      ist und bleibt montiert, auch wenn der HTML-Modus aktiv
+                      ist — sonst würde der iframe jeden Tab-Switch neu laden.
                     */}
                     <div
                       className={
-                        viewMode === "mjml" ? "absolute inset-0" : "hidden"
+                        viewMode === "builder" ? "absolute inset-0" : "hidden"
                       }
                     >
-                      {showStarterHelper ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-paper px-6 py-10 text-center">
-                          <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-                            Kein MJML-Source
-                          </p>
-                          <p className="max-w-md text-[13px] leading-relaxed text-ink-500">
-                            Diese Vorlage hat noch keinen MJML-Quelltext. Wähle
-                            einen Starter aus oder schreibe direkt eigenes MJML.
-                          </p>
-                          <div className="flex flex-wrap items-center justify-center gap-2">
-                            {MJML_STARTERS.map((s) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={() => applyStarter(s.source)}
-                                className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-800 transition hover:border-ink-300 hover:bg-ink-50"
-                                title={s.description}
-                              >
-                                {s.label}
-                              </button>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => applyStarter(MJML_STARTER_SIMPLE)}
-                              className="rounded-md border border-ink-900 bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800"
-                            >
-                              Standard einfügen
-                            </button>
+                      <Suspense
+                        fallback={
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Builder wird geladen…
+                            </p>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => switchViewMode("html")}
-                            className="mt-2 text-[12px] text-ink-500 underline underline-offset-2 hover:text-ink-700"
-                          >
-                            … oder direkt rohes HTML editieren
-                          </button>
-                        </div>
-                      ) : (
-                        <Suspense
-                          fallback={
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Editor wird geladen…
-                              </p>
-                            </div>
-                          }
-                        >
-                          <EmailMjmlEditor
-                            key={one.data.id}
-                            ref={editorRef}
-                            initialMjml={one.data.body_mjml ?? ""}
-                            onDirtyChange={setDirty}
-                          />
-                        </Suspense>
-                      )}
+                        }
+                      >
+                        <EmailUnlayerEditor
+                          key={one.data.id}
+                          ref={editorRef}
+                          initialDesign={design}
+                          onDirtyChange={setDirty}
+                        />
+                      </Suspense>
                     </div>
                     {viewMode === "html" && (
                       <div className="absolute inset-0 flex flex-col bg-ink-900">
                         <textarea
                           ref={htmlTextareaRef}
-                          value={bodyHtml}
+                          value={htmlOnly}
                           onChange={(e) => {
-                            setBodyHtml(e.target.value);
+                            setHtmlOnly(e.target.value);
                             setDirty(true);
                           }}
                           spellCheck={false}
@@ -1082,7 +993,7 @@ export default function EmailTemplatesPage() {
                   onChange={(e) => setNewCopyFrom(e.target.value)}
                   className="w-full rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-900 focus:border-ink-400 focus:outline-none"
                 >
-                  <option value="">— leer starten (Standard-MJML) —</option>
+                  <option value="">— leer starten —</option>
                   {rows.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.id} — {r.subject}

@@ -12,14 +12,13 @@ import { getCurrentUser, jsonResponse, type AuthEnv } from "../../../_lib/auth";
 
 const MAX_ID_LEN = 200;
 const MAX_SUBJECT_LEN = 998;
-const MAX_BODY_LEN = 1_000_000;
+const MAX_BODY_LEN = 2_000_000;
 const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
 
 type Row = {
   id: string;
   subject: string;
   body_html: string;
-  body_mjml: string | null;
   updated_at: string;
 };
 
@@ -38,11 +37,8 @@ function requireDb(env: AuthEnv): D1Database | Response {
 
 function tableMissingHint(e: unknown): string | null {
   const msg = (e as Error)?.message || String(e);
-  if (/no such column.*body_mjml/i.test(msg)) {
-    return "Spalte `body_mjml` fehlt. Migration ausführen: `wrangler d1 execute <DB-NAME> --file=./d1/migrations/0008_email_templates_mjml.sql`.";
-  }
   if (/no such table/i.test(msg) || /email_templates/.test(msg)) {
-    return "Tabelle `email_templates` fehlt. Migrationen ausführen: `wrangler d1 execute <DB-NAME> --file=./d1/migrations/0007_email_templates.sql && --file=./d1/migrations/0008_email_templates_mjml.sql`.";
+    return "Tabelle `email_templates` fehlt. Migration ausführen: `wrangler d1 execute <DB-NAME> --file=./d1/migrations/0007_email_templates.sql`.";
   }
   return null;
 }
@@ -74,7 +70,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   try {
     const row = await db
       .prepare(
-        "SELECT id, subject, body_html, body_mjml, updated_at FROM email_templates WHERE id = ? LIMIT 1",
+        "SELECT id, subject, body_html, updated_at FROM email_templates WHERE id = ? LIMIT 1",
       )
       .bind(id)
       .first<Row>();
@@ -94,7 +90,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 type PutBody = {
   subject?: string;
   body_html?: string;
-  body_mjml?: string | null;
   /** Optional: id rename. Wenn gesetzt und != alte id, wird umbenannt. */
   new_id?: string;
 };
@@ -126,7 +121,7 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
   try {
     const cur = await db
       .prepare(
-        "SELECT id, subject, body_html, body_mjml, updated_at FROM email_templates WHERE id = ? LIMIT 1",
+        "SELECT id, subject, body_html, updated_at FROM email_templates WHERE id = ? LIMIT 1",
       )
       .bind(id)
       .first<Row>();
@@ -146,16 +141,6 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
         : typeof body.body_html === "string"
           ? body.body_html
           : cur.body_html;
-    // body_mjml: explizit `null` löscht den Source, `undefined` lässt unverändert,
-    // String setzt ihn neu.
-    const bodyMjml: string | null =
-      body.body_mjml === undefined
-        ? cur.body_mjml
-        : body.body_mjml === null
-          ? null
-          : typeof body.body_mjml === "string"
-            ? body.body_mjml
-            : cur.body_mjml;
 
     if (!subject) {
       return jsonResponse(
@@ -168,9 +153,6 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
     }
     if (bodyHtml.length > MAX_BODY_LEN) {
       return jsonResponse({ error: "body_html zu groß" }, { status: 400 });
-    }
-    if (bodyMjml && bodyMjml.length > MAX_BODY_LEN) {
-      return jsonResponse({ error: "body_mjml zu groß" }, { status: 400 });
     }
 
     let newId = id;
@@ -203,22 +185,22 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
     if (newId === id) {
       await db
         .prepare(
-          "UPDATE email_templates SET subject = ?, body_html = ?, body_mjml = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+          "UPDATE email_templates SET subject = ?, body_html = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
-        .bind(subject, bodyHtml, bodyMjml, id)
+        .bind(subject, bodyHtml, id)
         .run();
     } else {
       await db
         .prepare(
-          "UPDATE email_templates SET id = ?, subject = ?, body_html = ?, body_mjml = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+          "UPDATE email_templates SET id = ?, subject = ?, body_html = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
         )
-        .bind(newId, subject, bodyHtml, bodyMjml, id)
+        .bind(newId, subject, bodyHtml, id)
         .run();
     }
 
     const row = await db
       .prepare(
-        "SELECT id, subject, body_html, body_mjml, updated_at FROM email_templates WHERE id = ? LIMIT 1",
+        "SELECT id, subject, body_html, updated_at FROM email_templates WHERE id = ? LIMIT 1",
       )
       .bind(newId)
       .first<Row>();
