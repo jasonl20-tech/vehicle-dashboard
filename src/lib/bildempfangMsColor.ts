@@ -85,3 +85,18 @@ export function msToRgbTriple(
   const { r, g, b } = gradient(ms, range);
   return `${r}, ${g}, ${b}`;
 }
+
+/**
+ * Liefert RGB als Tuple `[r, g, b]` (0..255) — das von deck.gl-Layern
+ * (z.B. `getFillColor`, `getColor`) erwartete Format.
+ */
+export function msToRgbArray(
+  ms: number | null,
+  range: { lo: number; hi: number } = { lo: 20, hi: 900 },
+): [number, number, number] {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) {
+    return [NEUTRAL.r, NEUTRAL.g, NEUTRAL.b];
+  }
+  const { r, g, b } = gradient(ms, range);
+  return [r, g, b];
+}

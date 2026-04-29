@@ -7,16 +7,17 @@ import {
 import { buildIpMapMarkers } from "../lib/bildempfangMapMarkers";
 import { BILDBEMPFANG_OCEAN_BG } from "../lib/bildempfangMapTheme";
 
-const BildempfangRealMap = lazy(
-  () => import("../components/bildempfang/BildempfangRealMap"),
+const BildempfangScene = lazy(
+  () => import("../components/bildempfang/BildempfangScene"),
 );
 
 /**
- * Bildempfang — full-screen Karte. Bewusst kein Header, keine Sidebar,
- * keine Toolbar: der Seitenname steht bereits im globalen
- * `DashboardHeader`, und alle Detail-Daten zur jeweiligen IP/Edge werden
- * direkt am Punkt per Leaflet-Popup angezeigt (siehe
- * `BildempfangRealMap`).
+ * Bildempfang — Vollbild-3D-Szene auf MapLibre + deck.gl.
+ *
+ * Bewusst kein zusätzlicher Header, keine Sidebar, keine Toolbar an der
+ * Seite: der Seitenname steht schon im globalen `DashboardHeader`,
+ * Detaildaten zur jeweiligen IP/Edge werden direkt am Punkt im
+ * Click-Detail-Panel der Szene angezeigt (siehe `BildempfangScene`).
  */
 export default function BildempfangPage() {
   const ipUrl = useMemo(() => imageUrlRequestsIpBreakdownUrl(), []);
@@ -41,7 +42,7 @@ export default function BildempfangPage() {
           />
         }
       >
-        <BildempfangRealMap ipMarkers={ipMarkers} />
+        <BildempfangScene ipMarkers={ipMarkers} />
       </Suspense>
     </div>
   );
