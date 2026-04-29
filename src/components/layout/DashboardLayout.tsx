@@ -38,6 +38,7 @@ const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/kunden/test-anfragen" as const;
 const FULLSCREEN_MAP_BILDBEMPFANG = "/ansichten/bildempfang" as const;
 const KUNDEN_CRM = "/kunden/crm" as const;
 const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
+const EMAIL_TEMPLATE_EDITOR_PREFIX = "/emails/templates/" as const;
 
 export default function DashboardLayout() {
   const { pathname } = useLocation();
@@ -45,6 +46,7 @@ export default function DashboardLayout() {
   const isKundenAnfragenPage = pathname === KUNDEN_ANFRAGEN;
   const isBildempfangMap = pathname === FULLSCREEN_MAP_BILDBEMPFANG;
   const isCrmPage = pathname === KUNDEN_CRM;
+  const isEmailEditor = pathname.startsWith(EMAIL_TEMPLATE_EDITOR_PREFIX);
   /** Vollflächig + Header-Toolbar (wie CRM): Anfragen + Test Anfragen */
   const isKundenAnfragenLayout = isKundenAnfragenPage || isKundenTestAnfragen;
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -107,8 +109,10 @@ export default function DashboardLayout() {
     [],
   );
   useEffect(() => {
-    if (!isCrmPage && !isKundenAnfragenLayout) setHeaderTrailing(null);
-  }, [isCrmPage, isKundenAnfragenLayout]);
+    if (!isCrmPage && !isKundenAnfragenLayout && !isEmailEditor) {
+      setHeaderTrailing(null);
+    }
+  }, [isCrmPage, isKundenAnfragenLayout, isEmailEditor]);
 
   return (
     <div
@@ -140,7 +144,10 @@ export default function DashboardLayout() {
         />
         <main
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            isBildempfangMap || isCrmPage || isKundenAnfragenLayout
+            isBildempfangMap ||
+            isCrmPage ||
+            isKundenAnfragenLayout ||
+            isEmailEditor
               ? "h-[100dvh] min-h-0"
               : ""
           }`}
@@ -153,15 +160,17 @@ export default function DashboardLayout() {
           <DashboardHeader
             onOpenMobileMenu={() => setMobileOpen(true)}
             trailing={
-              isCrmPage || isKundenAnfragenLayout ? headerTrailing : null
+              isCrmPage || isKundenAnfragenLayout || isEmailEditor
+                ? headerTrailing
+                : null
             }
-            crmMode={isCrmPage || isKundenAnfragenLayout}
+            crmMode={isCrmPage || isKundenAnfragenLayout || isEmailEditor}
           />
           <div
             className={
               isBildempfangMap
                 ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                : isCrmPage || isKundenAnfragenLayout
+                : isCrmPage || isKundenAnfragenLayout || isEmailEditor
                   ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
                   : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
@@ -170,7 +179,7 @@ export default function DashboardLayout() {
               className={
                 isBildempfangMap
                   ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
-                  : isCrmPage || isKundenAnfragenLayout
+                  : isCrmPage || isKundenAnfragenLayout || isEmailEditor
                     ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
                     : ""
               }

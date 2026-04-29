@@ -45,11 +45,6 @@ const META: Record<
     eyebrow: "Emails",
     description: "Öffnungs- und Klick-Tracking – Inhalte folgen.",
   },
-  "/emails/templates": {
-    title: "Email Templates",
-    eyebrow: "Emails",
-    description: "Vorlagen für Transaktions- und Marketing-Mails – Inhalte folgen.",
-  },
   "/emails/automator": {
     title: "Email Automator",
     eyebrow: "Emails",

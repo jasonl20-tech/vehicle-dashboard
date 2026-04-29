@@ -116,7 +116,7 @@ export interface AuthEnv {
   mapping?: D1Database;
   /**
    * D1: Webseite (z. B. Tabelle `submissions` für Formular-Einsendungen). Variable `website`.
-   * Tabelle `customers` (CRM) liegt in derselben Datenbank.
+   * Tabelle `customers` (CRM) und `email_templates` liegen in derselben Datenbank.
    */
   website?: D1Database;
 }

@@ -20,6 +20,8 @@ import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
 import KundenCrmPage from "./pages/KundenCrmPage";
 import AnfragenPage from "./pages/AnfragenPage";
+import EmailTemplateEditorPage from "./pages/EmailTemplateEditorPage";
+import EmailTemplatesPage from "./pages/EmailTemplatesPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
@@ -136,10 +138,14 @@ export default function App() {
           element={<Navigate to="/zahlungen/zahlungslinks" replace />}
         />
         <Route path="/emails" element={<Outlet />}>
-          <Route index element={<Navigate to="logs" replace />} />
+          <Route index element={<Navigate to="templates" replace />} />
           <Route path="logs" element={<ModulePage />} />
           <Route path="tracking" element={<ModulePage />} />
-          <Route path="templates" element={<ModulePage />} />
+          <Route path="templates" element={<EmailTemplatesPage />} />
+          <Route
+            path="templates/:id"
+            element={<EmailTemplateEditorPage />}
+          />
           <Route path="automator" element={<ModulePage />} />
         </Route>
         <Route path="/website/blogs" element={<ModulePage />} />
