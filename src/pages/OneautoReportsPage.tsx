@@ -80,23 +80,18 @@ function Header({
   onExport?: () => void;
 }) {
   return (
-    <header className="mb-8 border-b border-hair pb-6">
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
-        API Analytics · Oneauto Reports
-      </p>
+    <header
+      aria-label="Oneauto Reports"
+      className="mb-6 border-b border-hair pb-4"
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="font-display text-[34px] leading-[1.05] tracking-tighter2 text-ink-900">
-            Oneauto Reports
-          </h1>
-          <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-500">
-            Monatliche Abrechnung der Bild-Views aller Oneauto-API-Keys
-            (Kontoübergreifend: z. B. e6dd0c88…ac31 und e6dd0c88…9c76b). Pro
-            View berechnen wir{" "}
-            <span className="font-mono text-[12.5px] text-ink-700">£0,02</span>{" "}
-            und rechnen mit dem ECB-Wechselkurs zum Monatsende in Euro um.
-          </p>
-        </div>
+        <p className="max-w-2xl text-[13px] leading-relaxed text-ink-500">
+          Monatliche Abrechnung der Bild-Views aller Oneauto-API-Keys
+          (Kontoübergreifend: z. B. e6dd0c88…ac31 und e6dd0c88…9c76b). Pro
+          View berechnen wir{" "}
+          <span className="font-mono text-[12px] text-ink-700">£0,02</span> und
+          rechnen mit dem ECB-Wechselkurs zum Monatsende in Euro um.
+        </p>
         <div className="flex items-center gap-2">
           {onExport && (
             <button

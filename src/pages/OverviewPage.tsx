@@ -855,21 +855,13 @@ export default function OverviewPage() {
 
   return (
     <>
-      {/* Header */}
+      {/* Header — kompakte Toolbar; der Seitenname steht bereits oben */}
       <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-[10.5px] font-medium uppercase tracking-[0.18em] text-ink-500">
-            Dashboard
-          </p>
-          <h1 className="mt-1 font-display text-[34px] leading-none tracking-tighter2 text-ink-900 sm:text-[40px]">
-            Übersicht
-          </h1>
-          <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-ink-500">
-            Live-Kennzahlen aus Website, API, Oneauto und Controlling — mit
-            30-Tage-Trends pro Quelle. Klick auf eine Karte öffnet die
-            Detailansicht.
-          </p>
-        </div>
+        <p className="max-w-2xl text-[13px] leading-relaxed text-ink-500">
+          Live-Kennzahlen aus Website, API, Oneauto und Controlling — mit
+          30-Tage-Trends pro Quelle. Klick auf eine Karte öffnet die
+          Detailansicht.
+        </p>
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-[11px] tabular-nums text-ink-400">
             zuletzt {updatedAt}

@@ -36,7 +36,6 @@ const BILDEMPFANG_PAGE = "/ansichten/bildempfang" as const;
 const KUNDEN_CRM = "/kunden/crm" as const;
 const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
 const EMAIL_TEMPLATES = "/emails/templates" as const;
-const EMAIL_MANUELL = "/emails/manuell" as const;
 const ASSETS_PAGE = "/databases/assets" as const;
 
 /**
@@ -72,8 +71,7 @@ export default function DashboardLayout() {
    */
   const isBildempfangPage = pathname === BILDEMPFANG_PAGE;
   const isCrmPage = pathname === KUNDEN_CRM;
-  const isEmailEditor =
-    pathname === EMAIL_TEMPLATES || pathname === EMAIL_MANUELL;
+  const isEmailEditor = pathname === EMAIL_TEMPLATES;
   const isAssetsPage = pathname === ASSETS_PAGE;
   const isSplitView = isSplitViewPath(pathname);
   /** Vollflächig + Header-Toolbar (wie CRM): Anfragen + Test Anfragen */

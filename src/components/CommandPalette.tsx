@@ -139,7 +139,7 @@ export default function CommandPalette({ open, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh] sm:pt-[14vh]"
+      className="fixed inset-0 z-[2000] flex items-start justify-center px-4 pt-[12vh] sm:pt-[14vh]"
       role="dialog"
       aria-modal="true"
       aria-label="Befehlspalette"

@@ -2,12 +2,18 @@ import { Bell, Calendar, ChevronDown, Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 type Props = {
-  eyebrow?: string;
+  /**
+   * Wird intern (z. B. für `aria-label`) genutzt. Der Seitenname wird
+   * NICHT mehr im Body angezeigt — er steht bereits prominent im
+   * `DashboardHeader`. So haben wir keine redundante Überschrift.
+   */
   title: string;
+  /** Veraltet: wurde früher als kleines „Eyebrow"-Tag gerendert. */
+  eyebrow?: string;
   description?: ReactNode;
   rightSlot?: ReactNode;
   primaryAction?: { label: string; onClick?: () => void };
-  /** Versteckt Zeitraum-Dropdown („Letzte 7 Tage“ …) und Benachrichtigungs-Glocke. */
+  /** Versteckt Zeitraum-Dropdown („Letzte 7 Tage" …) und Benachrichtigungs-Glocke. */
   hideCalendarAndNotifications?: boolean;
 };
 
@@ -19,7 +25,6 @@ const RANGES = [
 ];
 
 export default function PageHeader({
-  eyebrow,
   title,
   description,
   rightSlot,
@@ -29,19 +34,24 @@ export default function PageHeader({
   const [range, setRange] = useState(RANGES[1]);
   const [open, setOpen] = useState(false);
 
+  // Wenn weder Beschreibung noch rechte Slot-Inhalte vorhanden sind und
+  // Calendar+Notifications versteckt sind, rendern wir gar nichts —
+  // sonst entsteht ein leerer Border-Bereich.
+  const hasContent =
+    !!description ||
+    !!rightSlot ||
+    !!primaryAction ||
+    !hideCalendarAndNotifications;
+  if (!hasContent) return null;
+
   return (
-    <header className="mb-10 flex flex-wrap items-end justify-between gap-6 border-b border-hair pb-6">
+    <header
+      aria-label={title}
+      className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-hair pb-4"
+    >
       <div className="min-w-0">
-        {eyebrow && (
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
-            {eyebrow}
-          </p>
-        )}
-        <h1 className="font-display text-[34px] leading-[1.05] tracking-tighter2 text-ink-900">
-          {title}
-        </h1>
         {description ? (
-          <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-ink-500">
+          <p className="max-w-2xl text-[13px] leading-relaxed text-ink-500">
             {description}
           </p>
         ) : null}

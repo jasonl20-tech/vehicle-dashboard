@@ -17,6 +17,10 @@ export type IpMapMarker = {
   userAgent: string;
   edgeCode: string;
   imagePath: string;
+  /** Anzahl Requests pro IP/Land im ausgewählten Zeitraum. */
+  count: number;
+  /** Key-Status aus `blob8` (valid / expired / none / "") */
+  status: string;
   /** RGBA aus avgMs (grün…rot) */
   signalColor: string;
   /** Größere Aura (px), innen folgt kleiner IP-Punkt */
@@ -94,6 +98,8 @@ export function buildIpMapMarkers(
       userAgent: (r.userAgent ?? "").trim(),
       edgeCode: (r.edgeCode ?? "").trim().toUpperCase().slice(0, 3),
       imagePath: (r.imagePath ?? "").trim(),
+      count: r.count,
+      status: (r.status ?? "").trim().toLowerCase(),
       signalColor,
       auraRadius,
       title: `${r.ip} (${fam === "v4" ? "IPv4" : "IPv6"}) — ${r.iso2}: ${r.count}`,

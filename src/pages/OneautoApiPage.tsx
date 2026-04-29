@@ -5,11 +5,5 @@ import KundenApiPage from "./KundenApiPage";
  * `getOneautoKeys` im Backend). Logik: `KundenApiPage` + `mode=oneauto`.
  */
 export default function OneautoApiPage() {
-  return (
-    <KundenApiPage
-      mode="oneauto"
-      title="Oneauto API"
-      eyebrow="API Analytics · Oneauto API"
-    />
-  );
+  return <KundenApiPage mode="oneauto" title="Oneauto API" />;
 }

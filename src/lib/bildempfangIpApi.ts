@@ -14,6 +14,11 @@ export type ImageUrlIpRow = {
   edgeCode?: string;
   /** Letzter Bild-URL-Pfad (aus `blob1` im Log) */
   imagePath?: string;
+  /**
+   * Key-Status aus `blob8`, typischerweise `valid`, `expired`, `none`.
+   * Leerer String, wenn nicht erhebbar.
+   */
+  status?: string;
 };
 
 export type ImageUrlIpBreakdownResponse = {

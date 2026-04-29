@@ -159,27 +159,22 @@ function Header({
   sourceLabel: string;
 }) {
   return (
-    <header className="mb-8 border-b border-hair pb-6">
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
-        Intern Analytics · Controlling
-      </p>
+    <header
+      aria-label="Controlling"
+      className="mb-6 border-b border-hair pb-4"
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="font-display text-[34px] leading-[1.05] tracking-tighter2 text-ink-900">
-            Controlling
-          </h1>
-          <p className="mt-2 max-w-3xl text-[13.5px] leading-relaxed text-ink-500">
-            Auswertung der Plattform-Logs aus{" "}
-            <span className="font-mono text-[12.5px] text-ink-700">
-              {sourceLabel}
-            </span>
-            . Fortschritt aus{" "}
-            <span className="font-mono text-[12px] text-ink-700">double2</span>{" "}
-            (offen) und{" "}
-            <span className="font-mono text-[12px] text-ink-700">double3</span>{" "}
-            (gesamt) je Modus, Sessions ab&nbsp;{gapMinutes}&nbsp;min Pause.
-          </p>
-        </div>
+        <p className="max-w-3xl text-[13px] leading-relaxed text-ink-500">
+          Auswertung der Plattform-Logs aus{" "}
+          <span className="font-mono text-[12px] text-ink-700">
+            {sourceLabel}
+          </span>
+          . Fortschritt aus{" "}
+          <span className="font-mono text-[12px] text-ink-700">double2</span>{" "}
+          (offen) und{" "}
+          <span className="font-mono text-[12px] text-ink-700">double3</span>{" "}
+          (gesamt) je Modus, Sessions ab&nbsp;{gapMinutes}&nbsp;min Pause.
+        </p>
         <button
           type="button"
           onClick={onReload}

@@ -43,6 +43,8 @@ type RawIpRow = {
   ua?: string;
   edge?: string;
   imagePath?: string;
+  /** Status aus `blob8`: typischerweise `valid` / `expired` / `none`. */
+  status?: string;
 };
 
 function parseOptFloat(v: unknown): number | null {
@@ -115,6 +117,8 @@ type MergedIp = {
   userAgent: string;
   edgeCode: string;
   imagePath: string;
+  /** Status aus `blob8`: `valid`, `expired`, `none` o. ä. */
+  status: string;
 };
 
 function defaultRange(days: number): { from: string; to: string } {
@@ -262,6 +266,7 @@ function buildIpSqlEnrichedPathIndex2(
   ${avgMsExpr()},
   argMax(blob5, timestamp) AS ua,
   argMax(blob9, timestamp) AS edge,
+  argMax(blob8, timestamp) AS status,
   ${pathExpr}`;
   if (mode === "dedicated") {
     return `${agg}
@@ -305,6 +310,7 @@ function buildIpSqlEnrichedBlobPath(
   ${avgMsExpr()},
   argMax(blob5, timestamp) AS ua,
   argMax(blob9, timestamp) AS edge,
+  argMax(blob8, timestamp) AS status,
   argMax(blob1, timestamp) AS imagePath`;
   if (mode === "dedicated") {
     return `${agg}
@@ -358,6 +364,7 @@ function buildIpSqlEnrichedAny(
   ${avgMsExpr()},
   any(blob5) AS ua,
   any(blob9) AS edge,
+  any(blob8) AS status,
   any(blob1) AS pathBlob,
   any(index2) AS pathIndex`;
   if (mode === "dedicated") {
@@ -433,6 +440,13 @@ function mergeRows(parts: RawIpRow[][]): Map<string, MergedIp> {
       const avgMs = pickAvgMs(rec) ?? parseOptFloat(rec);
       const ua = pickStr(rec, "ua", "UA", "userAgent", "useragent", "BLOB5", "blob5");
       const edge = pickStr(rec, "edge", "EDGE", "edgeCode", "edgecode", "BLOB9", "blob9");
+      const status = pickStr(
+        rec,
+        "status",
+        "STATUS",
+        "blob8",
+        "BLOB8",
+      ).toLowerCase();
       // `imagePath` kann unter mehreren Schlüsseln im Response auftauchen, je
       // nach Builder-Variante. Bei der `any()`-Variante kommen `pathIndex`
       // (= index2) und `pathBlob` (= blob1) getrennt; wir bevorzugen
@@ -465,6 +479,7 @@ function mergeRows(parts: RawIpRow[][]): Map<string, MergedIp> {
           userAgent: ua,
           edgeCode: edge,
           imagePath,
+          status,
         });
         continue;
       }
@@ -478,6 +493,7 @@ function mergeRows(parts: RawIpRow[][]): Map<string, MergedIp> {
         if (ua) cur.userAgent = ua;
         if (edge) cur.edgeCode = edge;
         if (imagePath) cur.imagePath = imagePath;
+        if (status) cur.status = status;
       }
     }
   }
@@ -622,13 +638,24 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     userAgent: string;
     edgeCode: string;
     imagePath: string;
+    status: string;
   }[] = [];
   let totalV4 = 0;
   let totalV6 = 0;
   let totalUnknown = 0;
 
   for (const row of merged.values()) {
-    const { ip, iso2, c, msNum, msDen, userAgent, edgeCode, imagePath } = row;
+    const {
+      ip,
+      iso2,
+      c,
+      msNum,
+      msDen,
+      userAgent,
+      edgeCode,
+      imagePath,
+      status,
+    } = row;
     const family = classifyIpFamily(ip);
     const avgMs =
       msDen > 0 && Number.isFinite(msNum / msDen) ? msNum / msDen : null;
@@ -641,6 +668,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       userAgent,
       edgeCode,
       imagePath,
+      status,
     });
     if (family === "v4") totalV4 += c;
     else if (family === "v6") totalV6 += c;

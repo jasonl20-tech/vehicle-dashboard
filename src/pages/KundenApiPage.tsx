@@ -212,15 +212,12 @@ interface KundenApiPageProps {
   title?: string;
   /** Optionaler Subtitel/Header-Beschreibung. */
   description?: ReactNode;
-  /** Eyebrow-Label (klein, oben). */
-  eyebrow?: string;
 }
 
 export default function KundenApiPage({
   mode = "customers",
   title = "Kunden API",
   description,
-  eyebrow = "API Analytics · Kunden API",
 }: KundenApiPageProps = {}) {
   const [range, setRange] = useState<Range>(() => rangeFromPreset("7d"));
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -272,7 +269,6 @@ export default function KundenApiPage({
         onRange={setRange}
         onReload={reloadAll}
         title={title}
-        eyebrow={eyebrow}
         description={description}
         mode={mode}
       />
@@ -420,15 +416,17 @@ function Header({
   onRange,
   onReload,
   title,
-  eyebrow,
   description,
   mode,
 }: {
   range: Range;
   onRange: (r: Range) => void;
   onReload: () => void;
+  /**
+   * Wird nur noch für `aria-label` benutzt — der eigentliche Seitenname
+   * steht im DashboardHeader und muss hier nicht wiederholt werden.
+   */
   title: string;
-  eyebrow: string;
   description?: ReactNode;
   mode: AnalyticsMode;
 }) {
@@ -456,19 +454,14 @@ function Header({
     );
 
   return (
-    <header className="mb-8 border-b border-hair pb-6">
-      <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-ink-400">
-        {eyebrow}
-      </p>
+    <header
+      aria-label={title}
+      className="mb-6 border-b border-hair pb-4"
+    >
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="font-display text-[34px] leading-[1.05] tracking-tighter2 text-ink-900">
-            {title}
-          </h1>
-          <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-500">
-            {description ?? defaultDescription}
-          </p>
-        </div>
+        <p className="max-w-2xl text-[13px] leading-relaxed text-ink-500">
+          {description ?? defaultDescription}
+        </p>
         <div className="flex items-center gap-2">
           <button
             type="button"
