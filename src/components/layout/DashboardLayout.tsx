@@ -50,6 +50,7 @@ const SPLIT_VIEW_PREFIXES = [
   "/systeme/prompts",
   "/systeme/mapping",
   "/systeme/blockierte-fahrzeuge",
+  "/emails/logs",
 ] as const;
 
 function isSplitViewPath(pathname: string): boolean {
