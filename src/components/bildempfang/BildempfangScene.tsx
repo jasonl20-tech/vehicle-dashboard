@@ -55,18 +55,49 @@ import "./BildempfangScene.css";
  * Browser, Bildpfad).
  */
 
-const MAP_STYLE =
-  "https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json";
-
-/** Schwarzer Fallback-Style ohne externe Tiles — falls CARTO mal weg ist. */
-const FALLBACK_STYLE = {
+/**
+ * Inline-Style ohne externe `style.json`-Anfrage. Wir nutzen die
+ * CARTO-Dark-Raster-Tiles, die wir früher schon mit Leaflet stabil
+ * eingesetzt haben — dadurch funktionieren die Tiles auch dann, wenn die
+ * `style.json`-Endpoints (CORS/CSP) nicht erreichbar sind.
+ *
+ * Mit `raster-saturation` und `raster-brightness-min/max` wird das
+ * Tile-Bild leicht entsättigt und tiefer gesetzt, damit die deck.gl-
+ * Säulen darüber gut leuchten. Den finalen „cyan" Schimmer macht das
+ * CSS-Overlay (`bg-scene__overlay`).
+ */
+const RASTER_DARK_STYLE = {
   version: 8 as const,
-  sources: {},
+  sources: {
+    "carto-dark": {
+      type: "raster" as const,
+      tiles: [
+        "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+        "https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+        "https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    },
+  },
   layers: [
     {
       id: "bg",
       type: "background" as const,
       paint: { "background-color": "#05060a" },
+    },
+    {
+      id: "carto-dark",
+      type: "raster" as const,
+      source: "carto-dark",
+      paint: {
+        "raster-opacity": 0.78,
+        "raster-saturation": -0.35,
+        "raster-contrast": 0.18,
+        "raster-brightness-min": 0.0,
+        "raster-brightness-max": 0.85,
+      },
     },
   ],
 };
@@ -154,25 +185,10 @@ export default function BildempfangScene({ ipMarkers }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const overlayRef = useRef<MapboxOverlay | null>(null);
-  const [styleReady, setStyleReady] = useState(false);
+  const tickRef = useRef(0);
   const [selected, setSelected] = useState<IpMapMarker | null>(null);
-  const [tick, setTick] = useState(0);
-
-  // Animations-Loop für TripsLayer.currentTime
-  useEffect(() => {
-    let raf = 0;
-    let active = true;
-    const loop = () => {
-      if (!active) return;
-      setTick(performance.now());
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => {
-      active = false;
-      cancelAnimationFrame(raf);
-    };
-  }, []);
+  const [layersVersion, setLayersVersion] = useState(0);
+  const [overlayReady, setOverlayReady] = useState(false);
 
   // ---------- Datenaufbereitung -----------------------------------------
   const msRange = useMemo(() => {
@@ -193,12 +209,14 @@ export default function BildempfangScene({ ipMarkers }: Props) {
     return ipMarkers.map((m) => {
       const [r, g, b] = msToRgbArray(m.avgMs, msRange);
       const t = Math.log(1 + m.count) / Math.max(0.0001, logMax);
-      const elevation = 35_000 + 220_000 * t;
+      // Säulen müssen bei der Welt-Übersicht (Zoom ~1.5) noch sichtbar
+      // sein — daher relativ groß (40–120 km Radius, 200–2500 km Höhe).
+      const elevation = 220_000 + 2_300_000 * t;
       return {
         marker: m,
         position: [m.coordinates[0], m.coordinates[1]],
         color: [r, g, b, 235],
-        haloColor: [r, g, b, 70],
+        haloColor: [r, g, b, 110],
         elevation,
       };
     });
@@ -268,7 +286,7 @@ export default function BildempfangScene({ ipMarkers }: Props) {
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: MAP_STYLE,
+      style: RASTER_DARK_STYLE as unknown as maplibregl.StyleSpecification,
       center: [INITIAL_VIEW.longitude, INITIAL_VIEW.latitude],
       zoom: INITIAL_VIEW.zoom,
       pitch: INITIAL_VIEW.pitch,
@@ -280,73 +298,74 @@ export default function BildempfangScene({ ipMarkers }: Props) {
     map.touchZoomRotate.enable();
     mapRef.current = map;
 
-    map.on("load", () => {
+    const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
+
+    const attach = () => {
       if (aborted) return;
-      // Hintergrund-/Land-Farben tiefer ziehen, damit das Cyan/Magenta-
-      // Overlay gut „leuchtet".
       try {
-        const layers = map.getStyle().layers ?? [];
-        for (const l of layers) {
-          if (l.type === "background") {
-            map.setPaintProperty(l.id, "background-color", "#05060a");
-          }
-          if (l.type === "fill" && /land|earth|continent|fill_land/i.test(l.id)) {
-            map.setPaintProperty(l.id, "fill-color", "#0b1018");
-            map.setPaintProperty(l.id, "fill-opacity", 0.95);
-          }
-          if (l.type === "fill" && /water|ocean/i.test(l.id)) {
-            map.setPaintProperty(l.id, "fill-color", "#03060c");
-          }
-          if (l.type === "line" && /admin|boundary|country/i.test(l.id)) {
-            map.setPaintProperty(l.id, "line-color", "rgba(34, 211, 238, 0.32)");
-            map.setPaintProperty(l.id, "line-width", 0.7);
-          }
-        }
+        map.addControl(overlay);
+        overlayRef.current = overlay;
+        setOverlayReady(true);
+        // Initialer Resize, damit die Canvas-Größe zur Container-Größe passt.
+        requestAnimationFrame(() => {
+          if (!aborted) map.resize();
+        });
       } catch {
-        // Style-Anpassung optional — wenn der Style sich ändert, ignorieren.
+        // Falls der Style noch nicht ganz da ist, beim nächsten 'load'
+        // erneut versuchen — passiert in der Praxis selten.
       }
-      setStyleReady(true);
-    });
+    };
 
-    map.on("error", (e) => {
-      // Bei Fehler vom Tile-Service auf Fallback-Style umstellen.
-      if (aborted) return;
-      const err = (e as { error?: { status?: number } }).error;
-      if (err && err.status && err.status >= 400) {
-        map.setStyle(FALLBACK_STYLE as unknown as maplibregl.StyleSpecification);
-        setStyleReady(true);
-      }
-    });
-
-    const overlay = new MapboxOverlay({
-      interleaved: true,
-      layers: [],
-    });
-    map.addControl(overlay);
-    overlayRef.current = overlay;
+    if (map.loaded()) attach();
+    else map.once("load", attach);
 
     return () => {
       aborted = true;
-      if (overlay) {
-        try {
-          map.removeControl(overlay);
-        } catch {
-          /* noop */
-        }
+      try {
+        map.removeControl(overlay);
+      } catch {
+        /* noop */
       }
-      map.remove();
+      try {
+        map.remove();
+      } catch {
+        /* noop */
+      }
       mapRef.current = null;
       overlayRef.current = null;
-      setStyleReady(false);
+      setOverlayReady(false);
+    };
+  }, []);
+
+  // Animations-Loop: nur ein Re-Render pro ~120ms, damit der RAF-Tick
+  // nicht jede Frame deck.gl-Layer neu erzeugt. Innerhalb des Frames
+  // setzen wir nur `currentTime` neu — sehr leichtgewichtig.
+  useEffect(() => {
+    let raf = 0;
+    let active = true;
+    let lastNotify = 0;
+    const loop = (t: number) => {
+      if (!active) return;
+      tickRef.current = t;
+      if (t - lastNotify > 80) {
+        lastNotify = t;
+        setLayersVersion((v) => (v + 1) % 1_000_000);
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      active = false;
+      cancelAnimationFrame(raf);
     };
   }, []);
 
   // ---------- Layer-Updates ---------------------------------------------
   useEffect(() => {
     const overlay = overlayRef.current;
-    if (!overlay || !styleReady) return;
+    if (!overlay || !overlayReady) return;
 
-    const currentTime = tick % TRIP_LOOP_MS;
+    const currentTime = tickRef.current % TRIP_LOOP_MS;
 
     const tripsLayer = new TripsLayer<TripDatum>({
       id: "bg-trips",
@@ -383,9 +402,9 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       data: columnData,
       getPosition: (d) => d.position,
       getFillColor: (d) => d.haloColor,
-      getRadius: 18000,
-      radiusMinPixels: 4,
-      radiusMaxPixels: 26,
+      getRadius: 90000,
+      radiusMinPixels: 6,
+      radiusMaxPixels: 36,
       stroked: false,
       filled: true,
       pickable: false,
@@ -395,7 +414,7 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       id: "bg-ip-cols",
       data: columnData,
       diskResolution: 22,
-      radius: 14000,
+      radius: 55000,
       radiusUnits: "meters",
       extruded: true,
       pickable: true,
@@ -421,19 +440,15 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       id: "bg-edge-halo",
       data: edgeSites,
       getPosition: (s) => [s.pos[1], s.pos[0]],
-      getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 60],
-      getRadius: 50000,
-      radiusMinPixels: 14,
-      radiusMaxPixels: 42,
+      getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 70],
+      getRadius: 130000,
+      radiusMinPixels: 16,
+      radiusMaxPixels: 48,
       stroked: true,
       getLineColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 230],
-      getLineWidth: 1500,
-      lineWidthMinPixels: 1,
-      pickable: true,
-      onClick: () => {
-        // Edge-Click ist bewusst no-op (Detail-Panel ist IP-zentriert);
-        // Hover/Tooltip könnte später ergänzt werden.
-      },
+      getLineWidth: 2200,
+      lineWidthMinPixels: 1.2,
+      pickable: false,
     });
 
     const edgeCoreLayer = new ScatterplotLayer<EdgeSite>({
@@ -441,9 +456,9 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       data: edgeSites,
       getPosition: (s) => [s.pos[1], s.pos[0]],
       getFillColor: [EDGE_PRIMARY.r, EDGE_PRIMARY.g, EDGE_PRIMARY.b, 255],
-      getRadius: 8000,
-      radiusMinPixels: 3,
-      radiusMaxPixels: 6,
+      getRadius: 30000,
+      radiusMinPixels: 4,
+      radiusMaxPixels: 8,
       stroked: false,
       pickable: false,
     });
@@ -458,7 +473,7 @@ export default function BildempfangScene({ ipMarkers }: Props) {
         columnLayer,
       ],
     });
-  }, [columnData, arcData, tripData, edgeSites, styleReady, tick]);
+  }, [columnData, arcData, tripData, edgeSites, overlayReady, layersVersion]);
 
   // ---------- Toolbar-Aktionen ------------------------------------------
   const zoomBy = useCallback((delta: number) => {
