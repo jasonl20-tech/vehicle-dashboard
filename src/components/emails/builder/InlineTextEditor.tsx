@@ -83,7 +83,10 @@ const InlineTextEditor = forwardRef<InlineTextEditorHandle, Props>(
     ref,
   ) {
     const elRef = useRef<HTMLElement | null>(null);
-    const lastEmittedRef = useRef<string>(value);
+    // Sentinel: garantiert ungleich jedem realen value → der erste
+    // useEffect-Run setzt das initiale innerHTML einmalig.
+    const UNINITIALIZED = "\u0000__INIT__\u0000";
+    const lastEmittedRef = useRef<string>(UNINITIALIZED);
     const [showVarMenu, setShowVarMenu] = useState(false);
 
     useImperativeHandle(ref, () => ({
@@ -97,9 +100,15 @@ const InlineTextEditor = forwardRef<InlineTextEditorHandle, Props>(
       if (!active) setShowVarMenu(false);
     }, [active]);
 
-    // Wenn sich der Wert von außen ändert, übernehmen wir ihn —
-    // aber nur, wenn er sich vom letzten emit unterscheidet (sonst
-    // springt der Cursor während des Tippens).
+    // Initiales und externes innerHTML imperativ setzen.
+    //
+    // Wir vermeiden absichtlich `dangerouslySetInnerHTML`, weil React
+    // dabei bei JEDEM Wert-Update das DOM neu schreibt → der Caret
+    // (Cursor) springt zwingend an Position 0. Hier setzen wir das
+    // innerHTML nur, wenn sich der Wert wirklich von dem unterscheidet,
+    // den wir zuletzt emittiert haben (also: extern geändert), und
+    // lassen das DOM in allen anderen Fällen unangetastet, damit der
+    // Browser die Caret-Position bewahren kann.
     useEffect(() => {
       const el = elRef.current;
       if (!el) return;
@@ -231,7 +240,6 @@ const InlineTextEditor = forwardRef<InlineTextEditorHandle, Props>(
           onBlur={onInput}
           className={className}
           style={style}
-          dangerouslySetInnerHTML={{ __html: value }}
         />
       </div>
     );
