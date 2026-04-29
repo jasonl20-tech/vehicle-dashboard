@@ -11,10 +11,9 @@
   },
   "dependencies": {
     "globe.gl": "^2.45.3",
-    "grapesjs": "^0.22.15",
-    "grapesjs-preset-newsletter": "^1.0.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.453.0",
+    "mjml-browser": "^5.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
@@ -26,6 +25,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241011.0",
     "@types/leaflet": "^1.9.14",
+    "@types/node": "^25.6.0",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",

@@ -12,6 +12,12 @@ export type EmailTemplate = {
   id: string;
   subject: string;
   body_html: string;
+  /**
+   * MJML-Quelltext, falls die Vorlage über den MJML-Editor gepflegt wird.
+   * `null`, wenn die Vorlage nur als rohes HTML (Custom-HTML-Modus) gepflegt
+   * wird.
+   */
+  body_mjml: string | null;
   updated_at: string;
 };
 
@@ -62,6 +68,7 @@ export async function createEmailTemplate(input: {
   id: string;
   subject?: string;
   body_html?: string;
+  body_mjml?: string;
   copy_from_id?: string;
 }): Promise<EmailTemplate> {
   const res = await fetch(EMAIL_TEMPLATES_API, {
@@ -75,7 +82,17 @@ export async function createEmailTemplate(input: {
 
 export async function updateEmailTemplate(
   id: string,
-  patch: { subject?: string; body_html?: string; new_id?: string },
+  patch: {
+    subject?: string;
+    body_html?: string;
+    /**
+     * MJML-Source. `null` setzt den Source explizit auf NULL (z. B. wenn
+     * die Vorlage in den reinen HTML-Modus überführt werden soll).
+     * `undefined` lässt den bestehenden Wert unverändert.
+     */
+    body_mjml?: string | null;
+    new_id?: string;
+  },
 ): Promise<EmailTemplate> {
   const res = await fetch(emailTemplateUrl(id), {
     method: "PUT",
