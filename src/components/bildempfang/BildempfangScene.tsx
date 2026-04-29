@@ -1,8 +1,12 @@
-import maplibregl, { type Map as MaplibreMap } from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
-import { MapboxOverlay } from "@deck.gl/mapbox";
-import { ArcLayer, ColumnLayer, ScatterplotLayer } from "@deck.gl/layers";
-import { TripsLayer } from "@deck.gl/geo-layers";
+import DeckGL from "@deck.gl/react";
+import { MapView, type MapViewState } from "@deck.gl/core";
+import {
+  ArcLayer,
+  BitmapLayer,
+  ColumnLayer,
+  ScatterplotLayer,
+} from "@deck.gl/layers";
+import { TileLayer, TripsLayer } from "@deck.gl/geo-layers";
 import {
   Activity,
   Maximize2,
@@ -32,83 +36,42 @@ import {
 import "./BildempfangScene.css";
 
 /**
- * Bildempfang — 3D-„Big-Screen"-Szene.
+ * Bildempfang — 3D-„Big-Screen"-Szene direkt mit deck.gl (ohne
+ * MapLibre dazwischen, weil deck.gl seine eigene `MapView` mitbringt
+ * und die Tile-Logik via `TileLayer` selbst übernimmt — ein Stack weniger
+ * der schiefgehen kann).
  *
- * - **MapLibre GL** rendert die Erdkarte mit Pitch (45°) und Bearing,
- *   sodass man von der Welt-Übersicht bis auf Stadtebene rein-/rauszoomen
- *   kann (`scrollZoom`, `dragPan`, `dragRotate`).
- * - **deck.gl** überlagert die Karte mit:
- *     - `ColumnLayer`     — IPs als 3D-Säulen (Höhe = log(Requests),
- *                           Farbe = Latenz-Cyan→Magenta-Gradient).
- *     - `ScatterplotLayer`— weicher Glow um IPs (gleiche Farbe, low alpha).
- *     - `ScatterplotLayer`— Cloudflare Edge-PoPs als oranger Reticle-Punkt.
- *     - `ArcLayer`        — gebogene Verbindung Edge → IP (statisch, dezent).
- *     - `TripsLayer`      — animierter Datenfluss-Puls auf den Bögen
- *                           (Cloudflare-Orange, schnell durchfließend).
+ * Layer-Reihenfolge (von unten nach oben):
+ *   1) `TileLayer`       — CARTO-Dark-Raster-Tiles als Basemap.
+ *   2) `ScatterplotLayer`— Halo unter jedem IP (gleiche Latenz-Farbe,
+ *                          niedrige Alpha).
+ *   3) `ArcLayer`        — gebogene Edge → IP Verbindung (statisch, dezent).
+ *   4) `TripsLayer`      — animierter Daten-Puls (Cloudflare-Orange).
+ *   5) `ScatterplotLayer`— Cloudflare-Edge-PoP-Halo + Core (orange).
+ *   6) `ColumnLayer`     — IPs als 3D-Säulen (Höhe = log(Requests),
+ *                          Farbe = Cyan→Violet→Magenta-Latenz).
  *
- * Der MapLibre-Style ist CARTO „dark-matter no-labels" (frei verfügbar,
- * kein API-Key), der Hintergrund wird per `setPaintProperty` noch eine
- * Stufe schwärzer gestellt. Atmosphäre/Vignette/Scanlines kommen via CSS.
- *
- * Klick auf eine IP-Säule öffnet ein Detail-Panel rechts (alle
- * Analytics-Felder: IP, Land, Latenz, Edge-PoP, Status, Fahrzeug,
- * Browser, Bildpfad).
+ * Die Welt-Übersicht (Zoom ~1.5, Pitch 45°) zeigt sofort alle Säulen
+ * dank `radiusMinPixels` an Halo + Edge-Glows. Per Drag rotiert man, mit
+ * Strg/Pinch ändert man Pitch, Scroll zoomt rein bis auf Stadtebene.
  */
 
-/**
- * Inline-Style ohne externe `style.json`-Anfrage. Wir nutzen die
- * CARTO-Dark-Raster-Tiles, die wir früher schon mit Leaflet stabil
- * eingesetzt haben — dadurch funktionieren die Tiles auch dann, wenn die
- * `style.json`-Endpoints (CORS/CSP) nicht erreichbar sind.
- *
- * Mit `raster-saturation` und `raster-brightness-min/max` wird das
- * Tile-Bild leicht entsättigt und tiefer gesetzt, damit die deck.gl-
- * Säulen darüber gut leuchten. Den finalen „cyan" Schimmer macht das
- * CSS-Overlay (`bg-scene__overlay`).
- */
-const RASTER_DARK_STYLE = {
-  version: 8 as const,
-  sources: {
-    "carto-dark": {
-      type: "raster" as const,
-      tiles: [
-        "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
-      ],
-      tileSize: 256,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    },
-  },
-  layers: [
-    {
-      id: "bg",
-      type: "background" as const,
-      paint: { "background-color": "#05060a" },
-    },
-    {
-      id: "carto-dark",
-      type: "raster" as const,
-      source: "carto-dark",
-      paint: {
-        "raster-opacity": 0.78,
-        "raster-saturation": -0.35,
-        "raster-contrast": 0.18,
-        "raster-brightness-min": 0.0,
-        "raster-brightness-max": 0.85,
-      },
-    },
-  ],
-};
+const TILE_URLS = [
+  "https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+  "https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+  "https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png",
+];
 
-const INITIAL_VIEW = {
+const INITIAL_VIEW: MapViewState = {
   longitude: 14,
   latitude: 30,
   zoom: 1.55,
   pitch: 45,
   bearing: -8,
-} as const;
+  maxPitch: 75,
+  minZoom: 0.5,
+  maxZoom: 18,
+};
 
 type EdgeSite = {
   code: string;
@@ -152,7 +115,6 @@ function buildBezierPath(
   const dLng = lng2 - lng1;
   const dLat = lat2 - lat1;
   const dist = Math.sqrt(dLng * dLng + dLat * dLat);
-  // Kontrollpunkt: Mitte zwischen Start/End, nach „oben" verschoben.
   const cLng = (lng1 + lng2) / 2;
   const cLat = (lat1 + lat2) / 2;
   const cAlt = Math.max(40_000, dist * 22_000 + arcHeight);
@@ -162,7 +124,6 @@ function buildBezierPath(
     const u = 1 - t;
     const lng = u * u * lng1 + 2 * u * t * cLng + t * t * lng2;
     const lat = u * u * lat1 + 2 * u * t * cLat + t * t * lat2;
-    // Höhen-Bezier: 0 → cAlt → 0 (parabolisch).
     const alt = u * u * 0 + 2 * u * t * cAlt + t * t * 0;
     points.push([lng, lat, alt]);
   }
@@ -182,13 +143,26 @@ type Props = {
 };
 
 export default function BildempfangScene({ ipMarkers }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<MaplibreMap | null>(null);
-  const overlayRef = useRef<MapboxOverlay | null>(null);
-  const tickRef = useRef(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [viewState, setViewState] = useState<MapViewState>(INITIAL_VIEW);
   const [selected, setSelected] = useState<IpMapMarker | null>(null);
-  const [layersVersion, setLayersVersion] = useState(0);
-  const [overlayReady, setOverlayReady] = useState(false);
+  const [tripTime, setTripTime] = useState(0);
+
+  // Animations-Loop für TripsLayer.currentTime — flüssiger Daten-Puls.
+  useEffect(() => {
+    let raf = 0;
+    let active = true;
+    const loop = (t: number) => {
+      if (!active) return;
+      setTripTime(t % TRIP_LOOP_MS);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      active = false;
+      cancelAnimationFrame(raf);
+    };
+  }, []);
 
   // ---------- Datenaufbereitung -----------------------------------------
   const msRange = useMemo(() => {
@@ -209,8 +183,6 @@ export default function BildempfangScene({ ipMarkers }: Props) {
     return ipMarkers.map((m) => {
       const [r, g, b] = msToRgbArray(m.avgMs, msRange);
       const t = Math.log(1 + m.count) / Math.max(0.0001, logMax);
-      // Säulen müssen bei der Welt-Übersicht (Zoom ~1.5) noch sichtbar
-      // sein — daher relativ groß (40–120 km Radius, 200–2500 km Höhe).
       const elevation = 220_000 + 2_300_000 * t;
       return {
         marker: m,
@@ -269,7 +241,11 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       if (!m.edgeCode) continue;
       const e = iataToLatLng(m.edgeCode);
       if (!e) continue;
-      const path = buildBezierPath([e[1], e[0]], [m.coordinates[0], m.coordinates[1]], 60_000);
+      const path = buildBezierPath(
+        [e[1], e[0]],
+        [m.coordinates[0], m.coordinates[1]],
+        60_000,
+      );
       out.push({
         path,
         timestamps: ts,
@@ -279,108 +255,45 @@ export default function BildempfangScene({ ipMarkers }: Props) {
     return out;
   }, [ipMarkers]);
 
-  // ---------- Map-Init ---------------------------------------------------
-  useEffect(() => {
-    if (!containerRef.current) return;
-    let aborted = false;
-
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: RASTER_DARK_STYLE as unknown as maplibregl.StyleSpecification,
-      center: [INITIAL_VIEW.longitude, INITIAL_VIEW.latitude],
-      zoom: INITIAL_VIEW.zoom,
-      pitch: INITIAL_VIEW.pitch,
-      bearing: INITIAL_VIEW.bearing,
-      attributionControl: false,
-      maxPitch: 75,
-      dragRotate: true,
-    });
-    map.touchZoomRotate.enable();
-    mapRef.current = map;
-
-    const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
-
-    const attach = () => {
-      if (aborted) return;
-      try {
-        map.addControl(overlay);
-        overlayRef.current = overlay;
-        setOverlayReady(true);
-        // Initialer Resize, damit die Canvas-Größe zur Container-Größe passt.
-        requestAnimationFrame(() => {
-          if (!aborted) map.resize();
+  // ---------- Layer-Bau --------------------------------------------------
+  const layers = useMemo(() => {
+    // CARTO-Dark-Raster-Tiles als Basemap.
+    const tileLayer = new TileLayer({
+      id: "bg-tiles",
+      data: TILE_URLS,
+      minZoom: 0,
+      maxZoom: 19,
+      tileSize: 256,
+      maxRequests: 6,
+      renderSubLayers: (props) => {
+        // `bbox` enthält die geografischen Grenzen jedes geladenen
+        // Tiles — daraus baut `BitmapLayer` das eigentliche Bild.
+        const tile = props.tile as {
+          bbox: { west: number; south: number; east: number; north: number };
+        };
+        const { west, south, east, north } = tile.bbox;
+        return new BitmapLayer({
+          id: `${props.id}-bitmap`,
+          image: props.data as unknown as string,
+          bounds: [west, south, east, north],
+          opacity: 0.78,
+          tintColor: [185, 215, 240],
+          desaturate: 0.35,
         });
-      } catch {
-        // Falls der Style noch nicht ganz da ist, beim nächsten 'load'
-        // erneut versuchen — passiert in der Praxis selten.
-      }
-    };
+      },
+    });
 
-    if (map.loaded()) attach();
-    else map.once("load", attach);
-
-    return () => {
-      aborted = true;
-      try {
-        map.removeControl(overlay);
-      } catch {
-        /* noop */
-      }
-      try {
-        map.remove();
-      } catch {
-        /* noop */
-      }
-      mapRef.current = null;
-      overlayRef.current = null;
-      setOverlayReady(false);
-    };
-  }, []);
-
-  // Animations-Loop: nur ein Re-Render pro ~120ms, damit der RAF-Tick
-  // nicht jede Frame deck.gl-Layer neu erzeugt. Innerhalb des Frames
-  // setzen wir nur `currentTime` neu — sehr leichtgewichtig.
-  useEffect(() => {
-    let raf = 0;
-    let active = true;
-    let lastNotify = 0;
-    const loop = (t: number) => {
-      if (!active) return;
-      tickRef.current = t;
-      if (t - lastNotify > 80) {
-        lastNotify = t;
-        setLayersVersion((v) => (v + 1) % 1_000_000);
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => {
-      active = false;
-      cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  // ---------- Layer-Updates ---------------------------------------------
-  useEffect(() => {
-    const overlay = overlayRef.current;
-    if (!overlay || !overlayReady) return;
-
-    const currentTime = tickRef.current % TRIP_LOOP_MS;
-
-    const tripsLayer = new TripsLayer<TripDatum>({
-      id: "bg-trips",
-      data: tripData,
-      getPath: (d) => d.path,
-      getTimestamps: (d) => d.timestamps,
-      getColor: (d) => d.color,
-      opacity: 0.95,
-      widthMinPixels: 2,
-      widthMaxPixels: 4,
-      jointRounded: true,
-      capRounded: true,
-      fadeTrail: true,
-      trailLength: 1100,
-      currentTime,
+    const haloLayer = new ScatterplotLayer<ColumnDatum>({
+      id: "bg-ip-halo",
+      data: columnData,
+      getPosition: (d) => d.position,
+      getFillColor: (d) => d.haloColor,
+      getRadius: 90000,
+      radiusMinPixels: 6,
+      radiusMaxPixels: 36,
+      stroked: false,
+      filled: true,
+      pickable: false,
     });
 
     const arcLayer = new ArcLayer<ArcDatum>({
@@ -397,43 +310,20 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       opacity: 0.55,
     });
 
-    const haloLayer = new ScatterplotLayer<ColumnDatum>({
-      id: "bg-ip-halo",
-      data: columnData,
-      getPosition: (d) => d.position,
-      getFillColor: (d) => d.haloColor,
-      getRadius: 90000,
-      radiusMinPixels: 6,
-      radiusMaxPixels: 36,
-      stroked: false,
-      filled: true,
-      pickable: false,
-    });
-
-    const columnLayer = new ColumnLayer<ColumnDatum>({
-      id: "bg-ip-cols",
-      data: columnData,
-      diskResolution: 22,
-      radius: 55000,
-      radiusUnits: "meters",
-      extruded: true,
-      pickable: true,
-      autoHighlight: true,
-      highlightColor: [255, 255, 255, 60],
-      elevationScale: 1,
-      getPosition: (d) => d.position,
-      getFillColor: (d) => d.color,
-      getElevation: (d) => d.elevation,
-      material: {
-        ambient: 0.6,
-        diffuse: 0.7,
-        shininess: 60,
-        specularColor: [255, 255, 255],
-      },
-      onClick: (info) => {
-        const obj = info.object as ColumnDatum | undefined;
-        if (obj) setSelected(obj.marker);
-      },
+    const tripsLayer = new TripsLayer<TripDatum>({
+      id: "bg-trips",
+      data: tripData,
+      getPath: (d) => d.path,
+      getTimestamps: (d) => d.timestamps,
+      getColor: (d) => d.color,
+      opacity: 0.95,
+      widthMinPixels: 2,
+      widthMaxPixels: 4,
+      jointRounded: true,
+      capRounded: true,
+      fadeTrail: true,
+      trailLength: 1100,
+      currentTime: tripTime,
     });
 
     const edgeHaloLayer = new ScatterplotLayer<EdgeSite>({
@@ -463,45 +353,62 @@ export default function BildempfangScene({ ipMarkers }: Props) {
       pickable: false,
     });
 
-    overlay.setProps({
-      layers: [
-        arcLayer,
-        tripsLayer,
-        edgeHaloLayer,
-        edgeCoreLayer,
-        haloLayer,
-        columnLayer,
-      ],
+    const columnLayer = new ColumnLayer<ColumnDatum>({
+      id: "bg-ip-cols",
+      data: columnData,
+      diskResolution: 22,
+      radius: 55000,
+      radiusUnits: "meters",
+      extruded: true,
+      pickable: true,
+      autoHighlight: true,
+      highlightColor: [255, 255, 255, 60],
+      elevationScale: 1,
+      getPosition: (d) => d.position,
+      getFillColor: (d) => d.color,
+      getElevation: (d) => d.elevation,
+      material: {
+        ambient: 0.6,
+        diffuse: 0.7,
+        shininess: 60,
+        specularColor: [255, 255, 255],
+      },
+      onClick: (info) => {
+        const obj = info.object as ColumnDatum | undefined;
+        if (obj) setSelected(obj.marker);
+      },
     });
-  }, [columnData, arcData, tripData, edgeSites, overlayReady, layersVersion]);
+
+    return [
+      tileLayer,
+      haloLayer,
+      arcLayer,
+      tripsLayer,
+      edgeHaloLayer,
+      edgeCoreLayer,
+      columnLayer,
+    ];
+  }, [columnData, arcData, tripData, edgeSites, tripTime]);
 
   // ---------- Toolbar-Aktionen ------------------------------------------
   const zoomBy = useCallback((delta: number) => {
-    const m = mapRef.current;
-    if (!m) return;
-    m.easeTo({ zoom: m.getZoom() + delta, duration: 280 });
+    setViewState((v) => ({
+      ...v,
+      zoom: Math.min(18, Math.max(0.5, (v.zoom ?? 1.5) + delta)),
+      transitionDuration: 280,
+    }));
   }, []);
 
   const resetView = useCallback(() => {
-    const m = mapRef.current;
-    if (!m) return;
-    m.easeTo({
-      center: [INITIAL_VIEW.longitude, INITIAL_VIEW.latitude],
-      zoom: INITIAL_VIEW.zoom,
-      pitch: INITIAL_VIEW.pitch,
-      bearing: INITIAL_VIEW.bearing,
-      duration: 900,
-    });
+    setViewState({ ...INITIAL_VIEW, transitionDuration: 900 } as MapViewState);
   }, []);
 
-  const toggleNorth = useCallback(() => {
-    const m = mapRef.current;
-    if (!m) return;
-    m.easeTo({ bearing: 0, duration: 600 });
+  const toNorth = useCallback(() => {
+    setViewState((v) => ({ ...v, bearing: 0, transitionDuration: 600 }));
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    const el = containerRef.current?.parentElement ?? containerRef.current;
+    const el = wrapRef.current;
     if (!el) return;
     if (document.fullscreenElement) {
       void document.exitFullscreen();
@@ -512,8 +419,18 @@ export default function BildempfangScene({ ipMarkers }: Props) {
 
   // ---------- Render -----------------------------------------------------
   return (
-    <div className="bg-scene">
-      <div ref={containerRef} className="bg-scene__map absolute inset-0" />
+    <div ref={wrapRef} className="bg-scene">
+      <DeckGL
+        viewState={viewState}
+        onViewStateChange={(e) => setViewState(e.viewState as MapViewState)}
+        controller={{ dragRotate: true, touchRotate: true }}
+        views={new MapView({ id: "map", repeat: true })}
+        layers={layers}
+        style={{ position: "absolute", inset: "0" }}
+        getCursor={({ isDragging, isHovering }) =>
+          isDragging ? "grabbing" : isHovering ? "pointer" : "default"
+        }
+      />
       <div className="bg-scene__overlay" aria-hidden />
 
       {/* HUD */}
@@ -556,7 +473,7 @@ export default function BildempfangScene({ ipMarkers }: Props) {
           type="button"
           className="bg-scene__btn"
           aria-label="Norden ausrichten"
-          onClick={toggleNorth}
+          onClick={toNorth}
         >
           <Compass className="h-4 w-4" />
         </button>
@@ -591,13 +508,10 @@ export default function BildempfangScene({ ipMarkers }: Props) {
 
       {/* Detail-Panel rechts */}
       {selected && (
-        <DetailPanel
-          marker={selected}
-          onClose={() => setSelected(null)}
-        />
+        <DetailPanel marker={selected} onClose={() => setSelected(null)} />
       )}
 
-      {/* Empty-/Loading-Hinweis, wenn keine Marker */}
+      {/* Empty-Hinweis, wenn keine Marker */}
       {ipMarkers.length === 0 && (
         <div
           className="bg-scene__hud-row absolute"
@@ -694,7 +608,7 @@ function DetailPanel({
         <dd>{ua}</dd>
 
         <dt>Bildpfad</dt>
-        <dd className="bg-detail__mono" style={{ fontSize: 10.5 }}>
+        <dd className="bg-detail__mono" style={{ fontSize: "10.5px" }}>
           {marker.imagePath || "—"}
         </dd>
       </dl>
