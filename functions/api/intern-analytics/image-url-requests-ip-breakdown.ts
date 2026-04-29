@@ -231,130 +231,33 @@ FORMAT JSON`;
 
 const D_OK = "double2 > 0 AND double2 < 1000000";
 
+/**
+ * Cloudflare Analytics Engine SQL kann `if(cond, NULL, Double)` NICHT
+ * implizit casten („the 2nd and 3rd arguments to IF() function must
+ * have the same type but instead had Null and Double") und kennt
+ * `any()` ebenfalls nicht. Deshalb teilen wir hier durch
+ * `nullIf(sum, 0)` — das gibt automatisch NULL, wenn der Divisor 0 ist,
+ * und der gesamte Ausdruck wird als nullable Double inferred.
+ */
 function avgMsExpr(): string {
-  return `if(sumIf(_sample_interval, ${D_OK}) = 0, NULL, sumIf(double2 * _sample_interval, ${D_OK}) / sumIf(_sample_interval, ${D_OK})) AS avgMs`;
+  return `sumIf(double2 * _sample_interval, ${D_OK}) / nullIf(sumIf(_sample_interval, ${D_OK}), 0) AS avgMs`;
 }
 
-/**
- * Robusteste avgMs-Variante — `avgIf` ist deutlich verträglicher mit der
- * Analytics-Engine-SQL-Subset als `if(sumIf=0, NULL, sumIf/sumIf)`, weil
- * der NULL-Branch bei manchen Engine-Konfigurationen einen Type-Inferenz-
- * Fehler erzeugt. Dafür ignoriert sie `_sample_interval`, was für die
- * UI-Heatmap völlig ausreicht.
- */
-function avgMsExprIf(): string {
-  return `avgIf(double2, ${D_OK}) AS avgMs`;
-}
 
 /**
- * Robuste Anreicherung mit minimal-set:
- * - Aggregat: `sum`, `avgIf`, `any`
- * - Keine `argMax(...)`, kein `index2` (manche Datasets haben weder)
- * - Pfad nur aus `blob1`
+ * Standard-Anreicherung: argMax + blob1. Nutzt nur Aggregate, die das
+ * Cloudflare-Analytics-Engine-SQL-Subset garantiert kennt
+ * (`SUM`, `sumIf`, `argMax`, `nullIf`).
  *
- * Wir setzen das als ERSTE Variante der Cascade ein, damit auch
- * Schemata, in denen `argMax`/`index2` nicht funktionieren, sofort
- * eine vollständige Antwort liefern.
+ * Erwartete Spalten:
+ * - `blob1`: URL-Pfad / Image-Pfad (Worker schreibt das beim Log)
+ * - `blob3`: ISO-2 Country
+ * - `blob4`: Client-IP (Standard, per Env umstellbar)
+ * - `blob5`: User-Agent
+ * - `blob8`: Key-Status (`valid` / `expired` / `none`)
+ * - `blob9`: Edge-PoP-Code (IATA)
+ * - `double2`: Antwortzeit in ms
  */
-function buildIpSqlEnrichedRobust(
-  fromIso: string,
-  toIso: string,
-  fromDataset: string,
-  mode: Mode,
-  name: string,
-  ipCol: IpBlobCol,
-): string {
-  const tw = buildTimeWhere(fromIso, toIso);
-  const blob3NotEmpty = `blob3 != ${sqlString("")} AND blob3 != ${sqlString(
-    "NA",
-  )}`;
-  const colNotEmpty = `${ipCol} != ${sqlString("")}`;
-  const agg = `SELECT
-  ${ipCol} AS ip,
-  blob3 AS iso2,
-  SUM(_sample_interval) AS c,
-  ${avgMsExprIf()},
-  any(blob5) AS ua,
-  any(blob9) AS edge,
-  any(blob8) AS status,
-  any(blob1) AS imagePath`;
-  if (mode === "dedicated") {
-    return `${agg}
-FROM ${name}
-WHERE ${tw}
-  AND ${colNotEmpty}
-  AND ${blob3NotEmpty}
-GROUP BY ${ipCol}, blob3
-ORDER BY c DESC
-LIMIT ${MAX_IP_SQL_ROWS}
-FORMAT JSON`;
-  }
-  return `${agg}
-FROM ${fromDataset}
-WHERE ${tw} AND dataset = ${sqlString(name)}
-  AND ${colNotEmpty}
-  AND ${blob3NotEmpty}
-GROUP BY ${ipCol}, blob3
-ORDER BY c DESC
-LIMIT ${MAX_IP_SQL_ROWS}
-FORMAT JSON`;
-}
-
-/**
- * `index2` bevorzugt (viele Worker speichern den URL-Pfad dort), sonst `blob1`.
- */
-function buildIpSqlEnrichedPathIndex2(
-  fromIso: string,
-  toIso: string,
-  fromDataset: string,
-  mode: Mode,
-  name: string,
-  ipCol: IpBlobCol,
-): string {
-  const tw = buildTimeWhere(fromIso, toIso);
-  const blob3NotEmpty = `blob3 != ${sqlString("")} AND blob3 != ${sqlString(
-    "NA",
-  )}`;
-  const colNotEmpty = `${ipCol} != ${sqlString("")}`;
-  const pathExpr = `argMax(
-  if(
-    (index2 != ${sqlString("")}) AND (index2 != ${sqlString("NA")}),
-    index2,
-    blob1
-  ),
-  timestamp
-) AS imagePath`;
-  const agg = `SELECT
-  ${ipCol} AS ip,
-  blob3 AS iso2,
-  SUM(_sample_interval) AS c,
-  ${avgMsExpr()},
-  argMax(blob5, timestamp) AS ua,
-  argMax(blob9, timestamp) AS edge,
-  argMax(blob8, timestamp) AS status,
-  ${pathExpr}`;
-  if (mode === "dedicated") {
-    return `${agg}
-FROM ${name}
-WHERE ${tw}
-  AND ${colNotEmpty}
-  AND ${blob3NotEmpty}
-GROUP BY ${ipCol}, blob3
-ORDER BY c DESC
-LIMIT ${MAX_IP_SQL_ROWS}
-FORMAT JSON`;
-  }
-  return `${agg}
-FROM ${fromDataset}
-WHERE ${tw} AND dataset = ${sqlString(name)}
-  AND ${colNotEmpty}
-  AND ${blob3NotEmpty}
-GROUP BY ${ipCol}, blob3
-ORDER BY c DESC
-LIMIT ${MAX_IP_SQL_ROWS}
-FORMAT JSON`;
-}
-
 function buildIpSqlEnrichedBlobPath(
   fromIso: string,
   toIso: string,
@@ -400,16 +303,11 @@ FORMAT JSON`;
 }
 
 /**
- * Robusteste Anreicherungs-Variante: nutzt `any()` statt `argMax(...)` —
- * `argMax(col, ts)` ist in manchen Analytics-Engine-Konfigurationen
- * problematisch (Type-Mismatch, nicht-supported Aggregate). `any()` liefert
- * einen beliebigen Wert pro Gruppe, was für UA / Edge / imagePath ausreicht.
- *
- * Außerdem nehmen wir hier sowohl `index2` als auch `blob1` als Pfad mit:
- * `any(ifNotEmpty(...))` ist nicht universell, daher werten wir beides aus
- * und ziehen das nicht-leere Feld vor.
+ * Variante OHNE die ms-Spalte — falls `double2` selbst in einem
+ * Dataset nicht existiert (z. B. nur Worker-Tally, kein Latenz-Log).
+ * Liefert weiterhin Edge / UA / Status / Pfad an die UI.
  */
-function buildIpSqlEnrichedAny(
+function buildIpSqlEnrichedNoMs(
   fromIso: string,
   toIso: string,
   fromDataset: string,
@@ -426,12 +324,10 @@ function buildIpSqlEnrichedAny(
   ${ipCol} AS ip,
   blob3 AS iso2,
   SUM(_sample_interval) AS c,
-  ${avgMsExpr()},
-  any(blob5) AS ua,
-  any(blob9) AS edge,
-  any(blob8) AS status,
-  any(blob1) AS pathBlob,
-  any(index2) AS pathIndex`;
+  argMax(blob5, timestamp) AS ua,
+  argMax(blob9, timestamp) AS edge,
+  argMax(blob8, timestamp) AS status,
+  argMax(blob1, timestamp) AS imagePath`;
   if (mode === "dedicated") {
     return `${agg}
 FROM ${name}
@@ -638,31 +534,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       const tryEnrichedCascade = async () => {
         const builders: { name: string; build: () => string }[] = [
           {
-            name: "enriched-robust (any+avgIf, blob1)",
-            build: () =>
-              buildIpSqlEnrichedRobust(
-                from,
-                to,
-                fromTable,
-                mode,
-                name,
-                ipCol,
-              ),
-          },
-          {
-            name: "enriched-any (index2 + blob1)",
-            build: () =>
-              buildIpSqlEnrichedAny(
-                from,
-                to,
-                fromTable,
-                mode,
-                name,
-                ipCol,
-              ),
-          },
-          {
-            name: "enriched-argmax-blob1",
+            // Standard-Variante: argMax + blob1 + nullIf-basiertes
+            // avgMs. Funktioniert in jedem CF-Analytics-Engine-
+            // Schema mit `double2` (ms) + Standard-blob1..9-Layout.
+            name: "enriched-argmax-blob1 (ms via nullIf)",
             build: () =>
               buildIpSqlEnrichedBlobPath(
                 from,
@@ -674,9 +549,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
               ),
           },
           {
-            name: "enriched-argmax-index2",
+            // Fallback ohne ms — falls `double2` in dem Dataset nicht
+            // existiert, oder die Division einen anderen Type-Fehler
+            // wirft. Liefert weiterhin Edge / UA / Status / Pfad.
+            name: "enriched-argmax-no-ms",
             build: () =>
-              buildIpSqlEnrichedPathIndex2(
+              buildIpSqlEnrichedNoMs(
                 from,
                 to,
                 fromTable,
