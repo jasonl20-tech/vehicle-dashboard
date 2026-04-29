@@ -1,0 +1,292 @@
+/**
+ * Bildempfang-Karte — Watch-Dogs/Palantir-Look.
+ *
+ * Alle Marker werden über Leaflet `DivIcon`s gerendert; die Animationen
+ * laufen rein per CSS, ohne JS-Interval. Das hält die Karte
+ * performant, selbst wenn ein paar hundert IPs sichtbar sind.
+ *
+ * Design-Tokens kommen über CSS-Custom-Properties auf der jeweiligen
+ * Marker-Wurzel (`--bm-color`), sodass jeder Marker seine eigene Farbe
+ * (Latenz-Mapping) mitbringen kann, ohne dass wir zur Laufzeit Klassen
+ * oder Style-Maps hin- und herschieben müssen.
+ */
+
+/* ─── Tile-Pane: dunkler, kontrastiger, leicht entsättigt ───────── */
+.bm-map .leaflet-tile-pane {
+  filter: brightness(0.55) contrast(1.18) saturate(0.4) hue-rotate(190deg);
+}
+
+/* Vignette + sehr dezente Scanlines über der gesamten Karte */
+.bm-map::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background:
+    radial-gradient(
+      ellipse at center,
+      transparent 0%,
+      transparent 55%,
+      rgba(0, 0, 0, 0.55) 100%
+    );
+}
+.bm-map::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.012) 0px,
+    rgba(255, 255, 255, 0.012) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+  opacity: 0.6;
+}
+
+/* ─── IP-Marker (DivIcon-Wrapper) ───────────────────────────────── */
+.bm-ip {
+  /* Die Größe (px) wird per `--bm-size` gesetzt; DivIcon zentriert
+     selbst, wir kompensieren mit `translate(-50%, -50%)`. */
+  position: relative;
+  width: var(--bm-size, 14px);
+  height: var(--bm-size, 14px);
+  pointer-events: none;
+}
+
+.bm-ip__core {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgb(var(--bm-color, 34, 211, 238));
+  box-shadow:
+    0 0 0 1.5px rgba(255, 255, 255, 0.6),
+    0 0 12px 2px rgba(var(--bm-color, 34, 211, 238), 0.6),
+    0 0 22px 6px rgba(var(--bm-color, 34, 211, 238), 0.25);
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 3;
+}
+
+.bm-ip__ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(var(--bm-color, 34, 211, 238), 0.7);
+  background: transparent;
+  pointer-events: none;
+  animation: bm-ping 2.8s cubic-bezier(0.2, 0.7, 0.2, 1) infinite;
+  z-index: 2;
+}
+
+.bm-ip__ping--delayed {
+  animation-delay: 1.4s;
+}
+
+@keyframes bm-ping {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.85;
+    border-width: 2px;
+  }
+  80% {
+    opacity: 0;
+    border-width: 0.5px;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* ─── Edge-PoP-Marker (Cloudflare-PoPs, orange) ─────────────────── */
+.bm-edge {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+
+.bm-edge__core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: rgb(243, 130, 31);
+  box-shadow:
+    0 0 0 1.5px rgba(255, 200, 130, 0.95),
+    0 0 14px 2px rgba(243, 130, 31, 0.85),
+    0 0 30px 8px rgba(243, 130, 31, 0.35);
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 4;
+}
+
+/* Crosshair-Reticle: 2 dünne Linien + Eckenmarken */
+.bm-edge__reticle {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: bm-edge-spin 22s linear infinite;
+  z-index: 3;
+}
+
+.bm-edge__reticle::before,
+.bm-edge__reticle::after {
+  content: "";
+  position: absolute;
+  background: rgba(243, 130, 31, 0.55);
+}
+
+/* Horizontale Linie */
+.bm-edge__reticle::before {
+  top: 50%;
+  left: 4px;
+  right: 4px;
+  height: 1px;
+  margin-top: -0.5px;
+  box-shadow: 0 0 4px rgba(243, 130, 31, 0.6);
+}
+
+/* Vertikale Linie */
+.bm-edge__reticle::after {
+  left: 50%;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  margin-left: -0.5px;
+  box-shadow: 0 0 4px rgba(243, 130, 31, 0.6);
+}
+
+@keyframes bm-edge-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Sonar-Pulse-Ring um die Edge-PoPs */
+.bm-edge__pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(243, 130, 31, 0.85);
+  pointer-events: none;
+  animation: bm-edge-pulse 3.2s cubic-bezier(0.2, 0.7, 0.2, 1) infinite;
+  z-index: 2;
+}
+
+.bm-edge__pulse--delayed {
+  animation-delay: 1.6s;
+}
+
+@keyframes bm-edge-pulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.95;
+    border-width: 2px;
+  }
+  85% {
+    opacity: 0;
+    border-width: 0.6px;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+/* Statisches inneres Outer-Ring (kein Animation) — gibt dem PoP
+   einen technisch-zentrierten Look */
+.bm-edge__ring-static {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  border: 1px solid rgba(243, 130, 31, 0.45);
+  box-shadow: inset 0 0 6px rgba(243, 130, 31, 0.18);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* IATA-Code unter dem Marker */
+.bm-edge__label {
+  position: absolute;
+  top: calc(50% + 22px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family:
+    ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.15em;
+  font-weight: 600;
+  color: rgba(255, 200, 130, 0.95);
+  text-shadow:
+    0 0 4px rgba(243, 130, 31, 0.6),
+    0 1px 1px rgba(0, 0, 0, 0.85);
+  padding: 0 4px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ─── Datenfluss-Linien (Polylines) ─────────────────────────────── */
+
+/* Die Linie selbst bekommt einen flowenden Dash-Effekt — wir
+   kombinieren das mit der durch `pathOptions` gesetzten Farbe und
+   der äußeren Glow-Linie für den Volumen-Look. */
+.bm-flow {
+  stroke-dasharray: 14 8;
+  animation: bm-flow-dash 1.6s linear infinite;
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.18));
+}
+
+@keyframes bm-flow-dash {
+  to {
+    stroke-dashoffset: -220;
+  }
+}
+
+/* ─── Popup-Restyle (passt zum dunklen Theme) ───────────────────── */
+.bildempfang-popup .leaflet-popup-content-wrapper {
+  background: rgba(8, 11, 18, 0.94) !important;
+  color: white !important;
+  border: 1px solid rgba(34, 211, 238, 0.18) !important;
+  box-shadow:
+    0 24px 60px -12px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(34, 211, 238, 0.08) inset !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.bildempfang-popup .leaflet-popup-tip {
+  background: rgba(8, 11, 18, 0.94) !important;
+}
+.bildempfang-popup a.leaflet-popup-close-button {
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-weight: 300 !important;
+}
+
+/* Attribution-Bar dezenter */
+.bm-map .leaflet-control-attribution {
+  border: 0 !important;
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.32) !important;
+  font-size: 9px !important;
+}
+.bm-map .leaflet-control-attribution a {
+  color: rgba(34, 211, 238, 0.6) !important;
+}

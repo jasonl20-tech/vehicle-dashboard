@@ -1,20 +1,19 @@
 import L from "leaflet";
-import type { LeafletMouseEvent } from "leaflet";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
-  CircleMarker,
   MapContainer,
+  Marker,
   Polyline,
   Popup,
   TileLayer,
-  Tooltip,
   useMap,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import "./BildempfangMap.css";
 import { BILDBEMPFANG_OCEAN_BG } from "../../lib/bildempfangMapTheme";
 import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
 import { iataToLatLng } from "../../lib/iataEdgeCodes";
-import { msToRgbaGloss } from "../../lib/bildempfangMsColor";
+import { msToRgbaGloss, msToRgbTriple } from "../../lib/bildempfangMsColor";
 import { iso2Name } from "../../lib/iso2Countries";
 import {
   parseVehicleFromImagePath,
@@ -22,22 +21,55 @@ import {
 } from "../../lib/bildempfangVehicleFromPath";
 
 const TILE = {
-  url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+  // Sehr dunkler, label-freier Tile-Layer — der CSS-Filter
+  // (`.bm-map .leaflet-tile-pane`) drückt den Look noch weiter ins
+  // Schwarz-Cyan ab.
+  url: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
   attribution:
     '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
 };
 
-/**
- * Cloudflare-Brand-Orange für die Edge-PoPs auf der Karte. Wir benutzen
- * zwei Töne: einen helleren Fill und einen kräftigen Strokefür den
- * Kontrast auf dunklem Tile-Layer.
- */
-const EDGE_FILL = "rgba(243, 130, 31, 0.55)";
-const EDGE_STROKE = "rgba(255, 162, 67, 0.95)";
-const EDGE_GLOW = "rgba(243, 130, 31, 0.18)";
-
 function toLatLng(m: IpMapMarker): [number, number] {
   return [m.coordinates[1], m.coordinates[0]];
+}
+
+/**
+ * Diskretisiert eine quadratische Bézier-Kurve zwischen zwei
+ * Map-Punkten. Wir setzen den Kontrollpunkt senkrecht zur Verbindung,
+ * damit die Linien als sanfte Bögen erscheinen — deutlich
+ * Watch-Dogs-/Palantir-mäßiger als gerade Strecken.
+ */
+function curvedPath(
+  start: [number, number],
+  end: [number, number],
+  curvature = 0.22,
+): [number, number][] {
+  const [lat1, lng1] = start;
+  const [lat2, lng2] = end;
+  const dLat = lat2 - lat1;
+  const dLng = lng2 - lng1;
+  const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+  if (dist < 1e-4) return [start, end];
+  const mLat = (lat1 + lat2) / 2;
+  const mLng = (lng1 + lng2) / 2;
+  // Senkrecht zur Verbindung — leicht „nach Norden" verschoben, damit
+  // die Bögen visuell einheitlich auf dieselbe Seite ausschlagen.
+  const sign = dLng >= 0 ? 1 : -1;
+  const pLat = (-dLng / dist) * sign;
+  const pLng = (dLat / dist) * sign;
+  const offset = dist * curvature;
+  const cLat = mLat + pLat * offset;
+  const cLng = mLng + pLng * offset;
+  const n = 28;
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const u = 1 - t;
+    const lat = u * u * lat1 + 2 * u * t * cLat + t * t * lat2;
+    const lng = u * u * lng1 + 2 * u * t * cLng + t * t * lng2;
+    pts.push([lat, lng]);
+  }
+  return pts;
 }
 
 function MapResizeWatcher() {
@@ -82,23 +114,51 @@ function FitBounds({
   return null;
 }
 
+/**
+ * Größe des IP-Cores in CSS-Pixeln, abgeleitet aus dem
+ * Marker-Aura-Radius. Wir bleiben absichtlich kompakt: der
+ * Pulse-Ping skaliert auf ~4×, der Glow erweitert das visuell weiter.
+ */
+function ipCoreSize(m: IpMapMarker): number {
+  const base = m.r ?? 4;
+  return Math.round(Math.min(20, Math.max(8, 6 + base)));
+}
+
+function makeIpDivIcon(m: IpMapMarker): L.DivIcon {
+  const size = ipCoreSize(m);
+  const rgb = msToRgbTriple(m.avgMs);
+  return L.divIcon({
+    className: "bm-ip-icon",
+    html: `<div class="bm-ip" style="--bm-color:${rgb};--bm-size:${size}px;">
+      <span class="bm-ip__ping" aria-hidden></span>
+      <span class="bm-ip__ping bm-ip__ping--delayed" aria-hidden></span>
+      <span class="bm-ip__core" aria-hidden></span>
+    </div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  });
+}
+
+function makeEdgeDivIcon(code: string): L.DivIcon {
+  return L.divIcon({
+    className: "bm-edge-icon",
+    html: `<div class="bm-edge">
+      <span class="bm-edge__pulse" aria-hidden></span>
+      <span class="bm-edge__pulse bm-edge__pulse--delayed" aria-hidden></span>
+      <span class="bm-edge__ring-static" aria-hidden></span>
+      <span class="bm-edge__reticle" aria-hidden></span>
+      <span class="bm-edge__core" aria-hidden></span>
+      <span class="bm-edge__label">${code.replace(/[^A-Z0-9]/gi, "")}</span>
+    </div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+  });
+}
+
 type Props = {
   ipMarkers: IpMapMarker[];
 };
 
-/**
- * Vollbild-Leaflet-Karte für den Bildempfang. Die UI ist bewusst
- * minimal: kein eigener Header, keine Sidebar — alle Detail-Infos
- * werden direkt am Marker per Popup angezeigt.
- *
- * Dargestellt werden:
- *  - IP-Marker (Größe ∝ Volumen, Farbe ∝ Latenz double2)
- *  - Cloudflare-Edge-PoPs (`blob9`) als orange Kreise inkl. IATA-Label
- *  - Verbindungslinien IP ↔ Edge (Farbe ∝ Latenz)
- *  - Klick auf einen IP-Marker: Popup mit allen verfügbaren Feldern
- *    (Status `blob8`, UA `blob5`, Pfad `blob1`/`index2`,
- *    Fahrzeug aus URL, Antwortzeit `double2`, Edge `blob9`).
- */
 export default function BildempfangRealMap({ ipMarkers }: Props) {
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
@@ -127,7 +187,11 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
       const el = iataToLatLng(m.edgeCode);
       if (!el) continue;
       const b = toLatLng(m);
-      out.push({ key: m.key, positions: [b, el], ms: m.avgMs });
+      out.push({
+        key: m.key,
+        positions: curvedPath(b, el),
+        ms: m.avgMs,
+      });
     }
     return out;
   }, [ipMarkers]);
@@ -165,6 +229,20 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
     [edgeSites],
   );
 
+  // DivIcons memoisieren, sonst rebauen wir bei jedem Render — und
+  // verlieren CSS-Animations-State + Performance.
+  const ipIcons = useMemo(() => {
+    const map = new Map<string, L.DivIcon>();
+    for (const m of ipMarkers) map.set(m.key, makeIpDivIcon(m));
+    return map;
+  }, [ipMarkers]);
+
+  const edgeIcons = useMemo(() => {
+    const map = new Map<string, L.DivIcon>();
+    for (const s of edgeSites) map.set(s.code, makeEdgeDivIcon(s.code));
+    return map;
+  }, [edgeSites]);
+
   if (!ready) {
     return (
       <div
@@ -177,12 +255,12 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
 
   return (
     <div
-      className="h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden [&_.leaflet-control-attribution]:border-0 [&_.leaflet-control-attribution]:bg-transparent [&_.leaflet-control-attribution]:text-[9px] [&_.leaflet-control-attribution]:text-white/35 [&_.leaflet-control-attribution]:shadow-none [&_.leaflet-popup-content-wrapper]:rounded-lg [&_.leaflet-popup-content-wrapper]:bg-night-900/95 [&_.leaflet-popup-content-wrapper]:text-white [&_.leaflet-popup-content-wrapper]:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.6)] [&_.leaflet-popup-tip]:!bg-night-900/95 [&_.leaflet-popup-content]:m-0 [&_.leaflet-popup-content]:min-w-[260px]"
+      className="bm-map relative h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden"
       style={{ backgroundColor: BILDBEMPFANG_OCEAN_BG }}
     >
       <MapContainer
-        className="!h-full !w-full"
-        style={{ minHeight: "100%" }}
+        className="!h-full !w-full bg-transparent"
+        style={{ minHeight: "100%", background: "transparent" }}
         center={[20, 0]}
         zoom={2}
         minZoom={2}
@@ -195,7 +273,7 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
         <MapResizeWatcher />
         <FitBounds points={points} edgePoints={edgePoints} />
 
-        {/* Verbindungslinien Edge ↔ IP (Farbe ∝ Latenz) */}
+        {/* Datenfluss-Linien Edge ↔ IP (animated dash) */}
         {edgeLines.map((line) => {
           const { line: c, glow } = msToRgbaGloss(line.ms, msRange);
           return (
@@ -205,18 +283,19 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
                 pathOptions={{
                   interactive: false,
                   color: glow,
-                  weight: 10,
+                  weight: 12,
                   lineCap: "round",
                   lineJoin: "round",
-                  opacity: 1,
+                  opacity: 0.7,
                 }}
               />
               <Polyline
                 positions={line.positions}
+                className="bm-flow"
                 pathOptions={{
                   interactive: false,
                   color: c,
-                  weight: 1.8,
+                  weight: 1.6,
                   lineCap: "round",
                   lineJoin: "round",
                   opacity: 0.95,
@@ -226,114 +305,47 @@ export default function BildempfangRealMap({ ipMarkers }: Props) {
           );
         })}
 
-        {/* Cloudflare-Edge-PoPs (orange) mit Tooltip-Label */}
-        {edgeSites.map((s) => (
-          <Fragment key={`edge-${s.code}`}>
-            <CircleMarker
-              center={s.pos}
-              radius={11}
-              pathOptions={{
-                interactive: false,
-                fillColor: EDGE_GLOW,
-                color: "transparent",
-                weight: 0,
-                fillOpacity: 1,
-              }}
-            />
-            <CircleMarker
-              center={s.pos}
-              radius={6}
-              pathOptions={{
-                fillColor: EDGE_FILL,
-                color: EDGE_STROKE,
-                weight: 1.4,
-                fillOpacity: 0.95,
-              }}
-            >
-              <Tooltip
-                direction="top"
-                offset={[0, -6]}
-                opacity={1}
-                permanent={false}
-                className="!rounded-md !border-0 !bg-night-900/95 !px-2 !py-1 !text-[11px] !text-white"
-              >
-                <div className="text-[11px] font-mono">
-                  <div className="font-semibold">
-                    Cloudflare PoP · {s.code}
-                  </div>
-                  <div className="text-night-300">
-                    {s.ipCount} IPs · {s.requests} Requests
-                  </div>
-                </div>
-              </Tooltip>
-            </CircleMarker>
-          </Fragment>
-        ))}
-
-        {/* IP-Marker mit Click-Popup */}
-        {ipMarkers.map((m) => {
-          const [lat, lng] = toLatLng(m);
-          const col = m.signalColor;
-          const hitR = Math.max(16, m.auraRadius);
-          const stop = (e: LeafletMouseEvent) => {
-            L.DomEvent.stopPropagation(e);
-          };
+        {/* Cloudflare-Edge-PoPs (orange) als animierte Reticle-Marker */}
+        {edgeSites.map((s) => {
+          const icon = edgeIcons.get(s.code);
+          if (!icon) return null;
           return (
-            <Fragment key={m.key}>
-              <CircleMarker
-                center={[lat, lng]}
-                radius={m.auraRadius}
-                pathOptions={{
-                  interactive: false,
-                  fillColor: col,
-                  color: "transparent",
-                  weight: 0,
-                  fillOpacity: 0.2,
-                }}
-              />
-              <CircleMarker
-                center={[lat, lng]}
-                radius={hitR}
-                className="bildempfang-ip-hit"
-                eventHandlers={{ click: stop }}
-                pathOptions={{
-                  fillColor: col,
-                  color: "transparent",
-                  weight: 0,
-                  fillOpacity: 0.08,
-                }}
-              >
-                <Popup
-                  closeButton
-                  autoPan
-                  maxWidth={360}
-                  className="bildempfang-popup"
-                >
-                  <IpDetailsPopup marker={m} />
-                </Popup>
-              </CircleMarker>
-              <CircleMarker
-                center={[lat, lng]}
-                radius={5}
-                className="bildempfang-ip-hit"
-                eventHandlers={{ click: stop }}
-                pathOptions={{
-                  fillColor: col,
-                  color: "rgba(255,255,255,0.8)",
-                  weight: 1.1,
-                  fillOpacity: 0.95,
-                }}
-              >
-                <Popup
-                  closeButton
-                  autoPan
-                  maxWidth={360}
-                  className="bildempfang-popup"
-                >
-                  <IpDetailsPopup marker={m} />
-                </Popup>
-              </CircleMarker>
-            </Fragment>
+            <Marker key={`edge-${s.code}`} position={s.pos} icon={icon}>
+              <Popup className="bildempfang-popup" maxWidth={320}>
+                <div className="px-3 py-2.5 text-[12px] leading-relaxed text-white">
+                  <div className="font-mono text-[13px] font-semibold tracking-widest text-[rgb(255,180,90)]">
+                    PoP · {s.code}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-night-300">
+                    Cloudflare-Edge — bedient diesen Bereich
+                  </div>
+                  <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-white/10 pt-2 text-[11.5px]">
+                    <dt className="text-night-400">IPs</dt>
+                    <dd className="font-mono tabular-nums">{s.ipCount}</dd>
+                    <dt className="text-night-400">Requests</dt>
+                    <dd className="font-mono tabular-nums">{s.requests}</dd>
+                  </dl>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* IP-Marker mit Sonar-Pings + Click-Popup */}
+        {ipMarkers.map((m) => {
+          const icon = ipIcons.get(m.key);
+          if (!icon) return null;
+          return (
+            <Marker
+              key={m.key}
+              position={toLatLng(m)}
+              icon={icon}
+              keyboard={false}
+            >
+              <Popup className="bildempfang-popup" maxWidth={360}>
+                <IpDetailsPopup marker={m} />
+              </Popup>
+            </Marker>
           );
         })}
       </MapContainer>
@@ -347,12 +359,12 @@ function IpDetailsPopup({ marker }: { marker: IpMapMarker }) {
   const status = marker.status || "—";
   const statusBadgeColor =
     status === "valid"
-      ? "bg-accent-mint/25 text-accent-mint"
+      ? "bg-[rgba(34,211,238,0.18)] text-[rgb(125,225,238)] border-[rgba(34,211,238,0.45)]"
       : status === "expired"
-        ? "bg-accent-rose/25 text-accent-rose"
+        ? "bg-[rgba(217,70,239,0.18)] text-[rgb(228,150,245)] border-[rgba(217,70,239,0.45)]"
         : status === "none"
-          ? "bg-white/10 text-night-300"
-          : "bg-white/10 text-night-300";
+          ? "bg-white/[0.06] text-night-300 border-white/[0.15]"
+          : "bg-white/[0.06] text-night-300 border-white/[0.15]";
   return (
     <div className="px-3 py-2.5 text-[12px] leading-relaxed text-white">
       <div className="flex items-baseline justify-between gap-2">
@@ -371,7 +383,7 @@ function IpDetailsPopup({ marker }: { marker: IpMapMarker }) {
           </div>
         </div>
         <span
-          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider ${statusBadgeColor}`}
+          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider ${statusBadgeColor}`}
           title="blob8 · Key-Status"
         >
           {status}
@@ -394,7 +406,13 @@ function IpDetailsPopup({ marker }: { marker: IpMapMarker }) {
         </dd>
 
         <dt className="text-night-400">Edge / PoP</dt>
-        <dd className="font-mono">{marker.edgeCode || "—"}</dd>
+        <dd className="font-mono">
+          {marker.edgeCode ? (
+            <span className="text-[rgb(255,180,90)]">{marker.edgeCode}</span>
+          ) : (
+            "—"
+          )}
+        </dd>
 
         <dt className="text-night-400">Fahrzeug</dt>
         <dd className="min-w-0">
