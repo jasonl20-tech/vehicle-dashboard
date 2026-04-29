@@ -1,9 +1,10 @@
 /**
- * Email-Templates: kombinierte Liste + visueller Editor in einem Split-View.
+ * Email-Templates: kombinierte Liste + selbst gebauter visueller Editor
+ * in einem Split-View.
  *
  * Linke Spalte: Vorlagen-Liste (suchbar, einklappbar).
  * Rechte Spalte: gewählte Vorlage – mit zwei Bearbeitungsmodi:
- *   - "Builder": visueller Drag-and-Drop-Editor (Unlayer / react-email-editor)
+ *   - "Builder": eigener Drag-and-Drop-Builder (`EmailBuilder`)
  *   - "HTML":    rohe HTML-Body-Textarea für Custom-Mails
  *
  * Speicher-Strategie (ohne Schema-Wechsel):
@@ -42,7 +43,9 @@ import {
 } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
-import type { EmailUnlayerEditorHandle } from "../components/emails/EmailUnlayerEditor";
+import type { EmailBuilderHandle } from "../components/emails/builder/EmailBuilder";
+import { makeDefaultDesign } from "../components/emails/builder/defaults";
+import type { EmailDesign } from "../components/emails/builder/types";
 import { useApi, fmtNumber } from "../lib/customerApi";
 import {
   EMAIL_TEMPLATE_VARIABLES,
@@ -54,10 +57,13 @@ import {
   type EmailTemplate,
   type EmailTemplatesListResponse,
 } from "../lib/emailTemplatesApi";
-import { embedDesign, extractDesign } from "../lib/unlayerDesign";
+import {
+  embedBuilderDesign,
+  extractBuilderDesign,
+} from "../lib/builderDesign";
 
-const EmailUnlayerEditor = lazy(
-  () => import("../components/emails/EmailUnlayerEditor"),
+const EmailBuilder = lazy(
+  () => import("../components/emails/builder/EmailBuilder"),
 );
 
 const PAGE_SIZE = 200;
@@ -166,24 +172,34 @@ export default function EmailTemplatesPage() {
   // ---- Builder / HTML-Modus ----
   const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
   /**
-   * `htmlOnly` ist body_html ohne den UNLAYER_DESIGN-Marker — das ist,
+   * `htmlOnly` ist body_html ohne den EMAIL_BUILDER-Marker — das ist,
    * was der HTML-Modus dem User zeigt und was beim direkten HTML-Save
    * geschickt wird (ggf. wieder mit Design-Marker versehen).
    */
   const [htmlOnly, setHtmlOnly] = useState("");
   /**
-   * Letztes geladenes Builder-Design. Source-of-Truth wenn Builder aktiv
-   * ist (in dem Fall liefert der Editor selbst den frischesten Stand).
+   * Initial-Design für den Builder. Wird nur beim Laden eines Templates
+   * gesetzt — der Builder hält danach selbst seinen State und liefert
+   * den aktuellen Stand via `editorRef.current.getDesign()`.
    */
-  const [design, setDesign] = useState<unknown | null>(null);
+  const [initialDesign, setInitialDesign] = useState<EmailDesign | null>(null);
+  /**
+   * Falls das Template noch keinen Builder-Marker hatte (manuell
+   * angelegtes HTML, alt-Daten), merken wir uns das, um die Warnung
+   * im HTML-Modus auszublenden.
+   */
+  const [hadDesign, setHadDesign] = useState(false);
 
   useEffect(() => {
     if (!one.data) return;
     setSubject(one.data.subject);
     setSavedAt(one.data.updated_at);
-    const { design: d, htmlWithoutMarker } = extractDesign(one.data.body_html);
+    const { design: d, htmlWithoutMarker } = extractBuilderDesign(
+      one.data.body_html,
+    );
     setHtmlOnly(htmlWithoutMarker);
-    setDesign(d);
+    setInitialDesign(d ?? makeDefaultDesign());
+    setHadDesign(d !== null);
     setDirty(false);
   }, [one.data?.id, one.data?.updated_at]);
 
@@ -275,7 +291,7 @@ export default function EmailTemplatesPage() {
   );
 
   // ---- Speichern + Rename ----
-  const editorRef = useRef<EmailUnlayerEditorHandle | null>(null);
+  const editorRef = useRef<EmailBuilderHandle | null>(null);
   const htmlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
@@ -283,88 +299,85 @@ export default function EmailTemplatesPage() {
   /**
    * Sammelt den finalen body_html-String je nach aktivem Modus.
    *
-   * - Builder: Editor liefert frisches HTML + Design via Callback. Wir
-   *   verpacken Design vorne als HTML-Kommentar, und schicken alles als
-   *   `body_html`.
+   * - Builder: Editor liefert frisches Design + gerendertes HTML synchron.
+   *   Wir verpacken Design vorne als HTML-Kommentar, und schicken alles
+   *   als `body_html`.
    * - HTML: User-Textarea ist die Quelle. Wenn ein Builder-Design noch
    *   existiert (frühere Bearbeitung), behalten wir es — beim erneuten
    *   Öffnen im Builder-Modus ist das Design wieder da (das sichtbare
-   *   HTML wurde direkt editiert, das Design ist evtl. nicht mehr deckungs-
-   *   gleich → der User wird über ein Banner gewarnt).
+   *   HTML wurde direkt editiert, das Design ist evtl. nicht mehr
+   *   deckungs-gleich → der User wird über ein Banner gewarnt).
    */
-  const collectBodyHtml = useCallback(
-    (cb: (final: string) => void) => {
-      if (viewMode === "builder") {
-        const ed = editorRef.current;
-        if (!ed) {
-          cb(embedDesign(design, htmlOnly || one.data?.body_html || ""));
-          return;
-        }
-        ed.getResult(({ design: d, html }) => {
-          cb(embedDesign(d ?? design, html || htmlOnly));
-        });
-        return;
+  const collectBodyHtml = useCallback((): string => {
+    if (viewMode === "builder") {
+      const ed = editorRef.current;
+      if (!ed) {
+        return embedBuilderDesign(initialDesign, htmlOnly);
       }
-      // HTML-Modus
-      cb(embedDesign(design, htmlOnly || one.data?.body_html || ""));
-    },
-    [viewMode, design, htmlOnly, one.data?.body_html],
-  );
+      const html = ed.getEmailHtml();
+      const design = ed.getDesign();
+      return embedBuilderDesign(design, html);
+    }
+    // HTML-Modus: behalte das vorhandene Initial-Design (falls vorhanden)
+    return embedBuilderDesign(initialDesign, htmlOnly);
+  }, [viewMode, initialDesign, htmlOnly]);
 
-  const switchViewMode = useCallback(
-    (next: ViewMode) => {
-      setViewMode((prev) => {
-        if (prev === next) return prev;
-        if (prev === "builder" && next === "html") {
-          // Builder → HTML: aktuellen Stand aus dem Editor ziehen
-          const ed = editorRef.current;
-          if (ed) {
-            ed.getResult(({ design: d, html }) => {
-              if (d) setDesign(d);
-              if (typeof html === "string") setHtmlOnly(html);
-            });
-          }
-        } else if (prev === "html" && next === "builder") {
-          // HTML → Builder: Design wieder in Editor laden (falls vorhanden)
-          editorRef.current?.loadDesign(design);
+  const switchViewMode = useCallback((next: ViewMode) => {
+    setViewMode((prev) => {
+      if (prev === next) return prev;
+      if (prev === "builder" && next === "html") {
+        // Builder → HTML: aktuellen Stand aus dem Editor ziehen, sodass
+        // der HTML-Editor das aktuelle Render-Ergebnis sieht.
+        const ed = editorRef.current;
+        if (ed) {
+          setHtmlOnly(ed.getEmailHtml());
+          setInitialDesign(ed.getDesign());
         }
-        writeViewMode(next);
-        return next;
-      });
-    },
-    [design],
-  );
+      } else if (prev === "html" && next === "builder") {
+        // HTML → Builder: Wenn der User im HTML-Modus etwas geändert
+        // hat, nehmen wir den letzten gemerkten Design-Stand und der
+        // Builder zeigt dazu seine Variante. Custom-HTML-Änderungen
+        // gehen verloren — daher das Banner im HTML-Modus.
+        const ed = editorRef.current;
+        if (ed && initialDesign) {
+          ed.replaceDesign(initialDesign);
+        }
+      }
+      writeViewMode(next);
+      return next;
+    });
+  }, [initialDesign]);
 
   const onSave = useCallback(async () => {
     if (!one.data) return;
     setSaving(true);
     setSaveErr(null);
-    collectBodyHtml(async (finalHtml) => {
-      try {
-        const updated = await updateEmailTemplate(one.data!.id, {
-          subject: subject.trim() || one.data!.subject,
-          body_html: finalHtml,
-        });
-        const { design: d, htmlWithoutMarker } = extractDesign(
-          updated.body_html,
-        );
-        setSavedAt(updated.updated_at);
-        setHtmlOnly(htmlWithoutMarker);
-        setDesign(d);
-        setDirty(false);
-        list.reload();
-      } catch (e) {
-        setSaveErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setSaving(false);
-      }
-    });
-  }, [one.data, subject, list, collectBodyHtml]);
+    const finalHtml = collectBodyHtml();
+    try {
+      const updated = await updateEmailTemplate(one.data!.id, {
+        subject: subject.trim() || one.data!.subject,
+        body_html: finalHtml,
+      });
+      const { design: d, htmlWithoutMarker } = extractBuilderDesign(
+        updated.body_html,
+      );
+      setSavedAt(updated.updated_at);
+      setHtmlOnly(htmlWithoutMarker);
+      setInitialDesign(d ?? initialDesign);
+      setHadDesign(d !== null);
+      setDirty(false);
+      list.reload();
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }, [one.data, subject, list, collectBodyHtml, initialDesign]);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
 
-  const onRename = useCallback(() => {
+  const onRename = useCallback(async () => {
     if (!one.data) return;
     const next = renameValue.trim();
     if (!next || next === one.data.id) {
@@ -373,29 +386,37 @@ export default function EmailTemplatesPage() {
     }
     setSaving(true);
     setSaveErr(null);
-    collectBodyHtml(async (finalHtml) => {
-      try {
-        const updated = await updateEmailTemplate(one.data!.id, {
-          new_id: next,
-          subject: subject.trim() || one.data!.subject,
-          body_html: finalHtml,
-        });
-        const { design: d, htmlWithoutMarker } = extractDesign(
-          updated.body_html,
-        );
-        setRenameOpen(false);
-        setHtmlOnly(htmlWithoutMarker);
-        setDesign(d);
-        setDirty(false);
-        list.reload();
-        setSearchParams({ id: updated.id }, { replace: true });
-      } catch (e) {
-        setSaveErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        setSaving(false);
-      }
-    });
-  }, [one.data, renameValue, subject, list, setSearchParams, collectBodyHtml]);
+    const finalHtml = collectBodyHtml();
+    try {
+      const updated = await updateEmailTemplate(one.data!.id, {
+        new_id: next,
+        subject: subject.trim() || one.data!.subject,
+        body_html: finalHtml,
+      });
+      const { design: d, htmlWithoutMarker } = extractBuilderDesign(
+        updated.body_html,
+      );
+      setRenameOpen(false);
+      setHtmlOnly(htmlWithoutMarker);
+      setInitialDesign(d ?? initialDesign);
+      setHadDesign(d !== null);
+      setDirty(false);
+      list.reload();
+      setSearchParams({ id: updated.id }, { replace: true });
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    one.data,
+    renameValue,
+    subject,
+    list,
+    setSearchParams,
+    collectBodyHtml,
+    initialDesign,
+  ]);
 
   // ---- Variablen-Dropdown ----
   const [varOpen, setVarOpen] = useState(false);
@@ -420,10 +441,9 @@ export default function EmailTemplatesPage() {
         }
         setDirty(true);
       } else {
-        // Builder: Token wird in die Zwischenablage gelegt — der User
-        // kann ihn dann in Text-Tools einfügen (oder die nativen
-        // Merge-Tag-Pillen aus der Editor-Toolbar nutzen).
-        editorRef.current?.insertMergeTag(token);
+        // Builder: fügt direkt am Cursor in einem Text-Block ein, oder
+        // legt den Token in die Zwischenablage als Fallback.
+        editorRef.current?.insertVariable(token);
       }
     },
     [viewMode],
@@ -498,7 +518,7 @@ export default function EmailTemplatesPage() {
                 <p className="px-2 pb-1 pt-1 text-[10.5px] uppercase tracking-wider text-night-500">
                   {viewMode === "html"
                     ? "In HTML einfügen"
-                    : "In Zwischenablage kopieren"}
+                    : "In Text-Block einfügen"}
                 </p>
                 <div className="max-h-72 overflow-y-auto">
                   {EMAIL_TEMPLATE_VARIABLES.map((v) => (
@@ -534,8 +554,9 @@ export default function EmailTemplatesPage() {
                 </div>
                 {viewMode === "builder" && (
                   <p className="border-t border-white/[0.08] px-2 py-1.5 text-[10.5px] text-night-500">
-                    Im Builder selbst kannst du Merge-Tags auch direkt aus
-                    dem Text-Tool-Menü einfügen.
+                    Setze den Cursor in einen Text-/Überschriften-Block,
+                    bevor du eine Variable wählst. Sonst landet sie in
+                    der Zwischenablage.
                   </p>
                 )}
               </div>
@@ -826,9 +847,7 @@ export default function EmailTemplatesPage() {
                 <span className="text-[11px] tabular-nums text-ink-400">
                   {viewMode === "html"
                     ? `${htmlOnly.length.toLocaleString("de-DE")} Zeichen HTML`
-                    : design
-                      ? "Drag-and-Drop · Vorschau · Merge-Tags"
-                      : "leeres Layout — links Block reinziehen"}
+                    : "Drag-and-Drop · Vorschau · Variablen"}
                 </span>
               </div>
               {(one.error || saveErr) && (
@@ -839,12 +858,12 @@ export default function EmailTemplatesPage() {
                   {one.error || saveErr}
                 </p>
               )}
-              {viewMode === "html" && design != null && (
+              {viewMode === "html" && hadDesign && (
                 <p
                   className="shrink-0 border-b border-accent-amber/30 bg-accent-amber/10 px-3 py-1.5 text-[11.5px] text-accent-amber sm:px-5"
                   role="status"
                 >
-                  Hinweis: Diese Vorlage hat einen Builder-Layout. Wenn du
+                  Hinweis: Diese Vorlage hat ein Builder-Layout. Wenn du
                   hier direkt das HTML editierst, weicht es vom Builder-Stand
                   ab. Beim nächsten Speichern im Builder-Modus überschreibt
                   der Builder dein Custom-HTML wieder.
@@ -859,12 +878,12 @@ export default function EmailTemplatesPage() {
                     </p>
                   </div>
                 )}
-                {one.data && (
+                {one.data && initialDesign && (
                   <>
                     {/*
-                      Unlayer-Editor wird montiert sobald ein Template geladen
-                      ist und bleibt montiert, auch wenn der HTML-Modus aktiv
-                      ist — sonst würde der iframe jeden Tab-Switch neu laden.
+                      Builder bleibt montiert, auch wenn der HTML-Modus
+                      aktiv ist — der State darin (Selection, Undo-Stack)
+                      würde sonst beim Tab-Switch verloren gehen.
                     */}
                     <div
                       className={
@@ -881,11 +900,11 @@ export default function EmailTemplatesPage() {
                           </div>
                         }
                       >
-                        <EmailUnlayerEditor
+                        <EmailBuilder
                           key={one.data.id}
                           ref={editorRef}
-                          initialDesign={design}
-                          onDirtyChange={setDirty}
+                          initialDesign={initialDesign}
+                          onChange={() => setDirty(true)}
                         />
                       </Suspense>
                     </div>
