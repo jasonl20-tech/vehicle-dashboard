@@ -38,7 +38,7 @@ const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/kunden/test-anfragen" as const;
 const FULLSCREEN_MAP_BILDBEMPFANG = "/ansichten/bildempfang" as const;
 const KUNDEN_CRM = "/kunden/crm" as const;
 const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
-const EMAIL_TEMPLATE_EDITOR_PREFIX = "/emails/templates/" as const;
+const EMAIL_TEMPLATES = "/emails/templates" as const;
 
 export default function DashboardLayout() {
   const { pathname } = useLocation();
@@ -46,7 +46,7 @@ export default function DashboardLayout() {
   const isKundenAnfragenPage = pathname === KUNDEN_ANFRAGEN;
   const isBildempfangMap = pathname === FULLSCREEN_MAP_BILDBEMPFANG;
   const isCrmPage = pathname === KUNDEN_CRM;
-  const isEmailEditor = pathname.startsWith(EMAIL_TEMPLATE_EDITOR_PREFIX);
+  const isEmailEditor = pathname === EMAIL_TEMPLATES;
   /** Vollflächig + Header-Toolbar (wie CRM): Anfragen + Test Anfragen */
   const isKundenAnfragenLayout = isKundenAnfragenPage || isKundenTestAnfragen;
   const [mobileOpen, setMobileOpen] = useState(false);

@@ -1,23 +1,43 @@
 import {
-  ChevronRight,
+  ChevronDown,
   Copy,
+  Loader2,
+  Pencil,
   Plus,
   RefreshCw,
+  Save,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import PageHeader from "../components/ui/PageHeader";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useOutletContext, useSearchParams } from "react-router-dom";
+import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
+import type { EmailDesignerHandle } from "../components/emails/EmailDesigner";
 import { useApi, fmtNumber } from "../lib/customerApi";
 import {
+  EMAIL_TEMPLATE_VARIABLES,
   createEmailTemplate,
   deleteEmailTemplate,
+  emailTemplateUrl,
   emailTemplatesListUrl,
+  updateEmailTemplate,
+  type EmailTemplate,
   type EmailTemplatesListResponse,
 } from "../lib/emailTemplatesApi";
 
-const PAGE_SIZE = 100;
+const EmailDesigner = lazy(() => import("../components/emails/EmailDesigner"));
+
+const PAGE_SIZE = 200;
 const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
 
 function fmtWhen(s: string | null | undefined): string {
@@ -37,53 +57,53 @@ function fmtWhen(s: string | null | undefined): string {
   }).format(new Date(t));
 }
 
-function fmtBytes(n: number | null | undefined): string {
-  if (n == null || Number.isNaN(n)) return "—";
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
-
 export default function EmailTemplatesPage() {
-  const navigate = useNavigate();
+  const { setHeaderTrailing } = useOutletContext<DashboardOutletContext>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedId = searchParams.get("id") ?? "";
 
+  // ---- Liste ----
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
-  const [offset, setOffset] = useState(0);
-
   useEffect(() => {
-    const t = setTimeout(() => setQ(qIn), 300);
+    const t = setTimeout(() => setQ(qIn), 250);
     return () => clearTimeout(t);
   }, [qIn]);
 
-  useEffect(() => {
-    setOffset(0);
-  }, [q]);
-
   const listUrl = useMemo(
-    () => emailTemplatesListUrl({ q, limit: PAGE_SIZE, offset }),
-    [q, offset],
+    () => emailTemplatesListUrl({ q, limit: PAGE_SIZE }),
+    [q],
   );
-  const { data, error, loading, reload } =
-    useApi<EmailTemplatesListResponse>(listUrl);
+  const list = useApi<EmailTemplatesListResponse>(listUrl);
 
+  // ---- Aktuell geladene Vorlage ----
+  const oneUrl = selectedId ? emailTemplateUrl(selectedId) : null;
+  const one = useApi<EmailTemplate>(oneUrl);
+
+  const [subject, setSubject] = useState("");
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    if (!one.data) return;
+    setSubject(one.data.subject);
+    setSavedAt(one.data.updated_at);
+    setDirty(false);
+  }, [one.data?.id, one.data?.updated_at]);
+
+  // ---- Anlegen ----
   const [newOpen, setNewOpen] = useState(false);
   const [newId, setNewId] = useState("");
   const [newSubject, setNewSubject] = useState("");
-  const [newCopyFrom, setNewCopyFrom] = useState<string>("");
+  const [newCopyFrom, setNewCopyFrom] = useState("");
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState<string | null>(null);
 
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteErr, setDeleteErr] = useState<string | null>(null);
-
   const idValid = newId.trim().length > 0 && ID_RE.test(newId.trim());
+
   const create = useCallback(async () => {
     if (!idValid) {
-      setCreateErr(
-        "id darf nur a–z, A–Z, 0–9 und . _ - : enthalten",
-      );
+      setCreateErr("id darf nur a–z, A–Z, 0–9 und . _ - : enthalten");
       return;
     }
     setCreating(true);
@@ -98,41 +118,19 @@ export default function EmailTemplatesPage() {
       setNewSubject("");
       setNewCopyFrom("");
       setNewOpen(false);
-      navigate(`/emails/templates/${encodeURIComponent(created.id)}`);
+      list.reload();
+      setSearchParams({ id: created.id });
     } catch (e) {
       setCreateErr(e instanceof Error ? e.message : String(e));
     } finally {
       setCreating(false);
     }
-  }, [idValid, newId, newSubject, newCopyFrom, navigate]);
+  }, [idValid, newId, newSubject, newCopyFrom, list, setSearchParams]);
 
-  const onDuplicate = useCallback(
-    async (sourceId: string) => {
-      const proposal = `${sourceId}_copy`;
-      const target = window.prompt(
-        `Kopie von „${sourceId}“ — neue id eingeben:`,
-        proposal,
-      );
-      if (!target) return;
-      const trimmed = target.trim();
-      if (!ID_RE.test(trimmed)) {
-        window.alert(
-          "Ungültige id. Erlaubt: a–z, A–Z, 0–9 und . _ - :",
-        );
-        return;
-      }
-      try {
-        const created = await createEmailTemplate({
-          id: trimmed,
-          copy_from_id: sourceId,
-        });
-        navigate(`/emails/templates/${encodeURIComponent(created.id)}`);
-      } catch (e) {
-        window.alert(e instanceof Error ? e.message : String(e));
-      }
-    },
-    [navigate],
-  );
+  // ---- Löschen ----
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const onDeleteConfirmed = useCallback(async () => {
     if (!confirmDelete) return;
@@ -140,232 +138,489 @@ export default function EmailTemplatesPage() {
     setDeleteErr(null);
     try {
       await deleteEmailTemplate(confirmDelete);
+      const wasSelected = confirmDelete === selectedId;
       setConfirmDelete(null);
-      reload();
+      list.reload();
+      if (wasSelected) {
+        setSearchParams({}, { replace: true });
+      }
     } catch (e) {
       setDeleteErr(e instanceof Error ? e.message : String(e));
     } finally {
       setDeleting(false);
     }
-  }, [confirmDelete, reload]);
+  }, [confirmDelete, selectedId, list, setSearchParams]);
 
-  const rows = data?.rows ?? [];
-  const total = data?.total ?? 0;
+  // ---- Duplizieren ----
+  const onDuplicate = useCallback(
+    async (sourceId: string) => {
+      const target = window.prompt(
+        `Kopie von „${sourceId}“ — neue id eingeben:`,
+        `${sourceId}_copy`,
+      );
+      if (!target) return;
+      const trimmed = target.trim();
+      if (!ID_RE.test(trimmed)) {
+        window.alert("Ungültige id. Erlaubt: a–z, A–Z, 0–9 und . _ - :");
+        return;
+      }
+      try {
+        const created = await createEmailTemplate({
+          id: trimmed,
+          copy_from_id: sourceId,
+        });
+        list.reload();
+        setSearchParams({ id: created.id });
+      } catch (e) {
+        window.alert(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [list, setSearchParams],
+  );
 
-  return (
-    <>
-      <PageHeader
-        eyebrow="Emails"
-        title="Email Templates"
-        hideCalendarAndNotifications
-        description={
-          <>
-            Vorlagen für transaktionale &amp; Marketing-Mails. Werden vom
-            externen Mail-Worker beim Versand aus dieser Tabelle gelesen.
-            Variablen wie{" "}
-            <span className="font-mono text-[12.5px] text-ink-700">{`{{name}}`}</span>{" "}
-            werden zur Laufzeit ersetzt.
-          </>
-        }
-        rightSlot={
-          <>
-            <button
-              type="button"
-              onClick={reload}
-              disabled={loading}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800 disabled:opacity-50"
-              title="Aktualisieren"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
-              />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCreateErr(null);
-                setNewOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Neue Vorlage
-            </button>
-          </>
-        }
-      />
+  // ---- Speichern + Rename ----
+  const designerRef = useRef<EmailDesignerHandle | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-ink-200/85 bg-white px-2.5 py-1.5 shadow-sm ring-1 ring-black/[0.05]">
-          <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-          <input
-            type="search"
-            value={qIn}
-            onChange={(e) => setQIn(e.target.value)}
-            placeholder="Nach id oder Betreff suchen…"
-            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
-          />
-        </div>
-        {data && (
-          <span className="text-[11.5px] tabular-nums text-ink-500">
-            {fmtNumber(total)} insgesamt
-            {q ? ` · ${rows.length} Treffer` : ""}
+  const onSave = useCallback(async () => {
+    if (!one.data) return;
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      const html = designerRef.current?.getHtml() ?? one.data.body_html;
+      const updated = await updateEmailTemplate(one.data.id, {
+        subject: subject.trim() || one.data.subject,
+        body_html: html,
+      });
+      setSavedAt(updated.updated_at);
+      setDirty(false);
+      list.reload();
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }, [one.data, subject, list]);
+
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+
+  const onRename = useCallback(async () => {
+    if (!one.data) return;
+    const next = renameValue.trim();
+    if (!next || next === one.data.id) {
+      setRenameOpen(false);
+      return;
+    }
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      const html = designerRef.current?.getHtml() ?? one.data.body_html;
+      const updated = await updateEmailTemplate(one.data.id, {
+        new_id: next,
+        subject: subject.trim() || one.data.subject,
+        body_html: html,
+      });
+      setRenameOpen(false);
+      setDirty(false);
+      list.reload();
+      setSearchParams({ id: updated.id }, { replace: true });
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  }, [one.data, renameValue, subject, list, setSearchParams]);
+
+  // ---- Variablen-Dropdown ----
+  const [varOpen, setVarOpen] = useState(false);
+  const insertVariable = useCallback((token: string) => {
+    setVarOpen(false);
+    designerRef.current?.insertHtml(token);
+    setDirty(true);
+  }, []);
+  const insertVariableIntoSubject = useCallback((token: string) => {
+    setVarOpen(false);
+    setSubject((s) => `${s}${s ? " " : ""}${token}`);
+    setDirty(true);
+  }, []);
+
+  useEffect(() => {
+    if (!varOpen) return;
+    const onDoc = () => setVarOpen(false);
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [varOpen]);
+
+  // ⌘S / Ctrl+S Shortcut
+  useEffect(() => {
+    if (!one.data) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        onSave();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [one.data, onSave]);
+
+  // BeforeUnload-Warnung
+  useEffect(() => {
+    if (!dirty) return;
+    const onBefore = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBefore);
+    return () => window.removeEventListener("beforeunload", onBefore);
+  }, [dirty]);
+
+  // ---- Header-Toolbar ----
+  const headerToolbar = useMemo(
+    () => (
+      <div className="flex min-w-0 w-full flex-1 items-center justify-end gap-1.5">
+        {one.data && (
+          <span className="hidden truncate text-[11.5px] tabular-nums text-night-500 sm:block">
+            {savedAt ? `Gespeichert: ${fmtWhen(savedAt)}` : "—"}
+            {dirty ? " · ungespeichert" : ""}
           </span>
         )}
+        {one.data && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setVarOpen((o) => !o);
+              }}
+              className="inline-flex h-9 items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 text-[12.5px] text-night-200 transition hover:bg-white/[0.08] hover:text-white"
+              title="Variable einfügen"
+            >
+              {`{{var}}`}
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            {varOpen && (
+              <div
+                className="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-white/[0.1] bg-night-800 p-1 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+              >
+                <p className="px-2 pb-1 pt-1 text-[10.5px] uppercase tracking-wider text-night-500">
+                  In Email-Body einfügen
+                </p>
+                <div className="max-h-72 overflow-y-auto">
+                  {EMAIL_TEMPLATE_VARIABLES.map((v) => (
+                    <button
+                      key={v.token}
+                      type="button"
+                      onClick={() => insertVariable(v.token)}
+                      className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-[12.5px] text-night-100 hover:bg-white/[0.06]"
+                    >
+                      <span className="font-mono text-night-100">{v.token}</span>
+                      <span className="truncate text-[11.5px] text-night-400">
+                        {v.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-1 border-t border-white/[0.08] pt-1">
+                  <p className="px-2 pb-1 pt-1 text-[10.5px] uppercase tracking-wider text-night-500">
+                    In Betreff einfügen
+                  </p>
+                  <div className="grid grid-cols-2 gap-1 px-1 pb-1">
+                    {EMAIL_TEMPLATE_VARIABLES.slice(0, 6).map((v) => (
+                      <button
+                        key={v.token}
+                        type="button"
+                        onClick={() => insertVariableIntoSubject(v.token)}
+                        className="rounded px-2 py-1 text-left font-mono text-[11.5px] text-night-100 hover:bg-white/[0.06]"
+                      >
+                        {v.token}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => list.reload()}
+          disabled={list.loading}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          title="Liste aktualisieren"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${list.loading || one.loading ? "animate-spin" : ""}`}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setCreateErr(null);
+            setNewOpen(true);
+          }}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
+          title="Neue Vorlage"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        {one.data && (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving || !one.data}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-white/15 bg-white px-3 text-[12.5px] font-medium text-ink-900 transition hover:bg-white/95 disabled:opacity-50"
+            title="Speichern (⌘S)"
+          >
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            {saving ? "Speichere…" : "Speichern"}
+          </button>
+        )}
       </div>
+    ),
+    [
+      one.data,
+      one.loading,
+      savedAt,
+      dirty,
+      varOpen,
+      list.loading,
+      saving,
+      onSave,
+      list,
+      insertVariable,
+      insertVariableIntoSubject,
+    ],
+  );
 
-      {error && (
+  useLayoutEffect(() => {
+    setHeaderTrailing(headerToolbar);
+    return () => setHeaderTrailing(null);
+  }, [setHeaderTrailing, headerToolbar]);
+
+  const rows = list.data?.rows ?? [];
+  const total = list.data?.total ?? 0;
+
+  return (
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-paper">
+      {list.error && (
         <p
-          className="mb-4 border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose"
+          className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose sm:px-5"
           role="alert"
         >
-          {error}
+          {list.error}
         </p>
       )}
-
-      {data?.hint && !error && (
+      {list.data?.hint && !list.error && (
         <p
-          className="mb-4 border-l-2 border-accent-amber px-3 py-2 text-[12.5px] text-accent-amber"
+          className="shrink-0 border-b border-accent-amber/40 bg-accent-amber/10 px-3 py-1.5 text-[12.5px] text-accent-amber sm:px-5"
           role="status"
         >
-          {data.hint}
+          {list.data.hint}
         </p>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-ink-200/70 bg-white shadow-sm shadow-ink-900/[0.06] ring-1 ring-ink-100/90">
-        <table className="w-full border-collapse text-[12.5px]">
-          <thead className="bg-gradient-to-b from-ink-50/95 to-ink-100/90">
-            <tr className="text-left text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-500">
-              <th className="px-4 py-2.5">id</th>
-              <th className="px-4 py-2.5">Betreff</th>
-              <th className="px-4 py-2.5 text-right">Größe</th>
-              <th className="px-4 py-2.5 text-right">Aktualisiert</th>
-              <th className="px-4 py-2.5 text-right">Aktionen</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && rows.length === 0 && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-10 text-center text-[12.5px] text-ink-500"
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {/* Linke Liste */}
+        <aside className="flex w-full shrink-0 flex-col border-b border-hair bg-white md:w-[300px] md:border-b-0 md:border-r">
+          <div className="shrink-0 border-b border-hair p-3">
+            <div className="flex items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
+              <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+              <input
+                type="search"
+                value={qIn}
+                onChange={(e) => setQIn(e.target.value)}
+                placeholder="id oder Betreff…"
+                className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-ink-500">
+              <span>
+                {fmtNumber(total)} Vorlagen
+                {q ? ` · ${rows.length} Treffer` : ""}
+              </span>
+              {list.loading && <Loader2 className="h-3 w-3 animate-spin" />}
+            </div>
+          </div>
+          <ul className="min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
+            {!list.loading && rows.length === 0 && (
+              <li className="px-4 py-6 text-center text-[12.5px] text-ink-500">
+                Keine Vorlagen.{" "}
+                <button
+                  type="button"
+                  onClick={() => setNewOpen(true)}
+                  className="text-ink-700 underline underline-offset-2 hover:text-ink-900"
                 >
-                  Wird geladen…
-                </td>
-              </tr>
+                  Jetzt anlegen
+                </button>
+              </li>
             )}
-            {!loading && rows.length === 0 && !error && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-10 text-center text-[12.5px] text-ink-500"
-                >
-                  Keine Vorlagen.{" "}
-                  <button
-                    type="button"
-                    className="text-ink-700 underline underline-offset-2 hover:text-ink-900"
-                    onClick={() => setNewOpen(true)}
+            {rows.map((r) => {
+              const active = r.id === selectedId;
+              return (
+                <li key={r.id}>
+                  <div
+                    className={`group flex w-full items-center gap-1.5 px-3 py-2 transition ${
+                      active
+                        ? "bg-ink-50/70"
+                        : "hover:bg-ink-50/50"
+                    }`}
                   >
-                    Jetzt anlegen
-                  </button>
-                </td>
-              </tr>
-            )}
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                className="cursor-pointer border-t border-hair transition-colors hover:bg-ink-50/60"
-                onClick={() =>
-                  navigate(`/emails/templates/${encodeURIComponent(r.id)}`)
-                }
-              >
-                <td className="px-4 py-2.5 align-middle font-mono text-[12px] text-ink-800">
-                  <span className="block max-w-[28ch] truncate" title={r.id}>
-                    {r.id}
-                  </span>
-                </td>
-                <td className="px-4 py-2.5 align-middle text-ink-800">
-                  <span
-                    className="block max-w-[60ch] truncate"
-                    title={r.subject}
-                  >
-                    {r.subject || "—"}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right align-middle tabular-nums text-ink-500">
-                  {fmtBytes(r.length)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-2.5 text-right align-middle tabular-nums text-ink-500">
-                  {fmtWhen(r.updated_at)}
-                </td>
-                <td
-                  className="whitespace-nowrap px-4 py-2.5 text-right align-middle"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="inline-flex items-center gap-1">
                     <button
                       type="button"
-                      title="Duplizieren"
-                      onClick={() => onDuplicate(r.id)}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition hover:border-ink-300 hover:text-ink-800"
+                      onClick={() => setSearchParams({ id: r.id })}
+                      className="flex min-w-0 flex-1 flex-col items-start text-left"
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <span
+                        className={`block max-w-full truncate font-mono text-[12px] ${
+                          active ? "text-ink-900" : "text-ink-700"
+                        }`}
+                        title={r.id}
+                      >
+                        {r.id}
+                      </span>
+                      <span
+                        className="mt-0.5 block max-w-full truncate text-[11.5px] text-ink-500"
+                        title={r.subject}
+                      >
+                        {r.subject || "—"}
+                      </span>
                     </button>
-                    <button
-                      type="button"
-                      title="Löschen"
-                      onClick={() => {
-                        setDeleteErr(null);
-                        setConfirmDelete(r.id);
-                      }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition hover:border-accent-rose/60 hover:text-accent-rose"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                    <Link
-                      to={`/emails/templates/${encodeURIComponent(r.id)}`}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition hover:border-ink-300 hover:text-ink-800"
-                      title="Bearbeiten"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Link>
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 [&>button]:h-6 [&>button]:w-6">
+                      <button
+                        type="button"
+                        title="Duplizieren"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDuplicate(r.id);
+                        }}
+                        className="inline-flex items-center justify-center rounded text-ink-500 hover:bg-ink-100 hover:text-ink-800"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Löschen"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteErr(null);
+                          setConfirmDelete(r.id);
+                        }}
+                        className="inline-flex items-center justify-center rounded text-ink-500 hover:bg-ink-100 hover:text-accent-rose"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
+
+        {/* Rechter Bereich: Editor */}
+        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {selectedId ? (
+            <>
+              <div className="flex shrink-0 items-center gap-2 border-b border-hair bg-white px-3 py-2 sm:gap-3 sm:px-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRenameValue(selectedId);
+                    setRenameOpen(true);
+                  }}
+                  className="group inline-flex min-w-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-1 font-mono text-[12.5px] text-ink-700 hover:border-hair hover:bg-ink-50/60"
+                  title="ID umbenennen"
+                  disabled={!one.data}
+                >
+                  <span className="max-w-[20ch] truncate">{selectedId}</span>
+                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-70" />
+                </button>
+                <span className="text-ink-400">›</span>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(e) => {
+                    setSubject(e.target.value);
+                    setDirty(true);
+                  }}
+                  placeholder="Betreff der Email"
+                  disabled={!one.data}
+                  className="min-w-0 flex-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none disabled:opacity-60"
+                />
+              </div>
+              {(one.error || saveErr) && (
+                <p
+                  className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose sm:px-5"
+                  role="alert"
+                >
+                  {one.error || saveErr}
+                </p>
+              )}
+              <div className="relative min-h-0 flex-1 bg-white">
+                {one.loading && !one.data && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70">
+                    <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Lade Vorlage…
+                    </p>
+                  </div>
+                )}
+                {one.data && (
+                  <Suspense
+                    fallback={
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Editor wird geladen…
+                        </p>
+                      </div>
+                    }
+                  >
+                    <EmailDesigner
+                      key={one.data.id}
+                      ref={designerRef}
+                      initialHtml={one.data.body_html}
+                      onDirtyChange={setDirty}
+                    />
+                  </Suspense>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                Keine Vorlage ausgewählt
+              </p>
+              <p className="max-w-sm text-[13px] leading-relaxed text-ink-500">
+                Wähle links eine Vorlage zum Bearbeiten oder lege eine neue an.
+              </p>
+              <button
+                type="button"
+                onClick={() => setNewOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Neue Vorlage
+              </button>
+            </div>
+          )}
+        </section>
       </div>
 
-      {data && data.total > PAGE_SIZE && (
-        <div className="mt-3 flex items-center justify-end gap-1.5 text-[12px] text-ink-600">
-          <span className="mr-2 tabular-nums">
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, data.total)} /{" "}
-            {fmtNumber(data.total)}
-          </span>
-          <button
-            type="button"
-            className="rounded border border-hair bg-white px-2 py-0.5 enabled:hover:bg-ink-50 disabled:opacity-40"
-            disabled={offset < PAGE_SIZE}
-            onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
-          >
-            Zurück
-          </button>
-          <button
-            type="button"
-            className="rounded border border-hair bg-white px-2 py-0.5 enabled:hover:bg-ink-50 disabled:opacity-40"
-            disabled={offset + PAGE_SIZE >= data.total}
-            onClick={() => setOffset((o) => o + PAGE_SIZE)}
-          >
-            Weiter
-          </button>
-        </div>
-      )}
-
+      {/* Anlegen-Modal */}
       {newOpen && (
         <div
           className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
-          onClick={() => setNewOpen(false)}
+          onClick={() => !creating && setNewOpen(false)}
           role="presentation"
         >
           <div
@@ -374,7 +629,10 @@ export default function EmailTemplatesPage() {
             role="dialog"
             aria-labelledby="tpl-new-title"
           >
-            <h2 id="tpl-new-title" className="text-sm font-semibold text-ink-800">
+            <h2
+              id="tpl-new-title"
+              className="text-sm font-semibold text-ink-800"
+            >
               Neue Vorlage
             </h2>
             <p className="mt-1 text-[12px] text-ink-500">
@@ -439,8 +697,9 @@ export default function EmailTemplatesPage() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
+                disabled={creating}
                 onClick={() => setNewOpen(false)}
-                className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:bg-ink-50"
+                className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
               >
                 Abbrechen
               </button>
@@ -458,6 +717,7 @@ export default function EmailTemplatesPage() {
         </div>
       )}
 
+      {/* Löschen-Modal */}
       {confirmDelete && (
         <div
           className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 p-4 sm:items-center"
@@ -470,7 +730,10 @@ export default function EmailTemplatesPage() {
             role="dialog"
             aria-labelledby="tpl-del-title"
           >
-            <h2 id="tpl-del-title" className="text-sm font-semibold text-ink-800">
+            <h2
+              id="tpl-del-title"
+              className="text-sm font-semibold text-ink-800"
+            >
               Vorlage löschen?
             </h2>
             <p className="mt-2 text-[12.5px] text-ink-600">
@@ -504,6 +767,68 @@ export default function EmailTemplatesPage() {
           </div>
         </div>
       )}
-    </>
+
+      {/* Rename-Modal */}
+      {renameOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          onClick={() => !saving && setRenameOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-hair bg-paper p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="tpl-rename-title"
+          >
+            <div className="mb-2 flex items-center justify-between">
+              <h2
+                id="tpl-rename-title"
+                className="text-sm font-semibold text-ink-800"
+              >
+                ID umbenennen
+              </h2>
+              <button
+                type="button"
+                onClick={() => setRenameOpen(false)}
+                className="rounded p-1 text-ink-400 hover:bg-ink-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-[12.5px] text-ink-500">
+              Achtung: Der externe Mail-Worker referenziert die Vorlage über
+              ihre id. Nach dem Umbenennen muss er ggf. angepasst werden.
+            </p>
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              className="mt-3 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12.5px] text-ink-900 focus:border-ink-400 focus:outline-none"
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setRenameOpen(false)}
+                className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                disabled={saving || !renameValue.trim()}
+                onClick={onRename}
+                className="inline-flex items-center gap-1 rounded-md border border-ink-900 bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800 disabled:opacity-50"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saving ? "Speichere…" : "Umbenennen & Speichern"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

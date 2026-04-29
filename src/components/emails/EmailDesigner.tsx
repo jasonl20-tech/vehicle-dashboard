@@ -259,10 +259,9 @@ const EmailDesigner = forwardRef<EmailDesignerHandle, Props>(
     }
 
     return (
-      <div
-        ref={containerRef}
-        className="email-designer h-full min-h-0 w-full flex-1"
-      />
+      <div className="email-designer-shell absolute inset-0">
+        <div ref={containerRef} className="h-full w-full" />
+      </div>
     );
   },
 );
