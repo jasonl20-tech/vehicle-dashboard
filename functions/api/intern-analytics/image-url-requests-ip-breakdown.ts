@@ -232,15 +232,18 @@ FORMAT JSON`;
 const D_OK = "double2 > 0 AND double2 < 1000000";
 
 /**
- * Cloudflare Analytics Engine SQL kann `if(cond, NULL, Double)` NICHT
- * implizit casten („the 2nd and 3rd arguments to IF() function must
- * have the same type but instead had Null and Double") und kennt
- * `any()` ebenfalls nicht. Deshalb teilen wir hier durch
- * `nullIf(sum, 0)` — das gibt automatisch NULL, wenn der Divisor 0 ist,
- * und der gesamte Ausdruck wird als nullable Double inferred.
+ * Cloudflare-Analytics-Engine-SQL kennt weder `any()` noch `nullIf()`,
+ * und `if(cond, NULL, Double)` lässt sich nicht implizit auf nullable
+ * Double casten („2nd and 3rd arguments must have the same type"). Was
+ * funktioniert: `if(cond, Double, Double)` — beide Branches Double.
+ *
+ * Deshalb liefern wir `0.0`, wenn keine Latenz-Datenpunkte vorhanden
+ * sind. Das Frontend (`bildempfangMapMarkers.ts`) interpretiert
+ * `avgMs <= 0` ohnehin als „keine Latenz" und behandelt es wie `null`
+ * — also kein Verlust an Semantik.
  */
 function avgMsExpr(): string {
-  return `sumIf(double2 * _sample_interval, ${D_OK}) / nullIf(sumIf(_sample_interval, ${D_OK}), 0) AS avgMs`;
+  return `if(sumIf(_sample_interval, ${D_OK}) > 0, sumIf(double2 * _sample_interval, ${D_OK}) / sumIf(_sample_interval, ${D_OK}), 0.0) AS avgMs`;
 }
 
 
