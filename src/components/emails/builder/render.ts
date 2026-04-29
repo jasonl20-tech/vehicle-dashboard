@@ -78,38 +78,50 @@ function borderStyle(b: Border | undefined, side: "all" | "top" | "bottom"): str
   return `border:${decl};`;
 }
 
-// ─── Social-Icons: Brand-Farben + öffentliche PNG-CDN-URLs ────────────
+// ─── Social-Icons: Brand-Farben über Image-Proxy (SVG → PNG) ──────────
 //
-// Wir nutzen für die "color"-Variante die SuperTinyIcons-CDN
-// (jsdelivr → GitHub edent/SuperTinyIcons). Die URLs sind stabil und
-// liefern PNG-Versionen, die in jedem Mail-Client funktionieren.
-// Für "mono" rendern wir einen monochromen Inline-SVG-via-data-URL —
-// in Mail-Clients problematisch (Outlook!), darum dort lieber farbig
-// arbeiten oder das User-Icon manuell setzen.
+// edent/SuperTinyIcons hostet die Logos nur als SVG. Viele Mail-Clients
+// (vor allem Outlook Desktop) rendern SVG nicht zuverlässig. Wir nutzen
+// daher den freien wsrv.nl-Proxy ("Weserv"), der die SVG-Quelle on the
+// fly nach PNG konvertiert und cached. Das Ergebnis funktioniert in
+// jedem Browser/Client und im Editor-Canvas.
+//
+// Die zuvor genutzten /images/png/<name>.png-URLs aus dem Repo waren
+// 404 (das Repo enthält ausschließlich SVG-Dateien) — daher hat bisher
+// nur der "twitter"-Slug zufällig funktioniert (manche CDN-Caches haben
+// generierte PNGs zwischengespeichert). Mit dem Proxy sind alle Icons
+// jetzt verlässlich verfügbar.
+
+const ICON_SIZE = 64;
+
+function buildIconUrl(svgName: string): string {
+  const upstream = `cdn.jsdelivr.net/gh/edent/SuperTinyIcons/images/svg/${svgName}.svg`;
+  return `https://wsrv.nl/?url=${encodeURIComponent(upstream)}&w=${ICON_SIZE}&h=${ICON_SIZE}&output=png`;
+}
 
 const SOCIAL_COLOR_ICONS: Record<SocialNetwork, string> = {
-  facebook:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/facebook.png",
-  x: "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/twitter.png",
-  instagram:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/instagram.png",
-  linkedin:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/linkedin.png",
-  youtube:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/youtube.png",
-  tiktok:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/tiktok.png",
-  github:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/github.png",
-  website:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/internet.png",
-  email:
-    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/email.png",
+  facebook: buildIconUrl("facebook"),
+  x: buildIconUrl("x"),
+  instagram: buildIconUrl("instagram"),
+  linkedin: buildIconUrl("linkedin"),
+  youtube: buildIconUrl("youtube"),
+  tiktok: buildIconUrl("tiktok"),
+  github: buildIconUrl("github"),
+  // Es gibt im Repo kein dediziertes "internet"/"website"-Icon —
+  // chrome.svg ist als generisches Web-Symbol etabliert.
+  website: buildIconUrl("chrome"),
+  email: buildIconUrl("email"),
 };
 
-// Mono-Icons als externe PNGs sind nicht trivial — wir nutzen die selben
-// URLs, der User kann später einzelne URLs überschreiben.
-const SOCIAL_MONO_ICONS: Record<SocialNetwork, string> = SOCIAL_COLOR_ICONS;
+// Mono-Variante: derselbe Proxy, allerdings mit zusätzlichem Filter
+// `&filt=greyscale`, der das PNG einfärbt. Das funktioniert für alle
+// Plattformen und bleibt PNG (Outlook-tauglich).
+const SOCIAL_MONO_ICONS: Record<SocialNetwork, string> = Object.fromEntries(
+  (Object.keys(SOCIAL_COLOR_ICONS) as SocialNetwork[]).map((k) => [
+    k,
+    `${SOCIAL_COLOR_ICONS[k]}&filt=greyscale`,
+  ]),
+) as Record<SocialNetwork, string>;
 
 export function socialIconUrl(
   network: SocialNetwork,

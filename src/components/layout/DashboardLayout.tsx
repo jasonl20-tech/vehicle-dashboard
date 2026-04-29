@@ -41,6 +41,26 @@ const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
 const EMAIL_TEMPLATES = "/emails/templates" as const;
 const ASSETS_PAGE = "/databases/assets" as const;
 
+/**
+ * Pfade, die das Split-View-Layout (kollabierbare Sidebar links + Editor
+ * rechts) verwenden — sie benötigen die volle Viewport-Höhe analog zum
+ * Email-Editor und dem CRM. Pfade mit `:param` werden über einen Match
+ * geprüft.
+ */
+const SPLIT_VIEW_PREFIXES = [
+  "/kunden/keys",
+  "/kunden/test-keys",
+  "/systeme/prompts",
+  "/systeme/mapping",
+  "/systeme/blockierte-fahrzeuge",
+] as const;
+
+function isSplitViewPath(pathname: string): boolean {
+  return SPLIT_VIEW_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
 export default function DashboardLayout() {
   const { pathname } = useLocation();
   const isKundenTestAnfragen = pathname === FULL_WIDTH_KUNDEN_TEST_ANFRAGEN;
@@ -49,6 +69,7 @@ export default function DashboardLayout() {
   const isCrmPage = pathname === KUNDEN_CRM;
   const isEmailEditor = pathname === EMAIL_TEMPLATES;
   const isAssetsPage = pathname === ASSETS_PAGE;
+  const isSplitView = isSplitViewPath(pathname);
   /** Vollflächig + Header-Toolbar (wie CRM): Anfragen + Test Anfragen */
   const isKundenAnfragenLayout = isKundenAnfragenPage || isKundenTestAnfragen;
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -115,11 +136,18 @@ export default function DashboardLayout() {
       !isCrmPage &&
       !isKundenAnfragenLayout &&
       !isEmailEditor &&
-      !isAssetsPage
+      !isAssetsPage &&
+      !isSplitView
     ) {
       setHeaderTrailing(null);
     }
-  }, [isCrmPage, isKundenAnfragenLayout, isEmailEditor, isAssetsPage]);
+  }, [
+    isCrmPage,
+    isKundenAnfragenLayout,
+    isEmailEditor,
+    isAssetsPage,
+    isSplitView,
+  ]);
 
   return (
     <div
@@ -155,7 +183,8 @@ export default function DashboardLayout() {
             isCrmPage ||
             isKundenAnfragenLayout ||
             isEmailEditor ||
-            isAssetsPage
+            isAssetsPage ||
+            isSplitView
               ? "h-[100dvh] min-h-0"
               : ""
           }`}
@@ -171,7 +200,8 @@ export default function DashboardLayout() {
               isCrmPage ||
               isKundenAnfragenLayout ||
               isEmailEditor ||
-              isAssetsPage
+              isAssetsPage ||
+              isSplitView
                 ? headerTrailing
                 : null
             }
@@ -179,7 +209,8 @@ export default function DashboardLayout() {
               isCrmPage ||
               isKundenAnfragenLayout ||
               isEmailEditor ||
-              isAssetsPage
+              isAssetsPage ||
+              isSplitView
             }
           />
           <div
@@ -189,7 +220,8 @@ export default function DashboardLayout() {
                 : isCrmPage ||
                     isKundenAnfragenLayout ||
                     isEmailEditor ||
-                    isAssetsPage
+                    isAssetsPage ||
+                    isSplitView
                   ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
                   : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
@@ -201,7 +233,8 @@ export default function DashboardLayout() {
                   : isCrmPage ||
                       isKundenAnfragenLayout ||
                       isEmailEditor ||
-                      isAssetsPage
+                      isAssetsPage ||
+                      isSplitView
                     ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
                     : ""
               }

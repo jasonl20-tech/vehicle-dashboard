@@ -51,6 +51,53 @@ function mapDwm(r: { dayN: number; weekN: number; monthN: number } | null): Dwm 
   };
 }
 
+/**
+ * Liefert eine 30-Tage-Tageszeitreihe (UTC) inkl. Lückenfüllung.
+ * Tabellen ohne `created_at` schlagen mit leerer Liste zurück.
+ */
+async function fetchDailySeries(
+  db: D1Database,
+  table: string,
+  days = 30,
+): Promise<Array<{ date: string; n: number }>> {
+  const sql = `SELECT strftime('%Y-%m-%d', created_at) AS d, COUNT(*) AS n
+               FROM ${table}
+               WHERE created_at >= datetime('now', ?)
+               GROUP BY d
+               ORDER BY d ASC`;
+  const off = `-${days - 1} days`;
+  let rows: Array<{ d: string; n: number }> = [];
+  try {
+    const res = await db.prepare(sql).bind(off).all<{ d: string; n: number }>();
+    rows = res?.results ?? [];
+  } catch {
+    return [];
+  }
+  // Lücken füllen: für jeden der letzten `days` Tage (UTC) einen Eintrag.
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    if (r.d) map.set(r.d, Number(r.n) || 0);
+  }
+  const out: Array<{ date: string; n: number }> = [];
+  const today = new Date();
+  // Today midnight UTC
+  const baseUtc = Date.UTC(
+    today.getUTCFullYear(),
+    today.getUTCMonth(),
+    today.getUTCDate(),
+  );
+  for (let i = days - 1; i >= 0; i--) {
+    const t = baseUtc - i * 24 * 60 * 60 * 1000;
+    const d = new Date(t);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    const key = `${yyyy}-${mm}-${dd}`;
+    out.push({ date: key, n: map.get(key) ?? 0 });
+  }
+  return out;
+}
+
 function countActiveKeySplit(summaries: CustomerKeySummary[]): {
   productive: number;
   test: number;
@@ -86,7 +133,16 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const vdb = requireVehicleDb(env);
   if (vdb instanceof Response) return vdb;
 
-  const [subRow, trialRow, newsRow, openJobsRow, keySplit] = await Promise.all([
+  const [
+    subRow,
+    trialRow,
+    newsRow,
+    openJobsRow,
+    keySplit,
+    subDaily,
+    trialDaily,
+    newsDaily,
+  ] = await Promise.all([
     website
       .prepare(`SELECT ${DWH_SQL} FROM submissions`)
       .first<{ dayN: number; weekN: number; monthN: number }>(),
@@ -97,9 +153,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       .prepare(`SELECT ${DWH_SQL} FROM newsletter`)
       .first<{ dayN: number; weekN: number; monthN: number }>(),
     vdb
-      .prepare(
-        `SELECT COUNT(*) as n FROM controll_status WHERE "check" = 0`,
-      )
+      .prepare(`SELECT COUNT(*) as n FROM controll_status WHERE "check" = 0`)
       .first<{ n: number }>(),
     (async () => {
       if (!env.customer_keys) {
@@ -108,6 +162,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       const summaries = await fetchAllSummaries(env.customer_keys);
       return countActiveKeySplit(summaries);
     })(),
+    fetchDailySeries(website, "submissions"),
+    fetchDailySeries(website, "trial_submissions"),
+    fetchDailySeries(website, "newsletter"),
   ]);
 
   return jsonResponse(
@@ -121,6 +178,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       activeKeys: keySplit
         ? { productive: keySplit.productive, test: keySplit.test }
         : null,
+      daily: {
+        submissions: subDaily,
+        trialSubmissions: trialDaily,
+        newsletter: newsDaily,
+      },
     },
     { status: 200 },
   );

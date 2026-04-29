@@ -1,6 +1,6 @@
-import { Plus, RefreshCw, X } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import PageHeader from "../components/ui/PageHeader";
+import SplitView from "../components/layout/SplitView";
 import { useJsonApi } from "../lib/billingApi";
 import {
   BLOCKED_VEHICLES_URL,
@@ -11,7 +11,12 @@ import {
   type BlockedVehiclesGetResponse,
   type BlockedVehiclesValue,
 } from "../lib/blockedVehiclesApi";
-import { fetchVehicleCatalog, type VehicleImageryCatalog } from "../lib/vehicleImageryApi";
+import {
+  fetchVehicleCatalog,
+  type VehicleImageryCatalog,
+} from "../lib/vehicleImageryApi";
+
+type BlockKind = "all" | "brands" | "models";
 
 export default function SystemeBlockedVehiclesPage() {
   const api = useJsonApi<BlockedVehiclesGetResponse>(BLOCKED_VEHICLES_URL);
@@ -22,6 +27,7 @@ export default function SystemeBlockedVehiclesPage() {
   const [cat, setCat] = useState<VehicleImageryCatalog | null>(null);
   const [catErr, setCatErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savedPing, setSavedPing] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
   const [pickBrand, setPickBrand] = useState("");
@@ -30,6 +36,9 @@ export default function SystemeBlockedVehiclesPage() {
   const [pickMarke, setPickMarke] = useState("");
   const [modelle, setModelle] = useState<string[]>([]);
   const [pickModell, setPickModell] = useState("");
+
+  const [filter, setFilter] = useState<BlockKind>("all");
+  const [q, setQ] = useState("");
 
   const marken = cat?.marken ?? [];
 
@@ -73,7 +82,9 @@ export default function SystemeBlockedVehiclesPage() {
   const addBrand = (name: string) => {
     const t = name.trim();
     if (!t) return;
-    setForm((f) => (f.brands.includes(t) ? f : { ...f, brands: [...f.brands, t] }));
+    setForm((f) =>
+      f.brands.includes(t) ? f : { ...f, brands: [...f.brands, t] },
+    );
   };
 
   const removeBrand = (b: string) => {
@@ -83,7 +94,9 @@ export default function SystemeBlockedVehiclesPage() {
   const addModelPair = () => {
     if (!pickMarke.trim() || !pickModell.trim()) return;
     const key = encodeBlockedModel(pickMarke, pickModell);
-    setForm((f) => (f.models.includes(key) ? f : { ...f, models: [...f.models, key] }));
+    setForm((f) =>
+      f.models.includes(key) ? f : { ...f, models: [...f.models, key] },
+    );
     setPickModell("");
   };
 
@@ -96,6 +109,8 @@ export default function SystemeBlockedVehiclesPage() {
     setSaving(true);
     try {
       await putBlockedVehicles(form);
+      setSavedPing(true);
+      window.setTimeout(() => setSavedPing(false), 1600);
       api.reload();
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : String(e));
@@ -104,199 +119,308 @@ export default function SystemeBlockedVehiclesPage() {
     }
   };
 
-  const brandOptions = useMemo(() => {
-    return marken.filter((m) => !form.brands.includes(m));
-  }, [marken, form.brands]);
-
   const reload = useCallback(() => {
     api.reload();
     void loadCat();
   }, [api, loadCat]);
 
-  return (
-    <>
-      <PageHeader
-        eyebrow="Systeme"
-        title="Blockierte Fahrzeuge"
-        hideCalendarAndNotifications
-        description={
-          <>
-            KV{" "}
-            <span className="font-mono text-[12.5px] text-ink-700">
-              blocked_vehicles
-            </span>
-            , Key{" "}
-            <span className="font-mono text-[12.5px] text-ink-700">
-              _config_blocked_vehicles
-            </span>
-            : gesperrte <strong>Marken</strong> (gesamte Marke) und
-            <strong> Marke+Modell</strong>-Kombinationen. Auswahl aus dem
-            D1-Fahrzeugkatalog oder Marke manuell.
-          </>
-        }
-        rightSlot={
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={reload}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
-              title="Aktualisieren"
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${api.loading || saving ? "animate-spin" : ""}`}
-              />
-            </button>
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={saving || api.loading}
-              className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] font-medium text-ink-800 transition-colors hover:border-ink-300 disabled:opacity-50"
-            >
-              {saving ? "Speichern …" : "Speichern"}
-            </button>
-          </div>
-        }
-      />
+  const brandOptions = useMemo(
+    () => marken.filter((m) => !form.brands.includes(m)),
+    [marken, form.brands],
+  );
+
+  const filteredBrands = useMemo(() => {
+    if (filter === "models") return [] as string[];
+    const t = q.trim().toLowerCase();
+    return form.brands.filter((b) => !t || b.toLowerCase().includes(t));
+  }, [form.brands, q, filter]);
+
+  const filteredModels = useMemo(() => {
+    if (filter === "brands") return [] as string[];
+    const t = q.trim().toLowerCase();
+    return form.models.filter(
+      (m) => !t || formatBlockedModelLabel(m).toLowerCase().includes(t),
+    );
+  }, [form.models, q, filter]);
+
+  const totalCount = form.brands.length + form.models.length;
+  const visibleCount = filteredBrands.length + filteredModels.length;
+
+  const aside = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-hair p-3 pr-9">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-500">
+            Gesperrt
+          </p>
+          <button
+            type="button"
+            onClick={reload}
+            title="Aktualisieren"
+            aria-label="Aktualisieren"
+            className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-400 hover:bg-ink-100 hover:text-ink-700"
+          >
+            <RefreshCw
+              className={`h-3 w-3 ${api.loading ? "animate-spin" : ""}`}
+            />
+          </button>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Marke oder Modell…"
+            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+          />
+        </div>
+        <div className="mt-2 flex gap-1">
+          {(
+            [
+              { id: "all" as BlockKind, label: "Alle", count: totalCount },
+              {
+                id: "brands" as BlockKind,
+                label: "Marken",
+                count: form.brands.length,
+              },
+              {
+                id: "models" as BlockKind,
+                label: "Modelle",
+                count: form.models.length,
+              },
+            ]
+          ).map((t) => {
+            const active = t.id === filter;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setFilter(t.id)}
+                className={`flex flex-1 items-center justify-center gap-1 rounded border px-1.5 py-1 text-[10.5px] transition-colors ${
+                  active
+                    ? "border-ink-400 bg-ink-50 text-ink-900"
+                    : "border-hair bg-white text-ink-600 hover:border-ink-300"
+                }`}
+              >
+                <span>{t.label}</span>
+                <span className="tabular-nums opacity-60">{t.count}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-ink-500">
+          <span>
+            {visibleCount}
+            {q.trim() ? ` / ${totalCount}` : ` Einträge`}
+          </span>
+          {api.loading && <Loader2 className="h-3 w-3 animate-spin" />}
+        </div>
+      </div>
 
       {api.error && (
-        <p className="mb-6 border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
+        <p className="border-b border-accent-rose/50 bg-accent-rose/10 px-3 py-2 text-[11.5px] text-accent-rose">
           {api.error}
         </p>
       )}
 
-      {catErr && (
-        <p className="mb-6 border-l-2 border-accent-amber px-3 py-2 text-[12.5px] text-ink-800">
-          Katalog: {catErr}
-        </p>
-      )}
+      <ul className="min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
+        {!api.loading && totalCount === 0 && (
+          <li className="px-3 py-6 text-center text-[12.5px] text-ink-500">
+            Keine gesperrten Einträge. Rechts hinzufügen.
+          </li>
+        )}
+        {filteredBrands.map((b) => (
+          <li
+            key={`b:${b}`}
+            className="group flex items-center justify-between gap-2 px-3 py-2 hover:bg-ink-50/60"
+          >
+            <div className="min-w-0 flex-1">
+              <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-accent-rose/80">
+                Marke
+              </span>
+              <span
+                className="block truncate font-mono text-[12.5px] text-ink-900"
+                title={b}
+              >
+                {b}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => removeBrand(b)}
+              className="shrink-0 rounded p-1 text-ink-400 opacity-0 transition hover:bg-accent-rose/10 hover:text-accent-rose group-hover:opacity-100"
+              aria-label={`${b} entfernen`}
+              title="Entfernen"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </li>
+        ))}
+        {filteredModels.map((key) => (
+          <li
+            key={`m:${key}`}
+            className="group flex items-center justify-between gap-2 px-3 py-2 hover:bg-ink-50/60"
+          >
+            <div className="min-w-0 flex-1">
+              <span className="block text-[10px] font-medium uppercase tracking-[0.14em] text-accent-amber">
+                Modell
+              </span>
+              <span
+                className="block truncate font-mono text-[12.5px] text-ink-900"
+                title={formatBlockedModelLabel(key)}
+              >
+                {formatBlockedModelLabel(key)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => removeModel(key)}
+              className="shrink-0 rounded p-1 text-ink-400 opacity-0 transition hover:bg-accent-rose/10 hover:text-accent-rose group-hover:opacity-100"
+              aria-label="Entfernen"
+              title="Entfernen"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
-      {saveErr && (
-        <p className="mb-6 border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
-          {saveErr}
-        </p>
-      )}
-
-      {api.loading && !api.data ? (
-        <p className="py-12 text-center text-[12.5px] text-ink-400">Lade …</p>
-      ) : (
-        <div className="max-w-3xl space-y-10">
-          <section>
-            <h2 className="mb-1 text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-              Gesperrte Marken
-            </h2>
-            <p className="mb-4 text-[12.5px] text-ink-500">
-              Alle Fahrzeuge dieser Marke zählen als gesperrt.
+  return (
+    <SplitView
+      storageKey="ui.systemeBlocked.aside"
+      asideLabel="Gesperrt"
+      asideWidthClass="md:w-[320px]"
+      asideContent={aside}
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* Toolbar */}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-hair bg-white px-4 py-2.5">
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-ink-400">
+              Systeme
             </p>
-            {form.brands.length > 0 && (
-              <ul className="mb-4 flex flex-wrap gap-1.5">
-                {form.brands.map((b) => (
-                  <li
-                    key={b}
-                    className="inline-flex max-w-full items-center gap-1 rounded-md border border-hair bg-ink-50 px-2.5 py-1 font-mono text-[12.5px] text-ink-800"
-                  >
-                    <span className="min-w-0 truncate">{b}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeBrand(b)}
-                      className="shrink-0 text-ink-500 hover:text-accent-rose"
-                      aria-label={`${b} entfernen`}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+            <p className="mt-0.5 truncate text-[14px] font-medium text-ink-900">
+              Blockierte Fahrzeuge
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {savedPing && (
+              <span className="text-[11.5px] text-accent-mint">
+                Gespeichert.
+              </span>
             )}
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-              <div className="min-w-0 sm:max-w-xs">
-                <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-ink-400">
-                  Marke aus Katalog
-                </label>
-                <select
-                  value={pickBrand}
-                  onChange={(e) => setPickBrand(e.target.value)}
-                  className="w-full rounded-md border border-hair bg-white px-2.5 py-2 text-[13px] text-ink-800 focus:border-ink-400 focus:outline-none"
-                >
-                  <option value="">— wählen —</option>
-                  {brandOptions.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (pickBrand) addBrand(pickBrand);
-                  setPickBrand("");
-                }}
-                disabled={!pickBrand}
-                className="inline-flex h-9 items-center gap-1 rounded-md border border-hair bg-white px-3 text-[12.5px] text-ink-800 hover:border-ink-300 disabled:opacity-50"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Hinzufügen
-              </button>
-            </div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1 sm:max-w-md">
-                <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-ink-400">
-                  Oder Marke (Freitext)
-                </label>
-                <input
-                  value={customBrand}
-                  onChange={(e) => setCustomBrand(e.target.value)}
-                  placeholder="z. B. exotische Schreibweise"
-                  className="w-full rounded-md border border-hair bg-white px-2.5 py-2 text-[13px] text-ink-800 focus:border-ink-400 focus:outline-none"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  addBrand(customBrand);
-                  setCustomBrand("");
-                }}
-                disabled={!customBrand.trim()}
-                className="inline-flex h-9 items-center gap-1 rounded-md border border-hair bg-white px-3 text-[12.5px] text-ink-800 hover:border-ink-300 disabled:opacity-50"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Hinzufügen
-              </button>
-            </div>
-          </section>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || api.loading}
+              className="rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-ink-800 disabled:opacity-50"
+            >
+              {saving ? "Speichere…" : "Speichern"}
+            </button>
+          </div>
+        </div>
 
-          <div className="border-t border-hair pt-10">
+        {/* Body */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
+          {catErr && (
+            <p className="mb-4 border-l-2 border-accent-amber px-3 py-2 text-[12.5px] text-ink-800">
+              Katalog: {catErr}
+            </p>
+          )}
+          {saveErr && (
+            <p className="mb-4 border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
+              {saveErr}
+            </p>
+          )}
+
+          <div className="mx-auto max-w-3xl space-y-10">
+            <p className="text-[12.5px] leading-relaxed text-ink-500">
+              KV{" "}
+              <span className="font-mono text-ink-700">blocked_vehicles</span>,
+              Key{" "}
+              <span className="font-mono text-ink-700">
+                _config_blocked_vehicles
+              </span>
+              : Marken werden komplett gesperrt; Marke + Modell sperrt nur die
+              Kombination.
+            </p>
+
             <section>
               <h2 className="mb-1 text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-                Gesperrte Modelle
+                Marke sperren
               </h2>
               <p className="mb-4 text-[12.5px] text-ink-500">
-                Pro Eintrag genau eine Marke + Modellkombination (aus dem
-                Katalog, der zur gewählten Marke geladen wird). Ohne
-                Markensperre nutzbar.
+                Alle Fahrzeuge der gewählten Marke gelten als gesperrt.
               </p>
-              {form.models.length > 0 && (
-                <ul className="mb-4 space-y-1.5">
-                  {form.models.map((key) => (
-                    <li
-                      key={key}
-                      className="flex max-w-2xl items-center justify-between gap-2 rounded-md border border-hair bg-paper/80 px-2.5 py-2"
-                    >
-                      <span className="min-w-0 font-mono text-[12.5px] text-ink-800">
-                        {formatBlockedModelLabel(key)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeModel(key)}
-                        className="shrink-0 text-ink-500 hover:text-accent-rose"
-                        aria-label="Eintrag entfernen"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="min-w-0">
+                  <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-ink-400">
+                    Marke aus Katalog
+                  </label>
+                  <select
+                    value={pickBrand}
+                    onChange={(e) => setPickBrand(e.target.value)}
+                    className="w-full rounded-md border border-hair bg-white px-2.5 py-2 text-[13px] text-ink-800 focus:border-ink-400 focus:outline-none"
+                  >
+                    <option value="">— wählen —</option>
+                    {brandOptions.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pickBrand) addBrand(pickBrand);
+                    setPickBrand("");
+                  }}
+                  disabled={!pickBrand}
+                  className="inline-flex h-9 items-center gap-1 rounded-md border border-hair bg-white px-3 text-[12.5px] text-ink-800 hover:border-ink-300 disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Marke sperren
+                </button>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="min-w-0">
+                  <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-ink-400">
+                    Oder Marke (Freitext)
+                  </label>
+                  <input
+                    value={customBrand}
+                    onChange={(e) => setCustomBrand(e.target.value)}
+                    placeholder="z. B. exotische Schreibweise"
+                    className="w-full rounded-md border border-hair bg-white px-2.5 py-2 text-[13px] text-ink-800 focus:border-ink-400 focus:outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    addBrand(customBrand);
+                    setCustomBrand("");
+                  }}
+                  disabled={!customBrand.trim()}
+                  className="inline-flex h-9 items-center gap-1 rounded-md border border-hair bg-white px-3 text-[12.5px] text-ink-800 hover:border-ink-300 disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Hinzufügen
+                </button>
+              </div>
+            </section>
+
+            <section className="border-t border-hair pt-10">
+              <h2 className="mb-1 text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                Marke + Modell sperren
+              </h2>
+              <p className="mb-4 text-[12.5px] text-ink-500">
+                Pro Eintrag genau eine Marken-/Modell-Kombination — der
+                Modell-Katalog wird aus der gewählten Marke geladen.
+              </p>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                 <div>
                   <label className="mb-1 block text-[10px] font-medium uppercase tracking-[0.12em] text-ink-400">
@@ -348,7 +472,7 @@ export default function SystemeBlockedVehiclesPage() {
             </section>
           </div>
         </div>
-      )}
-    </>
+      </div>
+    </SplitView>
   );
 }

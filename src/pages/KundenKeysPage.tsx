@@ -1,50 +1,68 @@
-import { ChevronDown, Mail, RefreshCw, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Mail,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import PageHeader from "../components/ui/PageHeader";
+import { useNavigate, useParams } from "react-router-dom";
+import CustomerKeyEditor from "../components/customer-keys/CustomerKeyEditor";
+import SplitView from "../components/layout/SplitView";
 import { useJsonApi } from "../lib/billingApi";
 import {
+  customerKeyUrlOne,
   customerKeysListUrl,
-  customerKeyDetailPath,
   isExpiredIso,
   shortKey,
+  type CustomerKeyOneResponse,
   type CustomerKeySummary,
   type CustomerKeysListResponse,
 } from "../lib/customerKeysApi";
-
-const GROUPS_PER_PAGE = 20;
 
 type ListVariant = "customer" | "test";
 type ExpiryFilter = "all" | "expired" | "valid" | "soon7";
 
 export default function KundenKeysPage() {
-  return <KundenKeysListView variant="customer" />;
+  return <KundenKeysSplitView variant="customer" />;
 }
 
 export function KundenTestKeysPage() {
-  return <KundenKeysListView variant="test" />;
+  return <KundenKeysSplitView variant="test" />;
 }
 
-function KundenKeysListView({ variant }: { variant: ListVariant }) {
+function basePathFor(variant: ListVariant): string {
+  return variant === "test" ? "/kunden/test-keys" : "/kunden/keys";
+}
+
+function KundenKeysSplitView({ variant }: { variant: ListVariant }) {
   const list = useJsonApi<CustomerKeysListResponse>(
     customerKeysListUrl(variant === "customer" ? "customer" : "test"),
   );
 
+  const { key: keyParam } = useParams();
+  const navigate = useNavigate();
+  const selectedKey = keyParam ? decodeURIComponent(keyParam) : null;
+
+  const oneApi = useJsonApi<CustomerKeyOneResponse>(
+    selectedKey ? customerKeyUrlOne(selectedKey) : null,
+  );
+
+  const reloadAll = useCallback(() => {
+    list.reload();
+    if (selectedKey) oneApi.reload();
+  }, [list, oneApi, selectedKey]);
+
+  const summaries = list.data?.keys ?? [];
+  const isTestArea = variant === "test";
+
+  // ---------- Filter / Suche ----------
   const [q, setQ] = useState("");
   const [planId, setPlanId] = useState("");
   const [expiry, setExpiry] = useState<ExpiryFilter>("all");
-  const [createdFrom, setCreatedFrom] = useState("");
-  const [createdTo, setCreatedTo] = useState("");
-  const [page, setPage] = useState(0);
-  /** `true` = Gruppe zugeklappt (nur Email-Zeile). Standard: zu, übersichtlicher. */
+  /** `true` = Email-Gruppe zugeklappt. Standard: zu, übersichtlicher. */
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-
-  const reload = useCallback(() => list.reload(), [list]);
-  const summaries = list.data?.keys ?? [];
-
-  useEffect(() => {
-    setPage(0);
-  }, [q, planId, expiry, createdFrom, createdTo]);
 
   const planOptions = useMemo(() => {
     const s = new Set<string>();
@@ -58,28 +76,18 @@ function KundenKeysListView({ variant }: { variant: ListVariant }) {
     const term = q.trim().toLowerCase();
     const now = Date.now();
     const soonEnd = now + 7 * 24 * 60 * 60 * 1000;
-    const cFrom = createdFrom ? dayStart(createdFrom) : null;
-    const cTo = createdTo ? dayEnd(createdTo) : null;
-
     return summaries.filter((s) => {
       if (planId && s.plan_id !== planId) return false;
 
       if (expiry === "expired") {
         if (!s.expires_at || !isExpiredIso(s.expires_at)) return false;
       } else if (expiry === "valid") {
-        if (!s.expires_at) return true; // kein Enddatum = gilt als unbegrenzt
+        if (!s.expires_at) return true;
         if (isExpiredIso(s.expires_at)) return false;
       } else if (expiry === "soon7") {
         if (!s.expires_at) return false;
         const t = Date.parse(s.expires_at);
         if (isNaN(t) || t < now || t > soonEnd) return false;
-      }
-
-      if (cFrom != null || cTo != null) {
-        const c = s.created_at ? Date.parse(s.created_at) : NaN;
-        if (isNaN(c)) return false;
-        if (cFrom != null && c < cFrom) return false;
-        if (cTo != null && c > cTo) return false;
       }
 
       if (!term) return true;
@@ -97,179 +105,296 @@ function KundenKeysListView({ variant }: { variant: ListVariant }) {
         .toLowerCase();
       return hay.includes(term);
     });
-  }, [summaries, q, planId, expiry, createdFrom, createdTo]);
+  }, [summaries, q, planId, expiry]);
 
   const groups = useMemo(() => groupByEmail(filtered), [filtered]);
-  const totalPages = Math.max(1, Math.ceil(groups.length / GROUPS_PER_PAGE));
-  const safePage = Math.min(Math.max(0, page), totalPages - 1);
 
+  // Auto-expand der Gruppe, in der der gerade selektierte Key liegt:
   useEffect(() => {
-    setPage((p) => Math.min(p, Math.max(0, totalPages - 1)));
-  }, [totalPages]);
-  const pageGroups = useMemo(() => {
-    const p = Math.max(0, safePage);
-    const start = p * GROUPS_PER_PAGE;
-    return groups.slice(start, start + GROUPS_PER_PAGE);
-  }, [groups, safePage]);
+    if (!selectedKey) return;
+    const sel = summaries.find((s) => s.key === selectedKey);
+    if (!sel) return;
+    const gid = groupIdFor(sel.email);
+    setCollapsed((m) => (m[gid] === false ? m : { ...m, [gid]: false }));
+  }, [selectedKey, summaries]);
 
-  const stats = useMemo(() => computeStats(summaries), [summaries]);
-  const linkFrom: "customer" | "test" = variant === "test" ? "test" : "customer";
-  const isTestArea = variant === "test";
+  const goToKey = useCallback(
+    (key: string) => {
+      navigate(`${basePathFor(variant)}/${encodeURIComponent(key)}`);
+    },
+    [navigate, variant],
+  );
 
-  return (
-    <>
-      <PageHeader
-        eyebrow="Kundenmanagement"
-        title={isTestArea ? "Kundentest keys" : "Kunden keys"}
-        hideCalendarAndNotifications
-        description={
-          isTestArea ? (
-            <>
-              Keys, deren{" "}
-              <span className="font-mono text-[12px] text-ink-600">plan_id</span>{" "}
-              oder <span className="font-mono text-[12px] text-ink-600">plan_name</span>{" "}
-              <span className="font-medium text-ink-800">test</span> enthält. Klick
-              auf einen Key öffnet die Bearbeiten-Seite.
-            </>
-          ) : (
-            <>
-              Produktions-Keys (ohne Pläne mit <span className="font-medium">test</span> im
-              Namen). Kundentest-Keys siehe{" "}
-              <span className="font-mono text-[12px] text-ink-600">Kundentest keys</span>.
-            </>
-          )
-        }
-        rightSlot={
+  // ---------- Sidebar ----------
+  const aside = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 border-b border-hair p-3 pr-9">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-500">
+            {isTestArea ? "Kundentest-Keys" : "Kunden-Keys"}
+          </p>
           <button
             type="button"
-            onClick={reload}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
+            onClick={reloadAll}
+            className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-400 hover:bg-ink-100 hover:text-ink-700"
             title="Aktualisieren"
+            aria-label="Aktualisieren"
           >
             <RefreshCw
-              className={`h-3.5 w-3.5 ${list.loading ? "animate-spin" : ""}`}
+              className={`h-3 w-3 ${list.loading ? "animate-spin" : ""}`}
             />
           </button>
-        }
-      />
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
+          <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Email, Key, Plan, Status…"
+            className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+          />
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <select
+            value={planId}
+            onChange={(e) => setPlanId(e.target.value)}
+            className="min-w-0 rounded border border-hair bg-white px-1.5 py-1 text-[11.5px] text-ink-700 focus:border-ink-400 focus:outline-none"
+            title="Plan filtern"
+          >
+            <option value="">Alle Pläne</option>
+            {planOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <select
+            value={expiry}
+            onChange={(e) => setExpiry(e.target.value as ExpiryFilter)}
+            className="min-w-0 rounded border border-hair bg-white px-1.5 py-1 text-[11.5px] text-ink-700 focus:border-ink-400 focus:outline-none"
+            title="Ablauffilter"
+          >
+            <option value="all">Alle</option>
+            <option value="expired">Abgelaufen</option>
+            <option value="valid">Gültig</option>
+            <option value="soon7">Läuft in 7 T.</option>
+          </select>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-ink-500">
+          <span>
+            {filtered.length} Keys · {groups.length} Gruppen
+            {q || planId || expiry !== "all"
+              ? ` · ${summaries.length} gesamt`
+              : ""}
+          </span>
+          {list.loading && <Loader2 className="h-3 w-3 animate-spin" />}
+        </div>
+      </div>
 
       {list.error && (
-        <p className="mb-6 border-l-2 border-accent-rose px-3 py-2 text-[12.5px] text-accent-rose">
+        <p className="border-b border-accent-rose/50 bg-accent-rose/10 px-3 py-2 text-[11.5px] text-accent-rose">
           {list.error}
         </p>
       )}
 
-      <KpiStrip
-        stats={stats}
-        loading={list.loading && !list.data}
-        variant={variant}
-      />
-
-      {list.loading && !list.data ? (
-        <p className="py-12 text-center text-[12.5px] text-ink-400">Lade …</p>
-      ) : (
-        <div className="border-t border-hair pt-8">
-          <FilterBar
-            q={q}
-            onQ={setQ}
-            planId={planId}
-            onPlanId={setPlanId}
-            planOptions={planOptions}
-            expiry={expiry}
-            onExpiry={setExpiry}
-            createdFrom={createdFrom}
-            onCreatedFrom={setCreatedFrom}
-            createdTo={createdTo}
-            onCreatedTo={setCreatedTo}
-            onResetFilters={() => {
-              setQ("");
-              setPlanId("");
-              setExpiry("all");
-              setCreatedFrom("");
-              setCreatedTo("");
-              setPage(0);
-            }}
-            resultCount={filtered.length}
-            groupCount={groups.length}
-            totalCount={summaries.length}
-          />
-
-          {groups.length === 0 ? (
-            <p className="mt-6 border border-dashed border-hair px-3 py-8 text-center text-[13px] text-ink-500">
-              {summaries.length === 0
-                ? isTestArea
-                  ? "Keine Kundentest-Keys (kein plan mit „test“ im Namen)."
-                  : "Keine Kunden-Keys (ohne Test-Pläne) im KV."
-                : "Keine Treffer — Filter lockern oder Suche ändern."}
-            </p>
-          ) : (
-            <>
-              <ul className="mt-6 divide-y divide-hair border-y border-hair">
-                {pageGroups.map((g) => (
-                  <EmailGroupBlock
-                    key={g.id}
-                    group={g}
-                    linkFrom={linkFrom}
-                    showTestBadge={isTestArea}
-                    collapsed={collapsed[g.id] ?? true}
-                    onToggle={() =>
-                      setCollapsed((m) => {
-                        const cur = m[g.id] ?? true;
-                        return { ...m, [g.id]: !cur };
-                      })
-                    }
+      <ul className="min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
+        {!list.loading && groups.length === 0 && (
+          <li className="px-4 py-6 text-center text-[12.5px] text-ink-500">
+            {summaries.length === 0
+              ? isTestArea
+                ? "Keine Kundentest-Keys gefunden."
+                : "Keine Kunden-Keys im KV."
+              : "Keine Treffer für die Filter."}
+          </li>
+        )}
+        {groups.map((g) => {
+          const gid = g.id;
+          const isCollapsed = collapsed[gid] ?? true;
+          const allExpired = g.rows.every(
+            (r) => r.expires_at && isExpiredIso(r.expires_at),
+          );
+          const someExpired =
+            !allExpired &&
+            g.rows.some((r) => r.expires_at && isExpiredIso(r.expires_at));
+          const tone = allExpired
+            ? "rose"
+            : someExpired
+              ? "amber"
+              : "neutral";
+          return (
+            <li key={gid}>
+              <button
+                type="button"
+                onClick={() =>
+                  setCollapsed((m) => ({ ...m, [gid]: !isCollapsed }))
+                }
+                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-ink-50/60 ${
+                  tone === "rose"
+                    ? "border-l-2 border-l-accent-rose bg-accent-rose/[0.05]"
+                    : tone === "amber"
+                      ? "border-l-2 border-l-accent-amber/90 bg-accent-amber/[0.06]"
+                      : "border-l-2 border-l-transparent"
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <Mail
+                    className={`h-3.5 w-3.5 shrink-0 ${
+                      tone === "rose"
+                        ? "text-accent-rose"
+                        : tone === "amber"
+                          ? "text-accent-amber"
+                          : "text-ink-400"
+                    }`}
                   />
-                ))}
-              </ul>
-
-              {totalPages > 1 && (
-                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-ink-600">
-                  <p className="text-[11.5px] text-ink-400">
-                    Gruppen {safePage * GROUPS_PER_PAGE + 1}–
-                    {Math.min((safePage + 1) * GROUPS_PER_PAGE, groups.length)} von{" "}
-                    {groups.length} (Keys: {filtered.length} / {summaries.length})
-                  </p>
-                  <div className="inline-flex items-center gap-1 border border-hair">
-                    <button
-                      type="button"
-                      disabled={safePage <= 0}
-                      onClick={() => setPage((p) => Math.max(0, p - 1))}
-                      className="px-3 py-1.5 text-[12px] hover:bg-ink-50 disabled:opacity-40"
+                  {g.email ? (
+                    <span
+                      className="truncate text-[12.5px] font-medium text-ink-900"
+                      title={g.email}
                     >
-                      Zurück
-                    </button>
-                    <span className="border-l border-hair px-3 py-1.5 font-mono text-[11px]">
-                      {safePage + 1} / {totalPages}
+                      {g.email}
                     </span>
-                    <button
-                      type="button"
-                      disabled={safePage >= totalPages - 1}
-                      onClick={() =>
-                        setPage((p) => Math.min(totalPages - 1, p + 1))
-                      }
-                      className="px-3 py-1.5 text-[12px] hover:bg-ink-50 disabled:opacity-40"
-                    >
-                      Weiter
-                    </button>
-                  </div>
-                </div>
+                  ) : (
+                    <span className="italic text-[12.5px] text-ink-400">
+                      (ohne Email)
+                    </span>
+                  )}
+                  <span className="shrink-0 text-[10.5px] tabular-nums text-ink-400">
+                    {g.rows.length}
+                  </span>
+                </span>
+                {isCollapsed ? (
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+                )}
+              </button>
+              {!isCollapsed && (
+                <ul className="bg-paper/40">
+                  {g.rows.map((r) => {
+                    const active = r.key === selectedKey;
+                    const expired =
+                      r.expires_at && isExpiredIso(r.expires_at);
+                    return (
+                      <li key={r.key}>
+                        <button
+                          type="button"
+                          onClick={() => goToKey(r.key)}
+                          className={`flex w-full items-start gap-2 px-3 py-1.5 pl-8 text-left transition ${
+                            active
+                              ? "bg-ink-100 text-ink-900"
+                              : "hover:bg-ink-50/70"
+                          }`}
+                        >
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span
+                              className={`block truncate font-mono text-[11.5px] ${
+                                active
+                                  ? "text-ink-900"
+                                  : expired
+                                    ? "text-accent-rose"
+                                    : "text-ink-700"
+                              }`}
+                              title={r.key}
+                            >
+                              {shortKey(r.key)}
+                            </span>
+                            <span
+                              className="block truncate text-[10.5px] text-ink-500"
+                              title={`${r.plan_id ?? ""} · ${r.status ?? ""}`}
+                            >
+                              {r.plan_id || "–"}
+                              {r.status ? ` · ${r.status}` : ""}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-            </>
-          )}
-        </div>
-      )}
-    </>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+
+  // ---------- Hauptbereich (Editor) ----------
+  return (
+    <SplitView
+      storageKey={
+        isTestArea ? "ui.kundenTestKeys.aside" : "ui.kundenKeys.aside"
+      }
+      asideLabel={isTestArea ? "Test-Keys" : "Keys"}
+      asideWidthClass="md:w-[320px]"
+      asideContent={aside}
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {selectedKey ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-8">
+            <CustomerKeyEditor
+              key={selectedKey}
+              kid={selectedKey}
+              one={oneApi.data}
+              err={oneApi.error}
+              loading={oneApi.loading}
+              onAfterSave={reloadAll}
+              containerClassName="mx-auto max-w-3xl"
+            />
+          </div>
+        ) : (
+          <EmptyState variant={variant} />
+        )}
+      </div>
+    </SplitView>
   );
 }
 
-// ---------- filter helpers ----------
+function EmptyState({ variant }: { variant: ListVariant }) {
+  const isTest = variant === "test";
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
+      <div className="max-w-md text-center">
+        <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+          {isTest ? "Kundentest-Keys" : "Kunden-Keys"}
+        </p>
+        <h2 className="mt-2 font-display text-[22px] tracking-tightish text-ink-900">
+          Wähle einen Key links aus
+        </h2>
+        <p className="mt-3 text-[13px] leading-relaxed text-ink-500">
+          {isTest ? (
+            <>
+              Test-Keys haben{" "}
+              <span className="font-mono text-[11.5px] text-ink-700">
+                test
+              </span>{" "}
+              im{" "}
+              <span className="font-mono text-[11.5px] text-ink-700">
+                plan_id
+              </span>{" "}
+              oder{" "}
+              <span className="font-mono text-[11.5px] text-ink-700">
+                plan_name
+              </span>
+              .
+            </>
+          ) : (
+            <>
+              Produktions-Keys ohne „test“ im Plan-Namen. Pläne mit „test“ siehe{" "}
+              <span className="font-mono text-[11.5px] text-ink-700">
+                Kundentest keys
+              </span>
+              .
+            </>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
 
-function dayStart(ymd: string): number {
-  return new Date(ymd + "T00:00:00").getTime();
-}
-function dayEnd(ymd: string): number {
-  return new Date(ymd + "T23:59:59.999").getTime();
-}
+// ---------- Helpers ----------
 
 type CustomerGroup = {
   id: string;
@@ -277,10 +402,14 @@ type CustomerGroup = {
   rows: CustomerKeySummary[];
 };
 
+function groupIdFor(email: string | null): string {
+  return email ? `e:${email.toLowerCase()}` : "_:noemail";
+}
+
 function groupByEmail(rows: CustomerKeySummary[]): CustomerGroup[] {
   const byEmail = new Map<string, CustomerGroup>();
   for (const r of rows) {
-    const id = r.email ? `e:${r.email.toLowerCase()}` : "_:noemail";
+    const id = groupIdFor(r.email);
     let g = byEmail.get(id);
     if (!g) {
       g = { id, email: r.email, rows: [] };
@@ -300,377 +429,4 @@ function groupByEmail(rows: CustomerKeySummary[]): CustomerGroup[] {
     g.rows.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
   return out;
-}
-
-type Stats = {
-  total: number;
-  withEmail: number;
-  uniqueEmails: number;
-  uniquePlans: number;
-  expired: number;
-};
-
-function computeStats(rows: CustomerKeySummary[]): Stats {
-  const emails = new Set<string>();
-  const plans = new Set<string>();
-  let withEmail = 0;
-  let expired = 0;
-  for (const r of rows) {
-    if (r.email) {
-      emails.add(r.email.toLowerCase());
-      withEmail += 1;
-    }
-    if (r.plan_id) plans.add(r.plan_id);
-    if (r.expires_at && isExpiredIso(r.expires_at)) expired += 1;
-  }
-  return {
-    total: rows.length,
-    withEmail,
-    uniqueEmails: emails.size,
-    uniquePlans: plans.size,
-    expired,
-  };
-}
-
-function KpiStrip({
-  stats,
-  loading,
-  variant,
-}: {
-  stats: Stats;
-  loading: boolean;
-  variant: ListVariant;
-}) {
-  return (
-    <div className="mb-10 grid grid-cols-2 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
-      <KpiTile
-        label={variant === "test" ? "Kundentest-Keys" : "Kunden-Keys"}
-        value={ld(loading, stats.total)}
-        sub={
-          variant === "test"
-            ? "„test“ in plan_id / plan_name"
-            : "ohne Test-Pläne"
-        }
-      />
-      <KpiTile
-        label="Abgelaufen"
-        value={ld(loading, stats.expired)}
-        sub="Ablaufdatum"
-        tone="warn"
-      />
-      <KpiTile
-        label="Mit Email"
-        value={ld(loading, stats.withEmail)}
-        sub={
-          !loading && stats.total
-            ? `${pct(stats.withEmail, stats.total)} %`
-            : "—"
-        }
-        tone="ok"
-      />
-      <KpiTile
-        label="E-Mails"
-        value={ld(loading, stats.uniqueEmails)}
-        sub="unique"
-      />
-      <KpiTile
-        label="Pläne"
-        value={ld(loading, stats.uniquePlans)}
-        sub="unique plan_id"
-      />
-    </div>
-  );
-}
-
-function ld(loading: boolean, n: number) {
-  return loading ? "…" : String(n);
-}
-function pct(a: number, b: number) {
-  return b ? Math.round((a / b) * 100) : 0;
-}
-
-function KpiTile({
-  label,
-  value,
-  sub,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  tone?: "neutral" | "ok" | "warn";
-}) {
-  const subColor =
-    tone === "ok"
-      ? "text-accent-mint"
-      : tone === "warn"
-        ? "text-accent-amber"
-        : "text-ink-400";
-  return (
-    <div className="px-4 py-5 sm:px-5 lg:px-6">
-      <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-        {label}
-      </p>
-      <p className="mt-2 font-display text-[32px] leading-none tracking-tighter2 text-ink-900">
-        {value}
-      </p>
-      {sub && <p className={`mt-2 text-[11.5px] font-medium ${subColor}`}>{sub}</p>}
-    </div>
-  );
-}
-
-// ---------- Filterbar ----------
-
-function FilterBar({
-  q,
-  onQ,
-  planId,
-  onPlanId,
-  planOptions,
-  expiry,
-  onExpiry,
-  createdFrom,
-  onCreatedFrom,
-  createdTo,
-  onCreatedTo,
-  onResetFilters,
-  resultCount,
-  groupCount,
-  totalCount,
-}: {
-  q: string;
-  onQ: (s: string) => void;
-  planId: string;
-  onPlanId: (s: string) => void;
-  planOptions: string[];
-  expiry: ExpiryFilter;
-  onExpiry: (e: ExpiryFilter) => void;
-  createdFrom: string;
-  onCreatedFrom: (s: string) => void;
-  createdTo: string;
-  onCreatedTo: (s: string) => void;
-  onResetFilters: () => void;
-  resultCount: number;
-  groupCount: number;
-  totalCount: number;
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="relative sm:col-span-2">
-          <Search className="pointer-events-none absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-          <input
-            type="search"
-            placeholder="Suche: Email, Key, Plan, Status, Stripe-IDs…"
-            value={q}
-            onChange={(e) => onQ(e.target.value)}
-            className="w-full border-b border-hair bg-transparent py-1.5 pl-6 pr-2 text-[12.5px] text-ink-800 outline-none placeholder:text-ink-400 focus:border-ink-700"
-          />
-        </div>
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-            plan_id
-          </span>
-          <select
-            value={planId}
-            onChange={(e) => onPlanId(e.target.value)}
-            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
-          >
-            <option value="">Alle Pläne</option>
-            {planOptions.map((p) => (
-              <option key={p} value={p}>
-                {p}
-                {p.toLowerCase().includes("test") ? " (Test-Plan)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-            Ablauf
-          </span>
-          <select
-            value={expiry}
-            onChange={(e) => onExpiry(e.target.value as ExpiryFilter)}
-            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
-          >
-            <option value="all">Alle</option>
-            <option value="expired">Abgelaufen</option>
-            <option value="valid">Noch gültig (oder ohne Datum)</option>
-            <option value="soon7">Läuft in 7 Tagen ab</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-            Erstellt ab
-          </span>
-          <input
-            type="date"
-            value={createdFrom}
-            onChange={(e) => onCreatedFrom(e.target.value)}
-            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
-          />
-        </label>
-        <label className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-            Erstellt bis
-          </span>
-          <input
-            type="date"
-            value={createdTo}
-            onChange={(e) => onCreatedTo(e.target.value)}
-            className="border-b border-hair bg-transparent py-1.5 text-[12.5px] text-ink-800 outline-none focus:border-ink-700"
-          />
-        </label>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 text-[12px] text-ink-500">
-        <p>
-          <span className="font-medium text-ink-800">{resultCount}</span> Keys
-          in{" "}
-          <span className="font-medium text-ink-800">{groupCount}</span>{" "}
-          E-Mail-Gruppen · Gesamt im KV:{" "}
-          <span className="text-ink-400">{totalCount}</span>
-        </p>
-        <button
-          type="button"
-          onClick={onResetFilters}
-          className="text-[12px] text-ink-600 underline decoration-hair underline-offset-2 hover:text-ink-900"
-        >
-          Filter zurücksetzen
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function fmtExpires(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
-}
-
-/** E-Mail-Kopfzeile: rot = alle Keys mit Datum abgelaufen, gelb = gemischt, sonst neutral. */
-function emailGroupBarTone(
-  rows: CustomerKeySummary[],
-): "allExpired" | "someExpired" | "ok" {
-  if (rows.length === 0) return "ok";
-  const allExpired = rows.every((r) => r.expires_at && isExpiredIso(r.expires_at));
-  if (allExpired) return "allExpired";
-  if (rows.some((r) => r.expires_at && isExpiredIso(r.expires_at)))
-    return "someExpired";
-  return "ok";
-}
-
-function EmailGroupBlock({
-  group,
-  linkFrom,
-  showTestBadge,
-  collapsed,
-  onToggle,
-}: {
-  group: CustomerGroup;
-  linkFrom: "customer" | "test";
-  showTestBadge: boolean;
-  collapsed: boolean;
-  onToggle: () => void;
-}) {
-  const bar = emailGroupBarTone(group.rows);
-  const barBtn =
-    bar === "allExpired"
-      ? "border-b border-transparent border-l-2 border-l-accent-rose bg-accent-rose/[0.07] pl-1.5 text-left transition-colors hover:border-b-hair hover:border-l-accent-rose hover:bg-accent-rose/15"
-      : bar === "someExpired"
-        ? "border-b border-transparent border-l-2 border-l-accent-amber/90 bg-accent-amber/12 pl-1.5 text-left transition-colors hover:border-b-hair hover:border-l-accent-amber hover:bg-accent-amber/18"
-        : "border-b border-l-2 border-l-transparent border-transparent pl-0 text-left transition-colors hover:border-hair";
-  const mailClass =
-    bar === "allExpired"
-      ? "text-accent-rose"
-      : bar === "someExpired"
-        ? "text-accent-amber"
-        : "text-ink-400";
-  const metaClass =
-    bar === "allExpired"
-      ? "text-accent-rose/80"
-      : bar === "someExpired"
-        ? "text-accent-amber/80"
-        : "text-ink-400";
-
-  return (
-    <li>
-      <div className="px-0 py-1 sm:px-1">
-        <button type="button" onClick={onToggle} className={`flex w-full items-center justify-between gap-3 rounded-l py-2 ${barBtn}`}>
-          <span className="flex min-w-0 items-center gap-2">
-            <Mail className={`h-3.5 w-3.5 shrink-0 ${mailClass}`} />
-            {group.email ? (
-              <span className="truncate text-[13px] font-medium text-ink-900" title={group.email}>
-                {group.email}
-              </span>
-            ) : (
-              <span className="italic text-[13px] text-ink-400">(ohne Email)</span>
-            )}
-            <span className={`shrink-0 text-[11px] tabular-nums ${metaClass}`}>
-              {group.rows.length} Key{group.rows.length === 1 ? "" : "s"}
-            </span>
-          </span>
-          <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 ${metaClass} transition-transform ${
-              collapsed ? "-rotate-90" : "rotate-0"
-            }`}
-            aria-hidden
-          />
-        </button>
-        {!collapsed && (
-          <div className="mt-1 max-h-[min(24rem,70vh)] overflow-y-auto">
-            <table className="min-w-full text-left text-[11.5px]">
-              <thead className="text-[10px] font-medium uppercase tracking-[0.12em] text-ink-400">
-                <tr>
-                  <th className="py-1.5 pr-3">Key / Bearbeiten</th>
-                  <th className="py-1.5 pr-3">plan_id</th>
-                  <th className="py-1.5 pr-3">Ablauf</th>
-                  <th className="py-1.5 pr-2">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-hair/80 text-ink-800">
-                {group.rows.map((r) => {
-                  const exp = r.expires_at;
-                  const expired = exp && isExpiredIso(exp);
-                  return (
-                    <tr key={r.key} className="hover:bg-ink-50/30">
-                      <td className="max-w-[min(28rem,50vw)] py-1.5 pr-3 align-top">
-                        <Link
-                          to={customerKeyDetailPath(r.key, linkFrom)}
-                          className="block font-mono text-[11px] text-brand-600 underline decoration-hair underline-offset-2 hover:text-ink-900"
-                          title={r.key}
-                        >
-                          {shortKey(r.key)}
-                        </Link>
-                      </td>
-                      <td className="pr-3 align-top">
-                        <span className="font-mono text-[11px] text-ink-700">
-                          {r.plan_id || "—"}
-                        </span>
-                        {showTestBadge && (
-                          <span className="ml-1 font-mono text-[9.5px] uppercase tracking-wider text-accent-amber">
-                            test
-                          </span>
-                        )}
-                      </td>
-                      <td
-                        className={`pr-3 align-top tabular-nums ${
-                          expired ? "text-accent-rose" : "text-ink-600"
-                        }`}
-                      >
-                        {fmtExpires(exp)}
-                      </td>
-                      <td className="align-top text-ink-500">{r.status || "—"}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </li>
-  );
 }

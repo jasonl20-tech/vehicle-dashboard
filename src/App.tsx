@@ -2,7 +2,6 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import KundenApiPage from "./pages/KundenApiPage";
-import KundenKeyDetailPage from "./pages/KundenKeyDetailPage";
 import KundenKeysPage, { KundenTestKeysPage } from "./pages/KundenKeysPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControllingPage from "./pages/ControllingPage";
@@ -61,9 +60,9 @@ export default function App() {
           path="/kunden/test-anfragen"
           element={<AnfragenPage variant="trial" />}
         />
-        <Route path="/kunden/keys/:key" element={<KundenKeyDetailPage />} />
+        <Route path="/kunden/keys/:key" element={<KundenKeysPage />} />
         <Route path="/kunden/keys" element={<KundenKeysPage />} />
-        <Route path="/kunden/test-keys/:key" element={<KundenKeyDetailPage />} />
+        <Route path="/kunden/test-keys/:key" element={<KundenTestKeysPage />} />
         <Route path="/kunden/test-keys" element={<KundenTestKeysPage />} />
         <Route path="/kunden/newsletter" element={<NewsletterPage />} />
         <Route

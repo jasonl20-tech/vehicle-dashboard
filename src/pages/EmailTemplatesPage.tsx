@@ -23,13 +23,11 @@ import {
   Copy,
   LayoutGrid,
   Loader2,
-  Pencil,
   Plus,
   RefreshCw,
   Save,
   Search,
   Trash2,
-  X,
 } from "lucide-react";
 import {
   Suspense,
@@ -374,49 +372,9 @@ export default function EmailTemplatesPage() {
     }
   }, [one.data, subject, list, collectBodyHtml, initialDesign]);
 
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [renameValue, setRenameValue] = useState("");
-
-  const onRename = useCallback(async () => {
-    if (!one.data) return;
-    const next = renameValue.trim();
-    if (!next || next === one.data.id) {
-      setRenameOpen(false);
-      return;
-    }
-    setSaving(true);
-    setSaveErr(null);
-    const finalHtml = collectBodyHtml();
-    try {
-      const updated = await updateEmailTemplate(one.data!.id, {
-        new_id: next,
-        subject: subject.trim() || one.data!.subject,
-        body_html: finalHtml,
-      });
-      const { design: d, htmlWithoutMarker } = extractBuilderDesign(
-        updated.body_html,
-      );
-      setRenameOpen(false);
-      setHtmlOnly(htmlWithoutMarker);
-      setInitialDesign(d ?? initialDesign);
-      setHadDesign(d !== null);
-      setDirty(false);
-      list.reload();
-      setSearchParams({ id: updated.id }, { replace: true });
-    } catch (e) {
-      setSaveErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    one.data,
-    renameValue,
-    subject,
-    list,
-    setSearchParams,
-    collectBodyHtml,
-    initialDesign,
-  ]);
+  // Rename (ID/Name) ist bewusst deaktiviert: Vorlagen werden vom externen
+  // Mail-Worker per id referenziert. Bestand bleibt durch Sperre der
+  // Frontend-UI stabil; Subject (Betreff) bleibt natürlich änderbar.
 
   // ---- Variablen-Dropdown ----
   const [varOpen, setVarOpen] = useState(false);
@@ -781,19 +739,12 @@ export default function EmailTemplatesPage() {
           {selectedId ? (
             <>
               <div className="flex shrink-0 items-center gap-2 border-b border-hair bg-white px-3 py-2 sm:gap-3 sm:px-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRenameValue(selectedId);
-                    setRenameOpen(true);
-                  }}
-                  className="group inline-flex min-w-0 items-center gap-1 rounded-md border border-transparent px-1.5 py-1 font-mono text-[12.5px] text-ink-700 hover:border-hair hover:bg-ink-50/60"
-                  title="ID umbenennen"
-                  disabled={!one.data}
+                <span
+                  className="inline-flex min-w-0 items-center gap-1 rounded-md border border-hair bg-ink-50/40 px-1.5 py-1 font-mono text-[12.5px] text-ink-700"
+                  title="Vorlagen-Name (nicht änderbar)"
                 >
                   <span className="max-w-[20ch] truncate">{selectedId}</span>
-                  <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-70" />
-                </button>
+                </span>
                 <span className="text-ink-400">›</span>
                 <input
                   type="text"
@@ -1100,67 +1051,6 @@ export default function EmailTemplatesPage() {
         </div>
       )}
 
-      {/* Rename-Modal */}
-      {renameOpen && (
-        <div
-          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/50 p-4 sm:items-center"
-          onClick={() => !saving && setRenameOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-hair bg-paper p-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-labelledby="tpl-rename-title"
-          >
-            <div className="mb-2 flex items-center justify-between">
-              <h2
-                id="tpl-rename-title"
-                className="text-sm font-semibold text-ink-800"
-              >
-                ID umbenennen
-              </h2>
-              <button
-                type="button"
-                onClick={() => setRenameOpen(false)}
-                className="rounded p-1 text-ink-400 hover:bg-ink-100"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <p className="text-[12.5px] text-ink-500">
-              Achtung: Der externe Mail-Worker referenziert die Vorlage über
-              ihre id. Nach dem Umbenennen muss er ggf. angepasst werden.
-            </p>
-            <input
-              type="text"
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              className="mt-3 w-full rounded border border-hair bg-white px-2 py-1.5 font-mono text-[12.5px] text-ink-900 focus:border-ink-400 focus:outline-none"
-              autoFocus
-            />
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => setRenameOpen(false)}
-                className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
-              >
-                Abbrechen
-              </button>
-              <button
-                type="button"
-                disabled={saving || !renameValue.trim()}
-                onClick={onRename}
-                className="inline-flex items-center gap-1 rounded-md border border-ink-900 bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800 disabled:opacity-50"
-              >
-                <Save className="h-3.5 w-3.5" />
-                {saving ? "Speichere…" : "Umbenennen & Speichern"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
