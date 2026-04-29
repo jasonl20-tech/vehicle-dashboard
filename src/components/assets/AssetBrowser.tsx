@@ -173,9 +173,8 @@ export default function AssetBrowser({
     (a: Asset) => {
       if (mode !== "pick" || !accept || accept.length === 0) return true;
       if (accept.includes("*")) return true;
-      const t = a.content_type || "";
-      if (accept.includes("image/") && t.startsWith("image/")) return true;
-      if (accept.includes("video/") && t.startsWith("video/")) return true;
+      if (accept.includes("image/") && isImage(a)) return true;
+      if (accept.includes("video/") && isVideo(a)) return true;
       return false;
     },
     [mode, accept],

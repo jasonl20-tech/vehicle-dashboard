@@ -251,12 +251,53 @@ export async function deleteAsset(key: string): Promise<void> {
   }
 }
 
-export function isImage(asset: { content_type: string }): boolean {
-  return asset.content_type.startsWith("image/");
+const IMAGE_EXTS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "jpe",
+  "gif",
+  "svg",
+  "webp",
+  "avif",
+  "bmp",
+  "ico",
+  "heic",
+  "heif",
+  "tif",
+  "tiff",
+]);
+
+const VIDEO_EXTS = new Set([
+  "mp4",
+  "m4v",
+  "webm",
+  "mov",
+  "avi",
+  "mkv",
+]);
+
+function fileExt(name: string | undefined): string {
+  if (!name) return "";
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return "";
+  return name.slice(dot + 1).toLowerCase();
 }
 
-export function isVideo(asset: { content_type: string }): boolean {
-  return asset.content_type.startsWith("video/");
+export function isImage(asset: {
+  content_type: string;
+  name?: string;
+}): boolean {
+  if (asset.content_type?.startsWith("image/")) return true;
+  return IMAGE_EXTS.has(fileExt(asset.name));
+}
+
+export function isVideo(asset: {
+  content_type: string;
+  name?: string;
+}): boolean {
+  if (asset.content_type?.startsWith("video/")) return true;
+  return VIDEO_EXTS.has(fileExt(asset.name));
 }
 
 export function formatBytes(bytes: number): string {

@@ -207,6 +207,76 @@ export function buildCustomMetadata(
   return m;
 }
 
+// ─── Content-Type-Erkennung ───────────────────────────────────────────
+// R2-Objekte, die ohne explizite httpMetadata hochgeladen wurden (z. B.
+// direkt aus dem Cloudflare-Dashboard oder via wrangler), kommen oft
+// als `application/octet-stream` zurück. Wir leiten in dem Fall den
+// Content-Type aus der Dateiendung ab, damit Bild-Previews und Filter
+// (`isImage`) auch für Legacy-Uploads funktionieren.
+
+const EXT_TO_TYPE: Record<string, string> = {
+  // Images
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  jpe: "image/jpeg",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  heic: "image/heic",
+  heif: "image/heif",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  // Videos
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  avi: "video/x-msvideo",
+  mkv: "video/x-matroska",
+  // Audio
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
+  // Docs
+  pdf: "application/pdf",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  xml: "application/xml",
+  html: "text/html",
+  htm: "text/html",
+  // Archive
+  zip: "application/zip",
+  gz: "application/gzip",
+  // Fonts
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
+};
+
+const GENERIC_TYPES: ReadonlySet<string> = new Set([
+  "",
+  "application/octet-stream",
+  "binary/octet-stream",
+  "application/x-octet-stream",
+]);
+
+export function guessContentType(name: string, current?: string | null): string {
+  const cur = (current || "").toLowerCase();
+  if (cur && !GENERIC_TYPES.has(cur)) return current!;
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return current || "application/octet-stream";
+  const ext = name.slice(dot + 1).toLowerCase();
+  return EXT_TO_TYPE[ext] ?? current ?? "application/octet-stream";
+}
+
 // ─── Asset-Shape für die API ─────────────────────────────────────────
 
 export type AssetRow = {
@@ -243,13 +313,17 @@ export function r2ObjectToAsset(env: AuthEnv, obj: R2Object): AssetRow {
     obj.uploaded instanceof Date
       ? obj.uploaded.toISOString()
       : new Date(obj.uploaded).toISOString();
+  // Content-Type robust herleiten — manche R2-Objekte (Direkt-Upload via
+  // Cloudflare-Console, wrangler ohne -t) tragen `application/octet-stream`
+  // oder gar keinen Type. Wir schließen aus der Dateiendung zurück.
+  const contentType = guessContentType(name, obj.httpMetadata?.contentType);
   return {
     id: obj.key,
     key: obj.key,
     folder,
     name,
     size: obj.size,
-    content_type: obj.httpMetadata?.contentType ?? "application/octet-stream",
+    content_type: contentType,
     kind: isFolderMarker ? "folder" : "file",
     alt_text: decodeMetaValue(meta[META_KEYS.altText]),
     description: decodeMetaValue(meta[META_KEYS.description]),
