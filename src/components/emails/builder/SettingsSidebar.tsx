@@ -10,18 +10,32 @@
  * NICHT hier — die Sidebar regelt nur Style/Properties.
  */
 import { useMemo } from "react";
+import { Trash2 } from "lucide-react";
+import {
+  SOCIAL_NETWORKS,
+  newId,
+  socialDefaultUrl,
+  socialLabel,
+} from "./defaults";
 import type { BuilderApi } from "./useBuilderState";
 import type {
+  AvatarBlock,
+  Border,
   ButtonBlock,
   ContentBlock,
   DividerBlock,
   HtmlBlock,
   ImageBlock,
+  ListBlock,
   Padding,
+  QuoteBlock,
   Section,
   SectionLayout,
+  SocialBlock,
+  SocialNetwork,
   SpacerBlock,
   TextBlock,
+  VideoBlock,
   HeadingBlock,
   Align,
   BlockPath,
@@ -235,6 +249,70 @@ const FONT_OPTIONS = [
   },
 ];
 
+// ─── Border-Editor (Farbe / Breite / Stil) ───────────────────────────
+
+function BorderEditor({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: Border | undefined;
+  onChange: (next: Border | undefined) => void;
+}) {
+  const enabled = !!value && value.width > 0;
+  return (
+    <div className="space-y-1.5">
+      <Row label={label}>
+        <SwitchInput
+          value={enabled}
+          onChange={(on) =>
+            onChange(
+              on
+                ? value && value.width > 0
+                  ? value
+                  : { color: "#e5e5e7", width: 1, style: "solid" }
+                : undefined,
+            )
+          }
+        />
+      </Row>
+      {enabled && value && (
+        <>
+          <Row label="Farbe">
+            <ColorInput
+              value={value.color}
+              onChange={(v) => v && onChange({ ...value, color: v })}
+            />
+          </Row>
+          <Row label="Stärke">
+            <NumberInput
+              value={value.width}
+              onChange={(width) => onChange({ ...value, width })}
+              min={0}
+              max={20}
+              unit="px"
+            />
+          </Row>
+          <Row label="Stil">
+            <SelectInput
+              value={value.style}
+              options={[
+                { value: "solid", label: "Durchgezogen" },
+                { value: "dashed", label: "Gestrichelt" },
+                { value: "dotted", label: "Gepunktet" },
+              ]}
+              onChange={(style) =>
+                onChange({ ...value, style: style as Border["style"] })
+              }
+            />
+          </Row>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Padding-Editor (Top/Right/Bottom/Left) ──────────────────────────
 
 function PaddingEditor({
@@ -313,6 +391,15 @@ function BodyPanel({ api }: { api: BuilderApi }) {
             unit="px"
           />
         </Row>
+        <Row label="Body-Padding Y">
+          <NumberInput
+            value={design.body.contentPaddingY}
+            onChange={(contentPaddingY) => updateBody({ contentPaddingY })}
+            min={0}
+            max={120}
+            unit="px"
+          />
+        </Row>
       </FieldGroup>
       <FieldGroup title="Typografie">
         <Row label="Schriftart">
@@ -377,6 +464,22 @@ function SectionPanel({
           onChange={(padding) => updateSection(sectionIndex, { padding })}
         />
       </FieldGroup>
+      <FieldGroup title="Trennlinien">
+        <BorderEditor
+          label="Linie oben"
+          value={section.borderTop}
+          onChange={(borderTop) =>
+            updateSection(sectionIndex, { borderTop })
+          }
+        />
+        <BorderEditor
+          label="Linie unten"
+          value={section.borderBottom}
+          onChange={(borderBottom) =>
+            updateSection(sectionIndex, { borderBottom })
+          }
+        />
+      </FieldGroup>
     </>
   );
 }
@@ -414,6 +517,19 @@ function BlockPanel({
       )}
       {block.type === "divider" && (
         <DividerSettings block={block} update={update} />
+      )}
+      {block.type === "list" && <ListSettings block={block} update={update} />}
+      {block.type === "quote" && (
+        <QuoteSettings block={block} update={update} />
+      )}
+      {block.type === "video" && (
+        <VideoSettings block={block} update={update} />
+      )}
+      {block.type === "social" && (
+        <SocialSettings block={block} update={update} />
+      )}
+      {block.type === "avatar" && (
+        <AvatarSettings block={block} update={update} />
       )}
       {block.type === "html" && (
         <HtmlSettings block={block} update={update} />
@@ -643,6 +759,13 @@ function ButtonSettings({
           />
         </Row>
       </FieldGroup>
+      <FieldGroup title="Rahmen">
+        <BorderEditor
+          label="Rahmen aktiv"
+          value={block.border}
+          onChange={(border) => update({ border })}
+        />
+      </FieldGroup>
     </>
   );
 }
@@ -726,6 +849,22 @@ function ImageSettings({
             onChange={(align) => update({ align })}
           />
         </Row>
+        <Row label="Eckenradius">
+          <NumberInput
+            value={block.borderRadius}
+            onChange={(borderRadius) => update({ borderRadius })}
+            min={0}
+            max={64}
+            unit="px"
+          />
+        </Row>
+      </FieldGroup>
+      <FieldGroup title="Rahmen">
+        <BorderEditor
+          label="Rahmen aktiv"
+          value={block.border}
+          onChange={(border) => update({ border })}
+        />
       </FieldGroup>
     </>
   );
@@ -812,6 +951,549 @@ function HtmlSettings({
       </p>
     </FieldGroup>
   );
+}
+
+function ListSettings({
+  block,
+  update,
+}: {
+  block: ListBlock;
+  update: Updater<ListBlock>;
+}) {
+  return (
+    <>
+      <FieldGroup title="Liste">
+        <Row label="Stil">
+          <SelectInput
+            value={block.ordered ? "ordered" : "unordered"}
+            options={[
+              { value: "unordered", label: "Bullet (•)" },
+              { value: "ordered", label: "Nummeriert (1.)" },
+            ]}
+            onChange={(v) => update({ ordered: v === "ordered" })}
+          />
+        </Row>
+        <Row label="Schrift">
+          <SelectInput
+            value={block.fontFamily}
+            options={FONT_OPTIONS}
+            onChange={(fontFamily) => update({ fontFamily })}
+          />
+        </Row>
+        <Row label="Größe">
+          <NumberInput
+            value={block.fontSize}
+            onChange={(fontSize) => update({ fontSize })}
+            min={10}
+            max={24}
+            unit="px"
+          />
+        </Row>
+        <Row label="Zeilenhöhe">
+          <NumberInput
+            value={block.lineHeight}
+            onChange={(lineHeight) => update({ lineHeight })}
+            min={1}
+            max={3}
+            step={0.05}
+          />
+        </Row>
+        <Row label="Punkt-Abstand">
+          <NumberInput
+            value={block.itemSpacing}
+            onChange={(itemSpacing) => update({ itemSpacing })}
+            min={0}
+            max={32}
+            unit="px"
+          />
+        </Row>
+        <Row label="Farbe">
+          <ColorInput
+            value={block.color}
+            onChange={(v) => v && update({ color: v })}
+          />
+        </Row>
+        <Row label="Ausrichtung">
+          <SelectInput<Align>
+            value={block.align}
+            options={ALIGN_OPTIONS}
+            onChange={(align) => update({ align })}
+          />
+        </Row>
+      </FieldGroup>
+      <FieldGroup title="Einträge">
+        <div className="space-y-1.5">
+          {block.items.map((item, idx) => (
+            <div key={idx} className="flex items-start gap-1.5">
+              <input
+                type="text"
+                value={stripHtml(item)}
+                onChange={(e) => {
+                  const next = block.items.slice();
+                  next[idx] = e.target.value;
+                  update({ items: next });
+                }}
+                className="min-w-0 flex-1 rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+                placeholder={`Eintrag ${idx + 1}`}
+              />
+              <button
+                type="button"
+                title="Löschen"
+                onClick={() => {
+                  const next = block.items.slice();
+                  next.splice(idx, 1);
+                  update({ items: next });
+                }}
+                disabled={block.items.length <= 1}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-ink-500 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => update({ items: [...block.items, "Neuer Eintrag"] })}
+            className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-hair bg-white px-2 py-1 text-[11.5px] text-ink-600 hover:border-ink-300 hover:text-ink-900"
+          >
+            + Eintrag hinzufügen
+          </button>
+          <p className="text-[10.5px] leading-snug text-ink-500">
+            Inline-Formatierung (Fett/Kursiv/Link) kannst du auch direkt
+            im Canvas auf den Listenpunkten editieren.
+          </p>
+        </div>
+      </FieldGroup>
+    </>
+  );
+}
+
+function QuoteSettings({
+  block,
+  update,
+}: {
+  block: QuoteBlock;
+  update: Updater<QuoteBlock>;
+}) {
+  return (
+    <>
+      <FieldGroup title="Zitat">
+        <div className="space-y-1">
+          <p className="text-[11.5px] text-ink-700">Quelle (optional)</p>
+          <input
+            type="text"
+            value={block.cite ?? ""}
+            onChange={(e) =>
+              update({ cite: e.target.value.trim() || undefined })
+            }
+            placeholder="— Max Mustermann, CEO"
+            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+          />
+        </div>
+        <Row label="Schrift">
+          <SelectInput
+            value={block.fontFamily}
+            options={FONT_OPTIONS}
+            onChange={(fontFamily) => update({ fontFamily })}
+          />
+        </Row>
+        <Row label="Größe">
+          <NumberInput
+            value={block.fontSize}
+            onChange={(fontSize) => update({ fontSize })}
+            min={12}
+            max={32}
+            unit="px"
+          />
+        </Row>
+        <Row label="Farbe">
+          <ColorInput
+            value={block.color}
+            onChange={(v) => v && update({ color: v })}
+          />
+        </Row>
+        <Row label="Ausrichtung">
+          <SelectInput<Align>
+            value={block.align}
+            options={ALIGN_OPTIONS}
+            onChange={(align) => update({ align })}
+          />
+        </Row>
+      </FieldGroup>
+      <FieldGroup title="Akzent (linke Linie)">
+        <Row label="Farbe">
+          <ColorInput
+            value={block.accentColor}
+            onChange={(v) => v && update({ accentColor: v })}
+          />
+        </Row>
+        <Row label="Breite">
+          <NumberInput
+            value={block.accentWidth}
+            onChange={(accentWidth) => update({ accentWidth })}
+            min={0}
+            max={12}
+            unit="px"
+          />
+        </Row>
+      </FieldGroup>
+    </>
+  );
+}
+
+function VideoSettings({
+  block,
+  update,
+}: {
+  block: VideoBlock;
+  update: Updater<VideoBlock>;
+}) {
+  const widthMode = block.width === "100%" ? "full" : "fixed";
+  return (
+    <>
+      <FieldGroup title="Video">
+        <div className="space-y-1">
+          <p className="text-[11.5px] text-ink-700">Thumbnail-URL</p>
+          <input
+            type="text"
+            value={block.thumbnailUrl}
+            onChange={(e) => update({ thumbnailUrl: e.target.value })}
+            placeholder="https://…/thumbnail.png"
+            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-[11.5px] text-ink-700">Video-Link</p>
+          <input
+            type="text"
+            value={block.videoUrl}
+            onChange={(e) => update({ videoUrl: e.target.value })}
+            placeholder="https://youtube.com/watch?v=…"
+            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+          />
+          <p className="text-[10.5px] leading-snug text-ink-500">
+            Mail-Clients zeigen kein Video direkt — der User klickt auf
+            das Thumbnail und landet bei der Video-URL.
+          </p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-[11.5px] text-ink-700">Alt-Text</p>
+          <input
+            type="text"
+            value={block.alt}
+            onChange={(e) => update({ alt: e.target.value })}
+            placeholder="Video ansehen"
+            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+          />
+        </div>
+      </FieldGroup>
+      <FieldGroup title="Größe & Stil">
+        <Row label="Modus">
+          <SelectInput
+            value={widthMode}
+            options={[
+              { value: "full", label: "Volle Breite" },
+              { value: "fixed", label: "Fixe Pixel" },
+            ]}
+            onChange={(v) => update({ width: v === "full" ? "100%" : 400 })}
+          />
+        </Row>
+        {widthMode === "fixed" && (
+          <Row label="Breite">
+            <NumberInput
+              value={typeof block.width === "number" ? block.width : 400}
+              onChange={(w) => update({ width: w })}
+              min={120}
+              max={800}
+              unit="px"
+            />
+          </Row>
+        )}
+        <Row label="Eckenradius">
+          <NumberInput
+            value={block.borderRadius}
+            onChange={(borderRadius) => update({ borderRadius })}
+            min={0}
+            max={32}
+            unit="px"
+          />
+        </Row>
+        <Row label="Ausrichtung">
+          <SelectInput<Align>
+            value={block.align}
+            options={ALIGN_OPTIONS}
+            onChange={(align) => update({ align })}
+          />
+        </Row>
+        <Row label="Play-Overlay">
+          <SwitchInput
+            value={block.showPlayOverlay}
+            onChange={(showPlayOverlay) => update({ showPlayOverlay })}
+          />
+        </Row>
+        {block.showPlayOverlay && (
+          <Row label="Play-Farbe">
+            <ColorInput
+              value={block.playButtonColor}
+              onChange={(v) => v && update({ playButtonColor: v })}
+            />
+          </Row>
+        )}
+      </FieldGroup>
+    </>
+  );
+}
+
+function SocialSettings({
+  block,
+  update,
+}: {
+  block: SocialBlock;
+  update: Updater<SocialBlock>;
+}) {
+  const updateLink = (idx: number, patch: Partial<SocialBlock["links"][0]>) => {
+    const next = block.links.slice();
+    next[idx] = { ...next[idx]!, ...patch };
+    update({ links: next });
+  };
+  const removeLink = (idx: number) => {
+    const next = block.links.slice();
+    next.splice(idx, 1);
+    update({ links: next });
+  };
+  const addLink = (network: SocialNetwork) => {
+    update({
+      links: [
+        ...block.links,
+        { id: newId("sn"), network, url: socialDefaultUrl(network) },
+      ],
+    });
+  };
+  const availableToAdd = SOCIAL_NETWORKS.filter(
+    (n) => !block.links.some((l) => l.network === n),
+  );
+
+  return (
+    <>
+      <FieldGroup title="Social-Icons">
+        <div className="space-y-1.5">
+          {block.links.map((l, idx) => (
+            <div
+              key={l.id}
+              className="space-y-1 rounded-md border border-hair bg-paper/50 p-1.5"
+            >
+              <div className="flex items-center gap-1.5">
+                <SelectInput<SocialNetwork>
+                  value={l.network}
+                  options={SOCIAL_NETWORKS.map((n) => ({
+                    value: n,
+                    label: socialLabel(n),
+                  }))}
+                  onChange={(network) => updateLink(idx, { network })}
+                />
+                <button
+                  type="button"
+                  title="Entfernen"
+                  onClick={() => removeLink(idx)}
+                  className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded text-ink-500 hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <input
+                type="text"
+                value={l.url}
+                onChange={(e) => updateLink(idx, { url: e.target.value })}
+                placeholder={socialDefaultUrl(l.network)}
+                className="w-full rounded-md border border-hair bg-white px-1.5 py-1 text-[11.5px] focus:border-ink-500 focus:outline-none"
+              />
+            </div>
+          ))}
+        </div>
+        {availableToAdd.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <SelectInput<SocialNetwork>
+              value={availableToAdd[0]!}
+              options={availableToAdd.map((n) => ({
+                value: n,
+                label: socialLabel(n),
+              }))}
+              onChange={(n) => addLink(n)}
+            />
+            <button
+              type="button"
+              onClick={() => addLink(availableToAdd[0]!)}
+              className="inline-flex h-7 items-center rounded-md bg-ink-900 px-2 text-[11.5px] font-medium text-white hover:bg-black"
+            >
+              + Hinzufügen
+            </button>
+          </div>
+        )}
+      </FieldGroup>
+      <FieldGroup title="Darstellung">
+        <Row label="Icon-Größe">
+          <NumberInput
+            value={block.iconSize}
+            onChange={(iconSize) => update({ iconSize })}
+            min={16}
+            max={64}
+            unit="px"
+          />
+        </Row>
+        <Row label="Abstand">
+          <NumberInput
+            value={block.gap}
+            onChange={(gap) => update({ gap })}
+            min={0}
+            max={48}
+            unit="px"
+          />
+        </Row>
+        <Row label="Stil">
+          <SelectInput
+            value={block.style}
+            options={[
+              { value: "color", label: "Farbig" },
+              { value: "mono", label: "Einfarbig" },
+            ]}
+            onChange={(v) => update({ style: v as "color" | "mono" })}
+          />
+        </Row>
+        {block.style === "mono" && (
+          <Row label="Mono-Farbe">
+            <ColorInput
+              value={block.monoColor}
+              onChange={(v) => v && update({ monoColor: v })}
+            />
+          </Row>
+        )}
+        <Row label="Ausrichtung">
+          <SelectInput<Align>
+            value={block.align}
+            options={ALIGN_OPTIONS}
+            onChange={(align) => update({ align })}
+          />
+        </Row>
+      </FieldGroup>
+    </>
+  );
+}
+
+function AvatarSettings({
+  block,
+  update,
+}: {
+  block: AvatarBlock;
+  update: Updater<AvatarBlock>;
+}) {
+  return (
+    <>
+      <FieldGroup title="Person">
+        <div className="space-y-1">
+          <p className="text-[11.5px] text-ink-700">Foto-URL</p>
+          <input
+            type="text"
+            value={block.imageUrl}
+            onChange={(e) => update({ imageUrl: e.target.value })}
+            placeholder="https://…/profil.jpg"
+            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-[11.5px] text-ink-700">Name</p>
+          <input
+            type="text"
+            value={block.name}
+            onChange={(e) => update({ name: e.target.value })}
+            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+          />
+        </div>
+        <div className="space-y-1">
+          <p className="text-[11.5px] text-ink-700">Untertitel</p>
+          <input
+            type="text"
+            value={block.subtitle}
+            onChange={(e) => update({ subtitle: e.target.value })}
+            placeholder="Rolle · Firma"
+            className="w-full rounded-md border border-hair bg-white px-2 py-1 text-[12px] focus:border-ink-500 focus:outline-none"
+          />
+        </div>
+      </FieldGroup>
+      <FieldGroup title="Layout">
+        <Row label="Anordnung">
+          <SelectInput
+            value={block.layout}
+            options={[
+              { value: "horizontal", label: "Bild links" },
+              { value: "vertical", label: "Bild oben" },
+            ]}
+            onChange={(v) =>
+              update({ layout: v as "horizontal" | "vertical" })
+            }
+          />
+        </Row>
+        <Row label="Foto-Größe">
+          <NumberInput
+            value={block.imageSize}
+            onChange={(imageSize) => update({ imageSize })}
+            min={24}
+            max={200}
+            unit="px"
+          />
+        </Row>
+        <Row label="Rund">
+          <SwitchInput
+            value={block.imageRounded}
+            onChange={(imageRounded) => update({ imageRounded })}
+          />
+        </Row>
+        {!block.imageRounded && (
+          <Row label="Eckenradius">
+            <NumberInput
+              value={block.imageBorderRadius}
+              onChange={(imageBorderRadius) => update({ imageBorderRadius })}
+              min={0}
+              max={48}
+              unit="px"
+            />
+          </Row>
+        )}
+        <Row label="Ausrichtung">
+          <SelectInput<Align>
+            value={block.align}
+            options={ALIGN_OPTIONS}
+            onChange={(align) => update({ align })}
+          />
+        </Row>
+      </FieldGroup>
+      <FieldGroup title="Typografie">
+        <Row label="Schrift">
+          <SelectInput
+            value={block.fontFamily}
+            options={FONT_OPTIONS}
+            onChange={(fontFamily) => update({ fontFamily })}
+          />
+        </Row>
+        <Row label="Name-Farbe">
+          <ColorInput
+            value={block.nameColor}
+            onChange={(v) => v && update({ nameColor: v })}
+          />
+        </Row>
+        <Row label="Untertitel-Farbe">
+          <ColorInput
+            value={block.subtitleColor}
+            onChange={(v) => v && update({ subtitleColor: v })}
+          />
+        </Row>
+      </FieldGroup>
+    </>
+  );
+}
+
+/** Entfernt simple HTML-Tags, sodass die Listen-Inputs klar bleiben. */
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]*>/g, "");
 }
 
 // ─── Top-Level ────────────────────────────────────────────────────────
@@ -908,6 +1590,16 @@ function blockTitle(block: ContentBlock): string {
       return "Spacer";
     case "divider":
       return "Trenner";
+    case "list":
+      return block.ordered ? "Liste (nummeriert)" : "Liste";
+    case "quote":
+      return "Zitat";
+    case "video":
+      return "Video";
+    case "social":
+      return "Social-Icons";
+    case "avatar":
+      return "Avatar / Bio";
     case "html":
       return "Custom HTML";
   }

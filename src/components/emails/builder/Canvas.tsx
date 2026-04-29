@@ -19,13 +19,16 @@ import {
   ArrowDown,
   ArrowUp,
   Copy,
+  Play,
   Plus,
   Trash2,
 } from "lucide-react";
 import { useCallback } from "react";
 import InlineTextEditor from "./InlineTextEditor";
+import { socialIconUrl } from "./render";
 import type { BuilderApi } from "./useBuilderState";
 import type {
+  AvatarBlock,
   BlockPath,
   ButtonBlock,
   ContentBlock,
@@ -34,10 +37,14 @@ import type {
   HeadingBlock,
   HtmlBlock,
   ImageBlock,
+  ListBlock,
+  QuoteBlock,
   Section,
   SelectionTarget,
+  SocialBlock,
   SpacerBlock,
   TextBlock,
+  VideoBlock,
 } from "./types";
 
 // ─── Hilfen ───────────────────────────────────────────────────────────
@@ -201,6 +208,12 @@ function SectionView({
       style={{
         background: section.backgroundColor,
         padding: `${section.padding.top}px ${section.padding.right}px ${section.padding.bottom}px ${section.padding.left}px`,
+        borderTop: section.borderTop
+          ? `${section.borderTop.width}px ${section.borderTop.style} ${section.borderTop.color}`
+          : undefined,
+        borderBottom: section.borderBottom
+          ? `${section.borderBottom.width}px ${section.borderBottom.style} ${section.borderBottom.color}`
+          : undefined,
       }}
     >
       {/* Section-Toolbar oben rechts (zeigt sich bei Hover oder Selection) */}
@@ -443,6 +456,16 @@ function renderBlockContent(
       return <SpacerView block={block} />;
     case "divider":
       return <DividerView block={block} />;
+    case "list":
+      return <ListView api={api} block={block} path={path} selected={selected} />;
+    case "quote":
+      return <QuoteView api={api} block={block} path={path} selected={selected} />;
+    case "video":
+      return <VideoView block={block} />;
+    case "social":
+      return <SocialView block={block} />;
+    case "avatar":
+      return <AvatarView block={block} />;
     case "html":
       return <HtmlView block={block} />;
   }
@@ -511,6 +534,7 @@ function HeadingView({
 }
 
 function ButtonView({ block }: { block: ButtonBlock }) {
+  const border = block.border;
   return (
     <div style={{ textAlign: block.align }}>
       <span
@@ -525,6 +549,9 @@ function ButtonView({ block }: { block: ButtonBlock }) {
           fontFamily: "Helvetica, Arial, sans-serif",
           textDecoration: "none",
           cursor: "default",
+          border: border
+            ? `${border.width}px ${border.style} ${border.color}`
+            : "none",
         }}
       >
         {block.text}
@@ -536,6 +563,7 @@ function ButtonView({ block }: { block: ButtonBlock }) {
 function ImageView({ block }: { block: ImageBlock }) {
   const widthStyle =
     block.width === "100%" ? { width: "100%" as const } : { width: `${block.width}px` };
+  const border = block.border;
   return (
     <div style={{ textAlign: block.align }}>
       {block.src ? (
@@ -546,7 +574,12 @@ function ImageView({ block }: { block: ImageBlock }) {
             display: "inline-block",
             maxWidth: "100%",
             height: "auto",
-            border: 0,
+            borderRadius: block.borderRadius
+              ? `${block.borderRadius}px`
+              : undefined,
+            border: border
+              ? `${border.width}px ${border.style} ${border.color}`
+              : 0,
             ...widthStyle,
           }}
           onError={(e) => {
@@ -568,6 +601,294 @@ function ImageView({ block }: { block: ImageBlock }) {
           Kein Bild · setze die URL rechts in den Einstellungen.
         </div>
       )}
+    </div>
+  );
+}
+
+function ListView({
+  api,
+  block,
+  path,
+  selected,
+}: {
+  api: BuilderApi;
+  block: ListBlock;
+  path: BlockPath;
+  selected: boolean;
+}) {
+  const Tag = block.ordered ? "ol" : "ul";
+  return (
+    <Tag
+      style={{
+        margin: 0,
+        paddingLeft: 20,
+        textAlign: block.align,
+        fontFamily: block.fontFamily,
+        color: block.color,
+      }}
+    >
+      {block.items.map((item, idx) => (
+        <li
+          key={idx}
+          style={{
+            fontSize: `${block.fontSize}px`,
+            lineHeight: block.lineHeight,
+            marginBottom: idx === block.items.length - 1 ? 0 : block.itemSpacing,
+            color: block.color,
+          }}
+        >
+          <InlineTextEditor
+            value={item}
+            onChange={(content) => {
+              const next = block.items.slice();
+              next[idx] = content;
+              api.updateBlock<ListBlock>(path, { items: next });
+            }}
+            tag="span"
+            active={selected}
+            style={{ outline: "none", display: "inline" }}
+          />
+        </li>
+      ))}
+    </Tag>
+  );
+}
+
+function QuoteView({
+  api,
+  block,
+  path,
+  selected,
+}: {
+  api: BuilderApi;
+  block: QuoteBlock;
+  path: BlockPath;
+  selected: boolean;
+}) {
+  return (
+    <blockquote
+      style={{
+        margin: 0,
+        borderLeft: block.accentWidth
+          ? `${block.accentWidth}px solid ${block.accentColor}`
+          : "none",
+        paddingLeft: block.accentWidth ? 16 : 0,
+        fontFamily: block.fontFamily,
+        fontSize: `${block.fontSize}px`,
+        color: block.color,
+        textAlign: block.align,
+        fontStyle: "italic",
+        lineHeight: 1.5,
+      }}
+    >
+      <InlineTextEditor
+        value={block.content}
+        onChange={(content) => api.updateBlock<QuoteBlock>(path, { content })}
+        tag="div"
+        active={selected}
+        style={{ outline: "none" }}
+      />
+      {block.cite ? (
+        <span
+          style={{
+            display: "block",
+            marginTop: 8,
+            fontSize: Math.max(11, block.fontSize - 3),
+            fontStyle: "normal",
+            opacity: 0.7,
+            color: block.color,
+          }}
+        >
+          {block.cite}
+        </span>
+      ) : null}
+    </blockquote>
+  );
+}
+
+function VideoView({ block }: { block: VideoBlock }) {
+  const widthStyle =
+    block.width === "100%"
+      ? { width: "100%" as const }
+      : { width: `${block.width}px` };
+  return (
+    <div style={{ textAlign: block.align, position: "relative" }}>
+      <div
+        style={{
+          display: "inline-block",
+          position: "relative",
+          ...widthStyle,
+        }}
+      >
+        {block.thumbnailUrl ? (
+          <img
+            src={block.thumbnailUrl}
+            alt={block.alt}
+            style={{
+              display: "block",
+              width: "100%",
+              height: "auto",
+              border: 0,
+              borderRadius: block.borderRadius
+                ? `${block.borderRadius}px`
+                : undefined,
+            }}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.opacity = "0.4";
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: "100%",
+              aspectRatio: "16 / 9",
+              background: "#0f0f10",
+              borderRadius: block.borderRadius
+                ? `${block.borderRadius}px`
+                : undefined,
+            }}
+          />
+        )}
+        {block.showPlayOverlay && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                background: block.playButtonColor,
+                opacity: 0.92,
+                boxShadow: "0 4px 18px rgba(0,0,0,0.25)",
+              }}
+            >
+              <Play
+                fill="#0f0f10"
+                strokeWidth={0}
+                style={{ width: 28, height: 28, color: "#0f0f10" }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SocialView({ block }: { block: SocialBlock }) {
+  return (
+    <div style={{ textAlign: block.align }}>
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: block.gap,
+        }}
+      >
+        {block.links.map((l) => (
+          <img
+            key={l.id}
+            src={socialIconUrl(l.network, block.style)}
+            alt={l.network}
+            style={{
+              display: "inline-block",
+              width: block.iconSize,
+              height: block.iconSize,
+              border: 0,
+            }}
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AvatarView({ block }: { block: AvatarBlock }) {
+  const radius = block.imageRounded
+    ? Math.round(block.imageSize / 2)
+    : block.imageBorderRadius;
+  const img = block.imageUrl ? (
+    <img
+      src={block.imageUrl}
+      alt={block.name}
+      style={{
+        display: "block",
+        width: block.imageSize,
+        height: block.imageSize,
+        borderRadius: radius ? `${radius}px` : undefined,
+        objectFit: "cover",
+        border: 0,
+      }}
+      onError={(e) => {
+        (e.currentTarget as HTMLImageElement).style.opacity = "0.3";
+      }}
+    />
+  ) : (
+    <div
+      style={{
+        width: block.imageSize,
+        height: block.imageSize,
+        borderRadius: radius ? `${radius}px` : undefined,
+        background: "#e5e5e7",
+      }}
+    />
+  );
+  const text = (
+    <div>
+      <div
+        style={{
+          fontFamily: block.fontFamily,
+          fontSize: 15,
+          fontWeight: 600,
+          color: block.nameColor,
+          lineHeight: 1.3,
+          margin: 0,
+        }}
+      >
+        {block.name || "—"}
+      </div>
+      {block.subtitle && (
+        <div
+          style={{
+            fontFamily: block.fontFamily,
+            fontSize: 12.5,
+            color: block.subtitleColor,
+            lineHeight: 1.4,
+            marginTop: 2,
+          }}
+        >
+          {block.subtitle}
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <div style={{ textAlign: block.align }}>
+      <div
+        style={{
+          display: "inline-flex",
+          gap: 12,
+          flexDirection: block.layout === "vertical" ? "column" : "row",
+          alignItems: block.layout === "vertical" ? "stretch" : "center",
+        }}
+      >
+        {img}
+        {text}
+      </div>
     </div>
   );
 }

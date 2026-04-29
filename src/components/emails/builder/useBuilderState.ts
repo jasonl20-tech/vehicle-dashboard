@@ -45,6 +45,9 @@ export type BuilderApi = {
 
   // ─── Sections ───
   addSection: (layout: SectionLayout) => void;
+  /** Fügt eine vorgefertigte Section ein. Wenn `afterIndex` gesetzt ist,
+   *  landet sie direkt nach dieser Section, sonst am Ende. */
+  insertSection: (section: Section, afterIndex?: number) => void;
   removeSection: (sectionIndex: number) => void;
   moveSection: (sectionIndex: number, direction: -1 | 1) => void;
   duplicateSection: (sectionIndex: number) => void;
@@ -174,6 +177,24 @@ export function useBuilderState(initialDesign: EmailDesign): BuilderApi {
       mutate((d) => {
         d.sections.push(makeSection(layout));
       });
+    },
+    [mutate],
+  );
+
+  const insertSection = useCallback(
+    (section: Section, afterIndex?: number) => {
+      let insertedAt = -1;
+      mutate((d) => {
+        const at =
+          afterIndex !== undefined && afterIndex >= 0
+            ? Math.min(afterIndex + 1, d.sections.length)
+            : d.sections.length;
+        d.sections.splice(at, 0, section);
+        insertedAt = at;
+      });
+      if (insertedAt >= 0) {
+        setSelection({ kind: "section", sectionIndex: insertedAt });
+      }
     },
     [mutate],
   );
@@ -369,6 +390,7 @@ export function useBuilderState(initialDesign: EmailDesign): BuilderApi {
     replace,
     updateBody,
     addSection,
+    insertSection,
     removeSection,
     moveSection,
     duplicateSection,

@@ -41,11 +41,13 @@ import BlockSidebar from "./BlockSidebar";
 import Canvas from "./Canvas";
 import SettingsSidebar from "./SettingsSidebar";
 import { renderEmailHtml } from "./render";
+import { freshSection } from "./sectionTemplates";
 import { STARTERS, fresh } from "./starters";
 import { useBuilderState } from "./useBuilderState";
 import type {
   ContentBlockType,
   EmailDesign,
+  Section,
   SectionLayout,
 } from "./types";
 
@@ -69,7 +71,9 @@ const EmailBuilder = forwardRef<EmailBuilderHandle, Props>(function EmailBuilder
   ref,
 ) {
   const api = useBuilderState(initialDesign);
-  const [tab, setTab] = useState<"content" | "layout">("content");
+  const [tab, setTab] = useState<"content" | "layout" | "templates">(
+    "templates",
+  );
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
   const [showStarters, setShowStarters] = useState(false);
 
@@ -123,6 +127,28 @@ const EmailBuilder = forwardRef<EmailBuilderHandle, Props>(function EmailBuilder
   const onAddSectionFromSidebar = useCallback(
     (layout: SectionLayout) => {
       api.addSection(layout);
+    },
+    [api],
+  );
+
+  /**
+   * Eine vorgefertigte Section-Vorlage einfügen. Wenn aktuell eine
+   * Section ausgewählt ist, fügen wir die neue direkt darunter ein —
+   * sonst hängen wir sie ans Ende. Das ist die natürliche Erwartung,
+   * wenn der User z. B. zuerst einen Header anklickt und dann einen
+   * Hero-Block direkt darunter haben will.
+   */
+  const onAddSectionTemplate = useCallback(
+    (factory: () => Section) => {
+      const section = freshSection(factory());
+      const sel = api.selection;
+      let afterIndex: number | undefined;
+      if (sel && sel.kind === "section") {
+        afterIndex = sel.sectionIndex;
+      } else if (sel && sel.kind === "block") {
+        afterIndex = sel.path.sectionIndex;
+      }
+      api.insertSection(section, afterIndex);
     },
     [api],
   );
@@ -300,6 +326,7 @@ const EmailBuilder = forwardRef<EmailBuilderHandle, Props>(function EmailBuilder
           onTabChange={setTab}
           onAddBlock={onAddBlock}
           onAddSection={onAddSectionFromSidebar}
+          onAddSectionTemplate={onAddSectionTemplate}
         />
         <main className="relative min-h-0 flex-1 overflow-hidden bg-paper">
           <Canvas
@@ -307,10 +334,13 @@ const EmailBuilder = forwardRef<EmailBuilderHandle, Props>(function EmailBuilder
             device={device}
             onRequestAddBlock={(secIdx, colIdx) => {
               setTab("content");
+              // Wenn die Spalte leer ist, gibt es keinen Block mit Index 0,
+              // den wir auswählen könnten — also nur die Section markieren.
               api.setSelection({
-                kind: "block",
-                path: { sectionIndex: secIdx, columnIndex: colIdx, blockIndex: 0 },
+                kind: "section",
+                sectionIndex: secIdx,
               });
+              void colIdx; /* noop: der Tab-Switch genügt */
             }}
           />
         </main>

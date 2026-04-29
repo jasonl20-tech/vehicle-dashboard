@@ -25,6 +25,13 @@ export type Padding = {
 
 export type Align = "left" | "center" | "right";
 
+/** Wiederverwendbarer Rahmen für Blöcke und Section-Borders. */
+export type Border = {
+  color: string;
+  width: number;
+  style: "solid" | "dashed" | "dotted";
+};
+
 // ─── Content-Blöcke ────────────────────────────────────────────────────
 
 type BaseBlock = {
@@ -70,6 +77,8 @@ export type ButtonBlock = BaseBlock & {
   paddingX: number;
   paddingY: number;
   fullWidth: boolean;
+  /** Optionaler Rahmen (z. B. für Outline-Buttons mit Background-Transparent). */
+  border?: Border;
 };
 
 export type ImageBlock = BaseBlock & {
@@ -80,6 +89,9 @@ export type ImageBlock = BaseBlock & {
   /** Pixelbreite oder "100%" für volle Spaltenbreite. */
   width: number | "100%";
   align: Align;
+  /** Eckenradius (rendert in mailtauglichem Bereich, ~50% kompatibel). */
+  borderRadius: number;
+  border?: Border;
 };
 
 export type SpacerBlock = BaseBlock & {
@@ -96,6 +108,101 @@ export type DividerBlock = BaseBlock & {
   inset: number;
 };
 
+export type ListBlock = BaseBlock & {
+  type: "list";
+  ordered: boolean;
+  /** Jeder Listeneintrag kann Inline-HTML enthalten (z. B. `<strong>`). */
+  items: string[];
+  align: Align;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  lineHeight: number;
+  /** Abstand zwischen den Listeneinträgen in Pixeln. */
+  itemSpacing: number;
+};
+
+export type QuoteBlock = BaseBlock & {
+  type: "quote";
+  /** Inline-HTML des Zitats. */
+  content: string;
+  /** Optionaler Quellenhinweis (z. B. „— Max Mustermann"). */
+  cite?: string;
+  align: Align;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  /** Linker Akzent-Streifen (Farbe + Breite in Pixeln). */
+  accentColor: string;
+  accentWidth: number;
+};
+
+export type VideoBlock = BaseBlock & {
+  type: "video";
+  /** Statisches Thumbnail-Bild — Mail-Clients zeigen kein eingebettetes Video. */
+  thumbnailUrl: string;
+  /** URL, zu der bei Klick gesprungen wird (YouTube/Vimeo/eigene Seite). */
+  videoUrl: string;
+  alt: string;
+  align: Align;
+  width: number | "100%";
+  /** Soll der Play-Overlay über das Thumbnail gelegt werden? */
+  showPlayOverlay: boolean;
+  /** Farbe des Play-Buttons (Overlay). */
+  playButtonColor: string;
+  borderRadius: number;
+};
+
+export type SocialNetwork =
+  | "facebook"
+  | "x"
+  | "instagram"
+  | "linkedin"
+  | "youtube"
+  | "tiktok"
+  | "github"
+  | "website"
+  | "email";
+
+export type SocialLink = {
+  id: string;
+  network: SocialNetwork;
+  url: string;
+};
+
+export type SocialBlock = BaseBlock & {
+  type: "social";
+  links: SocialLink[];
+  align: Align;
+  /** Icon-Größe in Pixeln (Quadrat). */
+  iconSize: number;
+  /** Abstand zwischen den Icons in Pixeln. */
+  gap: number;
+  /** Farb-Modus der Icons – "color" lädt die offiziellen Brand-Logos,
+   *  "mono" rendert einfarbige Icons in `monoColor`. */
+  style: "color" | "mono";
+  monoColor: string;
+};
+
+export type AvatarBlock = BaseBlock & {
+  type: "avatar";
+  imageUrl: string;
+  name: string;
+  /** Untertitel (Rolle, Firma, Tagline). */
+  subtitle: string;
+  /** Layout: Bild + Text horizontal (Bild links) oder vertikal (Bild oben). */
+  layout: "horizontal" | "vertical";
+  align: Align;
+  /** Bildgröße in Pixeln (Quadrat). */
+  imageSize: number;
+  /** Bild rund (true) oder rechteckig mit `imageBorderRadius` (false). */
+  imageRounded: boolean;
+  imageBorderRadius: number;
+  fontFamily: string;
+  nameColor: string;
+  subtitleColor: string;
+};
+
 export type HtmlBlock = BaseBlock & {
   type: "html";
   /** Roher HTML-Schnipsel — wird ungeprüft eingebettet. */
@@ -109,6 +216,11 @@ export type ContentBlock =
   | ImageBlock
   | SpacerBlock
   | DividerBlock
+  | ListBlock
+  | QuoteBlock
+  | VideoBlock
+  | SocialBlock
+  | AvatarBlock
   | HtmlBlock;
 
 export type ContentBlockType = ContentBlock["type"];
@@ -134,6 +246,9 @@ export type Section = {
   backgroundColor?: string;
   padding: Padding;
   columns: Column[];
+  /** Optionale Trennlinien oben und unten (z. B. zwischen Hero und Body). */
+  borderTop?: Border;
+  borderBottom?: Border;
 };
 
 // ─── Globale Body-Optionen ────────────────────────────────────────────
@@ -149,6 +264,8 @@ export type BodySettings = {
   fontFamily: string;
   /** Default-Textfarbe. */
   color: string;
+  /** Vertikales Padding **außerhalb** der Content-Box (oben/unten). */
+  contentPaddingY: number;
 };
 
 // ─── Top-Level ────────────────────────────────────────────────────────

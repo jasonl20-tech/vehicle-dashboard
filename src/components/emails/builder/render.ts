@@ -18,6 +18,8 @@
  *    selecter pseudo-cursor etc.)
  */
 import type {
+  AvatarBlock,
+  Border,
   ButtonBlock,
   ContentBlock,
   DividerBlock,
@@ -25,11 +27,17 @@ import type {
   HeadingBlock,
   HtmlBlock,
   ImageBlock,
+  ListBlock,
   Padding,
+  QuoteBlock,
   Section,
   SectionLayout,
+  SocialBlock,
+  SocialLink,
+  SocialNetwork,
   SpacerBlock,
   TextBlock,
+  VideoBlock,
 } from "./types";
 
 // ─── HTML-Helpers ─────────────────────────────────────────────────────
@@ -62,6 +70,56 @@ function paddingStyle(p: Padding): string {
   return `padding:${px(p.top)} ${px(p.right)} ${px(p.bottom)} ${px(p.left)};`;
 }
 
+function borderStyle(b: Border | undefined, side: "all" | "top" | "bottom"): string {
+  if (!b || b.width <= 0) return "";
+  const decl = `${px(b.width)} ${b.style} ${escAttr(b.color)}`;
+  if (side === "top") return `border-top:${decl};`;
+  if (side === "bottom") return `border-bottom:${decl};`;
+  return `border:${decl};`;
+}
+
+// ─── Social-Icons: Brand-Farben + öffentliche PNG-CDN-URLs ────────────
+//
+// Wir nutzen für die "color"-Variante die SuperTinyIcons-CDN
+// (jsdelivr → GitHub edent/SuperTinyIcons). Die URLs sind stabil und
+// liefern PNG-Versionen, die in jedem Mail-Client funktionieren.
+// Für "mono" rendern wir einen monochromen Inline-SVG-via-data-URL —
+// in Mail-Clients problematisch (Outlook!), darum dort lieber farbig
+// arbeiten oder das User-Icon manuell setzen.
+
+const SOCIAL_COLOR_ICONS: Record<SocialNetwork, string> = {
+  facebook:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/facebook.png",
+  x: "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/twitter.png",
+  instagram:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/instagram.png",
+  linkedin:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/linkedin.png",
+  youtube:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/youtube.png",
+  tiktok:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/tiktok.png",
+  github:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/github.png",
+  website:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/internet.png",
+  email:
+    "https://cdn.jsdelivr.net/gh/edent/SuperTinyIcons@master/images/png/email.png",
+};
+
+// Mono-Icons als externe PNGs sind nicht trivial — wir nutzen die selben
+// URLs, der User kann später einzelne URLs überschreiben.
+const SOCIAL_MONO_ICONS: Record<SocialNetwork, string> = SOCIAL_COLOR_ICONS;
+
+export function socialIconUrl(
+  network: SocialNetwork,
+  style: "color" | "mono",
+): string {
+  return style === "color"
+    ? SOCIAL_COLOR_ICONS[network]
+    : SOCIAL_MONO_ICONS[network];
+}
+
 // ─── Block-Renderer ───────────────────────────────────────────────────
 
 function renderText(b: TextBlock): string {
@@ -91,11 +149,10 @@ function renderHeading(b: HeadingBlock): string {
 }
 
 function renderButton(b: ButtonBlock): string {
-  // Bulletproof Button: <table align=…>+ <a> mit explizitem Padding.
-  // Outlook 2007–2019 ignoriert padding auf <a>, daher VML-Fallback.
   const tdStyle = [
     `background-color:${escAttr(b.backgroundColor)};`,
     `border-radius:${px(b.borderRadius)};`,
+    borderStyle(b.border, "all"),
   ].join("");
   const aStyle = [
     `display:inline-block;`,
@@ -120,7 +177,9 @@ function renderImage(b: ImageBlock): string {
   const imgStyle = [
     `display:block;`,
     widthStyle,
-    `border:0;`,
+    b.border ? "" : "border:0;",
+    borderStyle(b.border, "all"),
+    b.borderRadius > 0 ? `border-radius:${px(b.borderRadius)};` : "",
     `outline:none;`,
     `text-decoration:none;`,
     `-ms-interpolation-mode:bicubic;`,
@@ -148,6 +207,157 @@ function renderHtmlBlock(b: HtmlBlock): string {
   return b.html;
 }
 
+function renderList(b: ListBlock): string {
+  const tag = b.ordered ? "ol" : "ul";
+  const liStyle = [
+    `font-family:${escAttr(b.fontFamily)};`,
+    `font-size:${px(b.fontSize)};`,
+    `line-height:${b.lineHeight};`,
+    `color:${escAttr(b.color)};`,
+    `margin:0 0 ${px(b.itemSpacing)} 0;`,
+    `padding:0;`,
+  ].join("");
+  const items = b.items
+    .map((it) => `<li style="${liStyle}">${it}</li>`)
+    .join("");
+  const ulStyle = [
+    `font-family:${escAttr(b.fontFamily)};`,
+    `text-align:${b.align};`,
+    `margin:0;`,
+    `padding-left:${px(20)};`,
+    `color:${escAttr(b.color)};`,
+  ].join("");
+  return `<${tag} style="${ulStyle}">${items}</${tag}>`;
+}
+
+function renderQuote(b: QuoteBlock): string {
+  const accent =
+    b.accentWidth > 0
+      ? `border-left:${px(b.accentWidth)} solid ${escAttr(b.accentColor)};padding-left:${px(16)};`
+      : "";
+  const wrapperStyle = [
+    accent,
+    `font-family:${escAttr(b.fontFamily)};`,
+    `font-size:${px(b.fontSize)};`,
+    `color:${escAttr(b.color)};`,
+    `text-align:${b.align};`,
+    `margin:0;`,
+    `font-style:italic;`,
+    `line-height:1.5;`,
+  ].join("");
+  const citeStyle = [
+    `display:block;`,
+    `margin-top:${px(8)};`,
+    `font-family:${escAttr(SAFE_FONT_FALLBACK)};`,
+    `font-size:${px(Math.max(11, b.fontSize - 3))};`,
+    `font-style:normal;`,
+    `color:${escAttr(b.color)};`,
+    `opacity:0.7;`,
+  ].join("");
+  const cite = b.cite
+    ? `<span style="${citeStyle}">${escHtml(b.cite)}</span>`
+    : "";
+  return `<blockquote style="${wrapperStyle}">${b.content}${cite}</blockquote>`;
+}
+
+function renderVideo(b: VideoBlock): string {
+  const widthAttr = b.width === "100%" ? "100%" : String(b.width);
+  const widthStyle =
+    b.width === "100%"
+      ? "width:100%;height:auto;"
+      : `width:${px(b.width)};height:auto;`;
+  // Email-Clients zeigen kein <video>. Wir rendern ein verlinkbares
+  // Thumbnail mit Play-Overlay, das auf `videoUrl` zeigt.
+  // Das Play-Overlay ist eine zweite, absolut positionierte Image-Quelle
+  // — viele Mail-Clients (insb. Gmail) ignorieren `position:absolute`,
+  // daher rendern wir den Play-Button als CSS-pseudo-Stack mit table.
+  const imgStyle = [
+    "display:block;",
+    widthStyle,
+    "border:0;outline:none;text-decoration:none;",
+    b.borderRadius > 0 ? `border-radius:${px(b.borderRadius)};` : "",
+  ].join("");
+  const thumb = `<img src="${escUrl(b.thumbnailUrl)}" alt="${escAttr(b.alt)}" width="${escAttr(widthAttr)}" style="${imgStyle}" />`;
+  // Inline-SVG für Play-Button als data-URI (Outlook ignoriert das,
+  // dafür sieht es in modernen Clients sauber aus)
+  const playSvg = encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${b.playButtonColor}" opacity="0.92"/><polygon points="26,20 46,32 26,44" fill="#0f0f10"/></svg>`,
+  );
+  const playOverlay = b.showPlayOverlay
+    ? `<div style="position:relative;text-align:${b.align};margin-top:-${px(64)};height:0;">
+         <a href="${escUrl(b.videoUrl)}" target="_blank" rel="noopener" style="display:inline-block;text-decoration:none;">
+           <img src="data:image/svg+xml;utf8,${playSvg}" width="64" height="64" alt="" style="display:inline-block;border:0;outline:none;" />
+         </a>
+       </div>`
+    : "";
+  const wrappedThumb = `<a href="${escUrl(b.videoUrl)}" target="_blank" rel="noopener">${thumb}</a>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${b.align}" ${b.width === "100%" ? 'width="100%"' : ""}><tr><td align="${b.align}">${wrappedThumb}${playOverlay}</td></tr></table>`;
+}
+
+function renderSocial(b: SocialBlock): string {
+  if (b.links.length === 0) return "";
+  // Icons werden als nebeneinander stehende <a><img></a> in einer
+  // <table> gerendert — Outlook-kompatibel (kein flex/inline-block).
+  const tds = b.links
+    .map((l: SocialLink) => {
+      const url = socialIconUrlFor(l.network, b.style);
+      const imgStyle = [
+        "display:block;",
+        "border:0;outline:none;text-decoration:none;",
+        `width:${px(b.iconSize)};height:${px(b.iconSize)};`,
+      ].join("");
+      return `<td style="padding:0 ${px(b.gap / 2)};vertical-align:middle;"><a href="${escUrl(l.url)}" target="_blank" rel="noopener"><img src="${escUrl(url)}" alt="${escAttr(l.network)}" width="${b.iconSize}" height="${b.iconSize}" style="${imgStyle}" /></a></td>`;
+    })
+    .join("");
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${b.align}"><tr>${tds}</tr></table>`;
+}
+
+function socialIconUrlFor(
+  network: SocialNetwork,
+  style: "color" | "mono",
+): string {
+  return socialIconUrl(network, style);
+}
+
+function renderAvatar(b: AvatarBlock): string {
+  const radius = b.imageRounded
+    ? Math.round(b.imageSize / 2)
+    : b.imageBorderRadius;
+  const imgStyle = [
+    "display:block;",
+    `width:${px(b.imageSize)};height:${px(b.imageSize)};`,
+    radius > 0 ? `border-radius:${px(radius)};` : "",
+    "border:0;outline:none;",
+    "object-fit:cover;",
+  ].join("");
+  const img = `<img src="${escUrl(b.imageUrl)}" alt="${escAttr(b.name)}" width="${b.imageSize}" height="${b.imageSize}" style="${imgStyle}" />`;
+  const nameStyle = [
+    `font-family:${escAttr(b.fontFamily)};`,
+    `font-size:${px(15)};`,
+    `font-weight:600;`,
+    `color:${escAttr(b.nameColor)};`,
+    `margin:0;`,
+    `line-height:1.3;`,
+  ].join("");
+  const subStyle = [
+    `font-family:${escAttr(b.fontFamily)};`,
+    `font-size:${px(12.5)};`,
+    `color:${escAttr(b.subtitleColor)};`,
+    `margin:${px(2)} 0 0 0;`,
+    `line-height:1.4;`,
+  ].join("");
+  const nameHtml = `<div style="${nameStyle}">${escHtml(b.name)}</div>`;
+  const subHtml = b.subtitle
+    ? `<div style="${subStyle}">${escHtml(b.subtitle)}</div>`
+    : "";
+
+  if (b.layout === "vertical") {
+    return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${b.align}"><tr><td align="${b.align}">${img}<div style="height:8px;line-height:8px;font-size:8px;">&nbsp;</div>${nameHtml}${subHtml}</td></tr></table>`;
+  }
+  // horizontal: Bild links, Texte rechts
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${b.align}"><tr><td valign="middle" style="padding-right:12px;">${img}</td><td valign="middle">${nameHtml}${subHtml}</td></tr></table>`;
+}
+
 function renderBlock(block: ContentBlock): string {
   let inner = "";
   switch (block.type) {
@@ -168,6 +378,21 @@ function renderBlock(block: ContentBlock): string {
       break;
     case "divider":
       inner = renderDivider(block);
+      break;
+    case "list":
+      inner = renderList(block);
+      break;
+    case "quote":
+      inner = renderQuote(block);
+      break;
+    case "video":
+      inner = renderVideo(block);
+      break;
+    case "social":
+      inner = renderSocial(block);
+      break;
+    case "avatar":
+      inner = renderAvatar(block);
       break;
     case "html":
       inner = renderHtmlBlock(block);
@@ -219,6 +444,8 @@ function renderSection(section: Section, contentWidth: number): string {
     section.backgroundColor
       ? `background-color:${escAttr(section.backgroundColor)};`
       : "",
+    borderStyle(section.borderTop, "top"),
+    borderStyle(section.borderBottom, "bottom"),
   ].join("");
   return `<tr><td style="${sectionStyle}"><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;"><tr>${tds}</tr></table></td></tr>`;
 }
@@ -265,7 +492,7 @@ function buildDocument(design: EmailDesign, opts: { preview: boolean }): string 
 <body${previewClass} style="margin:0;padding:0;background:${bodyBg};font-family:${fontFamily};color:${color};">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${bodyBg};">
   <tr>
-    <td align="center" style="padding:0;">
+    <td align="center" style="padding:${px(design.body.contentPaddingY ?? 0)} 0;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="${design.body.contentWidth}" style="width:${contentWidthPx};max-width:${contentWidthPx};background:${contentBg};">
         ${sectionsHtml}
       </table>

@@ -8,6 +8,7 @@
  * werden diese Defaults verwendet.
  */
 import type {
+  AvatarBlock,
   BodySettings,
   ButtonBlock,
   Column,
@@ -18,10 +19,15 @@ import type {
   HeadingBlock,
   HtmlBlock,
   ImageBlock,
+  ListBlock,
+  QuoteBlock,
   Section,
   SectionLayout,
+  SocialBlock,
+  SocialNetwork,
   SpacerBlock,
   TextBlock,
+  VideoBlock,
 } from "./types";
 
 /** Generiert einen URL-sicheren, kollisions-armen Identifier. */
@@ -42,6 +48,7 @@ export function makeBody(): BodySettings {
     contentWidth: 600,
     fontFamily: SAFE_FONT,
     color: "#3a3a3d",
+    contentPaddingY: 24,
   };
 }
 
@@ -122,6 +129,7 @@ export function makeImage(): ImageBlock {
     alt: "",
     width: "100%",
     align: "center",
+    borderRadius: 0,
   };
 }
 
@@ -145,6 +153,123 @@ export function makeDivider(): DividerBlock {
   };
 }
 
+export function makeList(ordered = false): ListBlock {
+  return {
+    id: newId("blk"),
+    type: "list",
+    padding: { top: 0, right: 0, bottom: 12, left: 0 },
+    ordered,
+    items: [
+      "Erster Listenpunkt",
+      "Zweiter Listenpunkt",
+      "Dritter Listenpunkt",
+    ],
+    align: "left",
+    fontFamily: SAFE_FONT,
+    fontSize: 14,
+    color: "#3a3a3d",
+    lineHeight: 1.6,
+    itemSpacing: 4,
+  };
+}
+
+export function makeQuote(): QuoteBlock {
+  return {
+    id: newId("blk"),
+    type: "quote",
+    padding: { top: 8, right: 0, bottom: 12, left: 0 },
+    content:
+      "„Das beste Produkt, das ich seit Jahren benutzt habe – wirklich beeindruckend.\u201d",
+    cite: "— Max Mustermann, CTO @ Beispiel GmbH",
+    align: "left",
+    fontFamily: "Georgia, 'Times New Roman', serif",
+    fontSize: 16,
+    color: "#3a3a3d",
+    accentColor: "#0f0f10",
+    accentWidth: 4,
+  };
+}
+
+export function makeVideo(): VideoBlock {
+  return {
+    id: newId("blk"),
+    type: "video",
+    padding: { top: 0, right: 0, bottom: 12, left: 0 },
+    thumbnailUrl: "https://via.placeholder.com/600x340?text=Video+Thumbnail",
+    videoUrl: "https://example.com/video",
+    alt: "Video ansehen",
+    align: "center",
+    width: "100%",
+    showPlayOverlay: true,
+    playButtonColor: "#ffffff",
+    borderRadius: 6,
+  };
+}
+
+const SOCIAL_NETWORK_DEFAULTS: Record<
+  SocialNetwork,
+  { label: string; defaultUrl: string }
+> = {
+  facebook: { label: "Facebook", defaultUrl: "https://facebook.com/" },
+  x: { label: "X / Twitter", defaultUrl: "https://x.com/" },
+  instagram: { label: "Instagram", defaultUrl: "https://instagram.com/" },
+  linkedin: { label: "LinkedIn", defaultUrl: "https://linkedin.com/in/" },
+  youtube: { label: "YouTube", defaultUrl: "https://youtube.com/@" },
+  tiktok: { label: "TikTok", defaultUrl: "https://tiktok.com/@" },
+  github: { label: "GitHub", defaultUrl: "https://github.com/" },
+  website: { label: "Website", defaultUrl: "https://example.com" },
+  email: { label: "E-Mail", defaultUrl: "mailto:hello@example.com" },
+};
+
+export const SOCIAL_NETWORKS = Object.keys(
+  SOCIAL_NETWORK_DEFAULTS,
+) as SocialNetwork[];
+
+export function socialLabel(n: SocialNetwork): string {
+  return SOCIAL_NETWORK_DEFAULTS[n].label;
+}
+export function socialDefaultUrl(n: SocialNetwork): string {
+  return SOCIAL_NETWORK_DEFAULTS[n].defaultUrl;
+}
+
+export function makeSocial(): SocialBlock {
+  const networks: SocialNetwork[] = ["facebook", "instagram", "x", "linkedin"];
+  return {
+    id: newId("blk"),
+    type: "social",
+    padding: { top: 0, right: 0, bottom: 12, left: 0 },
+    links: networks.map((n) => ({
+      id: newId("sn"),
+      network: n,
+      url: SOCIAL_NETWORK_DEFAULTS[n].defaultUrl,
+    })),
+    align: "center",
+    iconSize: 28,
+    gap: 12,
+    style: "color",
+    monoColor: "#3a3a3d",
+  };
+}
+
+export function makeAvatar(): AvatarBlock {
+  return {
+    id: newId("blk"),
+    type: "avatar",
+    padding: { top: 8, right: 0, bottom: 12, left: 0 },
+    imageUrl: "https://via.placeholder.com/96x96?text=Foto",
+    name: "Vor- und Nachname",
+    subtitle: "Rolle · Firma",
+    layout: "horizontal",
+    align: "left",
+    imageSize: 56,
+    imageRounded: true,
+    imageBorderRadius: 8,
+    fontFamily: SAFE_FONT,
+    nameColor: "#0f0f10",
+    subtitleColor: "#6a6a70",
+  };
+}
+
 export function makeHtml(): HtmlBlock {
   return {
     id: newId("blk"),
@@ -161,6 +286,11 @@ const BLOCK_FACTORIES: Record<ContentBlockType, () => ContentBlock> = {
   image: makeImage,
   spacer: makeSpacer,
   divider: makeDivider,
+  list: () => makeList(false),
+  quote: makeQuote,
+  video: makeVideo,
+  social: makeSocial,
+  avatar: makeAvatar,
   html: makeHtml,
 };
 
