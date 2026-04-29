@@ -101,55 +101,44 @@ function delta(today: number, yesterday: number): number | null {
 // Building blocks
 // ────────────────────────────────────────────────────────────────────────
 
-function Card({
+/**
+ * Flacher Container: keine Border/Schatten/Bubbles. Lediglich vertikaler
+ * Abstand und – falls nötig – ein dezenter Top-Trenner. Der gesamte
+ * Übersicht-Look soll ruhig und tabellarisch wirken.
+ */
+function Block({
   className = "",
   children,
 }: {
   className?: string;
   children: ReactNode;
 }) {
-  return (
-    <div
-      className={`rounded-xl border border-hair bg-white/80 shadow-sm shadow-ink-900/[0.02] ring-1 ring-ink-900/[0.02] backdrop-blur-sm transition-shadow hover:shadow-md hover:shadow-ink-900/[0.04] ${className}`}
-    >
-      {children}
-    </div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
-function CardTitle({
+function SectionHeader({
   title,
   subtitle,
   to,
   icon: Icon,
-  accent,
 }: {
   title: string;
   subtitle?: string;
   to?: string;
   icon?: ComponentType<{ className?: string }>;
-  accent?: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-hair/70 px-5 py-3">
-      <div className="flex min-w-0 items-center gap-2.5">
+    <div className="mb-3 flex items-end justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-2">
         {Icon && (
-          <span
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
-            style={{
-              backgroundColor: accent ?? "hsl(220 14% 96%)",
-              color: "hsl(220 30% 30%)",
-            }}
-          >
-            <Icon className="h-3.5 w-3.5" />
-          </span>
+          <Icon className="h-3.5 w-3.5 shrink-0 text-ink-500" aria-hidden />
         )}
         <div className="min-w-0">
-          <h3 className="truncate text-[12.5px] font-semibold tracking-tight text-ink-900">
+          <h3 className="truncate text-[13px] font-semibold tracking-tight text-ink-900">
             {title}
           </h3>
           {subtitle && (
-            <p className="mt-0.5 truncate text-[11px] text-ink-500">
+            <p className="mt-0.5 truncate text-[11.5px] text-ink-500">
               {subtitle}
             </p>
           )}
@@ -158,9 +147,10 @@ function CardTitle({
       {to && (
         <Link
           to={to}
-          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-transparent px-2 py-1 text-[11px] text-ink-500 transition-colors hover:border-hair hover:bg-paper hover:text-ink-900"
+          className="inline-flex shrink-0 items-center gap-0.5 text-[11.5px] text-ink-500 transition-colors hover:text-ink-900"
         >
-          Details <ArrowRight className="h-3 w-3" aria-hidden />
+          Details
+          <ArrowRight className="h-3 w-3" aria-hidden />
         </Link>
       )}
     </div>
@@ -197,46 +187,48 @@ function KpiCard({
     return delta(today, yesterday);
   }, [daily]);
 
-  const cardCls = "group relative flex h-full min-w-0 flex-col px-5 py-4";
+  const cardCls =
+    "group relative flex h-full min-w-0 flex-col py-4 transition-colors";
 
   const inner = (
     <>
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <span
-              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
-              style={{
-                backgroundColor: `${color}26`,
-                color,
-              }}
+              className="inline-flex h-3 w-3 shrink-0 items-center justify-center"
+              style={{ color }}
+              aria-hidden
             >
               <Icon className="h-3 w-3" />
             </span>
-            <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
+            <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-500">
               {label}
             </p>
           </div>
           <p
-            className="mt-3 font-display text-[34px] leading-none tracking-tighter2 text-ink-900"
+            className="mt-2.5 font-display text-[34px] leading-none tracking-tighter2 text-ink-900"
             aria-live="polite"
           >
             {loading || value == null ? "—" : fmtNumber(value)}
           </p>
           {hint && (
-            <p className="mt-1.5 truncate text-[11px] text-ink-500" title={hint}>
+            <p
+              className="mt-1.5 truncate text-[11px] text-ink-500"
+              title={hint}
+            >
               {hint}
             </p>
           )}
         </div>
         {dlt != null && Number.isFinite(dlt) && (
           <span
-            className={`inline-flex shrink-0 items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium ${
+            className={`inline-flex shrink-0 items-center gap-0.5 text-[11px] font-medium tabular-nums ${
               dlt > 0
-                ? "border-accent-mint/40 bg-accent-mint/10 text-accent-mint"
+                ? "text-accent-mint"
                 : dlt < 0
-                  ? "border-accent-rose/40 bg-accent-rose/10 text-accent-rose"
-                  : "border-hair bg-ink-50 text-ink-500"
+                  ? "text-accent-rose"
+                  : "text-ink-500"
             }`}
             title="Veränderung gegenüber gestern"
           >
@@ -254,11 +246,11 @@ function KpiCard({
         )}
       </div>
       {series && series.length > 0 && (
-        <div className="mt-3 -mx-1 h-12">
+        <div className="mt-3 -mx-0.5 h-10">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={series}
-              margin={{ top: 2, right: 2, bottom: 0, left: 2 }}
+              margin={{ top: 1, right: 1, bottom: 0, left: 1 }}
             >
               <defs>
                 <linearGradient
@@ -268,18 +260,18 @@ function KpiCard({
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="0%" stopColor={color} stopOpacity={0.45} />
-                  <stop offset="100%" stopColor={color} stopOpacity={0.0} />
+                  <stop offset="0%" stopColor={color} stopOpacity={0.32} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <Tooltip
-                cursor={{ stroke: color, strokeOpacity: 0.4 }}
+                cursor={{ stroke: color, strokeOpacity: 0.35 }}
                 contentStyle={{
                   fontSize: 11,
                   border: "none",
                   borderRadius: 4,
-                  boxShadow: "0 1px 8px hsl(0 0% 0% / 0.08)",
-                  padding: "4px 8px",
+                  boxShadow: "0 1px 6px hsl(0 0% 0% / 0.06)",
+                  padding: "3px 8px",
                 }}
                 labelFormatter={(l) => shortDay(String(l))}
                 formatter={(v: number) => [fmtNumber(v), "Anzahl"]}
@@ -291,7 +283,12 @@ function KpiCard({
                 strokeWidth={1.5}
                 fill={`url(#kpi-grad-${label.replace(/\s+/g, "-")})`}
                 dot={false}
-                activeDot={{ r: 3, fill: color, stroke: "white", strokeWidth: 1.5 }}
+                activeDot={{
+                  r: 3,
+                  fill: color,
+                  stroke: "white",
+                  strokeWidth: 1.5,
+                }}
                 isAnimationActive={false}
               />
               <XAxis dataKey="date" hide />
@@ -300,25 +297,15 @@ function KpiCard({
           </ResponsiveContainer>
         </div>
       )}
-      {to && (
-        <span
-          aria-hidden
-          className="absolute inset-0 rounded-xl ring-1 ring-transparent transition-colors group-hover:ring-ink-200/60"
-        />
-      )}
     </>
   );
 
-  return (
-    <Card className="overflow-hidden">
-      {to ? (
-        <Link to={to} className={cardCls}>
-          {inner}
-        </Link>
-      ) : (
-        <div className={cardCls}>{inner}</div>
-      )}
-    </Card>
+  return to ? (
+    <Link to={to} className={`${cardCls} px-4 hover:bg-ink-50/40`}>
+      {inner}
+    </Link>
+  ) : (
+    <div className={`${cardCls} px-4`}>{inner}</div>
   );
 }
 
@@ -911,8 +898,8 @@ export default function OverviewPage() {
         </p>
       )}
 
-      {/* KPI Strip */}
-      <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {/* KPI Strip — flach, mit dezentem Trenner zwischen den Spalten */}
+      <div className="mb-10 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-5">
         <KpiCard
           label="Anfragen heute"
           value={stat.data?.website.submissions.day ?? null}
@@ -983,14 +970,13 @@ export default function OverviewPage() {
       </div>
 
       {/* Trend (full width) */}
-      <Card className="mb-8 overflow-hidden">
-        <CardTitle
+      <Block className="mb-12">
+        <SectionHeader
           title="30-Tage-Trend"
           subtitle="Anfragen, Test-Anfragen und Newsletter (UTC, lückenfüllend)"
           icon={TrendingUp}
-          accent={`${C.blue}1A`}
         />
-        <div className="h-[320px] w-full px-1 pb-2 pt-3">
+        <div className="h-[320px] w-full">
           {daily ? (
             <TrendChart daily={daily} />
           ) : (
@@ -1005,19 +991,18 @@ export default function OverviewPage() {
             />
           )}
         </div>
-      </Card>
+      </Block>
 
-      {/* Sub-charts grid */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <Card className="overflow-hidden lg:col-span-7">
-          <CardTitle
+      {/* Sub-charts grid — Linien-/Trenner-Layout statt Boxes */}
+      <div className="grid grid-cols-1 gap-x-12 gap-y-12 border-t border-hair pt-10 lg:grid-cols-12">
+        <Block className="lg:col-span-7 lg:border-r lg:border-hair lg:pr-12">
+          <SectionHeader
             title="Oneauto-Bilanz"
             subtitle="Letzte 12 Monate · EUR (ca.)"
             icon={TrendingUp}
-            accent={`${C.purple}1A`}
             to="/analytics/oneauto-reports"
           />
-          <div className="h-[280px] w-full px-3 pb-3 pt-3">
+          <div className="h-[280px] w-full">
             {oneauto.error ? (
               <EmptyChart label="Oneauto: Fehler beim Laden" />
             ) : oneauto.loading && !oneauto.data ? (
@@ -1026,17 +1011,16 @@ export default function OverviewPage() {
               <OneautoHistoryChart data={oneauto.data} />
             )}
           </div>
-        </Card>
+        </Block>
 
-        <Card className="overflow-hidden lg:col-span-5">
-          <CardTitle
+        <Block className="lg:col-span-5">
+          <SectionHeader
             title="Aktive Keys: Verteilung"
             subtitle="Nur unabgelaufene Keys"
             icon={KeyRound}
-            accent={`${C.purple}1A`}
             to="/kunden/keys"
           />
-          <div className="h-[280px] w-full px-4 pb-3 pt-3">
+          <div className="h-[280px] w-full">
             {stat.data?.activeKeys ? (
               <KeysSplitChart
                 productive={stat.data.activeKeys.productive}
@@ -1050,17 +1034,16 @@ export default function OverviewPage() {
               />
             )}
           </div>
-        </Card>
+        </Block>
 
-        <Card className="overflow-hidden lg:col-span-5">
-          <CardTitle
+        <Block className="lg:col-span-5 lg:border-t lg:border-hair lg:pt-10">
+          <SectionHeader
             title="Kunden-API: Requests"
             subtitle="Heute · 7 Tage · Monat"
             icon={TrendingUp}
-            accent={`${C.blue}1A`}
             to="/analytics/kunden-api"
           />
-          <div className="h-[260px] w-full px-3 pb-3 pt-3">
+          <div className="h-[260px] w-full">
             {!requestsReady ? (
               <EmptyChart
                 label={
@@ -1073,34 +1056,32 @@ export default function OverviewPage() {
               <RequestsChart day={rDay} week={rWeek} month={rMonth} />
             )}
           </div>
-        </Card>
+        </Block>
 
-        <Card className="overflow-hidden lg:col-span-7">
-          <CardTitle
+        <Block className="lg:col-span-7 lg:border-l lg:border-t lg:border-hair lg:pl-12 lg:pt-10">
+          <SectionHeader
             title="Anfragen vs. Newsletter"
             subtitle="Tagesvergleich (30 Tage)"
             icon={TrendingUp}
-            accent={`${C.mint}1A`}
             to="/kunden/newsletter"
           />
-          <div className="h-[260px] w-full px-3 pb-3 pt-3">
+          <div className="h-[260px] w-full">
             {daily ? (
               <NewslettersVsAnfragenLines daily={daily} />
             ) : (
               <EmptyChart label="Keine Daten" />
             )}
           </div>
-        </Card>
+        </Block>
 
-        <Card className="overflow-hidden lg:col-span-12">
-          <CardTitle
+        <Block className="lg:col-span-12 lg:border-t lg:border-hair lg:pt-10">
+          <SectionHeader
             title="Voraussichtliche Bearbeitungszeit"
             subtitle="7-Tage-Rückblick · Session-Gap 30 min · nur Zeilen mit blob4"
             icon={TimerReset}
-            accent={`${C.rose}1A`}
             to="/intern-analytics/controlling"
           />
-          <div className="h-[180px] w-full px-3 pb-3 pt-2">
+          <div className="h-[180px] w-full">
             {ctrl.error ? (
               <EmptyChart label="Controlling: Fehler beim Laden" />
             ) : ctrl.data ? (
@@ -1112,7 +1093,7 @@ export default function OverviewPage() {
               <EmptyChart label="Lade …" />
             )}
           </div>
-        </Card>
+        </Block>
       </div>
     </>
   );

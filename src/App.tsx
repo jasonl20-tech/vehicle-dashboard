@@ -20,6 +20,7 @@ import SystemeMappingPage from "./pages/SystemeMappingPage";
 import KundenCrmPage from "./pages/KundenCrmPage";
 import AnfragenPage from "./pages/AnfragenPage";
 import EmailTemplatesPage from "./pages/EmailTemplatesPage";
+import EmailManuellPage from "./pages/EmailManuellPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import AssetsPage from "./pages/AssetsPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
@@ -143,6 +144,7 @@ export default function App() {
         <Route path="/emails/logs" element={<ModulePage />} />
         <Route path="/emails/tracking" element={<ModulePage />} />
         <Route path="/emails/templates" element={<EmailTemplatesPage />} />
+        <Route path="/emails/manuell" element={<EmailManuellPage />} />
         <Route path="/emails/automator" element={<ModulePage />} />
         <Route path="/website/blogs" element={<ModulePage />} />
         <Route path="/website/landing-pages" element={<ModulePage />} />

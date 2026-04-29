@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import type { DashboardOutletContext } from "./dashboardOutletContext";
-import {
-  BILDBEMPFANG_HTML_CLASS,
-  BILDBEMPFANG_OCEAN_BG,
-} from "../../lib/bildempfangMapTheme";
+import { BILDBEMPFANG_HTML_CLASS } from "../../lib/bildempfangMapTheme";
 import CommandPalette from "../CommandPalette";
 import DashboardHeader from "./DashboardHeader";
 import Sidebar from "./Sidebar";
@@ -35,10 +32,11 @@ function useIsLg(): boolean {
 }
 
 const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/kunden/test-anfragen" as const;
-const FULLSCREEN_MAP_BILDBEMPFANG = "/ansichten/bildempfang" as const;
+const BILDEMPFANG_PAGE = "/ansichten/bildempfang" as const;
 const KUNDEN_CRM = "/kunden/crm" as const;
 const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
 const EMAIL_TEMPLATES = "/emails/templates" as const;
+const EMAIL_MANUELL = "/emails/manuell" as const;
 const ASSETS_PAGE = "/databases/assets" as const;
 
 /**
@@ -65,9 +63,17 @@ export default function DashboardLayout() {
   const { pathname } = useLocation();
   const isKundenTestAnfragen = pathname === FULL_WIDTH_KUNDEN_TEST_ANFRAGEN;
   const isKundenAnfragenPage = pathname === KUNDEN_ANFRAGEN;
-  const isBildempfangMap = pathname === FULLSCREEN_MAP_BILDBEMPFANG;
+  /**
+   * Bildempfang ist eine reguläre Page mit Header + Karte als Hauptinhalt.
+   * Die Karte wird hier nur noch als full-height-Container behandelt
+   * (analog Email-Editor / CRM); der Ozean-Hintergrund wird in der Page
+   * selbst gesetzt, damit globale Overlays (Cmd+K-Palette) zuverlässig
+   * darüberliegen.
+   */
+  const isBildempfangPage = pathname === BILDEMPFANG_PAGE;
   const isCrmPage = pathname === KUNDEN_CRM;
-  const isEmailEditor = pathname === EMAIL_TEMPLATES;
+  const isEmailEditor =
+    pathname === EMAIL_TEMPLATES || pathname === EMAIL_MANUELL;
   const isAssetsPage = pathname === ASSETS_PAGE;
   const isSplitView = isSplitViewPath(pathname);
   /** Vollflächig + Header-Toolbar (wie CRM): Anfragen + Test Anfragen */
@@ -116,13 +122,13 @@ export default function DashboardLayout() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (isBildempfangMap) {
+    if (isBildempfangPage) {
       root.classList.add(BILDBEMPFANG_HTML_CLASS);
     } else {
       root.classList.remove(BILDBEMPFANG_HTML_CLASS);
     }
     return () => root.classList.remove(BILDBEMPFANG_HTML_CLASS);
-  }, [isBildempfangMap]);
+  }, [isBildempfangPage]);
 
   // Only allow collapsed mode on desktop. Mobile always renders expanded sidebar.
   const effectiveCollapsed = collapsed && isLg;
@@ -131,45 +137,38 @@ export default function DashboardLayout() {
     () => ({ setHeaderTrailing }),
     [],
   );
+  /**
+   * Wir behandeln Bildempfang nun wie Email-/Assets-Editor: full-height,
+   * Header oben, Outlet darunter. Damit greift Cmd+K-Palette korrekt
+   * darüber, statt unter der Karte zu landen.
+   */
+  const isFullHeightPage =
+    isBildempfangPage ||
+    isCrmPage ||
+    isKundenAnfragenLayout ||
+    isEmailEditor ||
+    isAssetsPage ||
+    isSplitView;
+  const allowsHeaderTrailing =
+    isCrmPage ||
+    isKundenAnfragenLayout ||
+    isEmailEditor ||
+    isAssetsPage ||
+    isSplitView ||
+    isBildempfangPage;
+
   useEffect(() => {
-    if (
-      !isCrmPage &&
-      !isKundenAnfragenLayout &&
-      !isEmailEditor &&
-      !isAssetsPage &&
-      !isSplitView
-    ) {
+    if (!allowsHeaderTrailing) {
       setHeaderTrailing(null);
     }
-  }, [
-    isCrmPage,
-    isKundenAnfragenLayout,
-    isEmailEditor,
-    isAssetsPage,
-    isSplitView,
-  ]);
+  }, [allowsHeaderTrailing]);
 
   return (
-    <div
-      className={
-        isBildempfangMap
-          ? "relative h-[100dvh] min-h-0 text-ink-800"
-          : "relative min-h-screen bg-paper text-ink-800"
-      }
-      style={
-        isBildempfangMap
-          ? { backgroundColor: BILDBEMPFANG_OCEAN_BG }
-          : undefined
-      }
-    >
+    <div className="relative min-h-screen bg-paper text-ink-800">
       {/* Layered background — sits behind everything, doesn't intercept clicks. */}
-      {!isBildempfangMap && <BackgroundLayer />}
+      <BackgroundLayer />
 
-      <div
-        className={`relative flex w-full min-w-0 ${
-          isBildempfangMap ? "h-[100dvh] min-h-0" : "min-h-screen"
-        }`}
-      >
+      <div className="relative flex w-full min-w-0 min-h-screen">
         <Sidebar
           mobileOpen={mobileOpen}
           onClose={() => setMobileOpen(false)}
@@ -179,64 +178,26 @@ export default function DashboardLayout() {
         />
         <main
           className={`relative flex min-h-0 min-w-0 flex-1 flex-col ${
-            isBildempfangMap ||
-            isCrmPage ||
-            isKundenAnfragenLayout ||
-            isEmailEditor ||
-            isAssetsPage ||
-            isSplitView
-              ? "h-[100dvh] min-h-0"
-              : ""
+            isFullHeightPage ? "h-[100dvh] min-h-0" : ""
           }`}
-          style={
-            isBildempfangMap
-              ? { backgroundColor: BILDBEMPFANG_OCEAN_BG }
-              : undefined
-          }
         >
           <DashboardHeader
             onOpenMobileMenu={() => setMobileOpen(true)}
-            trailing={
-              isCrmPage ||
-              isKundenAnfragenLayout ||
-              isEmailEditor ||
-              isAssetsPage ||
-              isSplitView
-                ? headerTrailing
-                : null
-            }
-            crmMode={
-              isCrmPage ||
-              isKundenAnfragenLayout ||
-              isEmailEditor ||
-              isAssetsPage ||
-              isSplitView
-            }
+            trailing={allowsHeaderTrailing ? headerTrailing : null}
+            crmMode={allowsHeaderTrailing}
           />
           <div
             className={
-              isBildempfangMap
+              isFullHeightPage
                 ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                : isCrmPage ||
-                    isKundenAnfragenLayout ||
-                    isEmailEditor ||
-                    isAssetsPage ||
-                    isSplitView
-                  ? "relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-0"
-                  : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
+                : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
           >
             <div
               className={
-                isBildempfangMap
-                  ? "flex min-h-0 w-full min-w-0 flex-1 flex-col"
-                  : isCrmPage ||
-                      isKundenAnfragenLayout ||
-                      isEmailEditor ||
-                      isAssetsPage ||
-                      isSplitView
-                    ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
-                    : ""
+                isFullHeightPage
+                  ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
+                  : ""
               }
             >
               <Outlet context={outletContext} />
@@ -254,11 +215,9 @@ export default function DashboardLayout() {
 }
 
 /**
- * Subtle, layered background:
- *   1) Soft radial colour fades (existing `bg-grid-fade`)
- *   2) Faint dot grid for depth
- *   3) Top vignette tint to anchor the page
- * All decorative, pointer-events-none, z-0.
+ * Dezenter Hintergrund: subtiles Punktraster ohne radiale Akzent-Bubbles.
+ * Die früher genutzten Glow-Punkte (lila/grün) wurden auf Wunsch entfernt,
+ * das UI wirkt damit klarer und ruhiger.
  */
 function BackgroundLayer() {
   return (
@@ -266,35 +225,16 @@ function BackgroundLayer() {
       aria-hidden
       className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
     >
-      {/* Soft radial fades (tailwind: bg-grid-fade) */}
-      <div className="absolute inset-0 bg-grid-fade" />
-      {/* Dot grid */}
       <div
-        className="absolute inset-0 opacity-[0.55]"
+        className="absolute inset-0 opacity-[0.45]"
         style={{
           backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(13,13,15,0.06) 1px, transparent 0)",
+            "radial-gradient(circle at 1px 1px, rgba(13,13,15,0.05) 1px, transparent 0)",
           backgroundSize: "22px 22px",
           maskImage:
-            "linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.2) 100%)",
+            "linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0.25) 70%, rgba(0,0,0,0.05) 100%)",
           WebkitMaskImage:
-            "linear-gradient(to bottom, rgba(0,0,0,0.85), rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.2) 100%)",
-        }}
-      />
-      {/* Subtle accent glow top-left */}
-      <div
-        className="absolute -top-32 -left-32 h-[480px] w-[480px] rounded-full opacity-[0.18] blur-3xl"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(109,82,255,0.55), transparent 75%)",
-        }}
-      />
-      {/* Subtle accent glow bottom-right */}
-      <div
-        className="absolute -bottom-40 -right-32 h-[520px] w-[520px] rounded-full opacity-[0.16] blur-3xl"
-        style={{
-          background:
-            "radial-gradient(closest-side, rgba(62,207,142,0.5), transparent 75%)",
+            "linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0.25) 70%, rgba(0,0,0,0.05) 100%)",
         }}
       />
     </div>

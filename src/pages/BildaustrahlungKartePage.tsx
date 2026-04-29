@@ -1,4 +1,13 @@
-import { Bug, Globe, Map, Search, Waypoints, X } from "lucide-react";
+import {
+  Bug,
+  Check,
+  Copy,
+  Globe,
+  Map as MapIcon,
+  Search,
+  Waypoints,
+  X,
+} from "lucide-react";
 import {
   lazy,
   Suspense,
@@ -25,6 +34,16 @@ import { iso2Name } from "../lib/iso2Countries";
 
 const OverviewGlobe = lazy(() => import("../components/OverviewGlobe"));
 
+type SidebarTab = "domains" | "streams";
+
+/**
+ * Bildaustrahlung-Karte: Choroplethen-Karte (2D/3D) + Sidebar mit
+ * Domains/Streams. Das Layout wurde aufgeräumt:
+ *  - Klarer Header mit Toolbar rechts
+ *  - Karte links nimmt den Hauptbereich ein
+ *  - Rechts feste Sidebar (Tabs „Domains" / „Streams")
+ *  - Debug-Modal als sauberes Dialog-Pattern (Backdrop, Header, Footer)
+ */
 export default function BildaustrahlungKartePage() {
   const [apiDiagnose, setApiDiagnose] = useState(false);
   const [showArcs, setShowArcs] = useState(true);
@@ -37,10 +56,12 @@ export default function BildaustrahlungKartePage() {
   const arcsApi = useApi<BildaustrahlungArcsResponse>(arcsUrl);
   const [view, setView] = useState<"2d" | "3d">("2d");
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<SidebarTab>("domains");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
     null,
   );
   const [debugOpen, setDebugOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const data = geo.data;
 
@@ -69,6 +90,17 @@ export default function BildaustrahlungKartePage() {
     if (!t) return dom;
     return dom.filter((d) => d.domain.toLowerCase().includes(t));
   }, [geo.data?.domains, q]);
+
+  const filteredCustomers = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return arcCustomersAll;
+    return arcCustomersAll.filter((c) => {
+      if (c.company?.toLowerCase().includes(t)) return true;
+      if (c.email?.toLowerCase().includes(t)) return true;
+      if (c.location?.toLowerCase().includes(t)) return true;
+      return false;
+    });
+  }, [arcCustomersAll, q]);
 
   const debugJson = useMemo(
     () =>
@@ -105,6 +137,8 @@ export default function BildaustrahlungKartePage() {
   const copyDebug = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(debugJson);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
       /* ignore */
     }
@@ -119,74 +153,101 @@ export default function BildaustrahlungKartePage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [debugOpen]);
 
-  const viewToggle = (
-    <div className="inline-flex rounded-lg border border-hair bg-paper p-0.5 shadow-sm">
-      <button
-        type="button"
-        onClick={() => setView("2d")}
-        className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition ${
-          view === "2d"
-            ? "bg-ink-900 text-white"
-            : "text-ink-600 hover:bg-hair/80 hover:text-ink-900"
-        }`}
-        aria-pressed={view === "2d"}
-      >
-        <Map className="h-3.5 w-3.5 shrink-0" />
-        2D
-      </button>
-      <button
-        type="button"
-        onClick={() => setView("3d")}
-        className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition ${
-          view === "3d"
-            ? "bg-ink-900 text-white"
-            : "text-ink-600 hover:bg-hair/80 hover:text-ink-900"
-        }`}
-        aria-pressed={view === "3d"}
-      >
-        <Globe className="h-3.5 w-3.5 shrink-0" />
-        3D
-      </button>
-    </div>
-  );
-
-  const arcsCount = arcs.length;
-  const arcsToggle = (
-    <button
-      type="button"
-      onClick={() => setShowArcs((v) => !v)}
-      disabled={arcCustomersAll.length === 0}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium shadow-sm transition disabled:opacity-50 ${
-        showArcs && arcCustomersAll.length > 0
-          ? "border-ink-900 bg-ink-900 text-white hover:bg-ink-800"
-          : "border-hair bg-paper text-ink-700 hover:bg-hair/60 hover:text-ink-900"
-      }`}
-      aria-pressed={showArcs}
-      title={
-        arcCustomersAll.length === 0
-          ? "Keine Kunden mit Standort + passender Domain gefunden"
-          : "Bögen vom Kundenstandort zum Viewer-Land ein-/ausblenden"
-      }
-    >
-      <Waypoints className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      Streams ({arcsCount})
-    </button>
-  );
+  const totalRequests = geo.data?.total;
 
   const headerRight = (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {arcsToggle}
+      <button
+        type="button"
+        onClick={() => setShowArcs((v) => !v)}
+        disabled={arcCustomersAll.length === 0}
+        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition disabled:opacity-50 ${
+          showArcs && arcCustomersAll.length > 0
+            ? "border-ink-900 bg-ink-900 text-white hover:bg-ink-800"
+            : "border-hair bg-paper text-ink-700 hover:bg-hair/60 hover:text-ink-900"
+        }`}
+        aria-pressed={showArcs}
+        title={
+          arcCustomersAll.length === 0
+            ? "Keine Kunden mit Standort + passender Domain gefunden"
+            : "Bögen vom Kundenstandort zum Viewer-Land ein-/ausblenden"
+        }
+      >
+        <Waypoints className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        Streams
+        <span className="rounded-sm bg-white/15 px-1 text-[10.5px] tabular-nums text-current">
+          {arcs.length}
+        </span>
+      </button>
       <button
         type="button"
         onClick={() => setDebugOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-hair bg-paper px-3 py-1.5 text-[12.5px] font-medium text-ink-700 shadow-sm transition hover:bg-hair/60 hover:text-ink-900"
+        className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-paper px-2.5 py-1.5 text-[12px] font-medium text-ink-700 transition hover:bg-hair/60 hover:text-ink-900"
         aria-expanded={debugOpen}
         title="Roh-Response der APIs anzeigen"
       >
         <Bug className="h-3.5 w-3.5 shrink-0" aria-hidden />
         Debug
       </button>
-      {viewToggle}
+      <div className="inline-flex rounded-md border border-hair bg-paper p-0.5">
+        <button
+          type="button"
+          onClick={() => setView("2d")}
+          className={`inline-flex items-center gap-1.5 rounded-[4px] px-2.5 py-1 text-[12px] font-medium transition ${
+            view === "2d"
+              ? "bg-ink-900 text-white"
+              : "text-ink-600 hover:bg-hair/80 hover:text-ink-900"
+          }`}
+          aria-pressed={view === "2d"}
+        >
+          <MapIcon className="h-3.5 w-3.5 shrink-0" />
+          2D
+        </button>
+        <button
+          type="button"
+          onClick={() => setView("3d")}
+          className={`inline-flex items-center gap-1.5 rounded-[4px] px-2.5 py-1 text-[12px] font-medium transition ${
+            view === "3d"
+              ? "bg-ink-900 text-white"
+              : "text-ink-600 hover:bg-hair/80 hover:text-ink-900"
+          }`}
+          aria-pressed={view === "3d"}
+        >
+          <Globe className="h-3.5 w-3.5 shrink-0" />
+          3D
+        </button>
+      </div>
+    </div>
+  );
+
+  const summaryRight = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-ink-500">
+      {totalRequests != null ? (
+        <>
+          <span>
+            <strong className="font-semibold text-ink-900 tabular-nums">
+              {fmtNumber(totalRequests)}
+            </strong>{" "}
+            Requests
+          </span>
+          <span>
+            <strong className="font-semibold text-ink-900 tabular-nums">
+              {fmtNumber(geo.data?.domains?.length ?? 0)}
+            </strong>{" "}
+            Domains
+          </span>
+          <span>
+            <strong className="font-semibold text-ink-900 tabular-nums">
+              {fmtNumber(arcCustomersAll.length)}
+            </strong>{" "}
+            Streams
+          </span>
+        </>
+      ) : geo.loading ? (
+        <span>Lade Analytics …</span>
+      ) : (
+        <span>Keine Daten</span>
+      )}
     </div>
   );
 
@@ -195,77 +256,31 @@ export default function BildaustrahlungKartePage() {
       <PageHeader
         eyebrow="Ansichten"
         title="Bildaustrahlung"
-        description="Bild-URL-Requests (Analytics `image_url_requests`): Länder in `blob3`, Kunden-Domains in `index1`. 2D- oder 3D-Karte + Domain-Agenda (Standard 90 Tage, Zeitraum per `from`/`to` in der API anpassbar)."
-        rightSlot={headerRight}
+        description="Bild-URL-Requests pro Land und Domain (`image_url_requests`). Standard 90 Tage. Kunden-Streams verbinden den Kunden-Standort mit den Viewer-Ländern."
+        rightSlot={
+          <div className="flex flex-col items-end gap-2">
+            {headerRight}
+            {summaryRight}
+          </div>
+        }
       />
 
-      {geo.data?.queryWarnings && geo.data.queryWarnings.length > 0 && (
-        <p className="mb-2 text-[12.5px] text-accent-amber" role="status">
-          Hinweis: {geo.data.queryWarnings[0].slice(0, 200)}
-        </p>
+      {(geo.error ||
+        (geo.data?.queryWarnings && geo.data.queryWarnings.length > 0)) && (
+        <div className="mt-2 rounded-md border border-amber-200/70 bg-amber-50/70 px-3 py-2 text-[12px] text-amber-900">
+          {geo.error && <span>{geo.error}</span>}
+          {!geo.error &&
+            geo.data?.queryWarnings &&
+            geo.data.queryWarnings.length > 0 && (
+              <span title={geo.data.queryWarnings.join(" | ")}>
+                Hinweis: {geo.data.queryWarnings[0]?.slice(0, 220)}
+              </span>
+            )}
+        </div>
       )}
 
       <div className="mt-6 flex flex-col gap-6 lg:flex-row lg:items-stretch">
-        <aside className="w-full shrink-0 lg:order-2 lg:max-w-sm lg:pl-1">
-          <div className="border-b border-hair/80 pb-2">
-            <h2 className="text-[12px] font-medium uppercase tracking-[0.1em] text-ink-400">
-              Kunden-Domains (index1)
-            </h2>
-            <p className="mt-0.5 text-[11.5px] text-ink-500">
-              Alle Domains im Zeitraum, nach Volumen sortiert. Balken: Anteil
-              am Maximum in der Liste.
-            </p>
-            <div className="mt-2 flex items-center gap-2 rounded-md border border-hair/90 bg-paper px-2 py-1.5">
-              <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" aria-hidden />
-              <input
-                type="search"
-                value={q}
-                onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                  setQ(e.target.value)
-                }
-                placeholder="Filter …"
-                className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink-800 outline-none placeholder:text-ink-400"
-                aria-label="Domains filtern"
-              />
-            </div>
-          </div>
-          <ul
-            className="mt-2 max-h-[min(50vh,420px)] space-y-2 overflow-y-auto pr-0.5 text-[12.5px] lg:max-h-[min(85vh,720px)]"
-            aria-label="Domain-Liste"
-          >
-            {geo.error && (
-              <li className="text-accent-amber">{geo.error}</li>
-            )}
-            {geo.loading && !geo.data && !geo.error && (
-              <li className="text-ink-500">Laden …</li>
-            )}
-            {geo.data && filteredDomains.length === 0 && (
-              <li className="text-ink-500">Keine Treffer</li>
-            )}
-            {filteredDomains.map((row) => (
-              <li key={row.domain} className="min-w-0">
-                <div className="flex min-w-0 items-baseline justify-between gap-2">
-                  <span
-                    className="truncate font-mono text-[12px] text-ink-800"
-                    title={row.domain}
-                  >
-                    {row.domain}
-                  </span>
-                  <span className="shrink-0 tabular-nums text-ink-500">
-                    {fmtNumber(row.count)}
-                  </span>
-                </div>
-                <div className="mt-0.5 h-1.5 w-full overflow-hidden rounded-sm bg-ink-100/90">
-                  <div
-                    className="h-full rounded-sm bg-[hsl(214_45%_48%)]"
-                    style={{ width: `${(row.count / domainMax) * 100}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </aside>
-
+        {/* Karte links */}
         <div className="min-w-0 flex-1 lg:order-1">
           {view === "2d" ? (
             <OverviewMap2D
@@ -278,7 +293,7 @@ export default function BildaustrahlungKartePage() {
           ) : (
             <Suspense
               fallback={
-                <div className="grid min-h-[400px] place-items-center rounded-xl border border-hair border-dashed bg-paper/60 text-[13px] text-ink-500">
+                <div className="grid min-h-[400px] place-items-center rounded-md border border-dashed border-hair bg-paper/60 text-[13px] text-ink-500">
                   3D-Ansicht wird geladen…
                 </div>
               }
@@ -292,30 +307,129 @@ export default function BildaustrahlungKartePage() {
               />
             </Suspense>
           )}
+        </div>
 
-          {arcCustomersAll.length > 0 && (
-            <div className="mt-3 rounded-xl border border-hair bg-paper px-3 py-2.5 text-[12.5px]">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-[12px] font-medium uppercase tracking-[0.1em] text-ink-400">
-                  Kunden-Streams (CRM × Bildaustrahlung)
-                </h3>
-                {selectedCustomerId && (
+        {/* Sidebar rechts */}
+        <aside className="w-full shrink-0 lg:order-2 lg:max-w-sm">
+          {/* Tabs */}
+          <div
+            role="tablist"
+            aria-label="Sidebar"
+            className="flex border-b border-hair"
+          >
+            <TabButton
+              active={tab === "domains"}
+              onClick={() => setTab("domains")}
+              label="Domains"
+              count={filteredDomains.length}
+            />
+            <TabButton
+              active={tab === "streams"}
+              onClick={() => setTab("streams")}
+              label="Streams"
+              count={filteredCustomers.length}
+            />
+          </div>
+
+          {/* Suche */}
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-hair bg-paper px-2 py-1.5">
+            <Search
+              className="h-3.5 w-3.5 shrink-0 text-ink-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={q}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                setQ(e.target.value)
+              }
+              placeholder={
+                tab === "domains" ? "Domain filtern …" : "Kunde filtern …"
+              }
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink-800 outline-none placeholder:text-ink-400"
+              aria-label={tab === "domains" ? "Domains filtern" : "Kunden filtern"}
+            />
+          </div>
+
+          {/* Inhalt */}
+          {tab === "domains" ? (
+            <ul
+              className="mt-3 max-h-[min(50vh,420px)] divide-y divide-hair overflow-y-auto pr-0.5 lg:max-h-[min(85vh,720px)]"
+              aria-label="Domain-Liste"
+            >
+              {geo.error && (
+                <li className="px-1 py-2 text-[12.5px] text-accent-amber">
+                  {geo.error}
+                </li>
+              )}
+              {geo.loading && !geo.data && !geo.error && (
+                <li className="px-1 py-2 text-[12.5px] text-ink-500">
+                  Laden …
+                </li>
+              )}
+              {geo.data && filteredDomains.length === 0 && (
+                <li className="px-1 py-2 text-[12.5px] text-ink-500">
+                  Keine Treffer
+                </li>
+              )}
+              {filteredDomains.map((row) => (
+                <li key={row.domain} className="min-w-0 py-2">
+                  <div className="flex min-w-0 items-baseline justify-between gap-2">
+                    <span
+                      className="truncate font-mono text-[12px] text-ink-800"
+                      title={row.domain}
+                    >
+                      {row.domain}
+                    </span>
+                    <span className="shrink-0 text-[12px] tabular-nums text-ink-500">
+                      {fmtNumber(row.count)}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 w-full overflow-hidden rounded-sm bg-ink-50">
+                    <div
+                      className="h-full rounded-sm bg-[hsl(214_45%_48%)]"
+                      style={{
+                        width: `${(row.count / domainMax) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="mt-3">
+              {selectedCustomerId && (
+                <div className="mb-2 flex items-center justify-between text-[11.5px]">
+                  <span className="text-ink-500">Bögen gefiltert.</span>
                   <button
                     type="button"
-                    className="text-[11.5px] text-accent-blue underline decoration-dotted hover:text-ink-900"
+                    className="text-accent-blue underline decoration-dotted hover:text-ink-900"
                     onClick={() => setSelectedCustomerId(null)}
                   >
                     Auswahl aufheben
                   </button>
+                </div>
+              )}
+              <ul
+                className="max-h-[min(50vh,420px)] divide-y divide-hair overflow-y-auto pr-0.5 lg:max-h-[min(82vh,700px)]"
+                aria-label="Kunden-Streams"
+              >
+                {arcsApi.error && (
+                  <li className="px-1 py-2 text-[12.5px] text-accent-amber">
+                    {arcsApi.error}
+                  </li>
                 )}
-              </div>
-              <p className="mt-0.5 text-[11.5px] text-ink-500">
-                Kunde mit gesetzter <code>location</code> + passendem{" "}
-                <code>company</code> (= index1-Domain). Klick filtert die
-                Bögen auf einen Kunden.
-              </p>
-              <ul className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                {arcCustomersAll.map((c) => {
+                {arcsApi.loading && !arcsApi.data && !arcsApi.error && (
+                  <li className="px-1 py-2 text-[12.5px] text-ink-500">
+                    Laden …
+                  </li>
+                )}
+                {arcsApi.data && filteredCustomers.length === 0 && (
+                  <li className="px-1 py-2 text-[12.5px] text-ink-500">
+                    Keine Treffer
+                  </li>
+                )}
+                {filteredCustomers.map((c) => {
                   const active = selectedCustomerId === c.id;
                   return (
                     <li key={c.id}>
@@ -326,17 +440,17 @@ export default function BildaustrahlungKartePage() {
                             prev === c.id ? null : c.id,
                           )
                         }
-                        className={`flex w-full min-w-0 flex-col items-start gap-0.5 rounded-md border px-2 py-1.5 text-left transition ${
+                        className={`flex w-full min-w-0 flex-col items-start gap-0.5 px-1 py-2 text-left transition ${
                           active
-                            ? "border-ink-900 bg-ink-900/5"
-                            : "border-hair hover:bg-hair/40"
+                            ? "bg-ink-900/[0.04]"
+                            : "hover:bg-ink-50"
                         }`}
                         aria-pressed={active}
                       >
                         <span className="block w-full truncate font-medium text-ink-900">
                           {c.company || c.email}
                         </span>
-                        <span className="text-[11px] text-ink-500">
+                        <span className="text-[11.5px] text-ink-500">
                           {iso2Name(c.location)} ({c.location}) →{" "}
                           {fmtNumber(c.viewersTotal)} Requests aus{" "}
                           {c.viewersCountryCount} Ländern
@@ -348,9 +462,10 @@ export default function BildaustrahlungKartePage() {
               </ul>
             </div>
           )}
-        </div>
+        </aside>
       </div>
 
+      {/* Debug Modal */}
       {debugOpen && (
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center p-4 sm:items-center sm:p-6"
@@ -358,63 +473,111 @@ export default function BildaustrahlungKartePage() {
         >
           <button
             type="button"
-            className="absolute inset-0 bg-ink-900/50 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-ink-900/40 backdrop-blur-[2px]"
             aria-label="Schließen"
             onClick={() => setDebugOpen(false)}
           />
           <div
-            className="relative z-[81] flex max-h-[min(90vh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-hair bg-paper shadow-2xl"
+            className="relative z-[81] flex max-h-[min(90vh,720px)] w-full max-w-3xl flex-col overflow-hidden rounded-md border border-hair bg-paper shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="bildaustrahlung-debug-title"
           >
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-hair px-4 py-3">
-              <h2
-                id="bildaustrahlung-debug-title"
-                className="text-[14px] font-semibold text-ink-900"
-              >
-                API-Response (Debug)
-              </h2>
-              <div className="flex items-center gap-2">
-                <label className="inline-flex max-w-[min(100%,11rem)] items-center gap-1.5 text-[12px] text-ink-600">
-                  <input
-                    type="checkbox"
-                    checked={apiDiagnose}
-                    onChange={(e) => setApiDiagnose(e.target.checked)}
-                    className="rounded border-hair"
-                  />
-                  Volumen-Diagnose
-                </label>
-                <button
-                  type="button"
-                  onClick={copyDebug}
-                  className="rounded-md border border-hair bg-paper px-2.5 py-1.5 text-[12px] font-medium text-ink-700 transition hover:bg-hair/70"
+              <div>
+                <h2
+                  id="bildaustrahlung-debug-title"
+                  className="text-[14px] font-semibold text-ink-900"
                 >
-                  Kopieren
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDebugOpen(false)}
-                  className="rounded-md p-1.5 text-ink-500 transition hover:bg-hair/80 hover:text-ink-900"
-                  aria-label="Schließen"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                  API-Response (Debug)
+                </h2>
+                <p className="mt-0.5 text-[11.5px] text-ink-500">
+                  <strong className="text-ink-700">geo</strong>: Aggregat
+                  (Domains + Länder) ·{" "}
+                  <strong className="text-ink-700">arcs</strong>: Kunden mit
+                  Standort + Domain → Country-Breakdown
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setDebugOpen(false)}
+                className="rounded-md p-1.5 text-ink-500 transition hover:bg-hair/80 hover:text-ink-900"
+                aria-label="Schließen"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <p className="shrink-0 border-b border-hair/80 px-4 py-2 text-[11.5px] text-ink-500">
-              <strong className="text-ink-700">geo</strong>: gesamtes Bildaustrahlung-Aggregat (Domains, Länder).{" "}
-              <strong className="text-ink-700">arcs</strong>: pro Kunde mit{" "}
-              <code className="text-ink-700">location</code> +{" "}
-              <code className="text-ink-700">company</code>=index1-Domain das
-              Country-Breakdown – Quelle für die Bögen auf Karte.
-            </p>
-            <pre className="m-0 max-h-[min(75vh,600px)] overflow-auto p-4 text-left text-[11.5px] leading-relaxed text-ink-800 [tab-size:2]">
-              <code className="font-mono text-[11.5px]">{debugJson}</code>
+            <div className="flex shrink-0 items-center gap-3 border-b border-hair bg-paper/60 px-4 py-2">
+              <label className="inline-flex items-center gap-1.5 text-[12px] text-ink-700">
+                <input
+                  type="checkbox"
+                  checked={apiDiagnose}
+                  onChange={(e) => setApiDiagnose(e.target.checked)}
+                  className="rounded border-hair"
+                />
+                Volumen-Diagnose
+              </label>
+              <span className="ml-auto inline-flex items-center gap-1 text-[11.5px] text-ink-500">
+                <span className="rounded-sm bg-ink-50 px-1.5 py-0.5 font-mono text-[11px]">
+                  ESC
+                </span>{" "}
+                schließt
+              </span>
+              <button
+                type="button"
+                onClick={copyDebug}
+                className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1 text-[12px] font-medium text-ink-800 transition hover:bg-hair/60"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-accent-mint" />
+                    Kopiert
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    Kopieren
+                  </>
+                )}
+              </button>
+            </div>
+            <pre className="m-0 max-h-[min(75vh,560px)] overflow-auto bg-ink-50/40 p-4 text-left text-[11.5px] leading-relaxed text-ink-800 [tab-size:2]">
+              <code className="font-mono">{debugJson}</code>
             </pre>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={`relative -mb-px inline-flex items-center gap-1.5 px-3 py-2 text-[12.5px] font-medium transition ${
+        active
+          ? "border-b-2 border-ink-900 text-ink-900"
+          : "border-b-2 border-transparent text-ink-500 hover:text-ink-900"
+      }`}
+    >
+      {label}
+      <span className="rounded-sm bg-ink-50 px-1 py-px text-[10.5px] tabular-nums text-ink-600">
+        {count}
+      </span>
+    </button>
   );
 }

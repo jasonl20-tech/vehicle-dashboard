@@ -328,6 +328,60 @@ LIMIT ${MAX_IP_SQL_ROWS}
 FORMAT JSON`;
 }
 
+/**
+ * Robusteste Anreicherungs-Variante: nutzt `any()` statt `argMax(...)` —
+ * `argMax(col, ts)` ist in manchen Analytics-Engine-Konfigurationen
+ * problematisch (Type-Mismatch, nicht-supported Aggregate). `any()` liefert
+ * einen beliebigen Wert pro Gruppe, was für UA / Edge / imagePath ausreicht.
+ *
+ * Außerdem nehmen wir hier sowohl `index2` als auch `blob1` als Pfad mit:
+ * `any(ifNotEmpty(...))` ist nicht universell, daher werten wir beides aus
+ * und ziehen das nicht-leere Feld vor.
+ */
+function buildIpSqlEnrichedAny(
+  fromIso: string,
+  toIso: string,
+  fromDataset: string,
+  mode: Mode,
+  name: string,
+  ipCol: IpBlobCol,
+): string {
+  const tw = buildTimeWhere(fromIso, toIso);
+  const blob3NotEmpty = `blob3 != ${sqlString("")} AND blob3 != ${sqlString(
+    "NA",
+  )}`;
+  const colNotEmpty = `${ipCol} != ${sqlString("")}`;
+  const agg = `SELECT
+  ${ipCol} AS ip,
+  blob3 AS iso2,
+  SUM(_sample_interval) AS c,
+  ${avgMsExpr()},
+  any(blob5) AS ua,
+  any(blob9) AS edge,
+  any(blob1) AS pathBlob,
+  any(index2) AS pathIndex`;
+  if (mode === "dedicated") {
+    return `${agg}
+FROM ${name}
+WHERE ${tw}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
+  }
+  return `${agg}
+FROM ${fromDataset}
+WHERE ${tw} AND dataset = ${sqlString(name)}
+  AND ${colNotEmpty}
+  AND ${blob3NotEmpty}
+GROUP BY ${ipCol}, blob3
+ORDER BY c DESC
+LIMIT ${MAX_IP_SQL_ROWS}
+FORMAT JSON`;
+}
+
 function isIPv4String(s: string): boolean {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(
     s.trim().replaceAll(" ", ""),
@@ -379,13 +433,21 @@ function mergeRows(parts: RawIpRow[][]): Map<string, MergedIp> {
       const avgMs = pickAvgMs(rec) ?? parseOptFloat(rec);
       const ua = pickStr(rec, "ua", "UA", "userAgent", "useragent", "BLOB5", "blob5");
       const edge = pickStr(rec, "edge", "EDGE", "edgeCode", "edgecode", "BLOB9", "blob9");
+      // `imagePath` kann unter mehreren Schlüsseln im Response auftauchen, je
+      // nach Builder-Variante. Bei der `any()`-Variante kommen `pathIndex`
+      // (= index2) und `pathBlob` (= blob1) getrennt; wir bevorzugen
+      // pathIndex, weil das in den meisten Workern der schöne URL-Pfad ist.
       const imagePath = pickStr(
         rec,
         "imagePath",
         "imagepath",
         "IMAGEPATH",
+        "pathIndex",
+        "pathindex",
         "index2",
         "INDEX2",
+        "pathBlob",
+        "pathblob",
         "blob1",
         "BLOB1",
         "path",
@@ -472,6 +534,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     for (const mode of modes) {
       const tryEnrichedCascade = async () => {
         const builders = [
+          // 1) argMax + index2 — präziseste Variante (jüngste Werte)
           () =>
             buildIpSqlEnrichedPathIndex2(
               from,
@@ -481,8 +544,19 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
               name,
               ipCol,
             ),
+          // 2) argMax + blob1 — Fallback wenn index2 nicht da ist
           () =>
             buildIpSqlEnrichedBlobPath(
+              from,
+              to,
+              fromTable,
+              mode,
+              name,
+              ipCol,
+            ),
+          // 3) any() — robust gegen Engine-Limitationen, weniger präzise
+          () =>
+            buildIpSqlEnrichedAny(
               from,
               to,
               fromTable,
