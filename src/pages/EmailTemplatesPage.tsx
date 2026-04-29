@@ -45,6 +45,9 @@ const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
 const noopSetHeader: DashboardOutletContext["setHeaderTrailing"] = () => {};
 
 const ASIDE_COLLAPSE_KEY = "ui.emailTemplates.asideCollapsed";
+const VIEW_MODE_KEY = "ui.emailTemplates.viewMode";
+
+type ViewMode = "designer" | "html";
 
 function readAsideCollapsed(): boolean {
   if (typeof window === "undefined") return false;
@@ -58,6 +61,24 @@ function readAsideCollapsed(): boolean {
 function writeAsideCollapsed(v: boolean): void {
   try {
     window.localStorage.setItem(ASIDE_COLLAPSE_KEY, v ? "1" : "0");
+  } catch {
+    // bewusst leer
+  }
+}
+
+function readViewMode(): ViewMode {
+  if (typeof window === "undefined") return "designer";
+  try {
+    const v = window.localStorage.getItem(VIEW_MODE_KEY);
+    return v === "html" ? "html" : "designer";
+  } catch {
+    return "designer";
+  }
+}
+
+function writeViewMode(v: ViewMode): void {
+  try {
+    window.localStorage.setItem(VIEW_MODE_KEY, v);
   } catch {
     // bewusst leer
   }
@@ -123,10 +144,16 @@ export default function EmailTemplatesPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
+  // ---- Designer / HTML-Modus ----
+  const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
+  /** Aktueller body_html — Quelle der Wahrheit, wenn der User im HTML-Modus tippt. */
+  const [bodyHtml, setBodyHtml] = useState("");
+
   useEffect(() => {
     if (!one.data) return;
     setSubject(one.data.subject);
     setSavedAt(one.data.updated_at);
+    setBodyHtml(one.data.body_html);
     setDirty(false);
   }, [one.data?.id, one.data?.updated_at]);
 
@@ -222,17 +249,55 @@ export default function EmailTemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
+  /**
+   * Liefert den aktuellen body_html — abhängig vom Modus:
+   * - Designer: aus dem GrapesJS-Editor (frischer Stand)
+   * - HTML: aus dem `bodyHtml`-State (was im Textarea steht)
+   * Fallback: gespeicherter Wert.
+   */
+  const currentBodyHtml = useCallback((): string => {
+    if (viewMode === "designer") {
+      const fromDesigner = designerRef.current?.getHtml();
+      if (typeof fromDesigner === "string" && fromDesigner.length > 0) {
+        return fromDesigner;
+      }
+    }
+    return bodyHtml || one.data?.body_html || "";
+  }, [viewMode, bodyHtml, one.data?.body_html]);
+
+  const switchViewMode = useCallback(
+    (next: ViewMode) => {
+      setViewMode((prev) => {
+        if (prev === next) return prev;
+        if (prev === "designer" && next === "html") {
+          // Designer → HTML: aktuellen HTML-Stand aus GrapesJS in den Textarea ziehen
+          const html = designerRef.current?.getHtml();
+          if (typeof html === "string") setBodyHtml(html);
+        } else if (prev === "html" && next === "designer") {
+          // HTML → Designer: GrapesJS mit aktuellem Textarea-Inhalt neu laden
+          designerRef.current?.reload(bodyHtml);
+          // Layout neu berechnen, falls Canvas vorher in display:none war
+          requestAnimationFrame(() => designerRef.current?.refresh());
+        }
+        writeViewMode(next);
+        return next;
+      });
+    },
+    [bodyHtml],
+  );
+
   const onSave = useCallback(async () => {
     if (!one.data) return;
     setSaving(true);
     setSaveErr(null);
     try {
-      const html = designerRef.current?.getHtml() ?? one.data.body_html;
+      const html = currentBodyHtml() || one.data.body_html;
       const updated = await updateEmailTemplate(one.data.id, {
         subject: subject.trim() || one.data.subject,
         body_html: html,
       });
       setSavedAt(updated.updated_at);
+      setBodyHtml(updated.body_html);
       setDirty(false);
       list.reload();
     } catch (e) {
@@ -240,7 +305,7 @@ export default function EmailTemplatesPage() {
     } finally {
       setSaving(false);
     }
-  }, [one.data, subject, list]);
+  }, [one.data, subject, list, currentBodyHtml]);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -255,13 +320,14 @@ export default function EmailTemplatesPage() {
     setSaving(true);
     setSaveErr(null);
     try {
-      const html = designerRef.current?.getHtml() ?? one.data.body_html;
+      const html = currentBodyHtml() || one.data.body_html;
       const updated = await updateEmailTemplate(one.data.id, {
         new_id: next,
         subject: subject.trim() || one.data.subject,
         body_html: html,
       });
       setRenameOpen(false);
+      setBodyHtml(updated.body_html);
       setDirty(false);
       list.reload();
       setSearchParams({ id: updated.id }, { replace: true });
@@ -270,15 +336,38 @@ export default function EmailTemplatesPage() {
     } finally {
       setSaving(false);
     }
-  }, [one.data, renameValue, subject, list, setSearchParams]);
+  }, [one.data, renameValue, subject, list, setSearchParams, currentBodyHtml]);
 
   // ---- Variablen-Dropdown ----
+  const htmlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [varOpen, setVarOpen] = useState(false);
-  const insertVariable = useCallback((token: string) => {
-    setVarOpen(false);
-    designerRef.current?.insertHtml(token);
-    setDirty(true);
-  }, []);
+  const insertVariable = useCallback(
+    (token: string) => {
+      setVarOpen(false);
+      if (viewMode === "html") {
+        const ta = htmlTextareaRef.current;
+        if (ta) {
+          const start = ta.selectionStart ?? ta.value.length;
+          const end = ta.selectionEnd ?? ta.value.length;
+          const next =
+            ta.value.slice(0, start) + token + ta.value.slice(end);
+          setBodyHtml(next);
+          // Cursor hinter das eingefügte Token setzen
+          requestAnimationFrame(() => {
+            ta.focus();
+            const pos = start + token.length;
+            ta.setSelectionRange(pos, pos);
+          });
+        } else {
+          setBodyHtml((b) => b + token);
+        }
+      } else {
+        designerRef.current?.insertHtml(token);
+      }
+      setDirty(true);
+    },
+    [viewMode],
+  );
   const insertVariableIntoSubject = useCallback((token: string) => {
     setVarOpen(false);
     setSubject((s) => `${s}${s ? " " : ""}${token}`);
@@ -476,9 +565,12 @@ export default function EmailTemplatesPage() {
             title="Vorlagenliste einblenden"
             aria-label="Vorlagenliste einblenden"
             aria-expanded={false}
-            className="group hidden w-9 shrink-0 items-center justify-center border-b border-hair bg-white text-ink-500 transition hover:bg-ink-50/60 hover:text-ink-800 md:flex md:border-b-0 md:border-r"
+            className="group flex h-10 w-full shrink-0 items-center justify-center gap-1.5 border-b border-hair bg-ink-50 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-700 transition hover:bg-ink-100 hover:text-ink-900 md:h-auto md:w-10 md:flex-col md:gap-2 md:border-b-0 md:border-r md:py-3 md:text-[10px]"
           >
-            <ChevronsRight className="h-4 w-4" />
+            <ChevronsRight className="h-4 w-4 shrink-0" />
+            <span className="md:[writing-mode:vertical-rl] md:[transform:rotate(180deg)]">
+              Vorlagen
+            </span>
           </button>
         ) : (
           <aside className="flex w-full shrink-0 flex-col border-b border-hair bg-white md:w-[300px] md:border-b-0 md:border-r">
@@ -626,6 +718,47 @@ export default function EmailTemplatesPage() {
                   className="min-w-0 flex-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[13px] text-ink-900 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none disabled:opacity-60"
                 />
               </div>
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-hair bg-paper/60 px-3 py-1.5 sm:px-4">
+                <div
+                  role="tablist"
+                  aria-label="Bearbeitungsmodus"
+                  className="inline-flex rounded-md border border-hair bg-white p-0.5"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === "designer"}
+                    onClick={() => switchViewMode("designer")}
+                    disabled={!one.data}
+                    className={`rounded-[5px] px-2.5 py-1 text-[12px] font-medium transition disabled:opacity-50 ${
+                      viewMode === "designer"
+                        ? "bg-ink-900 text-white"
+                        : "text-ink-600 hover:text-ink-900"
+                    }`}
+                  >
+                    Designer
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === "html"}
+                    onClick={() => switchViewMode("html")}
+                    disabled={!one.data}
+                    className={`rounded-[5px] px-2.5 py-1 text-[12px] font-medium transition disabled:opacity-50 ${
+                      viewMode === "html"
+                        ? "bg-ink-900 text-white"
+                        : "text-ink-600 hover:text-ink-900"
+                    }`}
+                  >
+                    HTML
+                  </button>
+                </div>
+                <span className="text-[11px] tabular-nums text-ink-400">
+                  {viewMode === "html"
+                    ? `${bodyHtml.length.toLocaleString("de-DE")} Zeichen`
+                    : "Drag-and-Drop · Vorschau · CSS"}
+                </span>
+              </div>
               {(one.error || saveErr) && (
                 <p
                   className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose sm:px-5"
@@ -644,23 +777,52 @@ export default function EmailTemplatesPage() {
                   </div>
                 )}
                 {one.data && (
-                  <Suspense
-                    fallback={
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          Editor wird geladen…
-                        </p>
+                  <>
+                    {/*
+                      Designer wird gemountet sobald ein Template geladen ist
+                      und bleibt gemountet, auch wenn der HTML-Modus aktiv ist
+                      — so behält GrapesJS seinen internen Zustand. Wir
+                      verstecken ihn per `hidden`, statt zu unmounten.
+                    */}
+                    <div
+                      className={
+                        viewMode === "designer" ? "absolute inset-0" : "hidden"
+                      }
+                    >
+                      <Suspense
+                        fallback={
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Editor wird geladen…
+                            </p>
+                          </div>
+                        }
+                      >
+                        <EmailDesigner
+                          key={one.data.id}
+                          ref={designerRef}
+                          initialHtml={one.data.body_html}
+                          onDirtyChange={setDirty}
+                        />
+                      </Suspense>
+                    </div>
+                    {viewMode === "html" && (
+                      <div className="absolute inset-0 flex flex-col bg-ink-900">
+                        <textarea
+                          ref={htmlTextareaRef}
+                          value={bodyHtml}
+                          onChange={(e) => {
+                            setBodyHtml(e.target.value);
+                            setDirty(true);
+                          }}
+                          spellCheck={false}
+                          className="min-h-0 w-full flex-1 resize-none border-0 bg-ink-900 p-4 font-mono text-[12.5px] leading-relaxed text-ink-100 placeholder:text-ink-500 focus:outline-none focus:ring-0"
+                          placeholder="<table>… eigenes Email-HTML hier einfügen …</table>"
+                        />
                       </div>
-                    }
-                  >
-                    <EmailDesigner
-                      key={one.data.id}
-                      ref={designerRef}
-                      initialHtml={one.data.body_html}
-                      onDirtyChange={setDirty}
-                    />
-                  </Suspense>
+                    )}
+                  </>
                 )}
               </div>
             </>

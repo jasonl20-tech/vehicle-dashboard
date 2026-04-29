@@ -35,6 +35,12 @@ export type EmailDesignerHandle = {
   reload: (html: string) => void;
   undo: () => void;
   redo: () => void;
+  /**
+   * Erzwingt ein Re-Layout des GrapesJS-Canvas (iframe). Notwendig, wenn der
+   * Container vorher per `display:none` versteckt war (z. B. HTML-Modus
+   * aktiv) — sonst hat das Canvas u. U. 0×0-Dimensionen.
+   */
+  refresh: () => void;
 };
 
 type Props = {
@@ -240,6 +246,23 @@ const EmailDesigner = forwardRef<EmailDesignerHandle, Props>(
               redo?: () => void;
             };
             um?.redo?.();
+          } catch {
+            // bewusst leer
+          }
+        },
+        refresh: () => {
+          const ed = editorRef.current as
+            | (GrapesEditor & { refresh?: () => void })
+            | null;
+          if (!ed) return;
+          try {
+            ed.refresh?.();
+          } catch {
+            // bewusst leer
+          }
+          // Fallback: synthetisches resize, damit Canvas + Tools neu messen
+          try {
+            window.dispatchEvent(new Event("resize"));
           } catch {
             // bewusst leer
           }
