@@ -136,13 +136,14 @@ export default function App() {
           path="/zahlungslinks"
           element={<Navigate to="/zahlungen/zahlungslinks" replace />}
         />
-        <Route path="/emails" element={<Outlet />}>
-          <Route index element={<Navigate to="templates" replace />} />
-          <Route path="logs" element={<ModulePage />} />
-          <Route path="tracking" element={<ModulePage />} />
-          <Route path="templates" element={<EmailTemplatesPage />} />
-          <Route path="automator" element={<ModulePage />} />
-        </Route>
+        <Route
+          path="/emails"
+          element={<Navigate to="/emails/templates" replace />}
+        />
+        <Route path="/emails/logs" element={<ModulePage />} />
+        <Route path="/emails/tracking" element={<ModulePage />} />
+        <Route path="/emails/templates" element={<EmailTemplatesPage />} />
+        <Route path="/emails/automator" element={<ModulePage />} />
         <Route path="/website/blogs" element={<ModulePage />} />
         <Route path="/website/landing-pages" element={<ModulePage />} />
         <Route path="/website/faq" element={<ModulePage />} />

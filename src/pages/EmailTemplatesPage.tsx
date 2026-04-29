@@ -40,6 +40,8 @@ const EmailDesigner = lazy(() => import("../components/emails/EmailDesigner"));
 const PAGE_SIZE = 200;
 const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
 
+const noopSetHeader: DashboardOutletContext["setHeaderTrailing"] = () => {};
+
 function fmtWhen(s: string | null | undefined): string {
   if (!s?.trim()) return "—";
   const raw = s.trim();
@@ -58,7 +60,11 @@ function fmtWhen(s: string | null | undefined): string {
 }
 
 export default function EmailTemplatesPage() {
-  const { setHeaderTrailing } = useOutletContext<DashboardOutletContext>();
+  // Fail-safe: bei geschachtelten Outlet-Layouts kann der Context auf
+  // undefined fallen (innerer <Outlet /> ohne `context`-Prop überschreibt
+  // den DashboardLayout-Context). Deshalb defensiv gegen `undefined`.
+  const ctx = useOutletContext<DashboardOutletContext | undefined>();
+  const setHeaderTrailing = ctx?.setHeaderTrailing ?? noopSetHeader;
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get("id") ?? "";
 
