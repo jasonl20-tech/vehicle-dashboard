@@ -528,18 +528,20 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 };
 
 // ─── Schreibende Verben außer POST: 405 ───────────────────────────────
+//
+// Wichtig: `new Response(...)` darf laut Cloudflare-Runtime nur in einem
+// Handler erzeugt werden, nicht im Modul-Scope. Daher Factory-Funktion.
 
-const NOT_ALLOWED: Response = jsonResponse(
-  {
-    error:
-      "Diese Methode ist auf /api/emails/jobs nicht erlaubt. Bearbeitung & Status-Änderungen erfolgen ausschließlich über den externen Mail-Worker.",
-  },
-  { status: 405, headers: { Allow: "GET, POST" } },
-);
+function notAllowed(): Response {
+  return jsonResponse(
+    {
+      error:
+        "Diese Methode ist auf /api/emails/jobs nicht erlaubt. Bearbeitung & Status-Änderungen erfolgen ausschließlich über den externen Mail-Worker.",
+    },
+    { status: 405, headers: { Allow: "GET, POST" } },
+  );
+}
 
-export const onRequestPut: PagesFunction<AuthEnv> = async () =>
-  NOT_ALLOWED.clone();
-export const onRequestPatch: PagesFunction<AuthEnv> = async () =>
-  NOT_ALLOWED.clone();
-export const onRequestDelete: PagesFunction<AuthEnv> = async () =>
-  NOT_ALLOWED.clone();
+export const onRequestPut: PagesFunction<AuthEnv> = async () => notAllowed();
+export const onRequestPatch: PagesFunction<AuthEnv> = async () => notAllowed();
+export const onRequestDelete: PagesFunction<AuthEnv> = async () => notAllowed();

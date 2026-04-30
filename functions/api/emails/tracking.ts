@@ -392,18 +392,16 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 };
 
-const NOT_ALLOWED: Response = jsonResponse(
-  {
-    error: "Tracking-Statistiken sind read-only.",
-  },
-  { status: 405, headers: { Allow: "GET" } },
-);
+// `new Response(...)` darf laut Cloudflare-Runtime nur in einem
+// Handler erzeugt werden, nicht im Modul-Scope. Daher Factory-Funktion.
+function notAllowed(): Response {
+  return jsonResponse(
+    { error: "Tracking-Statistiken sind read-only." },
+    { status: 405, headers: { Allow: "GET" } },
+  );
+}
 
-export const onRequestPost: PagesFunction<AuthEnv> = async () =>
-  NOT_ALLOWED.clone();
-export const onRequestPut: PagesFunction<AuthEnv> = async () =>
-  NOT_ALLOWED.clone();
-export const onRequestPatch: PagesFunction<AuthEnv> = async () =>
-  NOT_ALLOWED.clone();
-export const onRequestDelete: PagesFunction<AuthEnv> = async () =>
-  NOT_ALLOWED.clone();
+export const onRequestPost: PagesFunction<AuthEnv> = async () => notAllowed();
+export const onRequestPut: PagesFunction<AuthEnv> = async () => notAllowed();
+export const onRequestPatch: PagesFunction<AuthEnv> = async () => notAllowed();
+export const onRequestDelete: PagesFunction<AuthEnv> = async () => notAllowed();
