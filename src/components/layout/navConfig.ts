@@ -79,7 +79,7 @@ export const NAV_PRIMARY: NavItem[] = [
       { label: "Email Logs", to: "/emails/logs" },
       { label: "Email Tracking", to: "/emails/tracking" },
       { label: "Email Templates", to: "/emails/templates" },
-      { label: "Email manuell", to: "/emails/manuell" },
+      { label: "Email Sending", to: "/emails/sending" },
       { label: "Email Automator", to: "/emails/automator" },
     ],
   },

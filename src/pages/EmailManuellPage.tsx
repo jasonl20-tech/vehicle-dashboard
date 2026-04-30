@@ -1,37 +1,42 @@
 /**
- * Email manuell — Compose-Window im Stil eines Mail-Clients.
+ * Email Sending — Compose-Window im Stil eines Mail-Clients.
  *
  * Schreibt einen `pending`-Job in `email_jobs` (siehe POST
  * /api/emails/jobs). Den Versand selbst inkl. `tracking_id`-Vergabe
  * übernimmt der externe Mail-Worker.
  *
- * Layout-Idee (Gmail / Apple-Mail-artig):
- *   - Oberhalb: Kompakte Header-Felder (To · From · Subject · Template)
- *   - Body-Bereich: Vorschau-Iframe direkt in der Mitte (das ist das
- *     „Schreibblatt") — bei aktivem Custom-HTML-Modus klappt unten
- *     der HTML-Editor auf
- *   - Rechte schmale Sidebar: Variablen + geplanter Zeitpunkt
- *   - Footer-Bar: Aktionen (Senden / Reset)
+ * Body-Logik:
+ *   - Wenn der Editor Text enthält, wird dieser als `custom_body_html`
+ *     an die API geschickt.
+ *   - Plain-Text wird automatisch in HTML gewrappt (Absätze /
+ *     Zeilenumbrüche), damit der Mail-Worker valides HTML versendet.
+ *   - Wenn der Text bereits HTML-Tags enthält, wird er unverändert
+ *     übernommen.
+ *   - Wenn der Editor leer ist und ein Template gewählt wurde, gilt
+ *     der Template-Body (`custom_body_html` bleibt leer).
  */
 import {
   AlertCircle,
   Calendar,
   CheckCircle2,
   ChevronDown,
-  Code2,
   ExternalLink,
   Eye,
   Loader2,
+  Pencil,
   Plus,
   RefreshCw,
   Send,
   Trash2,
+  Type,
   X,
 } from "lucide-react";
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Link, useOutletContext } from "react-router-dom";
@@ -62,6 +67,35 @@ const DEFAULT_VARS: Variable[] = [
   { key: "company", value: "" },
 ];
 
+const HTML_TAG_RE = /<\/?\w[\w-]*(\s|>|\/>)/;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
+ * Wandelt freien Editor-Inhalt in HTML.
+ *   - Wenn HTML-Tags erkannt werden → unverändert durchreichen.
+ *   - Sonst Plain-Text: Absätze (Leerzeile) → `<p>`, Zeilenumbruch
+ *     innerhalb eines Absatzes → `<br>`. Eingerahmt in einem schlichten
+ *     Wrapper, damit der Versand-Worker valides HTML kriegt.
+ */
+function bodyEditorToHtml(s: string): string {
+  const t = s.replace(/\r\n/g, "\n");
+  if (!t.trim()) return "";
+  if (HTML_TAG_RE.test(t)) return t;
+  const paragraphs = t.split(/\n{2,}/).map((p) => {
+    const inner = escapeHtml(p).replace(/\n/g, "<br>");
+    return `  <p style="margin:0 0 1em 0;">${inner}</p>`;
+  });
+  return `<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#222;">
+${paragraphs.join("\n")}
+</div>`;
+}
+
 export default function EmailManuellPage() {
   const ctx = useOutletContext<DashboardOutletContext | undefined>();
   const setHeaderTrailing = ctx?.setHeaderTrailing ?? noopSetHeader;
@@ -70,19 +104,20 @@ export default function EmailManuellPage() {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [templateId, setTemplateId] = useState<string>("");
   const [customSubject, setCustomSubject] = useState("");
-  const [customBodyHtml, setCustomBodyHtml] = useState("");
+  const [bodyInput, setBodyInput] = useState("");
   const [variables, setVariables] = useState<Variable[]>(DEFAULT_VARS);
   const [scheduledAt, setScheduledAt] = useState<string>("");
   const [fromEmail, setFromEmail] = useState<string>(DEFAULT_FROM_EMAIL);
   const [fromName, setFromName] = useState<string>("VehicleImagery");
-  const [showHtmlEditor, setShowHtmlEditor] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
 
-  // ---- API: Liste der Templates ----
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // ---- API: Templates ----
   const templatesUrl = useMemo(() => emailTemplatesListUrl({ limit: 200 }), []);
   const templates = useApi<EmailTemplatesListResponse>(templatesUrl);
 
-  // Vorschau für ausgewähltes Template
   const previewUrl = templateId ? emailTemplateUrl(templateId) : null;
   const preview = useApi<EmailTemplate>(previewUrl);
 
@@ -95,7 +130,7 @@ export default function EmailManuellPage() {
     () => (
       <div className="flex min-w-0 w-full flex-1 items-center justify-end gap-1.5">
         <span className="hidden truncate text-[11.5px] tabular-nums text-night-500 md:block">
-          Erstellt einen `pending`-Job · externer Mail-Worker versendet
+          Erstellt einen `pending`-Job · Versand erfolgt durch externen Worker
         </span>
         <button
           type="button"
@@ -104,7 +139,9 @@ export default function EmailManuellPage() {
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Templates neu laden"
         >
-          <RefreshCw className={`h-4 w-4 ${templates.loading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-4 w-4 ${templates.loading ? "animate-spin" : ""}`}
+          />
         </button>
       </div>
     ),
@@ -140,9 +177,41 @@ export default function EmailManuellPage() {
     });
   }, []);
 
+  /** Fügt Token an aktueller Cursor-Position ein. */
+  const insertTokenAtCursor = useCallback((token: string) => {
+    const ta = editorRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart ?? ta.value.length;
+    const end = ta.selectionEnd ?? ta.value.length;
+    const before = ta.value.slice(0, start);
+    const after = ta.value.slice(end);
+    const next = `${before}${token}${after}`;
+    setBodyInput(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = before.length + token.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  }, []);
+
+  // ---- Live-Vorschau ----
+  const editorHtml = useMemo(() => bodyEditorToHtml(bodyInput), [bodyInput]);
+  const isHtmlSource = useMemo(
+    () => HTML_TAG_RE.test(bodyInput),
+    [bodyInput],
+  );
+  const previewHtml = useMemo(() => {
+    if (editorHtml) return editorHtml;
+    return preview.data?.body_html || "";
+  }, [editorHtml, preview.data?.body_html]);
+  const previewSubject = useMemo(
+    () => customSubject.trim() || preview.data?.subject?.trim() || "",
+    [customSubject, preview.data?.subject],
+  );
+
   // ---- Validierung ----
   const recipientValid = EMAIL_RE.test(recipientEmail.trim());
-  const hasTemplateOrBody = !!templateId || !!customBodyHtml.trim();
+  const hasTemplateOrBody = !!templateId || !!bodyInput.trim();
   const canSubmit =
     recipientValid && hasTemplateOrBody && !submitting && !submitted;
 
@@ -153,7 +222,9 @@ export default function EmailManuellPage() {
       return;
     }
     if (!hasTemplateOrBody) {
-      setError("Wähle ein Template oder schreibe einen Custom-Body.");
+      setError(
+        "Schreibe eine Nachricht in den Editor oder wähle eine Vorlage.",
+      );
       return;
     }
 
@@ -166,12 +237,14 @@ export default function EmailManuellPage() {
       recipient_data[k] = v.value;
     }
 
+    const customBodyHtml = bodyEditorToHtml(bodyInput) || null;
+
     const input: CreateEmailJobInput = {
       recipient_email: recipientEmail.trim(),
       recipient_data,
       template_id: templateId || null,
       custom_subject: customSubject.trim() || null,
-      custom_body_html: customBodyHtml.trim() || null,
+      custom_body_html: customBodyHtml,
       scheduled_at: scheduledAt
         ? scheduledAt.replace("T", " ") + ":00"
         : null,
@@ -195,7 +268,7 @@ export default function EmailManuellPage() {
     variables,
     templateId,
     customSubject,
-    customBodyHtml,
+    bodyInput,
     scheduledAt,
     fromEmail,
     fromName,
@@ -208,18 +281,23 @@ export default function EmailManuellPage() {
     setVariables(DEFAULT_VARS);
     setTemplateId("");
     setCustomSubject("");
-    setCustomBodyHtml("");
+    setBodyInput("");
     setScheduledAt("");
-    setShowHtmlEditor(false);
   }, []);
 
-  const previewHtml = customBodyHtml.trim() || preview.data?.body_html || "";
-  const previewSubject =
-    customSubject.trim() || preview.data?.subject?.trim() || "";
+  // ⌘/Ctrl + Enter = senden
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (canSubmit) handleSubmit();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canSubmit, handleSubmit]);
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-paper">
-      {/* Top Notification Bars */}
       {error && (
         <p
           className="shrink-0 border-b border-rose-500/30 bg-rose-500/10 px-4 py-1.5 text-[12.5px] text-rose-700 sm:px-8"
@@ -244,7 +322,6 @@ export default function EmailManuellPage() {
         <>
           {/* Compose-Header (Mail-Client-Style) */}
           <div className="shrink-0 border-b border-hair bg-white">
-            {/* From */}
             <FieldRow label="Von">
               <input
                 type="text"
@@ -262,7 +339,6 @@ export default function EmailManuellPage() {
               />
             </FieldRow>
 
-            {/* To */}
             <FieldRow
               label="An"
               required
@@ -282,7 +358,6 @@ export default function EmailManuellPage() {
               )}
             </FieldRow>
 
-            {/* Template */}
             <FieldRow label="Vorlage">
               <select
                 value={templateId}
@@ -308,7 +383,6 @@ export default function EmailManuellPage() {
               )}
             </FieldRow>
 
-            {/* Subject */}
             <FieldRow label="Betreff">
               <input
                 type="text"
@@ -321,7 +395,6 @@ export default function EmailManuellPage() {
               />
             </FieldRow>
 
-            {/* Advanced (Geplanter Zeitpunkt + Toggles) */}
             <div className="flex flex-wrap items-center gap-3 px-4 py-2 text-[12px] sm:px-6">
               <button
                 type="button"
@@ -356,117 +429,146 @@ export default function EmailManuellPage() {
                       </button>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowHtmlEditor((v) => !v)}
-                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] transition ${
-                      showHtmlEditor
-                        ? "border-ink-900 bg-ink-900 text-white"
-                        : "border-hair bg-white text-ink-700 hover:bg-ink-50"
-                    }`}
-                  >
-                    <Code2 className="h-3.5 w-3.5" />
-                    Custom HTML
-                  </button>
                   <span className="text-[11px] text-ink-400">
                     Geplant in UTC · leer = sofort
                   </span>
                 </>
               )}
+              <span className="ml-auto text-[11px] text-ink-400">
+                ⌘/Ctrl + Enter = senden
+              </span>
             </div>
           </div>
 
-          {/* Body — Vorschau + (optional) HTML-Editor + rechte Sidebar */}
+          {/* Body — Editor (links) + Vorschau (rechts) + Variablen-Sidebar */}
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            {/* Mitte: Body */}
-            <div className="flex min-h-0 flex-1 flex-col bg-white">
-              {!hasTemplateOrBody ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-                  <Eye className="h-8 w-8 text-ink-300" />
-                  <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-                    Keine Vorlage · kein Custom-Body
-                  </p>
-                  <p className="max-w-sm text-[13px] leading-relaxed text-ink-500">
-                    Wähle oben eine Vorlage oder aktiviere unter „Erweitert"
-                    den Custom-HTML-Modus, um die Mail zu schreiben.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex min-h-0 flex-1 flex-col">
-                  {/* Subject-Mini-Preview */}
-                  {previewSubject && (
-                    <div className="shrink-0 border-b border-hair bg-ink-50/40 px-6 py-2 text-[12px] text-ink-500">
-                      Betreff:{" "}
-                      <span className="text-ink-800">{previewSubject}</span>
-                    </div>
+            {/* Editor */}
+            <section className="flex min-h-0 flex-1 flex-col bg-white">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-hair px-4 py-1.5 sm:px-6">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+                  <Pencil className="h-3 w-3" /> Nachricht
+                  {isHtmlSource && (
+                    <span
+                      className="rounded-full bg-ink-900 px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-[0.12em] text-white"
+                      title="HTML-Tags erkannt — Inhalt wird unverändert übernommen."
+                    >
+                      HTML
+                    </span>
                   )}
-                  {showHtmlEditor ? (
-                    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-                      <textarea
-                        value={customBodyHtml}
-                        onChange={(e) => setCustomBodyHtml(e.target.value)}
-                        spellCheck={false}
-                        placeholder={"<p>Hallo {{name}},</p>\n<p>…</p>"}
-                        className="min-h-0 flex-1 resize-none border-0 border-b border-hair bg-paper/40 px-4 py-3 font-mono text-[12.5px] leading-relaxed text-ink-900 focus:outline-none lg:w-1/2 lg:border-b-0 lg:border-r"
-                      />
-                      <div className="min-h-[40vh] flex-1 lg:w-1/2">
-                        {preview.loading && templateId && !customBodyHtml.trim() ? (
-                          <p className="flex items-center justify-center gap-1.5 py-10 text-[12px] text-ink-500">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Lade Template…
-                          </p>
-                        ) : (
-                          <iframe
-                            title="Email-Vorschau"
-                            srcDoc={previewHtml}
-                            sandbox=""
-                            className="h-full w-full border-0 bg-white"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  ) : preview.loading && templateId && !customBodyHtml.trim() ? (
-                    <p className="flex flex-1 items-center justify-center gap-1.5 text-[12px] text-ink-500">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Lade Template…
-                    </p>
-                  ) : (
-                    <iframe
-                      title="Email-Vorschau"
-                      srcDoc={previewHtml}
-                      sandbox=""
-                      className="min-h-0 flex-1 border-0 bg-white"
-                    />
+                  {!isHtmlSource && bodyInput.trim() && (
+                    <span
+                      className="rounded-full border border-hair px-1.5 py-0.5 text-[9.5px] font-medium uppercase tracking-[0.12em] text-ink-500"
+                      title="Plain-Text — wird beim Senden in HTML gewrappt."
+                    >
+                      Text
+                    </span>
                   )}
                 </div>
-              )}
-            </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-ink-500">
+                  <span className="tabular-nums">
+                    {bodyInput.length.toLocaleString("de-DE")} Zeichen
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewOpen((v) => !v)}
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 transition lg:hidden ${
+                      previewOpen
+                        ? "border-ink-900 bg-ink-900 text-white"
+                        : "border-hair bg-white text-ink-700 hover:bg-ink-50"
+                    }`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    Vorschau
+                  </button>
+                </div>
+              </div>
+              <textarea
+                ref={editorRef}
+                value={bodyInput}
+                onChange={(e) => setBodyInput(e.target.value)}
+                spellCheck
+                placeholder={
+                  templateId
+                    ? "Eigenen Text schreiben (überschreibt das Template) …"
+                    : "Schreib einfach drauf los — Plain-Text oder HTML.\n\nLeerzeile = neuer Absatz.\nUnterstützte Variablen kannst du mit {{name}} einfügen."
+                }
+                className={`min-h-0 flex-1 resize-none border-0 bg-white px-4 py-3 text-[14px] leading-relaxed text-ink-900 placeholder:text-ink-400 focus:outline-none sm:px-6 ${
+                  isHtmlSource
+                    ? "font-mono text-[12.5px] leading-relaxed"
+                    : ""
+                }`}
+              />
+            </section>
 
-            {/* Rechte Sidebar: Variablen */}
-            <aside className="hidden w-[300px] shrink-0 flex-col border-l border-hair bg-paper/60 lg:flex">
+            {/* Vorschau */}
+            <section
+              className={`flex min-h-0 flex-1 flex-col border-hair bg-white lg:w-[44%] lg:max-w-[44%] lg:border-l ${
+                previewOpen ? "" : "hidden lg:flex"
+              }`}
+            >
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-hair px-4 py-1.5 sm:px-6">
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+                  <Eye className="h-3 w-3" /> Vorschau
+                </div>
+                <span className="truncate text-[11px] text-ink-500">
+                  {previewSubject || "ohne Betreff"}
+                </span>
+              </div>
+              {!previewHtml ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
+                  <Type className="h-7 w-7 text-ink-300" />
+                  <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+                    Noch nichts geschrieben
+                  </p>
+                  <p className="max-w-xs text-[12.5px] leading-relaxed text-ink-500">
+                    Sobald du Text in den Editor links schreibst (oder eine
+                    Vorlage wählst), erscheint hier die Live-Vorschau.
+                  </p>
+                </div>
+              ) : preview.loading && templateId && !bodyInput.trim() ? (
+                <p className="flex flex-1 items-center justify-center gap-1.5 text-[12px] text-ink-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Lade Template…
+                </p>
+              ) : (
+                <iframe
+                  title="Email-Vorschau"
+                  srcDoc={previewHtml}
+                  sandbox=""
+                  className="min-h-0 flex-1 border-0 bg-white"
+                />
+              )}
+            </section>
+
+            {/* Variablen-Sidebar (rechts) */}
+            <aside className="hidden w-[280px] shrink-0 flex-col border-l border-hair bg-paper/60 lg:flex">
               <div className="shrink-0 border-b border-hair px-4 py-3">
                 <h3 className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-500">
                   Variablen
                 </h3>
                 <p className="mt-1 text-[11.5px] leading-relaxed text-ink-500">
-                  Werden als <code className="font-mono text-[10.5px]">recipient_data</code>{" "}
+                  Werden als{" "}
+                  <code className="font-mono text-[10.5px]">recipient_data</code>{" "}
                   gespeichert. Der Mail-Worker ersetzt{" "}
                   <code className="font-mono text-[10.5px]">{`{{key}}`}</code> im
-                  Body.
+                  Body und Betreff.
                 </p>
               </div>
 
               <div className="shrink-0 border-b border-hair px-4 py-3">
                 <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-                  Bekannte Tokens
+                  Tokens einfügen
                 </p>
                 <div className="flex flex-wrap gap-1">
                   {EMAIL_TEMPLATE_VARIABLES.map((v) => (
                     <button
                       key={v.token}
                       type="button"
-                      onClick={() => fillSuggestion(v.token)}
-                      title={v.label}
+                      onClick={() => {
+                        insertTokenAtCursor(v.token);
+                        fillSuggestion(v.token);
+                      }}
+                      title={`${v.label} — klick: in Editor einfügen`}
                       className="rounded border border-hair bg-white px-1.5 py-0.5 font-mono text-[10.5px] text-ink-700 hover:bg-ink-50"
                     >
                       {v.token}
@@ -482,14 +584,18 @@ export default function EmailManuellPage() {
                       <input
                         type="text"
                         value={v.key}
-                        onChange={(e) => updateVariable(idx, { key: e.target.value })}
+                        onChange={(e) =>
+                          updateVariable(idx, { key: e.target.value })
+                        }
                         placeholder="key"
-                        className="w-24 shrink-0 rounded border border-hair bg-white px-1.5 py-1 font-mono text-[11.5px] text-ink-900 focus:border-ink-400 focus:outline-none"
+                        className="w-20 shrink-0 rounded border border-hair bg-white px-1.5 py-1 font-mono text-[11.5px] text-ink-900 focus:border-ink-400 focus:outline-none"
                       />
                       <input
                         type="text"
                         value={v.value}
-                        onChange={(e) => updateVariable(idx, { value: e.target.value })}
+                        onChange={(e) =>
+                          updateVariable(idx, { value: e.target.value })
+                        }
                         placeholder="Wert"
                         className="min-w-0 flex-1 rounded border border-hair bg-white px-1.5 py-1 text-[11.5px] text-ink-900 focus:border-ink-400 focus:outline-none"
                       />
@@ -516,7 +622,7 @@ export default function EmailManuellPage() {
             </aside>
           </div>
 
-          {/* Mobile-Variablen (nur bei kleinem Screen) */}
+          {/* Mobile-Variablen */}
           <details className="shrink-0 border-t border-hair bg-white lg:hidden">
             <summary className="cursor-pointer px-4 py-2 text-[12px] text-ink-700">
               Variablen ({variables.length})
@@ -527,7 +633,10 @@ export default function EmailManuellPage() {
                   <button
                     key={v.token}
                     type="button"
-                    onClick={() => fillSuggestion(v.token)}
+                    onClick={() => {
+                      insertTokenAtCursor(v.token);
+                      fillSuggestion(v.token);
+                    }}
                     className="rounded border border-hair bg-white px-1.5 py-0.5 font-mono text-[10.5px] text-ink-700 hover:bg-ink-50"
                   >
                     {v.token}
@@ -540,14 +649,18 @@ export default function EmailManuellPage() {
                     <input
                       type="text"
                       value={v.key}
-                      onChange={(e) => updateVariable(idx, { key: e.target.value })}
+                      onChange={(e) =>
+                        updateVariable(idx, { key: e.target.value })
+                      }
                       placeholder="key"
-                      className="w-24 shrink-0 rounded border border-hair bg-white px-1.5 py-1 font-mono text-[11.5px] text-ink-900 focus:outline-none"
+                      className="w-20 shrink-0 rounded border border-hair bg-white px-1.5 py-1 font-mono text-[11.5px] text-ink-900 focus:outline-none"
                     />
                     <input
                       type="text"
                       value={v.value}
-                      onChange={(e) => updateVariable(idx, { value: e.target.value })}
+                      onChange={(e) =>
+                        updateVariable(idx, { value: e.target.value })
+                      }
                       placeholder="Wert"
                       className="min-w-0 flex-1 rounded border border-hair bg-white px-1.5 py-1 text-[11.5px] text-ink-900 focus:outline-none"
                     />
@@ -576,13 +689,15 @@ export default function EmailManuellPage() {
           <div className="shrink-0 border-t border-hair bg-white px-4 py-3 sm:px-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-[11.5px] text-ink-500">
-                {recipientValid ? (
+                {recipientValid && hasTemplateOrBody ? (
                   <>
                     <CheckCircle2 className="mr-1 inline h-3 w-3 text-emerald-500" />
                     bereit · {scheduledAt ? "geplant" : "wird sofort übergeben"}
                   </>
+                ) : !recipientValid ? (
+                  "Empfänger fehlt"
                 ) : (
-                  <>Empfänger fehlt</>
+                  "Nachricht oder Vorlage fehlt"
                 )}
               </p>
               <div className="flex items-center gap-1.5">
@@ -673,7 +788,10 @@ function SuccessPanel({
         >
           {job.id}
         </p>
-        <p className="mt-1 truncate text-[12.5px] text-ink-700" title={job.recipient_email}>
+        <p
+          className="mt-1 truncate text-[12.5px] text-ink-700"
+          title={job.recipient_email}
+        >
           → {job.recipient_email}
         </p>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">

@@ -148,7 +148,11 @@ export default function App() {
         <Route path="/emails/logs/:id" element={<EmailLogDetailPage />} />
         <Route path="/emails/tracking" element={<EmailTrackingPage />} />
         <Route path="/emails/templates" element={<EmailTemplatesPage />} />
-        <Route path="/emails/manuell" element={<EmailManuellPage />} />
+        <Route path="/emails/sending" element={<EmailManuellPage />} />
+        <Route
+          path="/emails/manuell"
+          element={<Navigate to="/emails/sending" replace />}
+        />
         <Route path="/emails/automator" element={<ModulePage />} />
         <Route path="/website/blogs" element={<ModulePage />} />
         <Route path="/website/landing-pages" element={<ModulePage />} />
