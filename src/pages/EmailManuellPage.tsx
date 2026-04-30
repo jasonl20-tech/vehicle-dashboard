@@ -136,7 +136,7 @@ export default function EmailManuellPage() {
           type="button"
           onClick={() => templates.reload()}
           disabled={templates.loading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Templates neu laden"
         >
           <RefreshCw
@@ -321,7 +321,7 @@ export default function EmailManuellPage() {
       ) : (
         <>
           {/* Compose-Header (Mail-Client-Style) */}
-          <div className="shrink-0 border-b border-hair bg-white">
+          <div className="shrink-0 border-b border-hair bg-white animate-fade-down">
             <FieldRow label="Von">
               <input
                 type="text"
@@ -704,7 +704,7 @@ export default function EmailManuellPage() {
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-700 hover:bg-ink-50"
+                  className="press inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-700 transition hover:bg-ink-50"
                 >
                   Zurücksetzen
                 </button>
@@ -712,7 +712,7 @@ export default function EmailManuellPage() {
                   type="button"
                   onClick={handleSubmit}
                   disabled={!canSubmit}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="btn-shine press inline-flex items-center justify-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[13px] font-medium text-white shadow-[0_4px_16px_-6px_rgba(13,13,15,0.3)] transition hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
                 >
                   {submitting ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -749,11 +749,11 @@ function FieldRow({
 }) {
   return (
     <div
-      className={`flex items-center gap-3 border-b border-hair px-4 py-2.5 sm:px-6 ${
+      className={`group flex items-center gap-3 border-b border-hair px-4 py-2.5 transition-colors duration-200 sm:px-6 focus-within:bg-paper/40 ${
         warn ? "bg-rose-500/5" : ""
       }`}
     >
-      <span className="w-12 shrink-0 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-400">
+      <span className="w-12 shrink-0 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-400 transition-colors group-focus-within:text-ink-700">
         {label}
         {required && <span className="ml-0.5 text-rose-500">*</span>}
       </span>
@@ -770,9 +770,9 @@ function SuccessPanel({
   onReset: () => void;
 }) {
   return (
-    <div className="flex h-full flex-1 items-center justify-center bg-white px-6 py-10">
-      <div className="max-w-md text-center">
-        <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700">
+    <div className="flex h-full flex-1 items-center justify-center bg-white px-6 py-10 aurora-backdrop">
+      <div className="max-w-md text-center animate-scale-in">
+        <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 animate-pulse-soft">
           <CheckCircle2 className="h-6 w-6" />
         </div>
         <h2 className="mt-4 text-[18px] font-semibold text-ink-900">
@@ -797,7 +797,7 @@ function SuccessPanel({
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <Link
             to={`/emails/logs/${encodeURIComponent(job.id)}`}
-            className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:bg-ink-50"
+            className="press inline-flex items-center gap-1 rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 transition hover:bg-ink-50"
           >
             <ExternalLink className="h-3.5 w-3.5" />
             Im Email-Log öffnen
@@ -805,7 +805,7 @@ function SuccessPanel({
           <button
             type="button"
             onClick={onReset}
-            className="inline-flex items-center gap-1 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800"
+            className="btn-shine press inline-flex items-center gap-1 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-ink-800"
           >
             <Plus className="h-3.5 w-3.5" />
             Weitere Mail

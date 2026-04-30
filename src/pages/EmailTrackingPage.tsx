@@ -35,6 +35,7 @@ import {
   YAxis,
 } from "recharts";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
+import { CountUp } from "../components/Premium";
 import { fmtNumber, toAeTimestamp, useApi } from "../lib/customerApi";
 import { parseTrackingMetadata } from "../lib/emailJobsApi";
 import {
@@ -177,7 +178,7 @@ export default function EmailTrackingPage() {
           type="button"
           onClick={() => stats.reload()}
           disabled={stats.loading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Neu laden"
         >
           <RefreshCw
@@ -217,7 +218,7 @@ export default function EmailTrackingPage() {
       )}
 
       {/* Mobile-Range-Switch */}
-      <div className="shrink-0 border-b border-hair bg-white px-4 py-2 sm:hidden">
+      <div className="shrink-0 glass-paper border-b border-hair px-4 py-2 sm:hidden">
         <div role="tablist" className="grid grid-cols-5 gap-1">
           {RANGES.map((r) => (
             <button
@@ -227,7 +228,7 @@ export default function EmailTrackingPage() {
                 setRangeId(r.id);
                 writeRange(r.id);
               }}
-              className={`rounded px-1 py-1 text-[10.5px] transition ${
+              className={`press rounded px-1 py-1 text-[10.5px] transition ${
                 rangeId === r.id
                   ? "bg-ink-900 text-white"
                   : "border border-hair bg-white text-ink-600 hover:text-ink-900"
@@ -240,12 +241,12 @@ export default function EmailTrackingPage() {
       </div>
 
       {/* Big Numbers — flach, ohne Boxen */}
-      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8 sm:py-8">
+      <section className="aurora-backdrop relative overflow-hidden border-b border-hair px-4 py-6 sm:px-8 sm:py-8 animate-fade-down">
         <BigNumbers loading={stats.loading} data={data} />
       </section>
 
       {/* Verlauf — großes AreaChart */}
-      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8">
+      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8 animate-fade-up">
         <Heading
           title="Verlauf"
           subtitle="Opens & Clicks pro Tag"
@@ -269,7 +270,7 @@ export default function EmailTrackingPage() {
       </section>
 
       {/* Stunden-Verteilung — echtes BarChart */}
-      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8">
+      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8 animate-fade-up">
         <Heading
           title="Aktivität nach Stunde"
           subtitle="Stunde des Tages (UTC) — gestapelt"
@@ -280,7 +281,7 @@ export default function EmailTrackingPage() {
       </section>
 
       {/* Top-Listen */}
-      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8">
+      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8 animate-fade-up">
         <Heading title="Top" subtitle="Links · Länder · Städte" />
         <div className="mt-4 grid grid-cols-1 gap-x-12 gap-y-8 lg:grid-cols-3">
           <FlatBars
@@ -312,7 +313,7 @@ export default function EmailTrackingPage() {
       </section>
 
       {/* Top Jobs */}
-      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8">
+      <section className="border-b border-hair bg-white px-4 py-6 sm:px-8 animate-fade-up">
         <Heading
           title="Top Jobs"
           subtitle="nach Engagement (Opens + Clicks)"
@@ -332,7 +333,7 @@ export default function EmailTrackingPage() {
       </section>
 
       {/* Recent Events */}
-      <section className="bg-white px-4 py-6 sm:px-8">
+      <section className="bg-white px-4 py-6 sm:px-8 animate-fade-up">
         <Heading title="Letzte Events" subtitle="Live-Stream der Pixel- & Click-Events" />
         <div className="mt-3">
           <RecentEvents
@@ -381,20 +382,23 @@ function BigNumbers({
   data: EmailTrackingResponse | null;
 }) {
   const t = data?.totals;
-  const items: {
+  type Item = {
     label: string;
-    value: string;
     sub: string;
     accent?: string;
-  }[] = [
+  } & (
+    | { numeric: number; suffix?: string; decimals?: number; value?: never }
+    | { numeric?: never; value: string }
+  );
+  const items: Item[] = [
     {
       label: "Jobs gesendet",
-      value: fmtNumber(t?.jobs_sent ?? 0),
+      numeric: t?.jobs_sent ?? 0,
       sub: `${fmtNumber(t?.jobs_total ?? 0)} insgesamt`,
     },
     {
       label: "Opens",
-      value: fmtNumber(t?.opens_total ?? 0),
+      numeric: t?.opens_total ?? 0,
       sub: `${fmtNumber(t?.unique_open_jobs ?? 0)} unique Jobs · ${
         t ? fmtPct(t.open_rate) : "—"
       } Open-Rate`,
@@ -402,7 +406,7 @@ function BigNumbers({
     },
     {
       label: "Clicks",
-      value: fmtNumber(t?.clicks_total ?? 0),
+      numeric: t?.clicks_total ?? 0,
       sub: `${fmtNumber(t?.unique_click_jobs ?? 0)} unique Jobs · ${
         t ? fmtPct(t.click_rate) : "—"
       } Click-Rate`,
@@ -410,12 +414,14 @@ function BigNumbers({
     },
     {
       label: "CTOR",
-      value: t ? fmtPct(t.click_to_open_rate) : "—",
+      numeric: t ? t.click_to_open_rate * 100 : 0,
+      decimals: 1,
+      suffix: "%",
       sub: "Click-to-Open-Rate",
     },
     {
       label: "Distinct IPs",
-      value: fmtNumber(t?.unique_ips ?? 0),
+      numeric: t?.unique_ips ?? 0,
       sub: "über alle Events",
     },
     {
@@ -426,9 +432,9 @@ function BigNumbers({
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="stagger-children grid grid-cols-2 gap-x-6 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
       {items.map((it) => (
-        <div key={it.label} className="min-w-0">
+        <div key={it.label} className="min-w-0 animate-fade-up">
           <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
             {it.label}
           </p>
@@ -438,6 +444,12 @@ function BigNumbers({
           >
             {loading && !data ? (
               <Loader2 className="inline h-5 w-5 animate-spin text-ink-300" />
+            ) : it.numeric != null ? (
+              <CountUp
+                value={it.numeric}
+                decimals={it.decimals ?? 0}
+                suffix={it.suffix}
+              />
             ) : (
               it.value
             )}
@@ -618,16 +630,16 @@ function FlatBars({
           {empty}
         </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="stagger-children space-y-2">
           {items.map((it, idx) => (
-            <li key={`${it.label}-${idx}`}>
+            <li key={`${it.label}-${idx}`} className="animate-fade-up">
               <div className="flex items-center justify-between gap-2 text-[12.5px]">
                 {it.href ? (
                   <a
                     href={it.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="truncate text-ink-800 hover:underline"
+                    className="truncate text-ink-800 transition hover:text-ink-900 hover:underline"
                     title={it.label}
                   >
                     {it.label}
@@ -638,13 +650,16 @@ function FlatBars({
                   </span>
                 )}
                 <span className="shrink-0 tabular-nums text-ink-600">
-                  {fmtNumber(it.count)}
+                  <CountUp value={it.count} />
                 </span>
               </div>
               <div className="mt-1 h-px w-full bg-ink-100">
                 <div
-                  className="h-[2px] bg-ink-700"
-                  style={{ width: `${(it.count / max) * 100}%` }}
+                  className="animate-bar-grow h-[2px] bg-ink-700"
+                  style={{
+                    width: `${(it.count / max) * 100}%`,
+                    animationDelay: `${idx * 40}ms`,
+                  }}
                 />
               </div>
             </li>

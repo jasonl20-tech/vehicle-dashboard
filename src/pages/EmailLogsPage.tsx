@@ -27,7 +27,8 @@ import {
 } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
-import { fmtNumber, useApi } from "../lib/customerApi";
+import { CountUp, SkeletonRows } from "../components/Premium";
+import { useApi } from "../lib/customerApi";
 import {
   EMAIL_JOB_STATUSES,
   emailJobsListUrl,
@@ -175,7 +176,7 @@ export default function EmailLogsPage() {
           type="button"
           onClick={() => list.reload()}
           disabled={list.loading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Neu laden"
         >
           <RefreshCw
@@ -216,10 +217,10 @@ export default function EmailLogsPage() {
       )}
 
       {/* Toolbar */}
-      <div className="shrink-0 border-b border-hair bg-white px-3 py-2 sm:px-5">
+      <div className="shrink-0 glass-paper border-b border-hair px-3 py-2 sm:px-5 animate-fade-down">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
-            <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5 transition focus-within:border-ink-400 focus-within:bg-white focus-within:shadow-[0_0_0_3px_rgba(13,13,15,0.05)]">
+            <Search className="h-3.5 w-3.5 shrink-0 text-ink-400 transition-colors group-focus-within:text-ink-700" />
             <input
               type="search"
               value={qIn}
@@ -231,7 +232,7 @@ export default function EmailLogsPage() {
               <button
                 type="button"
                 onClick={() => setQIn("")}
-                className="text-ink-400 hover:text-ink-700"
+                className="press text-ink-400 transition hover:text-ink-700"
                 title="Suche leeren"
               >
                 <X className="h-3.5 w-3.5" />
@@ -259,28 +260,28 @@ export default function EmailLogsPage() {
 
           <div className="flex items-center gap-3 text-[11.5px] tabular-nums text-ink-500">
             <span>
-              <span className="text-ink-700">{fmtNumber(total)}</span> gesamt
+              <CountUp value={total} className="text-ink-700" /> gesamt
               {(q || status) && (
                 <>
                   <span className="mx-1.5 text-ink-300">·</span>
-                  <span className="text-ink-700">{fmtNumber(rows.length)}</span> Treffer
+                  <CountUp value={rows.length} className="text-ink-700" /> Treffer
                 </>
               )}
             </span>
             {(["sent", "pending", "processing", "failed"] as const).map((s) => (
-              <span key={s} className="hidden md:inline">
+              <span key={s} className="hidden items-center md:inline-flex">
                 <span
                   className={`mr-1 inline-block h-2 w-2 rounded-full ${
                     s === "sent"
                       ? "bg-emerald-500"
                       : s === "pending"
-                        ? "bg-amber-500"
+                        ? "bg-amber-500 animate-pulse-soft text-amber-500"
                         : s === "processing"
-                          ? "bg-sky-500"
+                          ? "bg-sky-500 animate-pulse-soft text-sky-500"
                           : "bg-rose-500"
                   }`}
                 />
-                {fmtNumber(counts[s] ?? 0)}
+                <CountUp value={counts[s] ?? 0} />
               </span>
             ))}
             {list.loading && <Loader2 className="h-3 w-3 animate-spin" />}
@@ -291,7 +292,7 @@ export default function EmailLogsPage() {
       {/* Tabelle */}
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
-          <thead className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur">
+          <thead className="sticky top-0 z-10 glass-paper bg-ink-50/95">
             <tr className="text-[10px] uppercase tracking-[0.12em] text-ink-500">
               <th className="border-b border-hair px-3 py-2 font-medium">Status</th>
               <th className="border-b border-hair px-3 py-2 font-medium">Wann</th>
@@ -306,9 +307,12 @@ export default function EmailLogsPage() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger-children">
+            {list.loading && rows.length === 0 && (
+              <SkeletonRows count={8} cols={7} />
+            )}
             {!list.loading && rows.length === 0 && (
-              <tr>
+              <tr className="animate-fade-up">
                 <td
                   colSpan={7}
                   className="px-4 py-12 text-center text-[12.5px] text-ink-400"
@@ -317,10 +321,11 @@ export default function EmailLogsPage() {
                 </td>
               </tr>
             )}
-            {rows.map((r) => (
+            {rows.map((r, idx) => (
               <Row
                 key={r.id}
                 row={r}
+                index={idx}
                 onOpen={() =>
                   navigate(`/emails/logs/${encodeURIComponent(r.id)}`)
                 }
@@ -335,9 +340,11 @@ export default function EmailLogsPage() {
 
 function Row({
   row,
+  index,
   onOpen,
 }: {
   row: EmailJobRow;
+  index: number;
   onOpen: () => void;
 }) {
   const recipient = recipientSummary(row.recipient_data, row.recipient_email);
@@ -345,6 +352,9 @@ function Row({
     row.custom_subject?.trim() ||
     (row.template_id ? `Template: ${row.template_id}` : "Ohne Betreff");
   const b = statusBadge(row.status);
+  // Stagger nur für die ersten Zeilen, damit später hinzu-paginierte
+  // Einträge nicht endlos verzögert ankommen.
+  const delay = index < 24 ? `${index * 18}ms` : "0ms";
   return (
     <tr
       onClick={onOpen}
@@ -352,7 +362,8 @@ function Row({
         if (e.key === "Enter") onOpen();
       }}
       tabIndex={0}
-      className="cursor-pointer transition hover:bg-ink-50/60 focus:bg-ink-50/60 focus:outline-none"
+      style={{ animationDelay: delay }}
+      className="group accent-on-hover animate-fade-up cursor-pointer text-ink-700 transition-colors hover:bg-ink-50/60 focus:bg-ink-50/60 focus:outline-none"
     >
       <td className="border-b border-hair px-3 py-2 align-middle">
         <span
@@ -404,10 +415,10 @@ function Row({
         </span>
       </td>
       <td className="border-b border-hair px-3 py-2 text-right align-middle tabular-nums text-emerald-700">
-        {row.open_count > 0 ? fmtNumber(row.open_count) : "—"}
+        {row.open_count > 0 ? <CountUp value={row.open_count} /> : "—"}
       </td>
       <td className="border-b border-hair px-3 py-2 text-right align-middle tabular-nums text-sky-700">
-        {row.click_count > 0 ? fmtNumber(row.click_count) : "—"}
+        {row.click_count > 0 ? <CountUp value={row.click_count} /> : "—"}
       </td>
     </tr>
   );

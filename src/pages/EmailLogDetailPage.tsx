@@ -48,6 +48,7 @@ import {
 } from "recharts";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
 import { useOutletContext } from "react-router-dom";
+import { CountUp } from "../components/Premium";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   emailJobUrl,
@@ -121,7 +122,7 @@ export default function EmailLogDetailPage() {
           type="button"
           onClick={() => job.reload()}
           disabled={job.loading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Neu laden"
         >
           <RefreshCw className={`h-4 w-4 ${job.loading ? "animate-spin" : ""}`} />
@@ -186,7 +187,7 @@ export default function EmailLogDetailPage() {
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto bg-paper">
       {/* Header */}
-      <header className="border-b border-hair bg-white px-4 py-5 sm:px-8">
+      <header className="aurora-backdrop relative overflow-hidden border-b border-hair px-4 py-6 sm:px-8 sm:py-7 animate-fade-down">
         <div className="flex items-start gap-3">
           <span
             className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${b.className}`}
@@ -195,7 +196,7 @@ export default function EmailLogDetailPage() {
             {b.label}
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[20px] font-semibold tracking-tight text-ink-900">
+            <h1 className="truncate text-[22px] font-semibold tracking-tight text-ink-900">
               {subject}
             </h1>
             <p className="mt-0.5 truncate font-mono text-[11.5px] text-ink-400" title={j.id}>
@@ -206,7 +207,7 @@ export default function EmailLogDetailPage() {
         </div>
 
         {/* Flache Stamm-Daten — kein Card-Look */}
-        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-[12.5px] sm:grid-cols-4 lg:grid-cols-6">
+        <dl className="stagger-children mt-5 grid grid-cols-2 gap-x-6 gap-y-3 text-[12.5px] sm:grid-cols-4 lg:grid-cols-6">
           <DT label="Empfänger" mono>
             {j.recipient_email || "—"}
           </DT>
@@ -245,22 +246,24 @@ export default function EmailLogDetailPage() {
               : "—"}
           </DT>
           <DT label="Opens" tone="emerald">
-            <span className="tabular-nums">{fmtNumber(tr.open_count)}</span>
+            <CountUp value={tr.open_count} className="tabular-nums" />
             {tr.unique_open_count !== tr.open_count && (
               <span className="ml-1 text-[10.5px] text-ink-400">
-                · {fmtNumber(tr.unique_open_count)} unique
+                · <CountUp value={tr.unique_open_count} /> unique
               </span>
             )}
           </DT>
           <DT label="Clicks" tone="sky">
-            <span className="tabular-nums">{fmtNumber(tr.click_count)}</span>
+            <CountUp value={tr.click_count} className="tabular-nums" />
             {tr.unique_click_count !== tr.click_count && (
               <span className="ml-1 text-[10.5px] text-ink-400">
-                · {fmtNumber(tr.unique_click_count)} unique
+                · <CountUp value={tr.unique_click_count} /> unique
               </span>
             )}
           </DT>
-          <DT label="Distinct IPs">{fmtNumber(tr.unique_ip_count)}</DT>
+          <DT label="Distinct IPs">
+            <CountUp value={tr.unique_ip_count} />
+          </DT>
         </dl>
 
         {j.error_message && (
@@ -271,7 +274,7 @@ export default function EmailLogDetailPage() {
       </header>
 
       {/* Verlauf */}
-      <section className="border-b border-hair bg-white px-4 py-5 sm:px-8">
+      <section className="border-b border-hair bg-white px-4 py-5 sm:px-8 animate-fade-up">
         <SectionHeading
           title="Verlauf"
           subtitle="Opens & Clicks pro Tag"
@@ -295,7 +298,7 @@ export default function EmailLogDetailPage() {
       {(tr.top_links.length > 0 ||
         tr.top_countries.length > 0 ||
         tr.top_cities.length > 0) && (
-        <section className="border-b border-hair bg-white px-4 py-5 sm:px-8">
+        <section className="border-b border-hair bg-white px-4 py-5 sm:px-8 animate-fade-up">
           <SectionHeading title="Auswertung" subtitle="Top Links · Länder · Städte" />
           <div className="mt-3 grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-3">
             {tr.top_links.length > 0 && (
@@ -331,7 +334,7 @@ export default function EmailLogDetailPage() {
       )}
 
       {/* Empfänger-Daten */}
-      <section className="border-b border-hair bg-white px-4 py-5 sm:px-8">
+      <section className="border-b border-hair bg-white px-4 py-5 sm:px-8 animate-fade-up">
         <div className="flex items-center justify-between gap-2">
           <SectionHeading title="Empfänger / Variablen" subtitle="recipient_data (JSON)" />
           <CopyButton value={recipientPretty} title="JSON kopieren" />
@@ -345,7 +348,7 @@ export default function EmailLogDetailPage() {
       {j.custom_body_html && <CustomBodySection html={j.custom_body_html} />}
 
       {/* Timeline */}
-      <section className="border-b border-hair bg-white px-4 py-5 sm:px-8">
+      <section className="border-b border-hair bg-white px-4 py-5 sm:px-8 animate-fade-up">
         <SectionHeading
           title="Timeline"
           subtitle="Lifecycle + jedes Open/Click chronologisch"
@@ -407,7 +410,7 @@ function DT({
         ? "text-sky-700"
         : "text-ink-900";
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 animate-fade-up">
       <dt className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
         {label}
       </dt>
@@ -536,9 +539,9 @@ function FlatTopList({
       <h3 className="mb-2 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
         {title}
       </h3>
-      <ul className="space-y-1.5">
+      <ul className="stagger-children space-y-1.5">
         {items.map((it, idx) => (
-          <li key={`${it.label}-${idx}`}>
+          <li key={`${it.label}-${idx}`} className="animate-fade-up">
             <div className="flex items-center justify-between gap-2 text-[12.5px]">
               {it.href ? (
                 <a
@@ -556,13 +559,17 @@ function FlatTopList({
                 </span>
               )}
               <span className="shrink-0 tabular-nums text-ink-600">
-                {fmtNumber(it.count)}
+                <CountUp value={it.count} />
               </span>
             </div>
             <div className="mt-1 h-px w-full overflow-hidden bg-ink-100">
               <div
-                className="h-full bg-ink-700"
-                style={{ width: `${(it.count / max) * 100}%`, height: 2 }}
+                className="animate-bar-grow h-full bg-ink-700"
+                style={{
+                  width: `${(it.count / max) * 100}%`,
+                  height: 2,
+                  animationDelay: `${idx * 50}ms`,
+                }}
               />
             </div>
           </li>
@@ -878,8 +885,8 @@ function JobTimeline({ jobId }: { jobId: string }) {
               className="absolute left-[15px] top-0 bottom-0 w-px bg-hair"
               aria-hidden
             />
-            {g.events.map((ev) => (
-              <TimelineItem key={ev.id} ev={ev} />
+            {g.events.map((ev, idx) => (
+              <TimelineItem key={ev.id} ev={ev} index={idx} />
             ))}
           </ol>
         </div>
@@ -917,7 +924,13 @@ function JobTimeline({ jobId }: { jobId: string }) {
   );
 }
 
-function TimelineItem({ ev }: { ev: EmailTimelineEvent }) {
+function TimelineItem({
+  ev,
+  index,
+}: {
+  ev: EmailTimelineEvent;
+  index: number;
+}) {
   const meta = KIND_META[ev.kind];
   const Icon = meta.icon;
   const trackingMeta = parseTrackingMetadata(ev.metadata);
@@ -925,8 +938,12 @@ function TimelineItem({ ev }: { ev: EmailTimelineEvent }) {
     .filter(Boolean)
     .join(", ");
 
+  const delay = index < 12 ? `${index * 30}ms` : "0ms";
   return (
-    <li className="relative flex gap-3 py-1.5 pl-1 pr-1">
+    <li
+      style={{ animationDelay: delay }}
+      className="animate-fade-up relative flex gap-3 py-1.5 pl-1 pr-1"
+    >
       {/* Marker */}
       <div className="relative z-[1] flex h-[30px] w-[30px] shrink-0 items-center justify-center">
         <span

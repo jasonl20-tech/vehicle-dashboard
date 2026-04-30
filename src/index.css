@@ -77,3 +77,303 @@ html.bildempfang-ocean-bg .leaflet-container {
 ::selection {
   background: rgba(109, 82, 255, 0.18);
 }
+
+/* ─────────────────────────────────────────────────────────────────
+ * Premium Motion Layer
+ * ─────────────────────────────────────────────────────────────────
+ *
+ * Subtile, durchgängige Animationen für „edles" Look-and-Feel.
+ * Alle Animationen respektieren `prefers-reduced-motion`.
+ */
+
+@keyframes premium-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes premium-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes premium-fade-down {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes premium-scale-in {
+  from {
+    opacity: 0;
+    transform: scale3d(0.96, 0.96, 1);
+  }
+  to {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+  }
+}
+
+@keyframes premium-shimmer {
+  0% {
+    background-position: -150% 0;
+  }
+  100% {
+    background-position: 250% 0;
+  }
+}
+
+@keyframes premium-pulse-soft {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 currentColor;
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 6px currentColor;
+    opacity: 0.6;
+  }
+}
+
+@keyframes premium-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes premium-spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer utilities {
+  /* — Eintritts-Animationen, GPU-beschleunigt ─────────────────── */
+  .animate-fade-in {
+    animation: premium-fade-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .animate-fade-up {
+    animation: premium-fade-up 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .animate-fade-down {
+    animation: premium-fade-down 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .animate-scale-in {
+    animation: premium-scale-in 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .animate-bar-grow {
+    transform-origin: left;
+    animation: premium-bar-grow 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .animate-pulse-soft {
+    animation: premium-pulse-soft 2.4s ease-in-out infinite;
+  }
+
+  /* — Stagger-Sequenz für Listen/Tabellen ──────────────────────
+   * Direkte Kinder bekommen kaskadierte Verzögerung. Ein Element
+   * mit `.stagger-children > *` kombiniert mit `.animate-fade-up`
+   * ergibt eine angenehme Eintrittsanimation. */
+  .stagger-children > * {
+    animation-delay: 0ms;
+  }
+  .stagger-children > *:nth-child(1) {
+    animation-delay: 0ms;
+  }
+  .stagger-children > *:nth-child(2) {
+    animation-delay: 30ms;
+  }
+  .stagger-children > *:nth-child(3) {
+    animation-delay: 60ms;
+  }
+  .stagger-children > *:nth-child(4) {
+    animation-delay: 90ms;
+  }
+  .stagger-children > *:nth-child(5) {
+    animation-delay: 120ms;
+  }
+  .stagger-children > *:nth-child(6) {
+    animation-delay: 150ms;
+  }
+  .stagger-children > *:nth-child(7) {
+    animation-delay: 180ms;
+  }
+  .stagger-children > *:nth-child(8) {
+    animation-delay: 210ms;
+  }
+  .stagger-children > *:nth-child(9) {
+    animation-delay: 240ms;
+  }
+  .stagger-children > *:nth-child(10) {
+    animation-delay: 270ms;
+  }
+  .stagger-children > *:nth-child(11) {
+    animation-delay: 300ms;
+  }
+  .stagger-children > *:nth-child(12) {
+    animation-delay: 330ms;
+  }
+  .stagger-children > *:nth-child(n + 13) {
+    animation-delay: 360ms;
+  }
+
+  /* — Skeleton-Shimmer ───────────────────────────────────────── */
+  .skeleton-shimmer {
+    background-color: rgba(0, 0, 0, 0.04);
+    background-image: linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0) 0%,
+      rgba(0, 0, 0, 0.06) 35%,
+      rgba(255, 255, 255, 0.6) 50%,
+      rgba(0, 0, 0, 0.06) 65%,
+      rgba(0, 0, 0, 0) 100%
+    );
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    animation: premium-shimmer 1.6s linear infinite;
+    border-radius: 4px;
+  }
+
+  /* — „Edler" Button mit Shine-Sweep beim Hover ───────────────
+   * Anwenden auf einen Container mit position:relative; nutzt ein
+   * eigenes ::after-Pseudo. */
+  .btn-shine {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .btn-shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      120deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.3) 50%,
+      transparent 70%
+    );
+    transform: translateX(-120%);
+    transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .btn-shine:hover::after {
+    transform: translateX(120%);
+  }
+  .btn-shine > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* — Press-Scale: leichtes Verkleinern beim Klick ───────────── */
+  .press {
+    transition:
+      transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1),
+      filter 0.16s ease;
+  }
+  .press:active {
+    transform: scale3d(0.97, 0.97, 1);
+  }
+
+  /* — Kachel-Hover-Lift ───────────────────────────────────────── */
+  .lift {
+    transition:
+      transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 0.18s ease,
+      border-color 0.18s ease,
+      background-color 0.18s ease;
+  }
+  .lift:hover {
+    transform: translate3d(0, -1px, 0);
+    box-shadow: 0 6px 24px -12px rgba(13, 13, 15, 0.18);
+  }
+
+  /* — Ring beim Fokus, weich ───────────────────────────────── */
+  .focus-ring:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px #fafaf7,
+      0 0 0 4px rgba(13, 13, 15, 0.6);
+    border-radius: 6px;
+  }
+
+  /* — Premium-Glas-Hintergrund (subtil) ───────────────────────
+   * Tip-of-the-iceberg Glassmorphism, hauchdünn, für Header-Bars. */
+  .glass-paper {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.85),
+      rgba(255, 255, 255, 0.65)
+    );
+    backdrop-filter: saturate(160%) blur(8px);
+    -webkit-backdrop-filter: saturate(160%) blur(8px);
+  }
+
+  /* — Subtile Premium-Backdrop (Aurora) für Detail-Header ───── */
+  .aurora-backdrop {
+    background:
+      radial-gradient(
+        700px 320px at 90% -20%,
+        rgba(109, 82, 255, 0.10),
+        transparent 60%
+      ),
+      radial-gradient(
+        500px 240px at -10% 110%,
+        rgba(62, 207, 142, 0.08),
+        transparent 60%
+      ),
+      linear-gradient(180deg, #ffffff 0%, #fafaf7 100%);
+  }
+
+  /* — Tabular Hover-Akzent: linke Akzentleiste ───────────────── */
+  .accent-on-hover {
+    position: relative;
+  }
+  .accent-on-hover::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6%;
+    bottom: 6%;
+    width: 2px;
+    background: currentColor;
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    border-radius: 2px;
+    opacity: 0.7;
+  }
+  .accent-on-hover:hover::before,
+  .accent-on-hover:focus-visible::before,
+  .accent-on-hover[data-active="true"]::before {
+    transform: scaleY(1);
+  }
+}
+
+/* — Reduced motion: Animations deutlich abdämpfen ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

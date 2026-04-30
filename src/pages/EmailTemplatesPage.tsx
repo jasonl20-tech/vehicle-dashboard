@@ -525,7 +525,7 @@ export default function EmailTemplatesPage() {
           type="button"
           onClick={() => list.reload()}
           disabled={list.loading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Liste aktualisieren"
         >
           <RefreshCw
@@ -538,7 +538,7 @@ export default function EmailTemplatesPage() {
             setCreateErr(null);
             setNewOpen(true);
           }}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
           title="Neue Vorlage"
         >
           <Plus className="h-4 w-4" />
@@ -657,25 +657,32 @@ export default function EmailTemplatesPage() {
                 )}
               </div>
             </div>
-            <ul className="min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
+            <ul className="stagger-children min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
               {!list.loading && rows.length === 0 && (
-                <li className="px-4 py-6 text-center text-[12.5px] text-ink-500">
+                <li className="animate-fade-up px-4 py-6 text-center text-[12.5px] text-ink-500">
                   Keine Vorlagen.{" "}
                   <button
                     type="button"
                     onClick={() => setNewOpen(true)}
-                    className="text-ink-700 underline underline-offset-2 hover:text-ink-900"
+                    className="press text-ink-700 underline underline-offset-2 transition hover:text-ink-900"
                   >
                     Jetzt anlegen
                   </button>
                 </li>
               )}
-              {rows.map((r) => {
+              {rows.map((r, idx) => {
                 const active = r.id === selectedId;
                 return (
-                  <li key={r.id}>
+                  <li
+                    key={r.id}
+                    className="animate-fade-up"
+                    style={{
+                      animationDelay: idx < 24 ? `${idx * 18}ms` : "0ms",
+                    }}
+                  >
                     <div
-                      className={`group flex w-full items-center gap-1.5 px-3 py-2 transition ${
+                      data-active={active ? "true" : "false"}
+                      className={`accent-on-hover group flex w-full items-center gap-1.5 px-3 py-2 transition-colors text-ink-700 ${
                         active
                           ? "bg-ink-50/70"
                           : "hover:bg-ink-50/50"
@@ -889,7 +896,7 @@ export default function EmailTemplatesPage() {
               <button
                 type="button"
                 onClick={() => setNewOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800"
+                className="btn-shine press inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white shadow-[0_4px_16px_-6px_rgba(13,13,15,0.3)] transition hover:bg-ink-800"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Neue Vorlage
@@ -990,7 +997,7 @@ export default function EmailTemplatesPage() {
                 type="button"
                 onClick={create}
                 disabled={creating || !idValid}
-                className="inline-flex items-center gap-1 rounded-md border border-ink-900 bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white hover:bg-ink-800 disabled:opacity-50"
+                className="btn-shine press inline-flex items-center gap-1 rounded-md border border-ink-900 bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-ink-800 disabled:opacity-50"
               >
                 <Plus className="h-3.5 w-3.5" />
                 {creating ? "Anlegen…" : "Anlegen & Bearbeiten"}
