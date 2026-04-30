@@ -1,27 +1,27 @@
 /**
- * Erlaubte Workers-AI-Modelle für E-Mail-HTML-Chat (Allowlist gegen Missbrauch).
- * Neue Modelle: Eintrag hier + Deploy. Siehe https://developers.cloudflare.com/workers-ai/models/
+ * Erlaubte Modelle für E-Mail-HTML-Chat (Allowlist gegen Missbrauch).
+ * Mix aus Workers AI (@cf/…) und ggf. weiteren über dasselbe Binding
+ * erreichbaren IDs — je nach Cloudflare-Konto und aktivierten Anbietern.
  */
 export const WORKERS_AI_EMAIL_MODELS: { id: string; label: string }[] = [
+  { id: "anthropic/claude-opus-4.7", label: "Anthropic · Claude Opus 4.7" },
+  { id: "openai/gpt-5.5-pro", label: "OpenAI · GPT-5.5 Pro" },
+  { id: "openai/gpt-5.5", label: "OpenAI · GPT-5.5" },
+  { id: "google/gemini-3-flash", label: "Google · Gemini 3 Flash" },
+  { id: "alibaba/qwen3-max", label: "Alibaba · Qwen3 Max" },
+  { id: "google/gemini-3.1-pro", label: "Google · Gemini 3.1 Pro" },
   {
-    id: "@cf/meta/llama-3.1-8b-instruct",
-    label: "Llama 3.1 · 8B Instruct",
+    id: "@cf/google/gemma-4-26b-a4b-it",
+    label: "CF · Gemma 4 · 26B IT",
+  },
+  { id: "minimax/m2.7", label: "MiniMax · M2.7" },
+  {
+    id: "@cf/moonshotai/kimi-k2.5",
+    label: "CF · Kimi K2.5",
   },
   {
-    id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-    label: "Llama 3.3 · 70B (schnell)",
-  },
-  {
-    id: "@cf/mistral/mistral-7b-instruct-v0.2",
-    label: "Mistral · 7B Instruct",
-  },
-  {
-    id: "@cf/qwen/qwen2.5-coder-32b-instruct",
-    label: "Qwen 2.5 Coder · 32B (HTML/Code)",
-  },
-  {
-    id: "@cf/google/gemma-2-9b-it",
-    label: "Gemma 2 · 9B IT",
+    id: "@cf/nvidia/nemotron-3-120b-a12b",
+    label: "CF · NVIDIA Nemotron 3 · 120B",
   },
 ];
 
