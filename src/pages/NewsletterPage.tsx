@@ -167,7 +167,7 @@ export default function NewsletterPage() {
                 key={o.id}
                 type="button"
                 onClick={() => setActiveFilter(o.id)}
-                className={`px-2.5 py-1.5 text-[12px] transition-colors ${
+                className={`press px-2.5 py-1.5 text-[12px] transition-colors ${
                   activeFilter === o.id
                     ? "bg-ink-900 text-white"
                     : "text-ink-600 hover:bg-ink-50"
@@ -182,7 +182,7 @@ export default function NewsletterPage() {
           type="button"
           onClick={() => api.reload()}
           title="Aktualisieren"
-          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair text-ink-500 hover:bg-ink-50"
+          className="press ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair text-ink-500 transition hover:bg-ink-50"
         >
           <RefreshCw
             className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
@@ -209,7 +209,7 @@ export default function NewsletterPage() {
               <th className={TH} />
             </tr>
           </thead>
-          <tbody className="divide-y divide-hair">
+          <tbody className="stagger-children divide-y divide-hair">
             {api.loading && rows.length === 0 ? (
               <tr>
                 <td
@@ -231,12 +231,18 @@ export default function NewsletterPage() {
                 </td>
               </tr>
             ) : (
-              rows.map((r) => {
+              rows.map((r, idx) => {
                 const { email, subject } = getForm(r.metadata);
                 const ip = getRequestString(r.metadata, "ip");
                 const country = getRequestString(r.metadata, "country");
                 return (
-                  <tr key={r.id} className="hover:bg-ink-50/50">
+                  <tr
+                    key={r.id}
+                    style={{
+                      animationDelay: idx < 24 ? `${idx * 18}ms` : "0ms",
+                    }}
+                    className="accent-on-hover animate-fade-up text-ink-700 transition-colors hover:bg-ink-50/50"
+                  >
                     <td className={`${TD} whitespace-nowrap text-ink-600`}>
                       {fmtWhen(r.created_at)}
                     </td>
@@ -291,7 +297,7 @@ export default function NewsletterPage() {
             type="button"
             disabled={offset === 0 || api.loading}
             onClick={() => setOffset((o) => Math.max(0, o - limit))}
-            className="inline-flex h-8 items-center gap-0.5 rounded-md border border-hair px-2 text-ink-700 enabled:hover:bg-ink-50 disabled:opacity-40"
+            className="press inline-flex h-8 items-center gap-0.5 rounded-md border border-hair px-2 text-ink-700 transition enabled:hover:bg-ink-50 disabled:opacity-40"
           >
             <ChevronLeft className="h-4 w-4" />
             Zurück
@@ -300,7 +306,7 @@ export default function NewsletterPage() {
             type="button"
             disabled={atEnd || api.loading}
             onClick={() => setOffset((o) => o + limit)}
-            className="inline-flex h-8 items-center gap-0.5 rounded-md border border-hair px-2 text-ink-700 enabled:hover:bg-ink-50 disabled:opacity-40"
+            className="press inline-flex h-8 items-center gap-0.5 rounded-md border border-hair px-2 text-ink-700 transition enabled:hover:bg-ink-50 disabled:opacity-40"
           >
             Weiter
             <ChevronRight className="h-4 w-4" />

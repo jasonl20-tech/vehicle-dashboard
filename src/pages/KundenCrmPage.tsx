@@ -295,12 +295,14 @@ function isDraftDirty(d: CrmRowDraft, r: CrmCustomerRow): boolean {
 
 function CrmTableRow({
   row,
+  index = 0,
   editing,
   draft,
   onField,
   onActivate,
 }: {
   row: CrmCustomerRow;
+  index?: number;
   editing: boolean;
   draft: CrmRowDraft | null;
   onField: (patch: Partial<Pick<CrmRowDraft, "email" | "company" | "status" | "location">>) => void;
@@ -314,11 +316,12 @@ function CrmTableRow({
 
   return (
     <tr
+      style={{ animationDelay: index < 24 ? `${index * 14}ms` : "0ms" }}
       className={`${
         editing
           ? "bg-violet-50/80 ring-1 ring-inset ring-brand-500/25"
           : "even:bg-ink-50/[0.45] hover:bg-ink-100/70"
-      } cursor-pointer transition-colors`}
+      } animate-fade-up cursor-pointer transition-colors`}
       onClick={() => onActivate(row)}
     >
       <td className={`${TD} max-w-[7.5rem]`}>
@@ -799,7 +802,7 @@ export default function KundenCrmPage() {
           type="button"
           onClick={() => reload()}
           disabled={loading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Aktualisieren"
         >
           <RefreshCw
@@ -812,7 +815,7 @@ export default function KundenCrmPage() {
             setFormErr("");
             setNewOpen(true);
           }}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.1] hover:text-white"
           title="Neuer Kunde"
         >
           <Plus className="h-4 w-4" />
@@ -928,7 +931,7 @@ export default function KundenCrmPage() {
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="stagger-children">
             {loading && listRows.length === 0 && !error && (
               <tr>
                 <td
@@ -939,10 +942,11 @@ export default function KundenCrmPage() {
                 </td>
               </tr>
             )}
-            {sortedRows.map((row) => (
+            {sortedRows.map((row, idx) => (
               <CrmTableRow
                 key={row.id}
                 row={row}
+                index={idx}
                 editing={editingId === row.id}
                 draft={rowDraft}
                 onField={updateDraft}

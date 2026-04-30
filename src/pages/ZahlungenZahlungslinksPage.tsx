@@ -141,7 +141,7 @@ export default function ZahlungenZahlungslinksPage() {
                   ? "Zuerst mindestens einen Plan unter Zahlungen → Pläne anlegen"
                   : undefined
               }
-              className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-shine press inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white shadow-[0_4px_16px_-6px_rgba(13,13,15,0.3)] transition-colors hover:bg-ink-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
             >
               <Plus className="h-3.5 w-3.5" />
               Neuer Payment Link
@@ -747,7 +747,7 @@ function CreatePaymentLinkDialog({
                 setBusy(false);
               }
             }}
-            className="rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-ink-800 disabled:opacity-50"
+            className="btn-shine press rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white shadow-[0_4px_16px_-6px_rgba(13,13,15,0.3)] transition-colors hover:bg-ink-800 disabled:opacity-50 disabled:shadow-none"
           >
             {busy ? "…" : "In Stripe anlegen & verknüpfen"}
           </button>

@@ -316,7 +316,7 @@ export default function SystemeBlockedVehiclesPage() {
               type="button"
               onClick={onSave}
               disabled={saving || api.loading}
-              className="rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-ink-800 disabled:opacity-50"
+              className="btn-shine press rounded-md bg-ink-900 px-3 py-1.5 text-[12.5px] font-medium text-white shadow-[0_4px_16px_-6px_rgba(13,13,15,0.3)] transition-colors hover:bg-ink-800 disabled:opacity-50 disabled:shadow-none"
             >
               {saving ? "Speichere…" : "Speichern"}
             </button>

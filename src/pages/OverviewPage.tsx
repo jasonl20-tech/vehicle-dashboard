@@ -35,6 +35,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { CountUp } from "../components/Premium";
 import { controllingApiUrl, type ControllingResponse } from "../lib/controllingApi";
 import {
   fmtCurrency,
@@ -113,7 +114,7 @@ function Block({
   className?: string;
   children: ReactNode;
 }) {
-  return <div className={className}>{children}</div>;
+  return <div className={`animate-fade-up ${className}`}>{children}</div>;
 }
 
 function SectionHeader({
@@ -147,10 +148,13 @@ function SectionHeader({
       {to && (
         <Link
           to={to}
-          className="inline-flex shrink-0 items-center gap-0.5 text-[11.5px] text-ink-500 transition-colors hover:text-ink-900"
+          className="press group inline-flex shrink-0 items-center gap-0.5 text-[11.5px] text-ink-500 transition-colors hover:text-ink-900"
         >
           Details
-          <ArrowRight className="h-3 w-3" aria-hidden />
+          <ArrowRight
+            className="h-3 w-3 transition-transform group-hover:translate-x-0.5"
+            aria-hidden
+          />
         </Link>
       )}
     </div>
@@ -188,7 +192,7 @@ function KpiCard({
   }, [daily]);
 
   const cardCls =
-    "group relative flex h-full min-w-0 flex-col py-4 transition-colors";
+    "group relative flex h-full min-w-0 flex-col py-4 transition-colors animate-fade-up";
 
   const inner = (
     <>
@@ -210,7 +214,7 @@ function KpiCard({
             className="mt-2.5 font-display text-[34px] leading-none tracking-tighter2 text-ink-900"
             aria-live="polite"
           >
-            {loading || value == null ? "—" : fmtNumber(value)}
+            {loading || value == null ? "—" : <CountUp value={value} />}
           </p>
           {hint && (
             <p
@@ -301,7 +305,10 @@ function KpiCard({
   );
 
   return to ? (
-    <Link to={to} className={`${cardCls} px-4 hover:bg-ink-50/40`}>
+    <Link
+      to={to}
+      className={`${cardCls} press accent-on-hover text-ink-700 px-4 hover:bg-ink-50/40`}
+    >
       {inner}
     </Link>
   ) : (
@@ -891,7 +898,7 @@ export default function OverviewPage() {
       )}
 
       {/* KPI Strip — flach, mit dezentem Trenner zwischen den Spalten */}
-      <div className="mb-10 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-5">
+      <div className="stagger-children mb-10 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-2 sm:divide-y-0 sm:divide-x lg:grid-cols-5">
         <KpiCard
           label="Anfragen heute"
           value={stat.data?.website.submissions.day ?? null}

@@ -44,10 +44,9 @@ export default function Sidebar({
         />
       )}
       <aside
-        className={`fixed lg:sticky top-0 z-40 h-screen shrink-0 bg-night-900 text-night-300 transition-[width,transform] duration-200 ${
+        className={`fixed lg:sticky top-0 z-40 h-screen shrink-0 bg-night-900 text-night-300 transition-[width,transform] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] will-change-[width] ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 ${
-          // mobile: always full width; desktop: toggle between collapsed and expanded
           collapsed ? "w-[260px] lg:w-[68px]" : "w-[260px]"
         }`}
       >
@@ -95,7 +94,7 @@ function Brand({
         onClick={onToggleCollapse}
         title={collapsed ? "Sidebar ausklappen" : "Sidebar einklappen"}
         aria-label={collapsed ? "Sidebar ausklappen" : "Sidebar einklappen"}
-        className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-night-400 transition-colors hover:bg-white/[0.06] hover:text-white lg:inline-flex"
+        className="press hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-night-400 transition-colors hover:bg-white/[0.06] hover:text-white lg:inline-flex"
       >
         {collapsed ? (
           <PanelLeftOpen className="h-4 w-4" />
@@ -122,7 +121,7 @@ function SearchBox({
           onClick={onOpenPalette}
           title="Suchen oder Befehl (⌘K)"
           aria-label="Suchen (⌘K)"
-          className="grid h-9 w-full place-items-center rounded-md text-night-400 ring-1 ring-inset ring-white/10 hover:bg-white/[0.06] hover:text-white"
+          className="press grid h-9 w-full place-items-center rounded-md text-night-400 ring-1 ring-inset ring-white/10 transition-colors hover:bg-white/[0.06] hover:text-white"
         >
           <Search className="h-4 w-4" />
         </button>
@@ -143,7 +142,7 @@ function FullSearch({ onOpenPalette }: { onOpenPalette: () => void }) {
     <button
       type="button"
       onClick={onOpenPalette}
-      className="group relative flex w-full items-center gap-2 rounded-md bg-white/[0.04] px-3 py-2 text-left text-[13px] text-night-400 ring-1 ring-inset ring-white/10 transition-colors hover:bg-white/[0.07] hover:text-night-200"
+      className="press group relative flex w-full items-center gap-2 rounded-md bg-white/[0.04] px-3 py-2 text-left text-[13px] text-night-400 ring-1 ring-inset ring-white/10 transition-colors hover:bg-white/[0.07] hover:text-night-200"
     >
       <Search className="h-3.5 w-3.5" />
       <span className="flex-1 truncate">Suchen oder Befehl…</span>
@@ -219,7 +218,7 @@ function ExpandedNavRow({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className={`group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[13px] transition-colors ${
+          className={`press group flex w-full items-center justify-between rounded-md px-3 py-1.5 text-[13px] transition-colors ${
             childActive
               ? "text-white"
               : "text-night-300 hover:bg-white/[0.04] hover:text-white"
@@ -236,15 +235,15 @@ function ExpandedNavRow({
           />
         </button>
         {open && (
-          <ul className="ml-7 mt-0.5 space-y-px border-l border-white/10 pl-3">
+          <ul className="stagger-children ml-7 mt-0.5 space-y-px border-l border-white/10 pl-3">
             {item.children.map((child) => (
-              <li key={child.to + child.label}>
+              <li key={child.to + child.label} className="animate-fade-down">
                 <NavLink
                   to={child.to}
                   end={child.end}
                   onClick={onNavigate}
                   className={({ isActive }) =>
-                    `block rounded-md px-2.5 py-1 text-[12.5px] transition-colors ${
+                    `press block rounded-md px-2.5 py-1 text-[12.5px] transition-colors ${
                       isActive
                         ? "text-white"
                         : "text-night-400 hover:text-night-200"
@@ -267,7 +266,7 @@ function ExpandedNavRow({
         to={item.to!}
         onClick={onNavigate}
         className={({ isActive }) =>
-          `group relative flex items-center gap-3 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
+          `press group relative flex items-center gap-3 rounded-md px-3 py-1.5 text-[13px] transition-colors ${
             isActive
               ? "bg-white/[0.06] text-white"
               : "text-night-300 hover:bg-white/[0.04] hover:text-white"
@@ -277,10 +276,10 @@ function ExpandedNavRow({
         {({ isActive }) => (
           <>
             {isActive && (
-              <span className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r bg-brand-400" />
+              <span className="animate-scale-in absolute left-0 top-1/2 h-4 w-[2px] origin-center -translate-y-1/2 rounded-r bg-brand-400 shadow-[0_0_10px_rgba(138,118,255,0.6)]" />
             )}
             <Icon
-              className={`h-4 w-4 ${
+              className={`h-4 w-4 transition-colors ${
                 isActive
                   ? "text-brand-300"
                   : "text-night-400 group-hover:text-night-200"
@@ -613,7 +612,7 @@ function UserRow({ collapsed }: { collapsed: boolean }) {
             type="button"
             onClick={handleLogout}
             title="Abmelden"
-            className={`grid h-8 w-8 shrink-0 place-items-center rounded-md transition-colors ${logoutBtn}`}
+            className={`press grid h-8 w-8 shrink-0 place-items-center rounded-md transition-colors ${logoutBtn}`}
           >
             <LogOut className="h-3.5 w-3.5" />
           </button>

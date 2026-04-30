@@ -57,13 +57,13 @@ export default function DashboardHeader({
 
   return (
     <header
-      className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-night-900 px-2 sm:px-3 lg:px-4"
+      className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] bg-night-900/95 px-2 backdrop-blur-md sm:px-3 lg:px-4"
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={onOpenMobileMenu}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-night-200 transition hover:bg-white/[0.08] hover:text-white lg:hidden"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-night-200 transition hover:bg-white/[0.08] hover:text-white lg:hidden"
           aria-label="Menü öffnen"
         >
           <Menu className="h-5 w-5" />
@@ -72,7 +72,10 @@ export default function DashboardHeader({
           className="hidden h-7 w-px bg-white/10 md:block"
           aria-hidden
         />
-        <div className="min-w-0 max-w-[min(40vw,200px)] py-0.5 sm:max-w-none">
+        <div
+          key={`${section ?? ""}|${page}`}
+          className="animate-fade-down min-w-0 max-w-[min(40vw,200px)] py-0.5 sm:max-w-none"
+        >
           {showSection && (
             <p className="truncate text-[10px] font-medium uppercase tracking-[0.16em] text-night-500">
               {section}

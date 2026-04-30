@@ -53,7 +53,7 @@ export default function ZahlungenPlaenePage() {
           <button
             type="button"
             onClick={reloadAll}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
+            className="press inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
             title="Aktualisieren"
           >
             <RefreshCw
@@ -88,18 +88,25 @@ export default function ZahlungenPlaenePage() {
                 Noch keine Pläne — unten neuen Key anlegen.
               </p>
             ) : (
-              <ul className="divide-y divide-hair border-y border-hair">
-                {keys.map((k) => {
+              <ul className="stagger-children divide-y divide-hair border-y border-hair">
+                {keys.map((k, idx) => {
                   const active = planKey === k;
                   return (
-                    <li key={k}>
+                    <li
+                      key={k}
+                      className="animate-fade-up"
+                      style={{
+                        animationDelay: idx < 16 ? `${idx * 18}ms` : "0ms",
+                      }}
+                    >
                       <button
                         type="button"
                         onClick={() => {
                           setPlanKey(k);
                           setNewKeyError(null);
                         }}
-                        className={`group flex w-full items-center justify-between px-2 py-2 text-left font-mono text-[12px] transition-colors ${
+                        data-active={active ? "true" : "false"}
+                        className={`accent-on-hover press group flex w-full items-center justify-between px-2 py-2 text-left font-mono text-[12px] transition-colors ${
                           active
                             ? "bg-ink-50 text-ink-900"
                             : "text-ink-600 hover:bg-ink-50/60 hover:text-ink-900"
@@ -107,7 +114,7 @@ export default function ZahlungenPlaenePage() {
                       >
                         <span className="truncate">{k}</span>
                         {active && (
-                          <span className="ml-2 h-1.5 w-1.5 shrink-0 bg-ink-900" />
+                          <span className="animate-scale-in ml-2 h-1.5 w-1.5 shrink-0 bg-ink-900" />
                         )}
                       </button>
                     </li>
@@ -152,7 +159,7 @@ export default function ZahlungenPlaenePage() {
                 <button
                   type="submit"
                   disabled={saving || !newKey.trim()}
-                  className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-700 hover:border-ink-300 hover:text-ink-900 disabled:opacity-50"
+                  className="press inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-700 transition hover:border-ink-300 hover:text-ink-900 disabled:opacity-50"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Anlegen

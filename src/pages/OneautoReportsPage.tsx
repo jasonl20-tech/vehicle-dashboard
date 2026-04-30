@@ -82,7 +82,7 @@ function Header({
   return (
     <header
       aria-label="Oneauto Reports"
-      className="mb-6 border-b border-hair pb-4"
+      className="mb-6 border-b border-hair pb-4 animate-fade-down"
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <p className="max-w-2xl text-[13px] leading-relaxed text-ink-500">
@@ -98,7 +98,7 @@ function Header({
               type="button"
               onClick={onExport}
               title="Als CSV exportieren"
-              className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[11.5px] font-medium text-ink-600 hover:border-ink-300 hover:text-ink-900"
+              className="press inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[11.5px] font-medium text-ink-600 transition hover:border-ink-300 hover:text-ink-900"
             >
               <Download className="h-3.5 w-3.5" />
               CSV
@@ -108,7 +108,7 @@ function Header({
             type="button"
             onClick={onReload}
             title="Aktualisieren"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
+            className="press inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
@@ -124,7 +124,7 @@ function Header({
               key={o.id}
               type="button"
               onClick={() => onMonths(o.id)}
-              className={`rounded-[5px] px-2.5 py-1.5 transition-colors ${
+              className={`press rounded-[5px] px-2.5 py-1.5 transition-colors ${
                 active
                   ? "bg-white text-ink-900 shadow-[0_1px_0_rgba(15,23,42,0.06)]"
                   : "text-ink-500 hover:text-ink-800"
@@ -152,7 +152,7 @@ function Totals({
   const viewsTotal = safeNum(t.views);
   const gbpTotal = safeNum(t.gbp);
   return (
-    <div className="mb-12 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+    <div className="stagger-children mb-12 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-3 sm:divide-x sm:divide-y-0">
       <Tile
         label="Bild-Views gesamt"
         value={loading ? "…" : fmtNumber(viewsTotal)}
@@ -204,7 +204,7 @@ function Tile({
         ? "text-accent-amber"
         : "text-ink-400";
   return (
-    <div className="min-w-0 overflow-hidden px-5 py-6 first:pl-0 sm:px-6 lg:px-8 lg:first:pl-0">
+    <div className="animate-fade-up min-w-0 overflow-hidden px-5 py-6 first:pl-0 sm:px-6 lg:px-8 lg:first:pl-0">
       <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
         {label}
       </p>
@@ -230,7 +230,7 @@ function Section({
   meta?: string;
 }) {
   return (
-    <section className="mb-12 border-t border-hair pt-10 first:border-t-0 first:pt-0">
+    <section className="animate-fade-up mb-12 border-t border-hair pt-10 first:border-t-0 first:pt-0">
       <div className="mb-5">
         <h2 className="font-display text-[20px] tracking-tightish text-ink-900">
           {title}

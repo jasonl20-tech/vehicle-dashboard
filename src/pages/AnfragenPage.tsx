@@ -514,7 +514,7 @@ export default function AnfragenPage({
           type="button"
           disabled={offset === 0 || api.loading}
           onClick={() => setOffset((o) => Math.max(0, o - limit))}
-          className="rounded border border-hair bg-white px-2 py-0.5 text-[12px] enabled:hover:bg-ink-50 disabled:opacity-40"
+          className="press rounded border border-hair bg-white px-2 py-0.5 text-[12px] transition enabled:hover:bg-ink-50 disabled:opacity-40"
         >
           Zurück
         </button>
@@ -522,7 +522,7 @@ export default function AnfragenPage({
           type="button"
           disabled={atEnd || api.loading}
           onClick={() => setOffset((o) => o + limit)}
-          className="rounded border border-hair bg-white px-2 py-0.5 text-[12px] enabled:hover:bg-ink-50 disabled:opacity-40"
+          className="press rounded border border-hair bg-white px-2 py-0.5 text-[12px] transition enabled:hover:bg-ink-50 disabled:opacity-40"
         >
           Weiter
         </button>
@@ -647,7 +647,7 @@ export default function AnfragenPage({
           type="button"
           onClick={() => api.reload()}
           disabled={api.loading}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
+          className="press inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Aktualisieren"
         >
           <RefreshCw
@@ -756,7 +756,7 @@ export default function AnfragenPage({
                 </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="stagger-children">
               {api.loading && rows.length === 0 ? (
                 <tr>
                   <td
@@ -776,14 +776,17 @@ export default function AnfragenPage({
                   </td>
                 </tr>
               ) : (
-                sortedRows.map((r) => {
+                sortedRows.map((r, idx) => {
                   const email = pickEmail(r.payload);
                   const name = pickName(r.payload);
                   const country = pickMetaString(r.metadata, "country");
                   return (
                     <tr
                       key={r.id}
-                      className="even:bg-ink-50/[0.45] transition-colors hover:bg-ink-100/70"
+                      style={{
+                        animationDelay: idx < 24 ? `${idx * 14}ms` : "0ms",
+                      }}
+                      className="even:bg-ink-50/[0.45] animate-fade-up transition-colors hover:bg-ink-100/70"
                     >
                       <td className={`${TD} w-14 shrink-0`}>
                         <div className={DASH_TD_INNER}>

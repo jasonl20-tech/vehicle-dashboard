@@ -456,7 +456,7 @@ function Header({
   return (
     <header
       aria-label={title}
-      className="mb-6 border-b border-hair pb-4"
+      className="mb-6 border-b border-hair pb-4 animate-fade-down"
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
         <p className="max-w-2xl text-[13px] leading-relaxed text-ink-500">
@@ -467,7 +467,7 @@ function Header({
             type="button"
             onClick={onReload}
             title="Aktualisieren"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
+            className="press inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair bg-white text-ink-500 transition-colors hover:border-ink-300 hover:text-ink-800"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
@@ -500,7 +500,7 @@ function RangeBar({
                 setShowCustom(false);
                 onChange(rangeFromPreset(p.id));
               }}
-              className={`px-3 py-1.5 text-[12px] transition-colors ${
+              className={`press px-3 py-1.5 text-[12px] transition-colors ${
                 active
                   ? "bg-ink-900 text-white"
                   : "text-ink-600 hover:bg-ink-50"
@@ -513,7 +513,7 @@ function RangeBar({
         <button
           type="button"
           onClick={() => setShowCustom((v) => !v)}
-          className={`border-l border-hair px-3 py-1.5 text-[12px] transition-colors ${
+          className={`press border-l border-hair px-3 py-1.5 text-[12px] transition-colors ${
             range.preset === "custom" || showCustom
               ? "bg-ink-900 text-white"
               : "text-ink-600 hover:bg-ink-50"
@@ -613,7 +613,7 @@ function KpiGrid({
     total > 0 ? Math.round((views / total) * 1000) / 10 : null;
 
   return (
-    <div className="mb-12 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
+    <div className="stagger-children mb-12 grid grid-cols-1 divide-y divide-hair border-y border-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-5">
       <KpiTile
         label="Anfragen gesamt"
         value={loading ? "…" : fmtNumber(total)}
@@ -680,7 +680,7 @@ function KpiTile({
           ? "text-accent-rose"
           : "text-ink-400";
   return (
-    <div className="px-5 py-6 first:pl-0 sm:px-6 lg:px-8 lg:first:pl-0">
+    <div className="animate-fade-up px-5 py-6 first:pl-0 sm:px-6 lg:px-8 lg:first:pl-0">
       <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
         {label}
       </p>
@@ -708,7 +708,7 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="border-t border-hair pt-10 pb-12 first-of-type:border-t-0 first-of-type:pt-0">
+    <section className="animate-fade-up border-t border-hair pt-10 pb-12 first-of-type:border-t-0 first-of-type:pt-0">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="font-display text-[20px] tracking-tightish text-ink-900">

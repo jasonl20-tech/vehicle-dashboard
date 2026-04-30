@@ -192,11 +192,19 @@ export default function DashboardLayout() {
                 : "relative mx-auto w-full min-w-0 max-w-[1480px] px-5 pb-8 pt-4 sm:px-10 sm:pb-8 sm:pt-5 lg:px-14 lg:pb-12 lg:pt-6"
             }
           >
+            {/*
+             * `key={pathname}` zwingt React zum Re-Mount bei Routen-Wechsel,
+             * dadurch greift `animate-fade-up` als Page-Transition für ALLE
+             * Dashboard-Seiten kostenlos. `will-change: opacity, transform`
+             * hält die GPU-Pipeline kurz aktiv, ohne Layout-Thrashing.
+             */}
             <div
+              key={pathname}
+              style={{ willChange: "opacity, transform" }}
               className={
                 isFullHeightPage
-                  ? "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
-                  : ""
+                  ? "animate-fade-up flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
+                  : "animate-fade-up"
               }
             >
               <Outlet context={outletContext} />

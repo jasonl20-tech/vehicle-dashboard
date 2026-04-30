@@ -272,12 +272,19 @@ export default function SystemeMappingPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-hair/90">
-                    {(api.data?.rows ?? []).map((r) => {
+                  <tbody className="stagger-children divide-y divide-hair/90">
+                    {(api.data?.rows ?? []).map((r, idx) => {
                       const id = Number(r.id);
                       const isEd = editingId === id;
                       return (
-                        <tr key={id} className="hover:bg-ink-50/40">
+                        <tr
+                          key={id}
+                          style={{
+                            animationDelay:
+                              idx < 24 ? `${idx * 14}ms` : "0ms",
+                          }}
+                          className="animate-fade-up transition-colors hover:bg-ink-50/40"
+                        >
                           <td className={`${TD} font-mono text-ink-500`}>
                             {id}
                           </td>
