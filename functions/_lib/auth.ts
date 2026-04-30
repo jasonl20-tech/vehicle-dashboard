@@ -1,3 +1,5 @@
+import type { WorkersAiBinding } from "./workersAiBinding";
+
 /**
  * Session-/Cookie-Helper für Cloudflare Pages Functions.
  *
@@ -132,6 +134,12 @@ export interface AuthEnv {
    * damit der Browser den Public-Link direkt verwendet.
    */
   ASSETS_PUBLIC_BASE?: string;
+  /**
+   * Workers AI (Pages: Functions → Bindings → Workers AI).
+   * Variable z. B. `workersai` oder wie in der Doku `AI`.
+   */
+  workersai?: WorkersAiBinding;
+  AI?: WorkersAiBinding;
 }
 
 // ---------- base64url helpers ----------

@@ -31,6 +31,7 @@ import {
 } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
+import { EmailHtmlAiChatDock } from "../components/emails/EmailHtmlAiChatDock";
 import { useApi, fmtNumber } from "../lib/customerApi";
 import { stripEmailBuilderMarker } from "../lib/builderDesign";
 import {
@@ -264,6 +265,9 @@ export default function EmailTemplatesPage() {
 
   // ---- Speichern + Rename ----
   const htmlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const aiDockRootRef = useRef<HTMLDivElement | null>(null);
+  const [htmlEditorFocused, setHtmlEditorFocused] = useState(false);
+  const [aiDockExpanded, setAiDockExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
@@ -287,6 +291,27 @@ export default function EmailTemplatesPage() {
       setSaving(false);
     }
   }, [one.data, subject, list, htmlOnly]);
+
+  const showAiDock = Boolean(
+    one.data && (htmlEditorFocused || aiDockExpanded),
+  );
+
+  const onHtmlEditorFocus = useCallback(() => {
+    setHtmlEditorFocused(true);
+  }, []);
+
+  const onHtmlEditorBlur = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      const ae = document.activeElement;
+      if (aiDockRootRef.current?.contains(ae)) return;
+      setHtmlEditorFocused(false);
+    });
+  }, []);
+
+  const onAiApplyHtml = useCallback((next: string) => {
+    setHtmlOnly(next);
+    setDirty(true);
+  }, []);
 
   // Rename (ID/Name) ist bewusst deaktiviert: Vorlagen werden vom externen
   // Mail-Worker per id referenziert. Bestand bleibt durch Sperre der
@@ -694,6 +719,8 @@ export default function EmailTemplatesPage() {
                           setHtmlOnly(e.target.value);
                           setDirty(true);
                         }}
+                        onFocus={onHtmlEditorFocus}
+                        onBlur={onHtmlEditorBlur}
                         spellCheck={false}
                         className="min-h-0 w-full flex-1 resize-none border-0 bg-ink-900 p-4 font-mono text-[12.5px] leading-relaxed text-ink-100 placeholder:text-ink-500 focus:outline-none focus:ring-0"
                         placeholder="<table>… eigenes Email-HTML hier einfügen …</table>"
@@ -877,6 +904,14 @@ export default function EmailTemplatesPage() {
         </div>
       )}
 
+      <EmailHtmlAiChatDock
+        ref={aiDockRootRef}
+        show={showAiDock}
+        expanded={aiDockExpanded}
+        onExpandedChange={setAiDockExpanded}
+        html={htmlOnly}
+        onApplyHtml={onAiApplyHtml}
+      />
     </div>
   );
 }
