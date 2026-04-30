@@ -13,8 +13,6 @@ import {
   useMemo,
   useRef,
   useState,
-  forwardRef,
-  type Ref,
 } from "react";
 import {
   type TemplateAiChatTurn,
@@ -22,12 +20,6 @@ import {
   postTemplateAiChat,
   type TemplateAiModelOption,
 } from "../../lib/emailTemplateAiApi";
-
-function assignRef<T>(ref: Ref<T> | undefined, value: T | null): void {
-  if (!ref) return;
-  if (typeof ref === "function") ref(value);
-  else (ref as { current: T | null }).current = value;
-}
 
 const MODEL_STORAGE_KEY = "ui.emailTemplates.aiModelId";
 
@@ -48,19 +40,19 @@ function writeStoredModelId(id: string): void {
   }
 }
 
-export const EmailHtmlAiChatDock = forwardRef<
-  HTMLDivElement,
-  {
-    show: boolean;
-    expanded: boolean;
-    onExpandedChange: (open: boolean) => void;
-    html: string;
-    onApplyHtml: (next: string) => void;
-  }
->(function EmailHtmlAiChatDock(
-  { show, expanded, onExpandedChange, html, onApplyHtml },
-  forwardedRef,
-) {
+export function EmailHtmlAiChatDock({
+  show,
+  expanded,
+  onExpandedChange,
+  html,
+  onApplyHtml,
+}: {
+  show: boolean;
+  expanded: boolean;
+  onExpandedChange: (open: boolean) => void;
+  html: string;
+  onApplyHtml: (next: string) => void;
+}) {
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -176,13 +168,8 @@ export const EmailHtmlAiChatDock = forwardRef<
 
   if (!show) return null;
 
-  const setRoot = (node: HTMLDivElement | null) => {
-    assignRef(forwardedRef, node);
-  };
-
   return (
     <div
-      ref={setRoot}
       className="pointer-events-none fixed bottom-0 right-0 z-[100] flex flex-col items-end gap-2 p-3 sm:p-4"
     >
       {!expanded && (
@@ -340,4 +327,4 @@ export const EmailHtmlAiChatDock = forwardRef<
       )}
     </div>
   );
-});
+}

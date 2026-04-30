@@ -265,9 +265,10 @@ export default function EmailTemplatesPage() {
 
   // ---- Speichern + Rename ----
   const htmlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const aiDockRootRef = useRef<HTMLDivElement | null>(null);
-  const [htmlEditorFocused, setHtmlEditorFocused] = useState(false);
   const [aiDockExpanded, setAiDockExpanded] = useState(false);
+  useEffect(() => {
+    setAiDockExpanded(false);
+  }, [one.data?.id]);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
@@ -292,21 +293,8 @@ export default function EmailTemplatesPage() {
     }
   }, [one.data, subject, list, htmlOnly]);
 
-  const showAiDock = Boolean(
-    one.data && (htmlEditorFocused || aiDockExpanded),
-  );
-
-  const onHtmlEditorFocus = useCallback(() => {
-    setHtmlEditorFocused(true);
-  }, []);
-
-  const onHtmlEditorBlur = useCallback(() => {
-    window.requestAnimationFrame(() => {
-      const ae = document.activeElement;
-      if (aiDockRootRef.current?.contains(ae)) return;
-      setHtmlEditorFocused(false);
-    });
-  }, []);
+  /** KI-Hilfe: sichtbar sobald eine Vorlage geladen ist (nicht nur bei HTML-Fokus). */
+  const showAiDock = Boolean(one.data);
 
   const onAiApplyHtml = useCallback((next: string) => {
     setHtmlOnly(next);
@@ -719,8 +707,6 @@ export default function EmailTemplatesPage() {
                           setHtmlOnly(e.target.value);
                           setDirty(true);
                         }}
-                        onFocus={onHtmlEditorFocus}
-                        onBlur={onHtmlEditorBlur}
                         spellCheck={false}
                         className="min-h-0 w-full flex-1 resize-none border-0 bg-ink-900 p-4 font-mono text-[12.5px] leading-relaxed text-ink-100 placeholder:text-ink-500 focus:outline-none focus:ring-0"
                         placeholder="<table>… eigenes Email-HTML hier einfügen …</table>"
@@ -905,7 +891,7 @@ export default function EmailTemplatesPage() {
       )}
 
       <EmailHtmlAiChatDock
-        ref={aiDockRootRef}
+        key={one.data?.id ?? "none"}
         show={showAiDock}
         expanded={aiDockExpanded}
         onExpandedChange={setAiDockExpanded}
