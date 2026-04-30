@@ -1,27 +1,19 @@
 /**
- * Email-Templates: kombinierte Liste + selbst gebauter visueller Editor
- * in einem Split-View.
+ * Email-Templates: Liste + HTML-Editor mit Live-Vorschau (Split-View).
  *
- * Linke Spalte: Vorlagen-Liste (suchbar, einklappbar).
- * Rechte Spalte: gewählte Vorlage – mit zwei Bearbeitungsmodi:
- *   - "Builder": eigener Drag-and-Drop-Builder (`EmailBuilder`)
- *   - "HTML":    rohe HTML-Body-Textarea für Custom-Mails
+ * Linke Spalte: Vorlagen (suchbar, einklappbar).
+ * Rechte Spalte: Betreff, HTML-Textarea, daneben read-only iframe.
  *
- * Speicher-Strategie (ohne Schema-Wechsel):
- *   body_html in der DB enthält **vorne** einen unsichtbaren HTML-Kommentar
- *   mit dem Builder-Design-JSON (base64), gefolgt vom gerenderten HTML.
- *   Der externe Mail-Worker schickt body_html unverändert raus — Mail-
- *   Clients ignorieren HTML-Kommentare.
+ * Legacy: Ältere `body_html` können noch den EMAIL_BUILDER-Kommentar enthalten —
+ * beim Laden wird er entfernt. Gespeichert wird nur noch reines HTML.
  *
- * Persistenz: aside-collapse + viewMode in localStorage.
+ * Persistenz: aside-collapse in localStorage.
  */
 import {
   ChevronDown,
   ChevronsLeft,
   ChevronsRight,
-  Code2,
   Copy,
-  LayoutGrid,
   Loader2,
   Plus,
   RefreshCw,
@@ -30,8 +22,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  Suspense,
-  lazy,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -41,10 +31,8 @@ import {
 } from "react";
 import { useOutletContext, useSearchParams } from "react-router-dom";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
-import type { EmailBuilderHandle } from "../components/emails/builder/EmailBuilder";
-import { makeDefaultDesign } from "../components/emails/builder/defaults";
-import type { EmailDesign } from "../components/emails/builder/types";
 import { useApi, fmtNumber } from "../lib/customerApi";
+import { stripEmailBuilderMarker } from "../lib/builderDesign";
 import {
   EMAIL_TEMPLATE_VARIABLES,
   createEmailTemplate,
@@ -55,14 +43,6 @@ import {
   type EmailTemplate,
   type EmailTemplatesListResponse,
 } from "../lib/emailTemplatesApi";
-import {
-  embedBuilderDesign,
-  extractBuilderDesign,
-} from "../lib/builderDesign";
-
-const EmailBuilder = lazy(
-  () => import("../components/emails/builder/EmailBuilder"),
-);
 
 const PAGE_SIZE = 200;
 const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
@@ -70,9 +50,6 @@ const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
 const noopSetHeader: DashboardOutletContext["setHeaderTrailing"] = () => {};
 
 const ASIDE_COLLAPSE_KEY = "ui.emailTemplates.asideCollapsed";
-const VIEW_MODE_KEY = "ui.emailTemplates.viewMode";
-
-type ViewMode = "builder" | "html";
 
 function readAsideCollapsed(): boolean {
   if (typeof window === "undefined") return false;
@@ -86,24 +63,6 @@ function readAsideCollapsed(): boolean {
 function writeAsideCollapsed(v: boolean): void {
   try {
     window.localStorage.setItem(ASIDE_COLLAPSE_KEY, v ? "1" : "0");
-  } catch {
-    // bewusst leer
-  }
-}
-
-function readViewMode(): ViewMode {
-  if (typeof window === "undefined") return "builder";
-  try {
-    const v = window.localStorage.getItem(VIEW_MODE_KEY);
-    return v === "html" ? "html" : "builder";
-  } catch {
-    return "builder";
-  }
-}
-
-function writeViewMode(v: ViewMode): void {
-  try {
-    window.localStorage.setItem(VIEW_MODE_KEY, v);
   } catch {
     // bewusst leer
   }
@@ -139,28 +98,23 @@ function toPreviewDocument(html: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{margin:0;padding:16px;background:#f4f4f5;font:14px/1.45 system-ui,sans-serif;color:#1a1a1c}</style></head><body>${h}</body></html>`;
 }
 
-/** Read-only Live-Vorschau des rohen HTML-Strings (Custom-HTML / versendeter Body). */
-function EmailHtmlPreviewPane({
-  html,
-}: {
-  html: string;
-}) {
+/** Live-Vorschau des HTML (read-only iframe). */
+function EmailHtmlPreviewPane({ html }: { html: string }) {
   const doc = useMemo(() => toPreviewDocument(html), [html]);
   return (
-    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col border-t border-hair bg-white lg:w-[min(38vw,420px)] lg:max-w-[420px] lg:shrink-0 lg:border-l lg:border-t-0">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-hair bg-white lg:min-w-0 lg:flex-1 lg:border-l lg:border-t-0">
       <div className="shrink-0 border-b border-hair bg-ink-50/80 px-2.5 py-1.5">
         <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-500">
-          HTML-Vorschau (read-only)
+          Vorschau
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-ink-400">
-          Entspricht dem aktuellen Feldinhalt im HTML-Tab — nicht die
-          Builder-Blöcke. Zum Bearbeiten in den Tab „HTML“ wechseln.
+          Entspricht dem HTML im Editor (keine Scripts, sandbox).
         </p>
       </div>
       <div className="min-h-0 flex-1 p-2">
         <iframe
           title="Email HTML Vorschau"
-          className="h-full min-h-[180px] w-full rounded-md border border-hair bg-white shadow-inner"
+          className="h-full min-h-[200px] w-full rounded-md border border-hair bg-white shadow-inner"
           sandbox=""
           srcDoc={doc}
         />
@@ -210,46 +164,15 @@ export default function EmailTemplatesPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
 
-  // ---- Builder / HTML-Modus ----
-  const [viewMode, setViewMode] = useState<ViewMode>(readViewMode);
-  /**
-   * `htmlOnly` ist body_html ohne den EMAIL_BUILDER-Marker — das ist,
-   * was der HTML-Modus dem User zeigt und was beim direkten HTML-Save
-   * geschickt wird (ggf. wieder mit Design-Marker versehen).
-   */
+  /** Reiner HTML-Body (ohne optionalen EMAIL_BUILDER-Marker). */
   const [htmlOnly, setHtmlOnly] = useState("");
-  /**
-   * Initial-Design für den Builder. Wird nur beim Laden eines Templates
-   * gesetzt — der Builder hält danach selbst seinen State und liefert
-   * den aktuellen Stand via `editorRef.current.getDesign()`.
-   */
-  const [initialDesign, setInitialDesign] = useState<EmailDesign | null>(null);
-  /**
-   * Falls das Template noch keinen Builder-Marker hatte (manuell
-   * angelegtes HTML, alt-Daten), merken wir uns das, um die Warnung
-   * im HTML-Modus auszublenden.
-   */
-  const [hadDesign, setHadDesign] = useState(false);
-  /**
-   * True, sobald der User den HTML-Tab inhaltlich geändert hat. Dann
-   * überschreibt ein Wechsel Builder→HTML das Textarea nicht mit
-   * getEmailHtml() — sonst gingen Custom-HTML-Änderungen verloren.
-   * Jede Bearbeitung im Builder setzt das zurück.
-   */
-  const htmlBodyTouchedRef = useRef(false);
 
   useEffect(() => {
     if (!one.data) return;
     setSubject(one.data.subject);
     setSavedAt(one.data.updated_at);
-    const { design: d, htmlWithoutMarker } = extractBuilderDesign(
-      one.data.body_html,
-    );
-    setHtmlOnly(htmlWithoutMarker);
-    setInitialDesign(d ?? makeDefaultDesign());
-    setHadDesign(d !== null);
+    setHtmlOnly(stripEmailBuilderMarker(one.data.body_html ?? ""));
     setDirty(false);
-    htmlBodyTouchedRef.current = false;
   }, [one.data?.id, one.data?.updated_at]);
 
   // ---- Anlegen ----
@@ -340,81 +263,30 @@ export default function EmailTemplatesPage() {
   );
 
   // ---- Speichern + Rename ----
-  const editorRef = useRef<EmailBuilderHandle | null>(null);
   const htmlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
-
-  /**
-   * Sammelt den finalen body_html-String je nach aktivem Modus.
-   *
-   * - Builder: Editor liefert frisches Design + gerendertes HTML synchron.
-   *   Wir verpacken Design vorne als HTML-Kommentar, und schicken alles
-   *   als `body_html`.
-   * - HTML: User-Textarea ist die Quelle. Wenn ein Builder-Design noch
-   *   existiert (frühere Bearbeitung), behalten wir es — beim erneuten
-   *   Öffnen im Builder-Modus ist das Design wieder da (das sichtbare
-   *   HTML wurde direkt editiert, das Design ist evtl. nicht mehr
-   *   deckungs-gleich → der User wird über ein Banner gewarnt).
-   */
-  const collectBodyHtml = useCallback((): string => {
-    if (viewMode === "builder") {
-      const ed = editorRef.current;
-      if (!ed) {
-        return embedBuilderDesign(initialDesign, htmlOnly);
-      }
-      const design = ed.getDesign();
-      const html = htmlBodyTouchedRef.current
-        ? htmlOnly
-        : ed.getEmailHtml();
-      return embedBuilderDesign(design, html);
-    }
-    return embedBuilderDesign(initialDesign, htmlOnly);
-  }, [viewMode, initialDesign, htmlOnly]);
-
-  const switchViewMode = useCallback((next: ViewMode) => {
-    setViewMode((prev) => {
-      if (prev === next) return prev;
-      if (prev === "builder" && next === "html") {
-        const ed = editorRef.current;
-        if (ed) {
-          setInitialDesign(ed.getDesign());
-          if (!htmlBodyTouchedRef.current) {
-            setHtmlOnly(ed.getEmailHtml());
-          }
-        }
-      }
-      writeViewMode(next);
-      return next;
-    });
-  }, []);
 
   const onSave = useCallback(async () => {
     if (!one.data) return;
     setSaving(true);
     setSaveErr(null);
-    const finalHtml = collectBodyHtml();
+    const finalHtml = htmlOnly.trim();
     try {
       const updated = await updateEmailTemplate(one.data!.id, {
         subject: subject.trim() || one.data!.subject,
         body_html: finalHtml,
       });
-      const { design: d, htmlWithoutMarker } = extractBuilderDesign(
-        updated.body_html,
-      );
       setSavedAt(updated.updated_at);
-      setHtmlOnly(htmlWithoutMarker);
-      setInitialDesign(d ?? initialDesign);
-      setHadDesign(d !== null);
+      setHtmlOnly(stripEmailBuilderMarker(updated.body_html ?? ""));
       setDirty(false);
-      htmlBodyTouchedRef.current = false;
       list.reload();
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
-  }, [one.data, subject, list, collectBodyHtml, initialDesign]);
+  }, [one.data, subject, list, htmlOnly]);
 
   // Rename (ID/Name) ist bewusst deaktiviert: Vorlagen werden vom externen
   // Mail-Worker per id referenziert. Bestand bleibt durch Sperre der
@@ -422,36 +294,24 @@ export default function EmailTemplatesPage() {
 
   // ---- Variablen-Dropdown ----
   const [varOpen, setVarOpen] = useState(false);
-  const insertVariable = useCallback(
-    (token: string) => {
-      setVarOpen(false);
-      if (viewMode === "html") {
-        const ta = htmlTextareaRef.current;
-        if (ta) {
-          const start = ta.selectionStart ?? ta.value.length;
-          const end = ta.selectionEnd ?? ta.value.length;
-          const next =
-            ta.value.slice(0, start) + token + ta.value.slice(end);
-          setHtmlOnly(next);
-          htmlBodyTouchedRef.current = true;
-          requestAnimationFrame(() => {
-            ta.focus();
-            const pos = start + token.length;
-            ta.setSelectionRange(pos, pos);
-          });
-        } else {
-          setHtmlOnly((b) => b + token);
-          htmlBodyTouchedRef.current = true;
-        }
-        setDirty(true);
-      } else {
-        // Builder: fügt direkt am Cursor in einem Text-Block ein, oder
-        // legt den Token in die Zwischenablage als Fallback.
-        editorRef.current?.insertVariable(token);
-      }
-    },
-    [viewMode],
-  );
+  const insertVariable = useCallback((token: string) => {
+    setVarOpen(false);
+    const ta = htmlTextareaRef.current;
+    if (ta) {
+      const start = ta.selectionStart ?? ta.value.length;
+      const end = ta.selectionEnd ?? ta.value.length;
+      const next = ta.value.slice(0, start) + token + ta.value.slice(end);
+      setHtmlOnly(next);
+      requestAnimationFrame(() => {
+        ta.focus();
+        const pos = start + token.length;
+        ta.setSelectionRange(pos, pos);
+      });
+    } else {
+      setHtmlOnly((b) => b + token);
+    }
+    setDirty(true);
+  }, []);
   const insertVariableIntoSubject = useCallback((token: string) => {
     setVarOpen(false);
     setSubject((s) => `${s}${s ? " " : ""}${token}`);
@@ -520,9 +380,7 @@ export default function EmailTemplatesPage() {
                 role="dialog"
               >
                 <p className="px-2 pb-1 pt-1 text-[10.5px] uppercase tracking-wider text-night-500">
-                  {viewMode === "html"
-                    ? "In HTML einfügen"
-                    : "In Text-Block einfügen"}
+                  In HTML einfügen
                 </p>
                 <div className="max-h-72 overflow-y-auto">
                   {EMAIL_TEMPLATE_VARIABLES.map((v) => (
@@ -556,13 +414,6 @@ export default function EmailTemplatesPage() {
                     ))}
                   </div>
                 </div>
-                {viewMode === "builder" && (
-                  <p className="border-t border-white/[0.08] px-2 py-1.5 text-[10.5px] text-night-500">
-                    Setze den Cursor in einen Text-/Überschriften-Block,
-                    bevor du eine Variable wählst. Sonst landet sie in
-                    der Zwischenablage.
-                  </p>
-                )}
               </div>
             )}
           </div>
@@ -613,7 +464,6 @@ export default function EmailTemplatesPage() {
       savedAt,
       dirty,
       varOpen,
-      viewMode,
       list.loading,
       saving,
       onSave,
@@ -812,46 +662,9 @@ export default function EmailTemplatesPage() {
                 />
               </div>
               <div className="flex shrink-0 items-center justify-between gap-2 border-b border-hair bg-paper/60 px-3 py-1.5 sm:px-4">
-                <div
-                  role="tablist"
-                  aria-label="Bearbeitungsmodus"
-                  className="inline-flex rounded-md border border-hair bg-white p-0.5"
-                >
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "builder"}
-                    onClick={() => switchViewMode("builder")}
-                    disabled={!one.data}
-                    className={`inline-flex items-center gap-1 rounded-[5px] px-2.5 py-1 text-[12px] font-medium transition disabled:opacity-50 ${
-                      viewMode === "builder"
-                        ? "bg-ink-900 text-white"
-                        : "text-ink-600 hover:text-ink-900"
-                    }`}
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    Builder
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === "html"}
-                    onClick={() => switchViewMode("html")}
-                    disabled={!one.data}
-                    className={`inline-flex items-center gap-1 rounded-[5px] px-2.5 py-1 text-[12px] font-medium transition disabled:opacity-50 ${
-                      viewMode === "html"
-                        ? "bg-ink-900 text-white"
-                        : "text-ink-600 hover:text-ink-900"
-                    }`}
-                  >
-                    <Code2 className="h-3.5 w-3.5" />
-                    HTML
-                  </button>
-                </div>
+                <p className="text-[11px] font-medium text-ink-600">HTML</p>
                 <span className="text-[11px] tabular-nums text-ink-400">
-                  {viewMode === "html"
-                    ? `${htmlOnly.length.toLocaleString("de-DE")} Zeichen HTML`
-                    : "Builder · rechts: Vorschau des HTML-Tabs"}
+                  {`${htmlOnly.length.toLocaleString("de-DE")} Zeichen`}
                 </span>
               </div>
               {(one.error || saveErr) && (
@@ -860,17 +673,6 @@ export default function EmailTemplatesPage() {
                   role="alert"
                 >
                   {one.error || saveErr}
-                </p>
-              )}
-              {viewMode === "html" && hadDesign && (
-                <p
-                  className="shrink-0 border-b border-accent-amber/30 bg-accent-amber/10 px-3 py-1.5 text-[11.5px] text-accent-amber sm:px-5"
-                  role="status"
-                >
-                  Hinweis: Dieser HTML-Code und das Builder-Layout können
-                  auseinanderlaufen. Das im Tab „HTML“ bearbeitete Markup wird
-                  beim Speichern mit dem Builder-Design gemeinsam persistiert —
-                  im Builder gibt es dafür rechts eine Live-Vorschau.
                 </p>
               )}
               <div className="relative min-h-0 flex-1 bg-white">
@@ -882,61 +684,23 @@ export default function EmailTemplatesPage() {
                     </p>
                   </div>
                 )}
-                {one.data && initialDesign && (
-                  <>
-                    {/*
-                      Builder bleibt montiert, auch wenn der HTML-Modus
-                      aktiv ist — der State darin (Selection, Undo-Stack)
-                      würde sonst beim Tab-Switch verloren gehen.
-                    */}
-                    <div
-                      className={
-                        viewMode === "builder"
-                          ? "absolute inset-0 flex min-h-0 flex-col lg:flex-row"
-                          : "hidden"
-                      }
-                    >
-                      <div className="relative min-h-0 min-w-0 flex-1">
-                        <Suspense
-                          fallback={
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Builder wird geladen…
-                              </p>
-                            </div>
-                          }
-                        >
-                          <EmailBuilder
-                            key={one.data.id}
-                            ref={editorRef}
-                            initialDesign={initialDesign}
-                            onChange={() => {
-                              htmlBodyTouchedRef.current = false;
-                              setDirty(true);
-                            }}
-                          />
-                        </Suspense>
-                      </div>
-                      <EmailHtmlPreviewPane html={htmlOnly} />
+                {one.data && (
+                  <div className="absolute inset-0 flex min-h-0 flex-col lg:flex-row">
+                    <div className="relative flex min-h-[220px] min-w-0 flex-1 flex-col border-hair bg-ink-900 lg:min-h-0 lg:border-r">
+                      <textarea
+                        ref={htmlTextareaRef}
+                        value={htmlOnly}
+                        onChange={(e) => {
+                          setHtmlOnly(e.target.value);
+                          setDirty(true);
+                        }}
+                        spellCheck={false}
+                        className="min-h-0 w-full flex-1 resize-none border-0 bg-ink-900 p-4 font-mono text-[12.5px] leading-relaxed text-ink-100 placeholder:text-ink-500 focus:outline-none focus:ring-0"
+                        placeholder="<table>… eigenes Email-HTML hier einfügen …</table>"
+                      />
                     </div>
-                    {viewMode === "html" && (
-                      <div className="absolute inset-0 flex flex-col bg-ink-900">
-                        <textarea
-                          ref={htmlTextareaRef}
-                          value={htmlOnly}
-                          onChange={(e) => {
-                            setHtmlOnly(e.target.value);
-                            htmlBodyTouchedRef.current = true;
-                            setDirty(true);
-                          }}
-                          spellCheck={false}
-                          className="min-h-0 w-full flex-1 resize-none border-0 bg-ink-900 p-4 font-mono text-[12.5px] leading-relaxed text-ink-100 placeholder:text-ink-500 focus:outline-none focus:ring-0"
-                          placeholder="<table>… eigenes Email-HTML hier einfügen …</table>"
-                        />
-                      </div>
-                    )}
-                  </>
+                    <EmailHtmlPreviewPane html={htmlOnly} />
+                  </div>
                 )}
               </div>
             </>
