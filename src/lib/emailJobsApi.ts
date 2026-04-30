@@ -25,7 +25,8 @@ export type EmailJobStatus = (typeof EMAIL_JOB_STATUSES)[number];
 export type EmailJobRow = {
   id: string;
   recipient_email: string;
-  tracking_id: string;
+  /** Wird vom Mail-Worker beim Versand gesetzt — Dashboard schreibt nicht. */
+  tracking_id: string | null;
   recipient_data: string;
   template_id: string | null;
   custom_subject: string | null;
@@ -37,6 +38,7 @@ export type EmailJobRow = {
   sent_at: string | null;
   created_at: string | null;
   from_email: string;
+  from_name: string | null;
   /** Anzahl `open`-Events, gesamt. */
   open_count: number;
   /** Anzahl `click`-Events, gesamt. */
@@ -70,7 +72,7 @@ export type EmailJobTrackingSummary = {
 export type EmailJobFull = {
   id: string;
   recipient_email: string;
-  tracking_id: string;
+  tracking_id: string | null;
   recipient_data: string;
   template_id: string | null;
   custom_subject: string | null;
@@ -82,6 +84,7 @@ export type EmailJobFull = {
   sent_at: string | null;
   created_at: string | null;
   from_email: string;
+  from_name: string | null;
   tracking: EmailJobTrackingSummary;
 };
 
@@ -313,8 +316,12 @@ export type CreateEmailJobInput = {
   custom_body_html?: string | null;
   /** ISO oder `YYYY-MM-DD HH:MM:SS`. Wenn nicht gesetzt → sofort. */
   scheduled_at?: string | null;
+  /** Default: `support@vehicleimagery.com`. */
   from_email?: string | null;
+  from_name?: string | null;
 };
+
+export const DEFAULT_FROM_EMAIL = "support@vehicleimagery.com";
 
 export async function createEmailJob(
   input: CreateEmailJobInput,
@@ -330,6 +337,7 @@ export async function createEmailJob(
   if (input.custom_body_html) payload.custom_body_html = input.custom_body_html;
   if (input.scheduled_at) payload.scheduled_at = input.scheduled_at;
   if (input.from_email) payload.from_email = input.from_email;
+  if (input.from_name) payload.from_name = input.from_name;
 
   const res = await fetch(EMAIL_JOBS_API, {
     method: "POST",

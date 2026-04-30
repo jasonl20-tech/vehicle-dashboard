@@ -12,10 +12,11 @@
  *     Schreibt einen `pending`-Job in die Tabelle. Den Versand übernimmt
  *     der externe Mail-Worker (cron / queue).
  *
- * Schema (siehe d1/migrations/0008_email_jobs.sql + 0009_email_tracking.sql):
- *   id, recipient_email, tracking_id, recipient_data, template_id,
- *   custom_subject, custom_body_html, status, error_message, retries,
- *   scheduled_at, sent_at, created_at, from_email
+ * Schema (siehe d1/migrations/0008…0010):
+ *   id, recipient_email, tracking_id (NULLABLE, vom Mail-Worker gesetzt),
+ *   recipient_data, template_id, custom_subject, custom_body_html, status,
+ *   error_message, retries, scheduled_at, sent_at, created_at,
+ *   from_email, from_name (optional).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -35,7 +36,7 @@ const ALLOWED_STATUS = new Set([
 type Row = {
   id: string;
   recipient_email: string;
-  tracking_id: string;
+  tracking_id: string | null;
   recipient_data: string;
   template_id: string | null;
   custom_subject: string | null;
@@ -47,6 +48,7 @@ type Row = {
   sent_at: string | null;
   created_at: string | null;
   from_email: string;
+  from_name: string | null;
   open_count: number;
   click_count: number;
   unique_open_count: number;
@@ -74,6 +76,25 @@ function tableMissingHint(e: unknown): string | null {
     return "Tabelle `email_jobs` oder `email_tracking` fehlt. Migrationen ausführen: `wrangler d1 execute <DB-NAME> --file=./d1/migrations/0008_email_jobs.sql` und `… --file=./d1/migrations/0009_email_tracking.sql`.";
   }
   return null;
+}
+
+/** Prüft, ob eine Spalte in einer Tabelle existiert (PRAGMA table_info). */
+async function columnExists(
+  db: D1Database,
+  table: string,
+  column: string,
+): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all<{ name: string }>();
+    for (const row of r.results ?? []) {
+      if (row?.name === column) return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 /** Akzeptiert ISO-Strings (mit oder ohne `T`) bzw. `YYYY-MM-DD`. */
@@ -177,6 +198,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       if (r?.status) statusCounts[r.status] = Number(r.n) || 0;
     }
 
+    // `from_name`-Spalte ist optional (Migration 0010). Falls sie noch
+    // nicht existiert, fallen wir auf NULL zurück.
+    const hasFromName = await columnExists(db, "email_jobs", "from_name");
+    const fromNameSelect = hasFromName ? "j.from_name" : "NULL AS from_name";
+
     // Tracking-Aggregate per LEFT JOIN. `email_tracking` darf optional
     // fehlen (frühe Setups) — in dem Fall wird die Query mit Fallback
     // erneut ohne Tracking ausgeführt.
@@ -186,7 +212,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         .prepare(
           `SELECT j.id,
                   COALESCE(j.recipient_email, '') AS recipient_email,
-                  COALESCE(j.tracking_id, '') AS tracking_id,
+                  j.tracking_id AS tracking_id,
                   j.recipient_data,
                   j.template_id,
                   j.custom_subject,
@@ -198,6 +224,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
                   j.sent_at,
                   j.created_at,
                   j.from_email,
+                  ${fromNameSelect},
                   COALESCE(t.opens, 0)         AS open_count,
                   COALESCE(t.clicks, 0)        AS click_count,
                   COALESCE(t.unique_opens, 0)  AS unique_open_count,
@@ -231,7 +258,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
           .prepare(
             `SELECT j.id,
                     COALESCE(j.recipient_email, '') AS recipient_email,
-                    COALESCE(j.tracking_id, '') AS tracking_id,
+                    j.tracking_id AS tracking_id,
                     j.recipient_data,
                     j.template_id,
                     j.custom_subject,
@@ -243,6 +270,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
                     j.sent_at,
                     j.created_at,
                     j.from_email,
+                    ${fromNameSelect},
                     0 AS open_count,
                     0 AS click_count,
                     0 AS unique_open_count,
@@ -292,7 +320,10 @@ type PostBody = {
   custom_body_html?: string;
   scheduled_at?: string;
   from_email?: string;
+  from_name?: string;
 };
+
+const DEFAULT_FROM_EMAIL = "support@vehicleimagery.com";
 
 function uuid(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -428,67 +459,122 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const fromEmail =
     typeof body.from_email === "string" && body.from_email.trim()
       ? body.from_email.trim()
-      : "no-reply@vehicleimagery.com";
+      : DEFAULT_FROM_EMAIL;
+  const fromName =
+    typeof body.from_name === "string" && body.from_name.trim()
+      ? body.from_name.trim()
+      : null;
 
   const scheduledAt = normalizeDate(body.scheduled_at ?? null);
 
   const id = uuid();
-  // tracking_id bewusst leer (''), Versand + tracking_id-Vergabe macht
-  // der externe Mail-Worker. Wir schreiben hier nur den `pending`-Job.
-  // Empty-String statt NULL, damit der INSERT auch ohne DEFAULT-Klausel
-  // an der Spalte (NOT NULL) durchgeht.
-  const trackingId = "";
+  // `tracking_id` schreibt das Dashboard NICHT — der externe Mail-
+  // Worker setzt sie beim Versand. Im Schema (Migration 0010) ist die
+  // Spalte nullable; in älteren DBs darf sie NOT NULL DEFAULT '' sein,
+  // dann zieht der Default ohne explizite Angabe automatisch.
+
+  // `from_name` ist optional — die Spalte gibt es ggf. noch nicht
+  // (Migration 0010 nicht angewandt). Wir sondieren einmal vorher.
+  const hasFromName = await columnExists(db, "email_jobs", "from_name");
 
   try {
-    if (scheduledAt) {
-      await db
-        .prepare(
-          `INSERT INTO email_jobs
-             (id, recipient_email, tracking_id, recipient_data,
-              template_id, custom_subject, custom_body_html,
-              status, retries, scheduled_at, created_at, from_email)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, CURRENT_TIMESTAMP, ?)`,
-        )
-        .bind(
-          id,
-          recipientEmail,
-          trackingId,
-          recipientDataStr,
-          templateId,
-          customSubject,
-          customBodyHtml,
-          scheduledAt,
-          fromEmail,
-        )
-        .run();
+    if (hasFromName) {
+      if (scheduledAt) {
+        await db
+          .prepare(
+            `INSERT INTO email_jobs
+               (id, recipient_email, recipient_data,
+                template_id, custom_subject, custom_body_html,
+                status, retries, scheduled_at, created_at,
+                from_email, from_name)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, CURRENT_TIMESTAMP, ?, ?)`,
+          )
+          .bind(
+            id,
+            recipientEmail,
+            recipientDataStr,
+            templateId,
+            customSubject,
+            customBodyHtml,
+            scheduledAt,
+            fromEmail,
+            fromName,
+          )
+          .run();
+      } else {
+        await db
+          .prepare(
+            `INSERT INTO email_jobs
+               (id, recipient_email, recipient_data,
+                template_id, custom_subject, custom_body_html,
+                status, retries, scheduled_at, created_at,
+                from_email, from_name)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', 0,
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)`,
+          )
+          .bind(
+            id,
+            recipientEmail,
+            recipientDataStr,
+            templateId,
+            customSubject,
+            customBodyHtml,
+            fromEmail,
+            fromName,
+          )
+          .run();
+      }
     } else {
-      await db
-        .prepare(
-          `INSERT INTO email_jobs
-             (id, recipient_email, tracking_id, recipient_data,
-              template_id, custom_subject, custom_body_html,
-              status, retries, scheduled_at, created_at, from_email)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0,
-                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
-        )
-        .bind(
-          id,
-          recipientEmail,
-          trackingId,
-          recipientDataStr,
-          templateId,
-          customSubject,
-          customBodyHtml,
-          fromEmail,
-        )
-        .run();
+      // Kein `from_name` in der Tabelle → ohne diese Spalte einfügen.
+      if (scheduledAt) {
+        await db
+          .prepare(
+            `INSERT INTO email_jobs
+               (id, recipient_email, recipient_data,
+                template_id, custom_subject, custom_body_html,
+                status, retries, scheduled_at, created_at, from_email)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, CURRENT_TIMESTAMP, ?)`,
+          )
+          .bind(
+            id,
+            recipientEmail,
+            recipientDataStr,
+            templateId,
+            customSubject,
+            customBodyHtml,
+            scheduledAt,
+            fromEmail,
+          )
+          .run();
+      } else {
+        await db
+          .prepare(
+            `INSERT INTO email_jobs
+               (id, recipient_email, recipient_data,
+                template_id, custom_subject, custom_body_html,
+                status, retries, scheduled_at, created_at, from_email)
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', 0,
+                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)`,
+          )
+          .bind(
+            id,
+            recipientEmail,
+            recipientDataStr,
+            templateId,
+            customSubject,
+            customBodyHtml,
+            fromEmail,
+          )
+          .run();
+      }
     }
 
+    const fromNameSelect = hasFromName ? "from_name" : "NULL AS from_name";
     const row = await db
       .prepare(
         `SELECT id,
                 COALESCE(recipient_email, '') AS recipient_email,
-                COALESCE(tracking_id, '') AS tracking_id,
+                tracking_id AS tracking_id,
                 recipient_data,
                 template_id,
                 custom_subject,
@@ -499,7 +585,8 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
                 scheduled_at,
                 sent_at,
                 created_at,
-                from_email
+                from_email,
+                ${fromNameSelect}
            FROM email_jobs
           WHERE id = ?
           LIMIT 1`,
@@ -511,11 +598,20 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   } catch (e) {
     const msg = (e as Error)?.message || String(e);
     const hint = tableMissingHint(e);
-    if (/no column/i.test(msg) && /(recipient_email|tracking_id)/i.test(msg)) {
+    if (/no column/i.test(msg) && /recipient_email/i.test(msg)) {
       return jsonResponse(
         {
           error: msg,
-          hint: "Spalten `recipient_email` / `tracking_id` fehlen. Migration 0009 ausführen: `wrangler d1 execute <DB-NAME> --file=./d1/migrations/0009_email_tracking.sql`.",
+          hint: "Spalte `recipient_email` fehlt. Migration 0009 ausführen: `wrangler d1 execute <DB-NAME> --file=./d1/migrations/0009_email_tracking.sql`.",
+        },
+        { status: 503 },
+      );
+    }
+    if (/NOT NULL/i.test(msg) && /tracking_id/i.test(msg)) {
+      return jsonResponse(
+        {
+          error: msg,
+          hint: "`tracking_id` ist in der DB als NOT NULL angelegt. Migration 0010 (oder neueres Schema mit nullable `tracking_id`) anwenden.",
         },
         { status: 503 },
       );

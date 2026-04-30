@@ -20,6 +20,7 @@ import SystemeMappingPage from "./pages/SystemeMappingPage";
 import KundenCrmPage from "./pages/KundenCrmPage";
 import AnfragenPage from "./pages/AnfragenPage";
 import EmailTemplatesPage from "./pages/EmailTemplatesPage";
+import EmailLogDetailPage from "./pages/EmailLogDetailPage";
 import EmailLogsPage from "./pages/EmailLogsPage";
 import EmailManuellPage from "./pages/EmailManuellPage";
 import EmailTrackingPage from "./pages/EmailTrackingPage";
@@ -144,6 +145,7 @@ export default function App() {
           element={<Navigate to="/emails/templates" replace />}
         />
         <Route path="/emails/logs" element={<EmailLogsPage />} />
+        <Route path="/emails/logs/:id" element={<EmailLogDetailPage />} />
         <Route path="/emails/tracking" element={<EmailTrackingPage />} />
         <Route path="/emails/templates" element={<EmailTemplatesPage />} />
         <Route path="/emails/manuell" element={<EmailManuellPage />} />

@@ -1,31 +1,15 @@
 /**
- * Email Logs (Versand-Log) — STRIKT READ-ONLY.
+ * Email Logs — einfache, suchbare Tabelle.
  *
- * Quelle: Tabelle `email_jobs` in `env.website` (Cloudflare D1).
- * Geschrieben wird sie ausschließlich vom externen Mail-Worker; das
- * Dashboard zeigt sie nur an. Es gibt bewusst keine Bearbeitungs-,
- * Lösch- oder Retry-Aktionen in dieser UI.
- *
- * Layout: SplitView analog zu Customer Keys / Email Templates.
- *  - Links: kollabierbare Liste mit Suche, Status-Filter und Statistik-
- *    Kacheln, scrollbar.
- *  - Rechts: Detail-Panel mit allen Feldern, Recipient-JSON pretty-
- *    formatted, voller Tracking-Auswertung (Opens, Clicks, Top-Links,
- *    Top-Länder/Städte) und einer suchbaren Event-Tabelle.
- *
- * Persistenz: aside-collapse + Status-Filter in localStorage.
+ * Quelle: `email_jobs` (read-only, vom externen Mail-Worker geschrieben).
+ * Klick auf eine Zeile öffnet `/emails/logs/:id` (eigene Detail-Seite
+ * mit Charts und Events).
  */
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronsLeft,
-  ChevronsRight,
   Clock,
-  Code2,
-  Copy,
-  ExternalLink,
   Eye,
-  Globe2,
   Loader2,
   Mail,
   MousePointerClick,
@@ -35,54 +19,28 @@ import {
   X,
 } from "lucide-react";
 import {
-  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useState,
 } from "react";
-import { useOutletContext, useSearchParams } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import type { DashboardOutletContext } from "../components/layout/dashboardOutletContext";
-import { useApi, fmtNumber } from "../lib/customerApi";
+import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   EMAIL_JOB_STATUSES,
-  emailJobUrl,
   emailJobsListUrl,
-  emailJobEventsUrl,
-  parseRecipientData,
-  parseTrackingMetadata,
   recipientSummary,
   statusBadge,
-  type EmailJobFull,
+  type EmailJobRow,
   type EmailJobStatus,
   type EmailJobsListResponse,
-  type EmailTrackingEvent,
-  type EmailTrackingEventsResponse,
 } from "../lib/emailJobsApi";
 
 const PAGE_SIZE = 200;
-const EVENTS_PAGE_SIZE = 200;
-const ASIDE_KEY = "ui.emailLogs.asideCollapsed";
 const STATUS_KEY = "ui.emailLogs.status";
 
 const noopSetHeader: DashboardOutletContext["setHeaderTrailing"] = () => {};
-
-function readAsideCollapsed(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(ASIDE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeAsideCollapsed(v: boolean): void {
-  try {
-    window.localStorage.setItem(ASIDE_KEY, v ? "1" : "0");
-  } catch {
-    // bewusst leer
-  }
-}
 
 function readStatus(): EmailJobStatus | "" {
   if (typeof window === "undefined") return "";
@@ -114,27 +72,9 @@ function fmtWhen(s: string | null | undefined): string {
   return new Intl.DateTimeFormat("de-DE", {
     day: "2-digit",
     month: "2-digit",
-    year: "numeric",
+    year: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "UTC",
-  }).format(new Date(t));
-}
-
-function fmtWhenSeconds(s: string | null | undefined): string {
-  if (!s?.trim()) return "—";
-  const raw = s.trim();
-  const t = raw.includes("T")
-    ? Date.parse(raw)
-    : Date.parse(raw.replace(" ", "T") + "Z");
-  if (Number.isNaN(t)) return s;
-  return new Intl.DateTimeFormat("de-DE", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
     timeZone: "UTC",
   }).format(new Date(t));
 }
@@ -148,13 +88,6 @@ function fmtRelative(s: string | null | undefined): string {
   if (Number.isNaN(t)) return "—";
   const diff = Date.now() - t;
   const sec = Math.round(diff / 1000);
-  if (sec < 0) {
-    const inSec = -sec;
-    if (inSec < 60) return `in ${inSec}s`;
-    if (inSec < 3600) return `in ${Math.round(inSec / 60)} Min.`;
-    if (inSec < 86400) return `in ${Math.round(inSec / 3600)} Std.`;
-    return `in ${Math.round(inSec / 86400)} Tagen`;
-  }
   if (sec < 60) return `vor ${sec}s`;
   if (sec < 3600) return `vor ${Math.round(sec / 60)} Min.`;
   if (sec < 86400) return `vor ${Math.round(sec / 3600)} Std.`;
@@ -163,23 +96,11 @@ function fmtRelative(s: string | null | undefined): string {
 
 function StatusIcon({ status }: { status: string }) {
   const s = status.toLowerCase();
-  if (s === "sent") return <CheckCircle2 className="h-3.5 w-3.5" />;
-  if (s === "failed") return <AlertCircle className="h-3.5 w-3.5" />;
-  if (s === "processing") return <Send className="h-3.5 w-3.5" />;
-  if (s === "pending") return <Clock className="h-3.5 w-3.5" />;
-  return <Mail className="h-3.5 w-3.5" />;
-}
-
-function StatusPill({ status }: { status: string }) {
-  const b = statusBadge(status);
-  return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10.5px] font-medium ${b.className}`}
-    >
-      <StatusIcon status={status} />
-      {b.label}
-    </span>
-  );
+  if (s === "sent") return <CheckCircle2 className="h-3 w-3" />;
+  if (s === "failed") return <AlertCircle className="h-3 w-3" />;
+  if (s === "processing") return <Send className="h-3 w-3" />;
+  if (s === "pending") return <Clock className="h-3 w-3" />;
+  return <Mail className="h-3 w-3" />;
 }
 
 const STATUS_FILTER_OPTIONS: {
@@ -188,29 +109,16 @@ const STATUS_FILTER_OPTIONS: {
 }[] = [
   { value: "", label: "Alle" },
   { value: "sent", label: "Gesendet" },
-  { value: "failed", label: "Fehlgeschlagen" },
+  { value: "failed", label: "Fehler" },
   { value: "pending", label: "Wartend" },
-  { value: "processing", label: "Verarbeitung" },
+  { value: "processing", label: "Verarb." },
 ];
 
 export default function EmailLogsPage() {
   const ctx = useOutletContext<DashboardOutletContext | undefined>();
   const setHeaderTrailing = ctx?.setHeaderTrailing ?? noopSetHeader;
-  const [searchParams, setSearchParams] = useSearchParams();
-  const selectedId = searchParams.get("id") ?? "";
+  const navigate = useNavigate();
 
-  // ---- Aside collapsible ----
-  const [asideCollapsed, setAsideCollapsed] =
-    useState<boolean>(readAsideCollapsed);
-  const toggleAside = useCallback(() => {
-    setAsideCollapsed((v) => {
-      const next = !v;
-      writeAsideCollapsed(next);
-      return next;
-    });
-  }, []);
-
-  // ---- Filter ----
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   useEffect(() => {
@@ -223,7 +131,7 @@ export default function EmailLogsPage() {
     writeStatus(status);
   }, [status]);
 
-  const listUrl = useMemo(
+  const url = useMemo(
     () =>
       emailJobsListUrl({
         q,
@@ -232,18 +140,13 @@ export default function EmailLogsPage() {
       }),
     [q, status],
   );
-  const list = useApi<EmailJobsListResponse>(listUrl);
+  const list = useApi<EmailJobsListResponse>(url);
 
-  // ---- Selektierter Job (lädt Detail mit raw HTML + Tracking-Summary) ----
-  const detailUrl = selectedId ? emailJobUrl(selectedId) : null;
-  const detail = useApi<EmailJobFull>(detailUrl);
-
-  // ---- Header-Toolbar (Reload + Status-Filter) ----
   const headerToolbar = useMemo(
     () => (
       <div className="flex min-w-0 w-full flex-1 items-center justify-end gap-1.5">
-        <span className="hidden truncate text-[11.5px] tabular-nums text-night-500 sm:block">
-          Read-only · vom Mail-Worker geschrieben
+        <span className="hidden truncate text-[11.5px] tabular-nums text-night-500 md:block">
+          Read-only · vom Mail-Worker
         </span>
         <div
           role="tablist"
@@ -269,21 +172,18 @@ export default function EmailLogsPage() {
         </div>
         <button
           type="button"
-          onClick={() => {
-            list.reload();
-            if (detailUrl) detail.reload();
-          }}
-          disabled={list.loading || detail.loading}
+          onClick={() => list.reload()}
+          disabled={list.loading}
           className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/[0.1] bg-white/[0.04] text-night-200 transition hover:bg-white/[0.08] hover:text-white disabled:opacity-50"
           title="Neu laden"
         >
           <RefreshCw
-            className={`h-4 w-4 ${list.loading || detail.loading ? "animate-spin" : ""}`}
+            className={`h-4 w-4 ${list.loading ? "animate-spin" : ""}`}
           />
         </button>
       </div>
     ),
-    [status, list, detail, detailUrl],
+    [status, list],
   );
 
   useLayoutEffect(() => {
@@ -299,7 +199,7 @@ export default function EmailLogsPage() {
     <div className="flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-paper">
       {list.error && (
         <p
-          className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-3 py-1.5 text-[12.5px] text-accent-rose sm:px-5"
+          className="shrink-0 border-b border-accent-rose/30 bg-accent-rose/10 px-4 py-1.5 text-[12.5px] text-accent-rose"
           role="alert"
         >
           {list.error}
@@ -307,748 +207,24 @@ export default function EmailLogsPage() {
       )}
       {list.data?.hint && !list.error && (
         <p
-          className="shrink-0 border-b border-accent-amber/40 bg-accent-amber/10 px-3 py-1.5 text-[12.5px] text-accent-amber sm:px-5"
+          className="shrink-0 border-b border-accent-amber/40 bg-accent-amber/10 px-4 py-1.5 text-[12.5px] text-accent-amber"
           role="status"
         >
           {list.data.hint}
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {asideCollapsed ? (
-          <button
-            type="button"
-            onClick={toggleAside}
-            title="Liste einblenden"
-            aria-label="Email-Logs Liste einblenden"
-            aria-expanded={false}
-            className="group flex h-10 w-full shrink-0 items-center justify-center gap-1.5 border-b border-hair bg-ink-50 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-700 transition hover:bg-ink-100 hover:text-ink-900 md:h-auto md:w-10 md:flex-col md:gap-2 md:border-b-0 md:border-r md:py-3 md:text-[10px]"
-          >
-            <ChevronsRight className="h-4 w-4 shrink-0" />
-            <span className="md:[writing-mode:vertical-rl] md:[transform:rotate(180deg)]">
-              Logs
-            </span>
-          </button>
-        ) : (
-          <aside className="flex w-full shrink-0 flex-col border-b border-hair bg-white md:w-[360px] md:border-b-0 md:border-r">
-            <div className="shrink-0 border-b border-hair p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-500">
-                  Email Logs
-                </p>
-                <button
-                  type="button"
-                  onClick={toggleAside}
-                  title="Liste einklappen"
-                  aria-label="Email-Logs Liste einklappen"
-                  aria-expanded
-                  className="hidden h-6 w-6 items-center justify-center rounded text-ink-400 transition hover:bg-ink-100 hover:text-ink-700 md:inline-flex"
-                >
-                  <ChevronsLeft className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
-                <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
-                <input
-                  type="search"
-                  value={qIn}
-                  onChange={(e) => setQIn(e.target.value)}
-                  placeholder="id, Betreff, Empfänger…"
-                  className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
-                />
-                {qIn && (
-                  <button
-                    type="button"
-                    onClick={() => setQIn("")}
-                    className="text-ink-400 hover:text-ink-700"
-                    title="Suche leeren"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Status-Filter — auch im Aside (für Mobile + zur Sicherheit) */}
-              <div className="mt-2 grid grid-cols-5 gap-1 sm:hidden">
-                {STATUS_FILTER_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value || "all"}
-                    type="button"
-                    onClick={() => setStatus(opt.value)}
-                    className={`rounded px-1 py-1 text-[10.5px] transition ${
-                      status === opt.value
-                        ? "bg-ink-900 text-white"
-                        : "border border-hair bg-white text-ink-600 hover:text-ink-900"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Status-Statistik */}
-              <div className="mt-2 grid grid-cols-4 gap-1.5">
-                {(
-                  [
-                    { key: "sent", label: "Gesendet" },
-                    { key: "pending", label: "Wartend" },
-                    { key: "processing", label: "Verarb." },
-                    { key: "failed", label: "Fehler" },
-                  ] as { key: EmailJobStatus; label: string }[]
-                ).map((s) => (
-                  <div
-                    key={s.key}
-                    className="rounded-md border border-hair bg-paper/40 px-2 py-1.5"
-                    title={`${s.label}: ${fmtNumber(counts[s.key] ?? 0)}`}
-                  >
-                    <p className="text-[9.5px] uppercase tracking-[0.14em] text-ink-500">
-                      {s.label}
-                    </p>
-                    <p className="mt-0.5 text-[14px] font-semibold tabular-nums text-ink-900">
-                      {fmtNumber(counts[s.key] ?? 0)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-2 flex items-center justify-between text-[11px] tabular-nums text-ink-500">
-                <span>
-                  {fmtNumber(total)} Jobs
-                  {q || status ? ` · ${rows.length} Treffer` : ""}
-                </span>
-                {list.loading && <Loader2 className="h-3 w-3 animate-spin" />}
-              </div>
-            </div>
-
-            <ul className="min-h-0 flex-1 divide-y divide-hair overflow-y-auto">
-              {!list.loading && rows.length === 0 && (
-                <li className="px-4 py-8 text-center text-[12.5px] text-ink-500">
-                  Keine Jobs für diese Filter.
-                </li>
-              )}
-              {rows.map((r) => {
-                const active = r.id === selectedId;
-                const recipient = recipientSummary(
-                  r.recipient_data,
-                  r.recipient_email,
-                );
-                const subject =
-                  r.custom_subject?.trim() ||
-                  (r.template_id
-                    ? `Template: ${r.template_id}`
-                    : "Ohne Betreff");
-                return (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSearchParams({ id: r.id })}
-                      className={`flex w-full items-start gap-2 px-3 py-2 text-left transition ${
-                        active ? "bg-ink-50/70" : "hover:bg-ink-50/50"
-                      }`}
-                    >
-                      <span className="mt-0.5 shrink-0">
-                        <StatusPill status={r.status} />
-                      </span>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span
-                          className={`block max-w-full truncate text-[12.5px] ${
-                            active
-                              ? "font-medium text-ink-900"
-                              : "text-ink-800"
-                          }`}
-                          title={subject}
-                        >
-                          {subject}
-                        </span>
-                        <span
-                          className="mt-0.5 block max-w-full truncate text-[11.5px] text-ink-500"
-                          title={recipient}
-                        >
-                          {recipient}
-                        </span>
-                        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] tabular-nums text-ink-400">
-                          <span title={fmtWhen(r.created_at)}>
-                            {fmtRelative(r.sent_at || r.created_at)}
-                          </span>
-                          {r.template_id && (
-                            <span
-                              className="truncate font-mono"
-                              title={`Template: ${r.template_id}`}
-                            >
-                              · {r.template_id}
-                            </span>
-                          )}
-                          {r.open_count > 0 && (
-                            <span
-                              className="inline-flex items-center gap-0.5 text-emerald-600"
-                              title={`${r.open_count}× geöffnet`}
-                            >
-                              <Eye className="h-3 w-3" />
-                              {fmtNumber(r.open_count)}
-                            </span>
-                          )}
-                          {r.click_count > 0 && (
-                            <span
-                              className="inline-flex items-center gap-0.5 text-sky-600"
-                              title={`${r.click_count}× geklickt`}
-                            >
-                              <MousePointerClick className="h-3 w-3" />
-                              {fmtNumber(r.click_count)}
-                            </span>
-                          )}
-                          {r.retries > 0 && (
-                            <span
-                              className="text-accent-amber"
-                              title={`${r.retries} Wiederholungen`}
-                            >
-                              · ⟳ {r.retries}
-                            </span>
-                          )}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </aside>
-        )}
-
-        {/* Rechter Bereich: Detail */}
-        <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {selectedId ? (
-            <DetailPanel
-              loading={detail.loading}
-              error={detail.error}
-              job={detail.data}
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-              <Mail className="h-8 w-8 text-ink-300" />
-              <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
-                Kein Job ausgewählt
-              </p>
-              <p className="max-w-sm text-[13px] leading-relaxed text-ink-500">
-                Wähle links einen Job, um die Empfänger-Daten, den Status,
-                ggf. den rohen Email-Body und die komplette Tracking-
-                Auswertung (Opens, Clicks, IPs, Geo) einzusehen.
-              </p>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
-
-// ─── Detail-Panel ────────────────────────────────────────────────────
-
-function DetailPanel({
-  loading,
-  error,
-  job,
-}: {
-  loading: boolean;
-  error: string | null;
-  job: EmailJobFull | null;
-}) {
-  const [showRawBody, setShowRawBody] = useState(false);
-
-  if (loading && !job) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Lade Job…
-        </p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center px-6">
-        <p
-          className="rounded-lg border border-accent-rose/30 bg-accent-rose/10 px-4 py-3 text-[12.5px] text-accent-rose"
-          role="alert"
-        >
-          {error}
-        </p>
-      </div>
-    );
-  }
-
-  if (!job) return null;
-
-  const recipient = parseRecipientData(job.recipient_data);
-  const recipientPretty = recipient
-    ? JSON.stringify(recipient, null, 2)
-    : (job.recipient_data ?? "");
-  const tr = job.tracking;
-
-  return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-paper">
-      {/* Header */}
-      <div className="shrink-0 border-b border-hair bg-white px-4 py-3 sm:px-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusPill status={job.status} />
-              {job.retries > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-accent-amber/30 bg-accent-amber/10 px-1.5 py-0.5 text-[10.5px] font-medium text-accent-amber"
-                  title="Anzahl Wiederholungen"
-                >
-                  ⟳ {job.retries}× wiederholt
-                </span>
-              )}
-              {tr.open_count > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700">
-                  <Eye className="h-3 w-3" />
-                  {fmtNumber(tr.open_count)} Open
-                  {tr.unique_open_count !== tr.open_count
-                    ? ` · ${fmtNumber(tr.unique_open_count)} unique`
-                    : ""}
-                </span>
-              )}
-              {tr.click_count > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-sky-700">
-                  <MousePointerClick className="h-3 w-3" />
-                  {fmtNumber(tr.click_count)} Click
-                  {tr.unique_click_count !== tr.click_count
-                    ? ` · ${fmtNumber(tr.unique_click_count)} unique`
-                    : ""}
-                </span>
-              )}
-            </div>
-            <h2 className="mt-1.5 truncate text-[16px] font-semibold text-ink-900">
-              {job.custom_subject?.trim() ||
-                (job.template_id ? `Template: ${job.template_id}` : "Ohne Betreff")}
-            </h2>
-            <p
-              className="mt-0.5 truncate font-mono text-[11.5px] text-ink-500"
-              title={job.id}
-            >
-              {job.id}
-            </p>
-          </div>
-          <CopyButton value={job.id} title="ID kopieren" />
-        </div>
-      </div>
-
-      {/* Felder-Grid */}
-      <div className="grid shrink-0 grid-cols-1 gap-x-6 gap-y-3 border-b border-hair bg-white px-4 py-4 sm:grid-cols-2 sm:px-6">
-        <Field label="Empfänger" value={job.recipient_email || "—"} mono />
-        <Field label="Von" value={job.from_email || "—"} mono />
-        <Field
-          label="Template"
-          value={job.template_id || "—"}
-          mono
-          extra={
-            job.template_id ? (
-              <a
-                href={`/emails/templates?id=${encodeURIComponent(job.template_id)}`}
-                className="ml-1 inline-flex items-center text-ink-500 hover:text-ink-900"
-                title="Template öffnen"
-              >
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ) : null
-          }
-        />
-        <Field label="Tracking-ID" value={job.tracking_id || "—"} mono />
-        <Field label="Erstellt" value={fmtWhen(job.created_at)} />
-        <Field label="Geplant" value={fmtWhen(job.scheduled_at)} />
-        <Field label="Gesendet" value={fmtWhen(job.sent_at)} />
-        <Field
-          label="Custom HTML-Body"
-          value={
-            job.custom_body_html
-              ? `${job.custom_body_html.length.toLocaleString("de-DE")} Zeichen`
-              : "—"
-          }
-        />
-      </div>
-
-      {/* Tracking-Statistik */}
-      <TrackingSection job={job} />
-
-      {/* Fehler */}
-      {job.error_message && (
-        <div className="shrink-0 border-b border-accent-rose/20 bg-accent-rose/5 px-4 py-3 sm:px-6">
-          <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-accent-rose">
-            Fehler
-          </p>
-          <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-accent-rose/20 bg-white/60 p-2.5 font-mono text-[11.5px] leading-relaxed text-ink-900">
-            {job.error_message}
-          </pre>
-        </div>
-      )}
-
-      {/* Empfänger-Daten */}
-      <div className="shrink-0 border-b border-hair bg-white px-4 py-3 sm:px-6">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
-            Empfänger / Variablen
-          </p>
-          <CopyButton value={recipientPretty} title="JSON kopieren" />
-        </div>
-        <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-md border border-hair bg-paper/40 p-2.5 font-mono text-[11.5px] leading-relaxed text-ink-900">
-          {recipientPretty || "—"}
-        </pre>
-      </div>
-
-      {/* Custom Body HTML — optional, da potenziell groß */}
-      {job.custom_body_html && (
-        <div className="border-b border-hair bg-white px-4 py-3 sm:px-6">
-          <div className="flex items-center justify-between gap-2">
-            <p className="inline-flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
-              <Code2 className="h-3 w-3" />
-              Custom Body (HTML)
-            </p>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowRawBody((v) => !v)}
-                className="rounded-md border border-hair bg-white px-2 py-1 text-[11.5px] text-ink-700 hover:bg-ink-50"
-              >
-                {showRawBody ? "Ausblenden" : "Raw anzeigen"}
-              </button>
-              <CopyButton value={job.custom_body_html} title="HTML kopieren" />
-            </div>
-          </div>
-          {showRawBody && (
-            <pre className="mt-1.5 max-h-[40vh] overflow-auto whitespace-pre-wrap break-all rounded-md border border-hair bg-ink-900 p-2.5 font-mono text-[11.5px] leading-relaxed text-ink-100">
-              {job.custom_body_html}
-            </pre>
-          )}
-        </div>
-      )}
-
-      {/* Events-Tabelle (opens + clicks) */}
-      <EventsSection jobId={job.id} />
-
-      {/* Footer-Hinweis */}
-      <div className="px-4 py-3 text-[11.5px] text-ink-400 sm:px-6">
-        Diese Ansicht ist read-only. Status, Retries und Versand werden
-        ausschließlich vom externen Mail-Worker gepflegt; Tracking-Events
-        kommen vom Tracking-Pixel-/Click-Worker.
-      </div>
-    </div>
-  );
-}
-
-// ─── Tracking-Übersicht (Kacheln + Top-Listen) ────────────────────────
-
-function TrackingSection({ job }: { job: EmailJobFull }) {
-  const tr = job.tracking;
-  const hasAny = tr.open_count > 0 || tr.click_count > 0;
-  return (
-    <div className="shrink-0 border-b border-hair bg-white px-4 py-4 sm:px-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
-          Tracking
-        </p>
-        {!hasAny && (
-          <span className="text-[11px] text-ink-400">
-            Noch keine Events
-          </span>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Tile
-          icon={<Eye className="h-3.5 w-3.5" />}
-          label="Opens"
-          value={fmtNumber(tr.open_count)}
-          sub={
-            tr.unique_open_count !== tr.open_count
-              ? `${fmtNumber(tr.unique_open_count)} unique`
-              : tr.open_count === 0
-                ? "—"
-                : `${fmtNumber(tr.unique_open_count)} unique`
-          }
-          tone="emerald"
-        />
-        <Tile
-          icon={<MousePointerClick className="h-3.5 w-3.5" />}
-          label="Clicks"
-          value={fmtNumber(tr.click_count)}
-          sub={
-            tr.unique_click_count !== tr.click_count
-              ? `${fmtNumber(tr.unique_click_count)} unique`
-              : tr.click_count === 0
-                ? "—"
-                : `${fmtNumber(tr.unique_click_count)} unique`
-          }
-          tone="sky"
-        />
-        <Tile
-          icon={<Globe2 className="h-3.5 w-3.5" />}
-          label="Distinct IPs"
-          value={fmtNumber(tr.unique_ip_count)}
-          sub="Open + Click"
-          tone="ink"
-        />
-        <Tile
-          icon={<Clock className="h-3.5 w-3.5" />}
-          label="Erste Öffnung"
-          value={tr.first_open_at ? fmtRelative(tr.first_open_at) : "—"}
-          sub={tr.first_open_at ? fmtWhen(tr.first_open_at) : ""}
-          tone="amber"
-        />
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-ink-500 sm:grid-cols-4">
-        <Mini label="Letzte Öffnung" value={tr.last_open_at ? fmtWhen(tr.last_open_at) : "—"} />
-        <Mini label="Erster Click" value={tr.first_click_at ? fmtWhen(tr.first_click_at) : "—"} />
-        <Mini label="Letzter Click" value={tr.last_click_at ? fmtWhen(tr.last_click_at) : "—"} />
-        <Mini label="Letztes Event" value={tr.last_event_at ? fmtWhen(tr.last_event_at) : "—"} />
-      </div>
-
-      {(tr.top_links.length > 0 ||
-        tr.top_countries.length > 0 ||
-        tr.top_cities.length > 0) && (
-        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {tr.top_links.length > 0 && (
-            <TopList
-              title="Top Links"
-              items={tr.top_links.map((l) => ({
-                label: l.link_url,
-                count: l.count,
-                href: l.link_url,
-              }))}
-            />
-          )}
-          {tr.top_countries.length > 0 && (
-            <TopList
-              title="Top Länder"
-              items={tr.top_countries.map((c) => ({
-                label: c.country,
-                count: c.count,
-              }))}
-            />
-          )}
-          {tr.top_cities.length > 0 && (
-            <TopList
-              title="Top Städte"
-              items={tr.top_cities.map((c) => ({
-                label: c.country ? `${c.city} · ${c.country}` : c.city,
-                count: c.count,
-              }))}
-            />
-          )}
-        </div>
-      )}
-
-      {tr.events_by_day.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
-            Verlauf
-          </p>
-          <DayBars events={tr.events_by_day} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Tile({
-  icon,
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  sub: string;
-  tone: "emerald" | "sky" | "ink" | "amber";
-}) {
-  const toneClass = {
-    emerald: "border-emerald-500/30 bg-emerald-500/5 text-emerald-700",
-    sky: "border-sky-500/30 bg-sky-500/5 text-sky-700",
-    ink: "border-hair bg-paper/40 text-ink-700",
-    amber: "border-amber-500/30 bg-amber-500/5 text-amber-700",
-  }[tone];
-  return (
-    <div className={`rounded-md border px-2.5 py-2 ${toneClass}`}>
-      <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.14em]">
-        {icon}
-        {label}
-      </div>
-      <p className="mt-1 text-[16px] font-semibold tabular-nums text-ink-900">
-        {value}
-      </p>
-      <p className="mt-0.5 text-[11px] text-ink-500">{sub || "\u00A0"}</p>
-    </div>
-  );
-}
-
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-        {label}
-      </p>
-      <p className="mt-0.5 truncate text-[12px] text-ink-800" title={value}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function TopList({
-  title,
-  items,
-}: {
-  title: string;
-  items: { label: string; count: number; href?: string }[];
-}) {
-  const max = Math.max(1, ...items.map((i) => i.count));
-  return (
-    <div className="rounded-md border border-hair bg-paper/40 p-2.5">
-      <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
-        {title}
-      </p>
-      <ul className="space-y-1">
-        {items.map((it, idx) => (
-          <li key={`${it.label}-${idx}`}>
-            <div className="flex items-center justify-between gap-2 text-[12px]">
-              {it.href ? (
-                <a
-                  href={it.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="truncate text-ink-800 hover:text-ink-900 hover:underline"
-                  title={it.label}
-                >
-                  {it.label}
-                </a>
-              ) : (
-                <span className="truncate text-ink-800" title={it.label}>
-                  {it.label}
-                </span>
-              )}
-              <span className="shrink-0 tabular-nums text-ink-600">
-                {fmtNumber(it.count)}
-              </span>
-            </div>
-            <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-ink-100">
-              <div
-                className="h-full rounded-full bg-ink-700"
-                style={{ width: `${(it.count / max) * 100}%` }}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function DayBars({
-  events,
-}: {
-  events: { day: string; opens: number; clicks: number }[];
-}) {
-  const max = Math.max(1, ...events.map((e) => e.opens + e.clicks));
-  return (
-    <div className="flex items-end gap-1 overflow-x-auto rounded-md border border-hair bg-paper/40 p-2">
-      {events.map((e) => {
-        const total = e.opens + e.clicks;
-        const heightPct = (total / max) * 100;
-        const openPct = total > 0 ? (e.opens / total) * 100 : 0;
-        return (
-          <div
-            key={e.day}
-            className="flex min-w-[28px] shrink-0 flex-col items-center gap-1"
-            title={`${e.day} · ${e.opens} Opens · ${e.clicks} Clicks`}
-          >
-            <div
-              className="relative w-full overflow-hidden rounded bg-ink-100"
-              style={{ height: `${Math.max(4, heightPct * 0.6)}px`, minHeight: 4 }}
-            >
-              <div
-                className="absolute bottom-0 left-0 right-0 bg-emerald-500"
-                style={{ height: `${openPct}%` }}
-              />
-              <div
-                className="absolute left-0 right-0 top-0 bg-sky-500"
-                style={{ height: `${100 - openPct}%` }}
-              />
-            </div>
-            <span className="text-[9.5px] tabular-nums text-ink-500">
-              {e.day.slice(5)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── Events-Tabelle ──────────────────────────────────────────────────
-
-function EventsSection({ jobId }: { jobId: string }) {
-  const [qIn, setQIn] = useState("");
-  const [q, setQ] = useState("");
-  const [eventType, setEventType] = useState<"" | "open" | "click">("");
-  const [offset, setOffset] = useState(0);
-
-  useEffect(() => {
-    const t = setTimeout(() => setQ(qIn), 300);
-    return () => clearTimeout(t);
-  }, [qIn]);
-
-  useEffect(() => {
-    setOffset(0);
-  }, [q, eventType, jobId]);
-
-  const url = useMemo(
-    () =>
-      emailJobEventsUrl(jobId, {
-        q,
-        event_type: eventType,
-        limit: EVENTS_PAGE_SIZE,
-        offset,
-      }),
-    [jobId, q, eventType, offset],
-  );
-  const events = useApi<EmailTrackingEventsResponse>(url);
-  const rows = events.data?.rows ?? [];
-  const counts = events.data?.eventCounts ?? {};
-  const total = events.data?.total ?? 0;
-
-  return (
-    <div className="border-b border-hair bg-white px-4 py-4 sm:px-6">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-3">
-          <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
-            Events
-          </p>
-          <span className="inline-flex items-center gap-2 text-[11.5px] tabular-nums text-ink-500">
-            <span className="inline-flex items-center gap-1">
-              <Eye className="h-3 w-3 text-emerald-600" />
-              {fmtNumber(counts.open ?? 0)}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <MousePointerClick className="h-3 w-3 text-sky-600" />
-              {fmtNumber(counts.click ?? 0)}
-            </span>
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <div className="flex items-center gap-1.5 rounded-lg border border-hair bg-paper/60 px-2.5 py-1">
+      {/* Toolbar (Suche + mobile Status-Tabs + Counter) */}
+      <div className="shrink-0 border-b border-hair bg-white px-3 py-2 sm:px-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-hair bg-paper/60 px-2.5 py-1.5">
             <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
             <input
               type="search"
               value={qIn}
               onChange={(e) => setQIn(e.target.value)}
-              placeholder="IP, Land, URL, UA…"
-              className="min-w-0 w-44 border-0 bg-transparent text-[12px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+              placeholder="Suche: id, Betreff, Empfänger, Fehler…"
+              className="min-w-0 flex-1 border-0 bg-transparent text-[13px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
             />
             {qIn && (
               <button
@@ -1061,224 +237,168 @@ function EventsSection({ jobId }: { jobId: string }) {
               </button>
             )}
           </div>
-          <div className="inline-flex items-center gap-0.5 rounded-md border border-hair bg-white p-0.5">
-            {(
-              [
-                { v: "" as const, l: "Alle" },
-                { v: "open" as const, l: "Open" },
-                { v: "click" as const, l: "Click" },
-              ]
-            ).map((opt) => (
+
+          {/* Mobile status filter */}
+          <div className="grid w-full grid-cols-5 gap-1 sm:hidden">
+            {STATUS_FILTER_OPTIONS.map((opt) => (
               <button
-                key={opt.v || "all"}
+                key={opt.value || "all"}
                 type="button"
-                onClick={() => setEventType(opt.v)}
-                className={`rounded px-2 py-0.5 text-[11.5px] transition ${
-                  eventType === opt.v
+                onClick={() => setStatus(opt.value)}
+                className={`rounded px-1 py-1 text-[10.5px] transition ${
+                  status === opt.value
                     ? "bg-ink-900 text-white"
-                    : "text-ink-600 hover:bg-ink-50 hover:text-ink-900"
+                    : "border border-hair bg-white text-ink-600 hover:text-ink-900"
                 }`}
               >
-                {opt.l}
+                {opt.label}
               </button>
             ))}
+          </div>
+
+          <div className="flex items-center gap-3 text-[11.5px] tabular-nums text-ink-500">
+            <span>
+              <span className="text-ink-700">{fmtNumber(total)}</span> gesamt
+              {(q || status) && (
+                <>
+                  <span className="mx-1.5 text-ink-300">·</span>
+                  <span className="text-ink-700">{fmtNumber(rows.length)}</span> Treffer
+                </>
+              )}
+            </span>
+            {(["sent", "pending", "processing", "failed"] as const).map((s) => (
+              <span key={s} className="hidden md:inline">
+                <span
+                  className={`mr-1 inline-block h-2 w-2 rounded-full ${
+                    s === "sent"
+                      ? "bg-emerald-500"
+                      : s === "pending"
+                        ? "bg-amber-500"
+                        : s === "processing"
+                          ? "bg-sky-500"
+                          : "bg-rose-500"
+                  }`}
+                />
+                {fmtNumber(counts[s] ?? 0)}
+              </span>
+            ))}
+            {list.loading && <Loader2 className="h-3 w-3 animate-spin" />}
           </div>
         </div>
       </div>
 
-      {events.error && (
-        <p
-          className="mb-2 rounded-md border border-accent-rose/30 bg-accent-rose/10 px-2 py-1 text-[12px] text-accent-rose"
-          role="alert"
-        >
-          {events.error}
-        </p>
-      )}
-
-      <div className="overflow-x-auto rounded-md border border-hair">
-        <table className="min-w-full divide-y divide-hair text-left text-[12px]">
-          <thead className="bg-ink-50/40 text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
-            <tr>
-              <th className="px-2 py-1.5 font-medium">Wann</th>
-              <th className="px-2 py-1.5 font-medium">Typ</th>
-              <th className="px-2 py-1.5 font-medium">Geo</th>
-              <th className="px-2 py-1.5 font-medium">IP</th>
-              <th className="px-2 py-1.5 font-medium">URL / User-Agent</th>
+      {/* Tabelle */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full border-separate border-spacing-0 text-left text-[12.5px]">
+          <thead className="sticky top-0 z-10 bg-ink-50/95 backdrop-blur">
+            <tr className="text-[10px] uppercase tracking-[0.12em] text-ink-500">
+              <th className="border-b border-hair px-3 py-2 font-medium">Status</th>
+              <th className="border-b border-hair px-3 py-2 font-medium">Wann</th>
+              <th className="border-b border-hair px-3 py-2 font-medium">Empfänger</th>
+              <th className="border-b border-hair px-3 py-2 font-medium">Betreff</th>
+              <th className="border-b border-hair px-3 py-2 font-medium">Template</th>
+              <th className="border-b border-hair px-3 py-2 text-right font-medium">
+                <Eye className="inline h-3 w-3 -mt-0.5" /> Opens
+              </th>
+              <th className="border-b border-hair px-3 py-2 text-right font-medium">
+                <MousePointerClick className="inline h-3 w-3 -mt-0.5" /> Clicks
+              </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-hair bg-white">
-            {events.loading && rows.length === 0 && (
+          <tbody>
+            {!list.loading && rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-4 text-center text-ink-500">
-                  <span className="inline-flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Lade Events…
-                  </span>
+                <td
+                  colSpan={7}
+                  className="px-4 py-12 text-center text-[12.5px] text-ink-400"
+                >
+                  Keine Jobs für diese Filter.
                 </td>
               </tr>
             )}
-            {!events.loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-4 text-center text-ink-400">
-                  Keine Events.
-                </td>
-              </tr>
-            )}
-            {rows.map((ev) => (
-              <EventRow key={ev.id} ev={ev} />
+            {rows.map((r) => (
+              <Row
+                key={r.id}
+                row={r}
+                onOpen={() =>
+                  navigate(`/emails/logs/${encodeURIComponent(r.id)}`)
+                }
+              />
             ))}
           </tbody>
         </table>
       </div>
-
-      {total > rows.length && (
-        <div className="mt-2 flex items-center justify-between text-[11.5px] text-ink-500">
-          <span className="tabular-nums">
-            {fmtNumber(rows.length)} / {fmtNumber(total)} Events
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => setOffset((v) => Math.max(0, v - EVENTS_PAGE_SIZE))}
-              disabled={offset === 0}
-              className="rounded-md border border-hair bg-white px-2 py-0.5 text-[11.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
-            >
-              ◀
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setOffset((v) =>
-                  v + EVENTS_PAGE_SIZE >= total ? v : v + EVENTS_PAGE_SIZE,
-                )
-              }
-              disabled={offset + EVENTS_PAGE_SIZE >= total}
-              className="rounded-md border border-hair bg-white px-2 py-0.5 text-[11.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
-            >
-              ▶
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function EventRow({ ev }: { ev: EmailTrackingEvent }) {
-  const meta = parseTrackingMetadata(ev.metadata);
-  const geo = [meta?.city, meta?.country].filter(Boolean).join(", ") || "—";
-  const isClick = ev.event_type === "click";
+function Row({
+  row,
+  onOpen,
+}: {
+  row: EmailJobRow;
+  onOpen: () => void;
+}) {
+  const recipient = recipientSummary(row.recipient_data, row.recipient_email);
+  const subject =
+    row.custom_subject?.trim() ||
+    (row.template_id ? `Template: ${row.template_id}` : "Ohne Betreff");
+  const b = statusBadge(row.status);
   return (
-    <tr className="align-top">
-      <td className="whitespace-nowrap px-2 py-1.5 text-ink-700 tabular-nums">
-        {fmtWhenSeconds(ev.created_at)}
+    <tr
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onOpen();
+      }}
+      tabIndex={0}
+      className="cursor-pointer transition hover:bg-ink-50/60 focus:bg-ink-50/60 focus:outline-none"
+    >
+      <td className="border-b border-hair px-3 py-2 align-middle">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10.5px] font-medium ${b.className}`}
+        >
+          <StatusIcon status={row.status} />
+          {b.label}
+        </span>
       </td>
-      <td className="px-2 py-1.5">
-        {isClick ? (
-          <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-sky-700">
-            <MousePointerClick className="h-3 w-3" />
-            click
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700">
-            <Eye className="h-3 w-3" />
-            open
-          </span>
-        )}
+      <td
+        className="whitespace-nowrap border-b border-hair px-3 py-2 align-middle text-ink-700 tabular-nums"
+        title={fmtWhen(row.created_at)}
+      >
+        {fmtRelative(row.sent_at || row.created_at)}
       </td>
-      <td className="whitespace-nowrap px-2 py-1.5 text-ink-700">
-        {geo}
-        {meta?.timezone && (
-          <span className="ml-1 text-[10.5px] text-ink-400">
-            · {meta.timezone}
-          </span>
-        )}
+      <td className="max-w-[18rem] border-b border-hair px-3 py-2 align-middle">
+        <span className="block truncate font-mono text-[12px] text-ink-800" title={row.recipient_email}>
+          {row.recipient_email || "—"}
+        </span>
+        <span className="block truncate text-[10.5px] text-ink-400" title={recipient}>
+          {recipient !== row.recipient_email ? recipient : ""}
+        </span>
       </td>
-      <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[11.5px] text-ink-600">
-        {ev.ip_address || "—"}
-      </td>
-      <td className="px-2 py-1.5">
-        {isClick && ev.link_url ? (
-          <a
-            href={ev.link_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex max-w-md items-center gap-1 truncate text-ink-800 hover:text-ink-900 hover:underline"
-            title={ev.link_url}
-          >
-            <ExternalLink className="h-3 w-3 shrink-0" />
-            <span className="truncate">{ev.link_url}</span>
-          </a>
-        ) : (
+      <td className="max-w-[24rem] border-b border-hair px-3 py-2 align-middle">
+        <span className="block truncate text-ink-800" title={subject}>
+          {subject}
+        </span>
+        {row.error_message && (
           <span
-            className="block max-w-md truncate text-[11.5px] text-ink-500"
-            title={ev.user_agent || "—"}
+            className="mt-0.5 block truncate text-[10.5px] text-rose-600"
+            title={row.error_message}
           >
-            {ev.user_agent || "—"}
+            {row.error_message}
           </span>
         )}
+      </td>
+      <td className="border-b border-hair px-3 py-2 align-middle">
+        <span className="block max-w-[10rem] truncate font-mono text-[11.5px] text-ink-500" title={row.template_id ?? ""}>
+          {row.template_id || "—"}
+        </span>
+      </td>
+      <td className="border-b border-hair px-3 py-2 text-right align-middle tabular-nums text-emerald-700">
+        {row.open_count > 0 ? fmtNumber(row.open_count) : "—"}
+      </td>
+      <td className="border-b border-hair px-3 py-2 text-right align-middle tabular-nums text-sky-700">
+        {row.click_count > 0 ? fmtNumber(row.click_count) : "—"}
       </td>
     </tr>
-  );
-}
-
-// ─── Kleine Hilfen ───────────────────────────────────────────────────
-
-function Field({
-  label,
-  value,
-  mono = false,
-  extra,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  extra?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
-        {label}
-      </p>
-      <p
-        className={`mt-0.5 truncate text-[12.5px] text-ink-900 ${
-          mono ? "font-mono" : ""
-        }`}
-        title={value}
-      >
-        {value}
-        {extra}
-      </p>
-    </div>
-  );
-}
-
-function CopyButton({
-  value,
-  title,
-}: {
-  value: string;
-  title: string;
-}) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {
-      // ignore
-    }
-  }, [value]);
-  return (
-    <button
-      type="button"
-      onClick={onCopy}
-      title={title}
-      className="inline-flex h-7 items-center gap-1 rounded-md border border-hair bg-white px-2 text-[11.5px] text-ink-700 transition hover:bg-ink-50 hover:text-ink-900"
-    >
-      <Copy className="h-3 w-3" />
-      {copied ? "Kopiert" : "Kopieren"}
-    </button>
   );
 }

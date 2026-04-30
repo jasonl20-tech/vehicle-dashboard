@@ -1,0 +1,22 @@
+-- email_jobs: Schema-Anpassungen.
+--
+--   wrangler d1 execute <DB-NAME> --file=./d1/migrations/0010_email_jobs_from_name.sql
+--
+-- Hinzu kommt nur die optionale Spalte `from_name`. Zwei weitere
+-- inhaltliche Änderungen können in SQLite NICHT mit `ALTER TABLE`
+-- realisiert werden — das Backend (functions/api/emails/jobs.ts)
+-- übernimmt die Logik:
+--
+--   1) `tracking_id` darf NULL sein. Das Dashboard schreibt sie beim
+--      manuellen Anlegen NICHT mehr; der externe Mail-Worker setzt
+--      sie beim Versand.
+--   2) Default-Absender ist neuerdings `support@vehicleimagery.com`
+--      statt `no-reply@…`. Der Wert wird vom Backend beim INSERT
+--      explizit gebunden, daher reicht das aus, ohne den Spalten-
+--      DEFAULT der Tabelle anzufassen.
+--
+-- Wer das Schema sauber neu aufsetzen will, kann die Tabelle in einer
+-- separaten Migration umbauen (CREATE TABLE … _new + INSERT SELECT
+-- + DROP + RENAME). Für laufende Instanzen ist das nicht nötig.
+
+ALTER TABLE email_jobs ADD COLUMN from_name TEXT;

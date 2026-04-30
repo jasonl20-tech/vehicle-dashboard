@@ -13,7 +13,7 @@ import { getCurrentUser, jsonResponse, type AuthEnv } from "../../../_lib/auth";
 type FullRow = {
   id: string;
   recipient_email: string;
-  tracking_id: string;
+  tracking_id: string | null;
   recipient_data: string;
   template_id: string | null;
   custom_subject: string | null;
@@ -25,7 +25,26 @@ type FullRow = {
   sent_at: string | null;
   created_at: string | null;
   from_email: string;
+  from_name: string | null;
 };
+
+async function columnExists(
+  db: D1Database,
+  table: string,
+  column: string,
+): Promise<boolean> {
+  try {
+    const r = await db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all<{ name: string }>();
+    for (const row of r.results ?? []) {
+      if (row?.name === column) return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
 
 type TrackingSummary = {
   open_count: number;
@@ -238,11 +257,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 
   try {
+    const hasFromName = await columnExists(db, "email_jobs", "from_name");
+    const fromNameSelect = hasFromName ? "from_name" : "NULL AS from_name";
     const row = await db
       .prepare(
         `SELECT id,
                 COALESCE(recipient_email, '') AS recipient_email,
-                COALESCE(tracking_id, '') AS tracking_id,
+                tracking_id AS tracking_id,
                 recipient_data,
                 template_id,
                 custom_subject,
@@ -253,7 +274,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
                 scheduled_at,
                 sent_at,
                 created_at,
-                from_email
+                from_email,
+                ${fromNameSelect}
            FROM email_jobs
           WHERE id = ?
           LIMIT 1`,
