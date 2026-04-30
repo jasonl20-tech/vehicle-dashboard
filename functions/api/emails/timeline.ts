@@ -139,11 +139,15 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   //   template_id, status, link_url, ip_address, user_agent,
   //   metadata, error_message, retries
 
+  // SQLite akzeptiert in einem `UNION ALL` keine in Klammern gesetzten
+  // SELECT-Statements (das produziert „near 'UNION': syntax error").
+  // Die Sub-Queries werden daher OHNE Klammern verkettet — die einzige
+  // Klammerung ist außen für das `SELECT * FROM (…) AS u`.
   const subQueries: string[] = [];
   const subBinds: unknown[] = [];
 
   function pushSub(sql: string, binds: unknown[]) {
-    subQueries.push(`(${sql})`);
+    subQueries.push(sql);
     subBinds.push(...binds);
   }
 
