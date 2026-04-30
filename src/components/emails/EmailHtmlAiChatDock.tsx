@@ -60,6 +60,8 @@ export function EmailHtmlAiChatDock({
   const [defaultModel, setDefaultModel] = useState("");
   const [modelId, setModelId] = useState<string>(() => readStoredModelId() ?? "");
   const [aiConfigured, setAiConfigured] = useState(true);
+  const [gatewayConfigured, setGatewayConfigured] = useState(false);
+  const [gatewayHint, setGatewayHint] = useState<string | null>(null);
   const [configHint, setConfigHint] = useState<string | null>(null);
   const [metaErr, setMetaErr] = useState<string | null>(null);
 
@@ -78,6 +80,10 @@ export function EmailHtmlAiChatDock({
         setModels(m.models ?? []);
         setDefaultModel(m.defaultModel ?? "");
         setAiConfigured(Boolean(m.aiConfigured));
+        setGatewayConfigured(Boolean(m.gatewayConfigured));
+        setGatewayHint(
+          typeof m.gatewayHint === "string" ? m.gatewayHint : null,
+        );
         setConfigHint(typeof m.hint === "string" ? m.hint : null);
         setMetaErr(null);
         const stored = readStoredModelId();
@@ -125,6 +131,12 @@ export function EmailHtmlAiChatDock({
     if (defaultModel) return defaultModel;
     return models[0]?.id ?? "";
   }, [modelId, models, defaultModel]);
+
+  const providerModelNeedsGateway =
+    Boolean(effectiveModel) && !effectiveModel.startsWith("@cf/");
+
+  const gatewayBlocked =
+    providerModelNeedsGateway && !gatewayConfigured;
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -239,6 +251,12 @@ export function EmailHtmlAiChatDock({
                   "Workers AI-Binding in Cloudflare Pages setzen (Variable z. B. workersai)."}
               </p>
             )}
+            {aiConfigured && gatewayBlocked && !metaErr && (
+              <p className="mt-1 text-[10.5px] text-accent-amber">
+                {gatewayHint ??
+                  "Für dieses Modell: Environment Variable `AI_GATEWAY_ID` setzen (Name des AI Gateway im Cloudflare-Dashboard)."}
+              </p>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto bg-ink-50/40 px-2 py-2">
@@ -299,7 +317,9 @@ export function EmailHtmlAiChatDock({
                   }
                 }}
                 rows={2}
-                disabled={sending || !effectiveModel || !aiConfigured}
+                disabled={
+                  sending || !effectiveModel || !aiConfigured || gatewayBlocked
+                }
                 placeholder="Nachricht an die KI… (Enter senden, Shift+Enter Zeile)"
                 className="min-h-0 flex-1 resize-none rounded-md border border-hair bg-white px-2 py-1.5 text-[12px] text-ink-900 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none disabled:opacity-50"
               />
@@ -310,7 +330,8 @@ export function EmailHtmlAiChatDock({
                   sending ||
                   !input.trim() ||
                   !effectiveModel ||
-                  !aiConfigured
+                  !aiConfigured ||
+                  gatewayBlocked
                 }
                 className="inline-flex h-[3.25rem] w-10 shrink-0 items-center justify-center rounded-md bg-ink-900 text-white disabled:opacity-40"
                 title="Senden"

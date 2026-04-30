@@ -3,7 +3,11 @@
  * Im Dashboard z. B. Variable `workersai`; in der Doku oft `AI`.
  */
 export type WorkersAiBinding = {
-  run(model: string, input: Record<string, unknown>): Promise<unknown>;
+  run(
+    model: string,
+    input: Record<string, unknown>,
+    options?: Record<string, unknown>,
+  ): Promise<unknown>;
 };
 
 export function getWorkersAiBinding(env: {

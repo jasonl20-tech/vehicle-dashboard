@@ -6,7 +6,9 @@ export type TemplateAiMetaResponse = {
   models: TemplateAiModelOption[];
   defaultModel: string;
   aiConfigured?: boolean;
+  gatewayConfigured?: boolean;
   hint?: string;
+  gatewayHint?: string;
   error?: string;
 };
 
@@ -21,6 +23,7 @@ export type TemplateAiChatResponse = {
   model?: string;
   error?: string;
   hint?: string;
+  rawPreview?: string;
 };
 
 export async function fetchTemplateAiMeta(): Promise<TemplateAiMetaResponse> {
@@ -54,6 +57,9 @@ export async function postTemplateAiChat(body: {
     const parts: string[] = [];
     if (typeof json.error === "string") parts.push(json.error);
     if (typeof json.hint === "string") parts.push(json.hint);
+    if (typeof json.rawPreview === "string" && json.rawPreview.trim()) {
+      parts.push(`Antwort-Vorschau: ${json.rawPreview}`);
+    }
     throw new Error(parts.length > 0 ? parts.join(" · ") : `HTTP ${res.status}`);
   }
   return json;

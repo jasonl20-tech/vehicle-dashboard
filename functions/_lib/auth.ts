@@ -140,6 +140,15 @@ export interface AuthEnv {
    */
   workersai?: WorkersAiBinding;
   AI?: WorkersAiBinding;
+  /**
+   * Name eines [AI Gateway](https://developers.cloudflare.com/ai-gateway/)
+   * im selben Account. Pflicht für Provider-Modelle (`openai/…`, `anthropic/…`,
+   * `google/…` …) bei `env.AI.run()`; optional für reines `@cf/…` (Workers AI).
+   * Pages: Environment Variable `AI_GATEWAY_ID`.
+   */
+  AI_GATEWAY_ID?: string;
+  /** Tippfehler-Toleranz */
+  AIGATEWAY_ID?: string;
 }
 
 // ---------- base64url helpers ----------

@@ -9,6 +9,9 @@
  *   → { reply, html|null, model }
  *
  * Binding: Pages → Workers AI als `workersai` oder `AI` (siehe getWorkersAiBinding).
+ * Provider-Modelle (`openai/…`, `anthropic/…`, …): zusätzlich Environment
+ * Variable `AI_GATEWAY_ID` = Name eines AI Gateway im Account (drittes
+ * Argument zu `AI.run`, siehe Cloudflare-Doku).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 import { getWorkersAiBinding } from "../../_lib/workersAiBinding";
@@ -31,7 +34,23 @@ function extractAiText(result: unknown): string {
   const o = result as Record<string, unknown>;
   if (typeof o.response === "string") return o.response;
   if (typeof o.text === "string") return o.text;
+  if (typeof o.content === "string") return o.content;
+  if (Array.isArray(o.choices) && o.choices[0]) {
+    const c = o.choices[0] as Record<string, unknown>;
+    const msg = c.message as Record<string, unknown> | undefined;
+    if (msg && typeof msg.content === "string") return msg.content;
+    if (typeof c.text === "string") return c.text;
+  }
   return "";
+}
+
+function getAiGatewayId(env: AuthEnv): string | null {
+  const id = env.AI_GATEWAY_ID?.trim() || env.AIGATEWAY_ID?.trim();
+  return id || null;
+}
+
+function isCfWorkersAiModel(model: string): boolean {
+  return model.startsWith("@cf/");
 }
 
 function parseAssistantJson(text: string): {
@@ -84,16 +103,24 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({ request, env }) => 
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
   const aiConfigured = getWorkersAiBinding(env) !== null;
+  const gatewayConfigured = getAiGatewayId(env) !== null;
   return jsonResponse(
     {
       models: WORKERS_AI_EMAIL_MODELS,
       defaultModel: DEFAULT_WORKERS_AI_EMAIL_MODEL,
       aiConfigured,
+      gatewayConfigured,
       ...(aiConfigured
         ? {}
         : {
             hint: 'Workers AI-Binding fehlt: Pages → Functions → Bindings → „Workers AI“ (Variable z. B. `workersai`).',
           }),
+      ...(!gatewayConfigured
+        ? {
+            gatewayHint:
+              "Für Modelle ohne @cf/-Präfix: Environment Variable `AI_GATEWAY_ID` setzen (Name eines AI Gateway im Cloudflare-Dashboard) — sonst liefern Provider-Modelle einen Fehler.",
+          }
+        : {}),
     },
     { status: 200 },
   );
@@ -139,6 +166,20 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     typeof b.model === "string" && isAllowedEmailAiModel(b.model)
       ? b.model
       : DEFAULT_WORKERS_AI_EMAIL_MODEL;
+
+  const gatewayId = getAiGatewayId(env);
+  const gatewayOpts = gatewayId ? { gateway: { id: gatewayId } } : undefined;
+  if (!isCfWorkersAiModel(model) && !gatewayOpts) {
+    return jsonResponse(
+      {
+        error:
+          "Für dieses Modell fehlt ein AI Gateway (Provider-IDs wie openai/, anthropic/, google/, …).",
+        hint:
+          "Im Cloudflare-Dashboard unter AI → AI Gateway ein Gateway anlegen. Unter Pages → Settings → Environment variables die Variable `AI_GATEWAY_ID` auf den **Namen** dieses Gateways setzen (gleiches Konto). Siehe https://developers.cloudflare.com/ai-gateway/integrations/worker-binding-methods/",
+      },
+      { status: 400 },
+    );
+  }
 
   const currentHtml =
     typeof b.currentHtml === "string" ? b.currentHtml : "";
@@ -194,16 +235,21 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 
   let result: unknown;
   try {
-    result = await ai.run(model, {
+    const payload = {
       messages: outMessages,
       max_tokens: MAX_TOKENS,
-    });
+    };
+    result = gatewayOpts
+      ? await ai.run(model, payload, gatewayOpts)
+      : await ai.run(model, payload);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return jsonResponse(
       {
-        error: `Workers AI: ${msg}`,
-        hint: "Modell-ID prüfen und im Dashboard „Workers AI“ für das Konto aktivieren.",
+        error: `AI.run: ${msg}`,
+        hint: !isCfWorkersAiModel(model)
+          ? "AI Gateway + Unified Billing für den Anbieter prüfen; Modell im Katalog https://developers.cloudflare.com/ai/models/"
+          : "Modell-ID, Workers AI im Konto und ggf. AI_GATEWAY_ID prüfen.",
       },
       { status: 502 },
     );
@@ -213,11 +259,12 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   if (!rawText.trim()) {
     return jsonResponse(
       {
-        error: "Leere Modellantwort",
+        error: "Leere Modellantwort (unerwartetes Antwortformat)",
         rawPreview:
           typeof result === "object" && result !== null
-            ? JSON.stringify(result).slice(0, 400)
+            ? JSON.stringify(result).slice(0, 500)
             : undefined,
+        hint: "Gateway-Logs im AI-Dashboard prüfen; Modell ggf. wechseln.",
       },
       { status: 502 },
     );
