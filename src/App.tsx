@@ -22,6 +22,7 @@ import AnfragenPage from "./pages/AnfragenPage";
 import EmailTemplatesPage from "./pages/EmailTemplatesPage";
 import EmailLogsPage from "./pages/EmailLogsPage";
 import EmailManuellPage from "./pages/EmailManuellPage";
+import EmailTrackingPage from "./pages/EmailTrackingPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import AssetsPage from "./pages/AssetsPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
@@ -143,7 +144,7 @@ export default function App() {
           element={<Navigate to="/emails/templates" replace />}
         />
         <Route path="/emails/logs" element={<EmailLogsPage />} />
-        <Route path="/emails/tracking" element={<ModulePage />} />
+        <Route path="/emails/tracking" element={<EmailTrackingPage />} />
         <Route path="/emails/templates" element={<EmailTemplatesPage />} />
         <Route path="/emails/manuell" element={<EmailManuellPage />} />
         <Route path="/emails/automator" element={<ModulePage />} />

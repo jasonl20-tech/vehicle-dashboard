@@ -10,7 +10,8 @@
  *  - Links: kollabierbare Liste mit Suche, Status-Filter und Statistik-
  *    Kacheln, scrollbar.
  *  - Rechts: Detail-Panel mit allen Feldern, Recipient-JSON pretty-
- *    formatted, optional rohem `custom_body_html` als `<pre>`-Block.
+ *    formatted, voller Tracking-Auswertung (Opens, Clicks, Top-Links,
+ *    Top-Länder/Städte) und einer suchbaren Event-Tabelle.
  *
  * Persistenz: aside-collapse + Status-Filter in localStorage.
  */
@@ -23,8 +24,11 @@ import {
   Code2,
   Copy,
   ExternalLink,
+  Eye,
+  Globe2,
   Loader2,
   Mail,
+  MousePointerClick,
   RefreshCw,
   Search,
   Send,
@@ -44,15 +48,20 @@ import {
   EMAIL_JOB_STATUSES,
   emailJobUrl,
   emailJobsListUrl,
+  emailJobEventsUrl,
   parseRecipientData,
+  parseTrackingMetadata,
   recipientSummary,
   statusBadge,
   type EmailJobFull,
   type EmailJobStatus,
   type EmailJobsListResponse,
+  type EmailTrackingEvent,
+  type EmailTrackingEventsResponse,
 } from "../lib/emailJobsApi";
 
 const PAGE_SIZE = 200;
+const EVENTS_PAGE_SIZE = 200;
 const ASIDE_KEY = "ui.emailLogs.asideCollapsed";
 const STATUS_KEY = "ui.emailLogs.status";
 
@@ -108,6 +117,24 @@ function fmtWhen(s: string | null | undefined): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(t));
+}
+
+function fmtWhenSeconds(s: string | null | undefined): string {
+  if (!s?.trim()) return "—";
+  const raw = s.trim();
+  const t = raw.includes("T")
+    ? Date.parse(raw)
+    : Date.parse(raw.replace(" ", "T") + "Z");
+  if (Number.isNaN(t)) return s;
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
     timeZone: "UTC",
   }).format(new Date(t));
 }
@@ -207,7 +234,7 @@ export default function EmailLogsPage() {
   );
   const list = useApi<EmailJobsListResponse>(listUrl);
 
-  // ---- Selektierter Job (lädt Detail mit raw HTML) ----
+  // ---- Selektierter Job (lädt Detail mit raw HTML + Tracking-Summary) ----
   const detailUrl = selectedId ? emailJobUrl(selectedId) : null;
   const detail = useApi<EmailJobFull>(detailUrl);
 
@@ -401,7 +428,10 @@ export default function EmailLogsPage() {
               )}
               {rows.map((r) => {
                 const active = r.id === selectedId;
-                const recipient = recipientSummary(r.recipient_data);
+                const recipient = recipientSummary(
+                  r.recipient_data,
+                  r.recipient_email,
+                );
                 const subject =
                   r.custom_subject?.trim() ||
                   (r.template_id
@@ -436,7 +466,7 @@ export default function EmailLogsPage() {
                         >
                           {recipient}
                         </span>
-                        <span className="mt-1 flex items-center gap-2 text-[10.5px] tabular-nums text-ink-400">
+                        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] tabular-nums text-ink-400">
                           <span title={fmtWhen(r.created_at)}>
                             {fmtRelative(r.sent_at || r.created_at)}
                           </span>
@@ -446,6 +476,24 @@ export default function EmailLogsPage() {
                               title={`Template: ${r.template_id}`}
                             >
                               · {r.template_id}
+                            </span>
+                          )}
+                          {r.open_count > 0 && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-emerald-600"
+                              title={`${r.open_count}× geöffnet`}
+                            >
+                              <Eye className="h-3 w-3" />
+                              {fmtNumber(r.open_count)}
+                            </span>
+                          )}
+                          {r.click_count > 0 && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-sky-600"
+                              title={`${r.click_count}× geklickt`}
+                            >
+                              <MousePointerClick className="h-3 w-3" />
+                              {fmtNumber(r.click_count)}
                             </span>
                           )}
                           {r.retries > 0 && (
@@ -481,10 +529,9 @@ export default function EmailLogsPage() {
                 Kein Job ausgewählt
               </p>
               <p className="max-w-sm text-[13px] leading-relaxed text-ink-500">
-                Wähle links einen Job, um die Empfänger-Daten, den Status
-                und ggf. den rohen Email-Body einzusehen. Bearbeiten ist
-                hier nicht möglich — die Tabelle wird ausschließlich vom
-                externen Mail-Worker gepflegt.
+                Wähle links einen Job, um die Empfänger-Daten, den Status,
+                ggf. den rohen Email-Body und die komplette Tracking-
+                Auswertung (Opens, Clicks, IPs, Geo) einzusehen.
               </p>
             </div>
           )}
@@ -537,6 +584,7 @@ function DetailPanel({
   const recipientPretty = recipient
     ? JSON.stringify(recipient, null, 2)
     : (job.recipient_data ?? "");
+  const tr = job.tracking;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-paper">
@@ -552,6 +600,24 @@ function DetailPanel({
                   title="Anzahl Wiederholungen"
                 >
                   ⟳ {job.retries}× wiederholt
+                </span>
+              )}
+              {tr.open_count > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700">
+                  <Eye className="h-3 w-3" />
+                  {fmtNumber(tr.open_count)} Open
+                  {tr.unique_open_count !== tr.open_count
+                    ? ` · ${fmtNumber(tr.unique_open_count)} unique`
+                    : ""}
+                </span>
+              )}
+              {tr.click_count > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-sky-700">
+                  <MousePointerClick className="h-3 w-3" />
+                  {fmtNumber(tr.click_count)} Click
+                  {tr.unique_click_count !== tr.click_count
+                    ? ` · ${fmtNumber(tr.unique_click_count)} unique`
+                    : ""}
                 </span>
               )}
             </div>
@@ -572,6 +638,7 @@ function DetailPanel({
 
       {/* Felder-Grid */}
       <div className="grid shrink-0 grid-cols-1 gap-x-6 gap-y-3 border-b border-hair bg-white px-4 py-4 sm:grid-cols-2 sm:px-6">
+        <Field label="Empfänger" value={job.recipient_email || "—"} mono />
         <Field label="Von" value={job.from_email || "—"} mono />
         <Field
           label="Template"
@@ -589,6 +656,7 @@ function DetailPanel({
             ) : null
           }
         />
+        <Field label="Tracking-ID" value={job.tracking_id || "—"} mono />
         <Field label="Erstellt" value={fmtWhen(job.created_at)} />
         <Field label="Geplant" value={fmtWhen(job.scheduled_at)} />
         <Field label="Gesendet" value={fmtWhen(job.sent_at)} />
@@ -601,6 +669,9 @@ function DetailPanel({
           }
         />
       </div>
+
+      {/* Tracking-Statistik */}
+      <TrackingSection job={job} />
 
       {/* Fehler */}
       {job.error_message && (
@@ -654,14 +725,504 @@ function DetailPanel({
         </div>
       )}
 
+      {/* Events-Tabelle (opens + clicks) */}
+      <EventsSection jobId={job.id} />
+
       {/* Footer-Hinweis */}
       <div className="px-4 py-3 text-[11.5px] text-ink-400 sm:px-6">
         Diese Ansicht ist read-only. Status, Retries und Versand werden
-        ausschließlich vom externen Mail-Worker gepflegt.
+        ausschließlich vom externen Mail-Worker gepflegt; Tracking-Events
+        kommen vom Tracking-Pixel-/Click-Worker.
       </div>
     </div>
   );
 }
+
+// ─── Tracking-Übersicht (Kacheln + Top-Listen) ────────────────────────
+
+function TrackingSection({ job }: { job: EmailJobFull }) {
+  const tr = job.tracking;
+  const hasAny = tr.open_count > 0 || tr.click_count > 0;
+  return (
+    <div className="shrink-0 border-b border-hair bg-white px-4 py-4 sm:px-6">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
+          Tracking
+        </p>
+        {!hasAny && (
+          <span className="text-[11px] text-ink-400">
+            Noch keine Events
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Tile
+          icon={<Eye className="h-3.5 w-3.5" />}
+          label="Opens"
+          value={fmtNumber(tr.open_count)}
+          sub={
+            tr.unique_open_count !== tr.open_count
+              ? `${fmtNumber(tr.unique_open_count)} unique`
+              : tr.open_count === 0
+                ? "—"
+                : `${fmtNumber(tr.unique_open_count)} unique`
+          }
+          tone="emerald"
+        />
+        <Tile
+          icon={<MousePointerClick className="h-3.5 w-3.5" />}
+          label="Clicks"
+          value={fmtNumber(tr.click_count)}
+          sub={
+            tr.unique_click_count !== tr.click_count
+              ? `${fmtNumber(tr.unique_click_count)} unique`
+              : tr.click_count === 0
+                ? "—"
+                : `${fmtNumber(tr.unique_click_count)} unique`
+          }
+          tone="sky"
+        />
+        <Tile
+          icon={<Globe2 className="h-3.5 w-3.5" />}
+          label="Distinct IPs"
+          value={fmtNumber(tr.unique_ip_count)}
+          sub="Open + Click"
+          tone="ink"
+        />
+        <Tile
+          icon={<Clock className="h-3.5 w-3.5" />}
+          label="Erste Öffnung"
+          value={tr.first_open_at ? fmtRelative(tr.first_open_at) : "—"}
+          sub={tr.first_open_at ? fmtWhen(tr.first_open_at) : ""}
+          tone="amber"
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-ink-500 sm:grid-cols-4">
+        <Mini label="Letzte Öffnung" value={tr.last_open_at ? fmtWhen(tr.last_open_at) : "—"} />
+        <Mini label="Erster Click" value={tr.first_click_at ? fmtWhen(tr.first_click_at) : "—"} />
+        <Mini label="Letzter Click" value={tr.last_click_at ? fmtWhen(tr.last_click_at) : "—"} />
+        <Mini label="Letztes Event" value={tr.last_event_at ? fmtWhen(tr.last_event_at) : "—"} />
+      </div>
+
+      {(tr.top_links.length > 0 ||
+        tr.top_countries.length > 0 ||
+        tr.top_cities.length > 0) && (
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {tr.top_links.length > 0 && (
+            <TopList
+              title="Top Links"
+              items={tr.top_links.map((l) => ({
+                label: l.link_url,
+                count: l.count,
+                href: l.link_url,
+              }))}
+            />
+          )}
+          {tr.top_countries.length > 0 && (
+            <TopList
+              title="Top Länder"
+              items={tr.top_countries.map((c) => ({
+                label: c.country,
+                count: c.count,
+              }))}
+            />
+          )}
+          {tr.top_cities.length > 0 && (
+            <TopList
+              title="Top Städte"
+              items={tr.top_cities.map((c) => ({
+                label: c.country ? `${c.city} · ${c.country}` : c.city,
+                count: c.count,
+              }))}
+            />
+          )}
+        </div>
+      )}
+
+      {tr.events_by_day.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
+            Verlauf
+          </p>
+          <DayBars events={tr.events_by_day} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Tile({
+  icon,
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub: string;
+  tone: "emerald" | "sky" | "ink" | "amber";
+}) {
+  const toneClass = {
+    emerald: "border-emerald-500/30 bg-emerald-500/5 text-emerald-700",
+    sky: "border-sky-500/30 bg-sky-500/5 text-sky-700",
+    ink: "border-hair bg-paper/40 text-ink-700",
+    amber: "border-amber-500/30 bg-amber-500/5 text-amber-700",
+  }[tone];
+  return (
+    <div className={`rounded-md border px-2.5 py-2 ${toneClass}`}>
+      <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.14em]">
+        {icon}
+        {label}
+      </div>
+      <p className="mt-1 text-[16px] font-semibold tabular-nums text-ink-900">
+        {value}
+      </p>
+      <p className="mt-0.5 text-[11px] text-ink-500">{sub || "\u00A0"}</p>
+    </div>
+  );
+}
+
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
+        {label}
+      </p>
+      <p className="mt-0.5 truncate text-[12px] text-ink-800" title={value}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function TopList({
+  title,
+  items,
+}: {
+  title: string;
+  items: { label: string; count: number; href?: string }[];
+}) {
+  const max = Math.max(1, ...items.map((i) => i.count));
+  return (
+    <div className="rounded-md border border-hair bg-paper/40 p-2.5">
+      <p className="mb-1.5 text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
+        {title}
+      </p>
+      <ul className="space-y-1">
+        {items.map((it, idx) => (
+          <li key={`${it.label}-${idx}`}>
+            <div className="flex items-center justify-between gap-2 text-[12px]">
+              {it.href ? (
+                <a
+                  href={it.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate text-ink-800 hover:text-ink-900 hover:underline"
+                  title={it.label}
+                >
+                  {it.label}
+                </a>
+              ) : (
+                <span className="truncate text-ink-800" title={it.label}>
+                  {it.label}
+                </span>
+              )}
+              <span className="shrink-0 tabular-nums text-ink-600">
+                {fmtNumber(it.count)}
+              </span>
+            </div>
+            <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-ink-100">
+              <div
+                className="h-full rounded-full bg-ink-700"
+                style={{ width: `${(it.count / max) * 100}%` }}
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DayBars({
+  events,
+}: {
+  events: { day: string; opens: number; clicks: number }[];
+}) {
+  const max = Math.max(1, ...events.map((e) => e.opens + e.clicks));
+  return (
+    <div className="flex items-end gap-1 overflow-x-auto rounded-md border border-hair bg-paper/40 p-2">
+      {events.map((e) => {
+        const total = e.opens + e.clicks;
+        const heightPct = (total / max) * 100;
+        const openPct = total > 0 ? (e.opens / total) * 100 : 0;
+        return (
+          <div
+            key={e.day}
+            className="flex min-w-[28px] shrink-0 flex-col items-center gap-1"
+            title={`${e.day} · ${e.opens} Opens · ${e.clicks} Clicks`}
+          >
+            <div
+              className="relative w-full overflow-hidden rounded bg-ink-100"
+              style={{ height: `${Math.max(4, heightPct * 0.6)}px`, minHeight: 4 }}
+            >
+              <div
+                className="absolute bottom-0 left-0 right-0 bg-emerald-500"
+                style={{ height: `${openPct}%` }}
+              />
+              <div
+                className="absolute left-0 right-0 top-0 bg-sky-500"
+                style={{ height: `${100 - openPct}%` }}
+              />
+            </div>
+            <span className="text-[9.5px] tabular-nums text-ink-500">
+              {e.day.slice(5)}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Events-Tabelle ──────────────────────────────────────────────────
+
+function EventsSection({ jobId }: { jobId: string }) {
+  const [qIn, setQIn] = useState("");
+  const [q, setQ] = useState("");
+  const [eventType, setEventType] = useState<"" | "open" | "click">("");
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQ(qIn), 300);
+    return () => clearTimeout(t);
+  }, [qIn]);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [q, eventType, jobId]);
+
+  const url = useMemo(
+    () =>
+      emailJobEventsUrl(jobId, {
+        q,
+        event_type: eventType,
+        limit: EVENTS_PAGE_SIZE,
+        offset,
+      }),
+    [jobId, q, eventType, offset],
+  );
+  const events = useApi<EmailTrackingEventsResponse>(url);
+  const rows = events.data?.rows ?? [];
+  const counts = events.data?.eventCounts ?? {};
+  const total = events.data?.total ?? 0;
+
+  return (
+    <div className="border-b border-hair bg-white px-4 py-4 sm:px-6">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <p className="text-[10.5px] font-medium uppercase tracking-[0.14em] text-ink-500">
+            Events
+          </p>
+          <span className="inline-flex items-center gap-2 text-[11.5px] tabular-nums text-ink-500">
+            <span className="inline-flex items-center gap-1">
+              <Eye className="h-3 w-3 text-emerald-600" />
+              {fmtNumber(counts.open ?? 0)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <MousePointerClick className="h-3 w-3 text-sky-600" />
+              {fmtNumber(counts.click ?? 0)}
+            </span>
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex items-center gap-1.5 rounded-lg border border-hair bg-paper/60 px-2.5 py-1">
+            <Search className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+            <input
+              type="search"
+              value={qIn}
+              onChange={(e) => setQIn(e.target.value)}
+              placeholder="IP, Land, URL, UA…"
+              className="min-w-0 w-44 border-0 bg-transparent text-[12px] text-ink-900 placeholder:text-ink-400 focus:outline-none"
+            />
+            {qIn && (
+              <button
+                type="button"
+                onClick={() => setQIn("")}
+                className="text-ink-400 hover:text-ink-700"
+                title="Suche leeren"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-hair bg-white p-0.5">
+            {(
+              [
+                { v: "" as const, l: "Alle" },
+                { v: "open" as const, l: "Open" },
+                { v: "click" as const, l: "Click" },
+              ]
+            ).map((opt) => (
+              <button
+                key={opt.v || "all"}
+                type="button"
+                onClick={() => setEventType(opt.v)}
+                className={`rounded px-2 py-0.5 text-[11.5px] transition ${
+                  eventType === opt.v
+                    ? "bg-ink-900 text-white"
+                    : "text-ink-600 hover:bg-ink-50 hover:text-ink-900"
+                }`}
+              >
+                {opt.l}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {events.error && (
+        <p
+          className="mb-2 rounded-md border border-accent-rose/30 bg-accent-rose/10 px-2 py-1 text-[12px] text-accent-rose"
+          role="alert"
+        >
+          {events.error}
+        </p>
+      )}
+
+      <div className="overflow-x-auto rounded-md border border-hair">
+        <table className="min-w-full divide-y divide-hair text-left text-[12px]">
+          <thead className="bg-ink-50/40 text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
+            <tr>
+              <th className="px-2 py-1.5 font-medium">Wann</th>
+              <th className="px-2 py-1.5 font-medium">Typ</th>
+              <th className="px-2 py-1.5 font-medium">Geo</th>
+              <th className="px-2 py-1.5 font-medium">IP</th>
+              <th className="px-2 py-1.5 font-medium">URL / User-Agent</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-hair bg-white">
+            {events.loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-4 text-center text-ink-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Lade Events…
+                  </span>
+                </td>
+              </tr>
+            )}
+            {!events.loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-4 text-center text-ink-400">
+                  Keine Events.
+                </td>
+              </tr>
+            )}
+            {rows.map((ev) => (
+              <EventRow key={ev.id} ev={ev} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {total > rows.length && (
+        <div className="mt-2 flex items-center justify-between text-[11.5px] text-ink-500">
+          <span className="tabular-nums">
+            {fmtNumber(rows.length)} / {fmtNumber(total)} Events
+          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setOffset((v) => Math.max(0, v - EVENTS_PAGE_SIZE))}
+              disabled={offset === 0}
+              className="rounded-md border border-hair bg-white px-2 py-0.5 text-[11.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+            >
+              ◀
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setOffset((v) =>
+                  v + EVENTS_PAGE_SIZE >= total ? v : v + EVENTS_PAGE_SIZE,
+                )
+              }
+              disabled={offset + EVENTS_PAGE_SIZE >= total}
+              className="rounded-md border border-hair bg-white px-2 py-0.5 text-[11.5px] text-ink-700 hover:bg-ink-50 disabled:opacity-50"
+            >
+              ▶
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EventRow({ ev }: { ev: EmailTrackingEvent }) {
+  const meta = parseTrackingMetadata(ev.metadata);
+  const geo = [meta?.city, meta?.country].filter(Boolean).join(", ") || "—";
+  const isClick = ev.event_type === "click";
+  return (
+    <tr className="align-top">
+      <td className="whitespace-nowrap px-2 py-1.5 text-ink-700 tabular-nums">
+        {fmtWhenSeconds(ev.created_at)}
+      </td>
+      <td className="px-2 py-1.5">
+        {isClick ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-sky-700">
+            <MousePointerClick className="h-3 w-3" />
+            click
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10.5px] font-medium text-emerald-700">
+            <Eye className="h-3 w-3" />
+            open
+          </span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-2 py-1.5 text-ink-700">
+        {geo}
+        {meta?.timezone && (
+          <span className="ml-1 text-[10.5px] text-ink-400">
+            · {meta.timezone}
+          </span>
+        )}
+      </td>
+      <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[11.5px] text-ink-600">
+        {ev.ip_address || "—"}
+      </td>
+      <td className="px-2 py-1.5">
+        {isClick && ev.link_url ? (
+          <a
+            href={ev.link_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex max-w-md items-center gap-1 truncate text-ink-800 hover:text-ink-900 hover:underline"
+            title={ev.link_url}
+          >
+            <ExternalLink className="h-3 w-3 shrink-0" />
+            <span className="truncate">{ev.link_url}</span>
+          </a>
+        ) : (
+          <span
+            className="block max-w-md truncate text-[11.5px] text-ink-500"
+            title={ev.user_agent || "—"}
+          >
+            {ev.user_agent || "—"}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+// ─── Kleine Hilfen ───────────────────────────────────────────────────
 
 function Field({
   label,
