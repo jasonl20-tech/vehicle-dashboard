@@ -127,6 +127,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const status = ALLOWED_STATUS.has(statusRaw) ? statusRaw : "";
   const from = normalizeDate(u.searchParams.get("from"));
   const to = normalizeDate(u.searchParams.get("to"));
+  // Optional: nur Events für genau diesen Job — wird auf der
+  // Detail-Seite verwendet, um die Job-Timeline zu laden.
+  const jobIdFilter = (u.searchParams.get("job_id") ?? "").trim();
 
   const hasTracking = await trackingTableExists(db);
 
@@ -155,6 +158,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   // Sie referenzieren entweder `j.…` (Jobs) oder `t.…`+`j.…` (Tracking).
   const baseJobFilter: string[] = [];
   const baseJobBinds: unknown[] = [];
+  if (jobIdFilter) {
+    baseJobFilter.push("j.id = ?");
+    baseJobBinds.push(jobIdFilter);
+  }
   if (status) {
     baseJobFilter.push("j.status = ?");
     baseJobBinds.push(status);
@@ -322,6 +329,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     }
 
     const filterParts: string[] = [...eventTypeFilter, ...dateFilter];
+    if (jobIdFilter) filterParts.push("t.job_id = ?");
     if (status) filterParts.push("j.status = ?");
     if (q) filterParts.push(...qFilter);
     const whereSql = filterParts.length
@@ -331,6 +339,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     const allBinds: unknown[] = [
       ...eventTypeBinds,
       ...dateBinds,
+      ...(jobIdFilter ? [jobIdFilter] : []),
       ...(status ? [status] : []),
       ...qBinds,
     ];

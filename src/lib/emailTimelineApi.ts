@@ -51,6 +51,8 @@ export type EmailTimelineOpts = {
   status?: "pending" | "processing" | "sent" | "failed" | "";
   from?: string | null;
   to?: string | null;
+  /** Optional: nur Events für diesen Job (Detail-Seite). */
+  job_id?: string | null;
   limit?: number;
   offset?: number;
 };
@@ -62,6 +64,7 @@ export function emailTimelineUrl(opts: EmailTimelineOpts = {}): string {
   if (opts.status) u.searchParams.set("status", opts.status);
   if (opts.from) u.searchParams.set("from", opts.from);
   if (opts.to) u.searchParams.set("to", opts.to);
+  if (opts.job_id) u.searchParams.set("job_id", opts.job_id);
   if (opts.limit != null) u.searchParams.set("limit", String(opts.limit));
   if (opts.offset != null) u.searchParams.set("offset", String(opts.offset));
   return `${u.pathname}${u.search}`;
