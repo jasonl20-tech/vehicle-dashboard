@@ -126,6 +126,49 @@ function fmtWhen(s: string | null | undefined): string {
   }).format(new Date(t));
 }
 
+/**
+ * Vollständiges Dokument für iframe srcDoc — fragments werden in einen
+ * neutralen Rahmen gepackt. Keine Scripts (sandbox ohne allow-scripts).
+ */
+function toPreviewDocument(html: string): string {
+  const h = html.trim();
+  if (!h) {
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>body{margin:0;padding:20px;font:13px/1.45 system-ui,sans-serif;color:#888;text-align:center}</style></head><body>Kein HTML-Inhalt</body></html>`;
+  }
+  if (/^<!doctype/i.test(h) || /<html[\s>]/i.test(h)) return h;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><style>body{margin:0;padding:16px;background:#f4f4f5;font:14px/1.45 system-ui,sans-serif;color:#1a1a1c}</style></head><body>${h}</body></html>`;
+}
+
+/** Read-only Live-Vorschau des rohen HTML-Strings (Custom-HTML / versendeter Body). */
+function EmailHtmlPreviewPane({
+  html,
+}: {
+  html: string;
+}) {
+  const doc = useMemo(() => toPreviewDocument(html), [html]);
+  return (
+    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col border-t border-hair bg-white lg:w-[min(38vw,420px)] lg:max-w-[420px] lg:shrink-0 lg:border-l lg:border-t-0">
+      <div className="shrink-0 border-b border-hair bg-ink-50/80 px-2.5 py-1.5">
+        <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-500">
+          HTML-Vorschau (read-only)
+        </p>
+        <p className="mt-0.5 text-[11px] leading-snug text-ink-400">
+          Entspricht dem aktuellen Feldinhalt im HTML-Tab — nicht die
+          Builder-Blöcke. Zum Bearbeiten in den Tab „HTML“ wechseln.
+        </p>
+      </div>
+      <div className="min-h-0 flex-1 p-2">
+        <iframe
+          title="Email HTML Vorschau"
+          className="h-full min-h-[180px] w-full rounded-md border border-hair bg-white shadow-inner"
+          sandbox=""
+          srcDoc={doc}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function EmailTemplatesPage() {
   // Defensive gegen `undefined` (Fallback für verschachtelte Outlet-Layouts).
   const ctx = useOutletContext<DashboardOutletContext | undefined>();
@@ -187,6 +230,13 @@ export default function EmailTemplatesPage() {
    * im HTML-Modus auszublenden.
    */
   const [hadDesign, setHadDesign] = useState(false);
+  /**
+   * True, sobald der User den HTML-Tab inhaltlich geändert hat. Dann
+   * überschreibt ein Wechsel Builder→HTML das Textarea nicht mit
+   * getEmailHtml() — sonst gingen Custom-HTML-Änderungen verloren.
+   * Jede Bearbeitung im Builder setzt das zurück.
+   */
+  const htmlBodyTouchedRef = useRef(false);
 
   useEffect(() => {
     if (!one.data) return;
@@ -199,6 +249,7 @@ export default function EmailTemplatesPage() {
     setInitialDesign(d ?? makeDefaultDesign());
     setHadDesign(d !== null);
     setDirty(false);
+    htmlBodyTouchedRef.current = false;
   }, [one.data?.id, one.data?.updated_at]);
 
   // ---- Anlegen ----
@@ -312,11 +363,12 @@ export default function EmailTemplatesPage() {
       if (!ed) {
         return embedBuilderDesign(initialDesign, htmlOnly);
       }
-      const html = ed.getEmailHtml();
       const design = ed.getDesign();
+      const html = htmlBodyTouchedRef.current
+        ? htmlOnly
+        : ed.getEmailHtml();
       return embedBuilderDesign(design, html);
     }
-    // HTML-Modus: behalte das vorhandene Initial-Design (falls vorhanden)
     return embedBuilderDesign(initialDesign, htmlOnly);
   }, [viewMode, initialDesign, htmlOnly]);
 
@@ -324,27 +376,18 @@ export default function EmailTemplatesPage() {
     setViewMode((prev) => {
       if (prev === next) return prev;
       if (prev === "builder" && next === "html") {
-        // Builder → HTML: aktuellen Stand aus dem Editor ziehen, sodass
-        // der HTML-Editor das aktuelle Render-Ergebnis sieht.
         const ed = editorRef.current;
         if (ed) {
-          setHtmlOnly(ed.getEmailHtml());
           setInitialDesign(ed.getDesign());
-        }
-      } else if (prev === "html" && next === "builder") {
-        // HTML → Builder: Wenn der User im HTML-Modus etwas geändert
-        // hat, nehmen wir den letzten gemerkten Design-Stand und der
-        // Builder zeigt dazu seine Variante. Custom-HTML-Änderungen
-        // gehen verloren — daher das Banner im HTML-Modus.
-        const ed = editorRef.current;
-        if (ed && initialDesign) {
-          ed.replaceDesign(initialDesign);
+          if (!htmlBodyTouchedRef.current) {
+            setHtmlOnly(ed.getEmailHtml());
+          }
         }
       }
       writeViewMode(next);
       return next;
     });
-  }, [initialDesign]);
+  }, []);
 
   const onSave = useCallback(async () => {
     if (!one.data) return;
@@ -364,6 +407,7 @@ export default function EmailTemplatesPage() {
       setInitialDesign(d ?? initialDesign);
       setHadDesign(d !== null);
       setDirty(false);
+      htmlBodyTouchedRef.current = false;
       list.reload();
     } catch (e) {
       setSaveErr(e instanceof Error ? e.message : String(e));
@@ -389,6 +433,7 @@ export default function EmailTemplatesPage() {
           const next =
             ta.value.slice(0, start) + token + ta.value.slice(end);
           setHtmlOnly(next);
+          htmlBodyTouchedRef.current = true;
           requestAnimationFrame(() => {
             ta.focus();
             const pos = start + token.length;
@@ -396,6 +441,7 @@ export default function EmailTemplatesPage() {
           });
         } else {
           setHtmlOnly((b) => b + token);
+          htmlBodyTouchedRef.current = true;
         }
         setDirty(true);
       } else {
@@ -805,7 +851,7 @@ export default function EmailTemplatesPage() {
                 <span className="text-[11px] tabular-nums text-ink-400">
                   {viewMode === "html"
                     ? `${htmlOnly.length.toLocaleString("de-DE")} Zeichen HTML`
-                    : "Drag-and-Drop · Vorschau · Variablen"}
+                    : "Builder · rechts: Vorschau des HTML-Tabs"}
                 </span>
               </div>
               {(one.error || saveErr) && (
@@ -821,10 +867,10 @@ export default function EmailTemplatesPage() {
                   className="shrink-0 border-b border-accent-amber/30 bg-accent-amber/10 px-3 py-1.5 text-[11.5px] text-accent-amber sm:px-5"
                   role="status"
                 >
-                  Hinweis: Diese Vorlage hat ein Builder-Layout. Wenn du
-                  hier direkt das HTML editierst, weicht es vom Builder-Stand
-                  ab. Beim nächsten Speichern im Builder-Modus überschreibt
-                  der Builder dein Custom-HTML wieder.
+                  Hinweis: Dieser HTML-Code und das Builder-Layout können
+                  auseinanderlaufen. Das im Tab „HTML“ bearbeitete Markup wird
+                  beim Speichern mit dem Builder-Design gemeinsam persistiert —
+                  im Builder gibt es dafür rechts eine Live-Vorschau.
                 </p>
               )}
               <div className="relative min-h-0 flex-1 bg-white">
@@ -845,26 +891,34 @@ export default function EmailTemplatesPage() {
                     */}
                     <div
                       className={
-                        viewMode === "builder" ? "absolute inset-0" : "hidden"
+                        viewMode === "builder"
+                          ? "absolute inset-0 flex min-h-0 flex-col lg:flex-row"
+                          : "hidden"
                       }
                     >
-                      <Suspense
-                        fallback={
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              Builder wird geladen…
-                            </p>
-                          </div>
-                        }
-                      >
-                        <EmailBuilder
-                          key={one.data.id}
-                          ref={editorRef}
-                          initialDesign={initialDesign}
-                          onChange={() => setDirty(true)}
-                        />
-                      </Suspense>
+                      <div className="relative min-h-0 min-w-0 flex-1">
+                        <Suspense
+                          fallback={
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <p className="inline-flex items-center gap-2 text-[12.5px] text-ink-500">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Builder wird geladen…
+                              </p>
+                            </div>
+                          }
+                        >
+                          <EmailBuilder
+                            key={one.data.id}
+                            ref={editorRef}
+                            initialDesign={initialDesign}
+                            onChange={() => {
+                              htmlBodyTouchedRef.current = false;
+                              setDirty(true);
+                            }}
+                          />
+                        </Suspense>
+                      </div>
+                      <EmailHtmlPreviewPane html={htmlOnly} />
                     </div>
                     {viewMode === "html" && (
                       <div className="absolute inset-0 flex flex-col bg-ink-900">
@@ -873,6 +927,7 @@ export default function EmailTemplatesPage() {
                           value={htmlOnly}
                           onChange={(e) => {
                             setHtmlOnly(e.target.value);
+                            htmlBodyTouchedRef.current = true;
                             setDirty(true);
                           }}
                           spellCheck={false}
