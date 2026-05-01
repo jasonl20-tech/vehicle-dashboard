@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   Send,
+  Settings,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -33,7 +34,7 @@ const TILES: PlatformTile[] = [
     status: "Bald verfügbar",
   },
   {
-    title: "Kontroll Platform",
+    title: "Control Platform",
     icon: Gauge,
     status: "Bald verfügbar",
   },
@@ -48,9 +49,14 @@ const TILES: PlatformTile[] = [
     href: "https://n8n.vehicleimagery.com",
   },
   {
-    title: "BUFFER",
+    title: "Buffer",
     icon: Send,
     href: "https://publish.buffer.com/schedule?tab=approvals",
+  },
+  {
+    title: "User Settings",
+    icon: Settings,
+    to: "/settings",
   },
 ];
 
