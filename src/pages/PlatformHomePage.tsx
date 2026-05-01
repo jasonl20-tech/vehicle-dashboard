@@ -1,6 +1,5 @@
 import {
   ArrowRight,
-  Boxes,
   LayoutDashboard,
   Lock,
   LogOut,
@@ -98,24 +97,15 @@ export default function PlatformHomePage() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto flex w-full max-w-7xl flex-col px-6 pb-12 pt-6 sm:px-10 lg:px-12 lg:pb-16 lg:pt-12">
-        <section className="max-w-3xl">
-          <p className="inline-flex items-center gap-2 rounded-full border border-hair bg-white/65 px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.2em] text-ink-500 shadow-sm backdrop-blur">
-            <Boxes className="h-3.5 w-3.5 text-brand-500" />
-            Plattform Auswahl
-          </p>
-          <h1 className="mt-6 font-display text-[44px] font-semibold leading-[0.98] tracking-tighter2 text-ink-900 sm:text-[58px] lg:text-[70px]">
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-88px)] w-full max-w-7xl flex-col items-center justify-center px-6 pb-12 pt-4 sm:px-10 lg:px-12">
+        <section className="max-w-3xl text-center">
+          <h1 className="font-display text-[44px] font-semibold leading-[0.98] tracking-tighter2 text-ink-900 sm:text-[58px] lg:text-[70px]">
             Wohin möchtest du gehen?
           </h1>
-          <p className="mt-5 max-w-2xl text-[15px] leading-7 text-ink-500 sm:text-[16px]">
-            Wähle zuerst einen Bereich aus. Aktuell ist das Dashboard aktiv;
-            weitere Plattform-Module können später als eigene Kacheln ergänzt
-            werden.
-          </p>
         </section>
 
         <section
-          className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          className="mt-10 grid w-full gap-4 sm:grid-cols-2 xl:grid-cols-4"
           aria-label="Plattform Bereiche"
         >
           {TILES.map((tile) => (
@@ -219,7 +209,7 @@ function Background() {
             "linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.25) 75%, rgba(0,0,0,0.08))",
         }}
       />
-      <LogoMark className="absolute -bottom-16 -right-10 h-[44rem] w-auto text-ink-900/[0.025]" />
+      <Logo className="absolute left-1/2 top-1/2 h-auto w-[min(88vw,58rem)] -translate-x-1/2 -translate-y-1/2 text-ink-900/[0.035]" />
     </div>
   );
 }
