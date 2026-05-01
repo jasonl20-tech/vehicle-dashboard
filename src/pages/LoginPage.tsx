@@ -36,7 +36,7 @@ export default function LoginPage() {
 
   const target = useMemo(() => {
     const from = (location.state as { from?: string } | null)?.from;
-    return from && from !== "/login" ? from : "/dashboard";
+    return from && from !== "/login" ? from : "/";
   }, [location.state]);
 
   if (loading) {
