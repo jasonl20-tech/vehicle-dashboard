@@ -100,7 +100,7 @@ export default function PlatformHomePage() {
         </section>
 
         <section
-          className="mt-10 grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
+          className="mt-10 grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-4"
           aria-label="Plattform Bereiche"
         >
           {TILES.map((tile) => (
