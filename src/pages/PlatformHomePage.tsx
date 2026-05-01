@@ -54,6 +54,11 @@ const TILES: PlatformTile[] = [
     href: "https://publish.buffer.com/schedule?tab=approvals",
   },
   {
+    title: "Docusign",
+    icon: FileText,
+    href: "https://app-eu.boldsign.com/dashboard",
+  },
+  {
     title: "User Settings",
     icon: Settings,
     to: "/settings",
