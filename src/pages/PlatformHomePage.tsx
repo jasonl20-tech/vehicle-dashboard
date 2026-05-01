@@ -5,6 +5,8 @@ import {
   Gauge,
   LayoutDashboard,
   LogOut,
+  Send,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -15,6 +17,7 @@ type PlatformTile = {
   title: string;
   icon: LucideIcon;
   to?: string;
+  href?: string;
   status?: string;
 };
 
@@ -38,6 +41,16 @@ const TILES: PlatformTile[] = [
     title: "Job Manager",
     icon: Briefcase,
     status: "Bald verfügbar",
+  },
+  {
+    title: "N8N",
+    icon: Workflow,
+    href: "https://n8n.vehicleimagery.com",
+  },
+  {
+    title: "BUFFER",
+    icon: Send,
+    href: "https://publish.buffer.com/schedule?tab=approvals",
   },
 ];
 
@@ -87,7 +100,7 @@ export default function PlatformHomePage() {
         </section>
 
         <section
-          className="mt-10 grid w-full gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          className="mt-10 grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6"
           aria-label="Plattform Bereiche"
         >
           {TILES.map((tile) => (
@@ -101,7 +114,7 @@ export default function PlatformHomePage() {
 
 function PlatformCard({ tile }: { tile: PlatformTile }) {
   const Icon = tile.icon;
-  const isActive = Boolean(tile.to);
+  const isActive = Boolean(tile.to || tile.href);
   const content = (
     <>
       <div className="flex items-center gap-4">
@@ -146,6 +159,23 @@ function PlatformCard({ tile }: { tile: PlatformTile }) {
         />
         {content}
       </Link>
+    );
+  }
+
+  if (tile.href) {
+    return (
+      <a
+        href={tile.href}
+        target="_blank"
+        rel="noreferrer"
+        className="group relative min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/75 p-5 shadow-[0_24px_70px_-45px_rgba(13,13,15,0.45)] backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-ink-200 hover:bg-white"
+      >
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-500 via-accent-rose to-accent-mint"
+        />
+        {content}
+      </a>
     );
   }
 
