@@ -103,7 +103,10 @@ export default function ProductionVehicleDetailPage() {
           row ? (
             <span className="text-ink-600">
               id <span className="font-mono">{row.id}</span> · {row.jahr ?? "—"} ·{" "}
-              {row.body} / {row.trim} / {row.farbe}
+              {row.body} / {row.trim} / {row.farbe} · genehmigt{" "}
+              <span className="font-mono">
+                {row.genehmigt === 1 ? "1" : "0"}
+              </span>
             </span>
           ) : null
         }

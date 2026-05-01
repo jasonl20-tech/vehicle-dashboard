@@ -102,6 +102,7 @@ export const NAV_PRIMARY: NavItem[] = [
     children: [
       { label: "Produktions Datenbank", to: "/databases/production" },
       { label: "Produktions Images", to: "/databases/production-images" },
+      { label: "Status", to: "/databases/status" },
       { label: "Assets", to: "/databases/assets" },
     ],
   },

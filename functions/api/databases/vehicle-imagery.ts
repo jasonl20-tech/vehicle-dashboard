@@ -5,7 +5,9 @@
  * D1 `vehicledatabase` → `vehicleimagery_public_storage`
  *
  * GET: Query `id=` → ein Datensatz { row, cdnBase, imageUrlQuery }
- * GET: sonst Liste: q, limit, offset, active=all|1|0
+ * GET: sonst Liste: q, limit, offset, active=all|1|0, genehmigt=all|1|0 (optional),
+ *      strukturierte Filter: id, marke, modell, jahr, body, trim, farbe, resolution, format,
+ *      updated_from, updated_to (YYYY-MM-DD, bezieht sich auf date(last_updated))
  * PUT: Body { id, active: 0|1 }
  *
  * Response: `imageUrlQuery` = `?key=` + encodiertes `env.image_url_secret`.
@@ -64,8 +66,9 @@ const SEARCH_OR_SQL = `(
   OR ifnull(views, '') LIKE ?
   OR ifnull(sonstiges, '') LIKE ?
   OR ifnull(last_updated, '') LIKE ?
+  OR CAST(ifnull(genehmigt, 0) AS TEXT) LIKE ?
 )`;
-const BINDS_PER_TOKEN = 12;
+const BINDS_PER_TOKEN = 13;
 
 export type VehicleImageryPublicRow = {
   id: number;
@@ -81,6 +84,7 @@ export type VehicleImageryPublicRow = {
   sonstiges: string | null;
   active: number | null;
   last_updated: string | null;
+  genehmigt: number | null;
 };
 
 function cdnBaseFromEnv(env: AuthEnv): string {
@@ -99,8 +103,19 @@ function imageUrlQueryFromEnv(env: AuthEnv): string {
 }
 
 const SELECT_LIST = `SELECT
-  id, marke, modell, jahr, body, trim, farbe, resolution, format, views, sonstiges, active, last_updated
+  id, marke, modell, jahr, body, trim, farbe, resolution, format, views, sonstiges, active, last_updated, genehmigt
 FROM vehicleimagery_public_storage`;
+
+/** LIKE-Muster mit entfernten Wildcards; leer = kein Filter */
+function likeContainsUserInput(raw: string): string | null {
+  const esc = raw.replace(/[%_]/g, "").trim();
+  if (!esc) return null;
+  return `%${esc}%`;
+}
+
+function isYyyyMmDd(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
+}
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -153,12 +168,88 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     );
   }
 
+  const genehmigtRaw = (url.searchParams.get("genehmigt") || "all")
+    .trim()
+    .toLowerCase();
+  if (!["all", "0", "1", ""].includes(genehmigtRaw)) {
+    return jsonResponse(
+      { error: "genehmigt muss leer, all, 0 oder 1 sein" },
+      { status: 400 },
+    );
+  }
+
+  const updatedFrom = (url.searchParams.get("updated_from") || "").trim();
+  const updatedTo = (url.searchParams.get("updated_to") || "").trim();
+  if (updatedFrom && !isYyyyMmDd(updatedFrom)) {
+    return jsonResponse(
+      { error: "updated_from muss YYYY-MM-DD sein" },
+      { status: 400 },
+    );
+  }
+  if (updatedTo && !isYyyyMmDd(updatedTo)) {
+    return jsonResponse(
+      { error: "updated_to muss YYYY-MM-DD sein" },
+      { status: 400 },
+    );
+  }
+
+  const filterId = (url.searchParams.get("filter_id") || "").trim();
+  if (filterId && (!/^\d+$/.test(filterId) || Number(filterId) < 1)) {
+    return jsonResponse({ error: "filter_id ungültig" }, { status: 400 });
+  }
+
+  const filterJahr = (url.searchParams.get("jahr") || "").trim();
+  if (filterJahr && (!/^-?\d+$/.test(filterJahr) || Number.isNaN(Number(filterJahr)))) {
+    return jsonResponse({ error: "jahr ungültig" }, { status: 400 });
+  }
+
   const where: string[] = ["1=1"];
   const binds: (string | number)[] = [];
 
   if (activeRaw === "0" || activeRaw === "1") {
     where.push("active = ?");
     binds.push(activeRaw === "1" ? 1 : 0);
+  }
+
+  if (genehmigtRaw === "0" || genehmigtRaw === "1") {
+    where.push("ifnull(genehmigt, 0) = ?");
+    binds.push(genehmigtRaw === "1" ? 1 : 0);
+  }
+
+  if (updatedFrom) {
+    where.push("date(last_updated) >= date(?)");
+    binds.push(updatedFrom);
+  }
+  if (updatedTo) {
+    where.push("date(last_updated) <= date(?)");
+    binds.push(updatedTo);
+  }
+
+  if (filterId) {
+    where.push("id = ?");
+    binds.push(Number(filterId));
+  }
+
+  const textFilters: [string, string][] = [
+    ["marke", url.searchParams.get("marke") || ""],
+    ["modell", url.searchParams.get("modell") || ""],
+    ["body", url.searchParams.get("body") || ""],
+    ["trim", url.searchParams.get("trim") || ""],
+    ["farbe", url.searchParams.get("farbe") || ""],
+    ["resolution", url.searchParams.get("resolution") || ""],
+    ["format", url.searchParams.get("format") || ""],
+  ];
+  for (const [col, raw] of textFilters) {
+    const pat = likeContainsUserInput(raw);
+    if (pat) {
+      where.push(`ifnull(${col}, '') LIKE ?`);
+      binds.push(pat);
+    }
+  }
+
+  if (filterJahr) {
+    where.push("jahr = ?");
+    binds.push(Number(filterJahr));
   }
 
   /* Pro Suchwort: irgendein passendes Feld; alle Wörter müssen (AND) erfüllt sein. */

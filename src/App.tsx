@@ -27,7 +27,9 @@ import EmailTrackingPage from "./pages/EmailTrackingPage";
 import NewsletterPage from "./pages/NewsletterPage";
 import AssetsPage from "./pages/AssetsPage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
+import ProductionImagesPage from "./pages/ProductionImagesPage";
 import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
+import VehicleDatabaseStatusPage from "./pages/VehicleDatabaseStatusPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
@@ -172,8 +174,9 @@ export default function App() {
         <Route path="/databases/assets" element={<AssetsPage />} />
         <Route
           path="/databases/production-images"
-          element={<ModulePage />}
+          element={<ProductionImagesPage />}
         />
+        <Route path="/databases/status" element={<VehicleDatabaseStatusPage />} />
         <Route
           path="/databases"
           element={<Navigate to="/databases/production" replace />}

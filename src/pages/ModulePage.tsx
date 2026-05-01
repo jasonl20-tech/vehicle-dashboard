@@ -85,12 +85,6 @@ const META: Record<
     eyebrow: "Webseite",
     description: "Produkt- und Release-Notizen.",
   },
-  "/databases/production-images": {
-    title: "Produktions Images",
-    eyebrow: "Datenbanken",
-    description:
-      "Übersicht und Verwaltung der Produktions-Bilddaten – Inhalte folgen.",
-  },
 };
 
 const DEFAULT_META = {
