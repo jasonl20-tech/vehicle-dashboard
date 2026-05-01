@@ -171,6 +171,10 @@ export default function App() {
         />
         <Route path="/databases/assets" element={<AssetsPage />} />
         <Route
+          path="/databases/production-images"
+          element={<ModulePage />}
+        />
+        <Route
           path="/databases"
           element={<Navigate to="/databases/production" replace />}
         />

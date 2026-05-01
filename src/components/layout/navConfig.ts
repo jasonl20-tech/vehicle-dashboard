@@ -101,6 +101,7 @@ export const NAV_PRIMARY: NavItem[] = [
     icon: Database,
     children: [
       { label: "Produktions Datenbank", to: "/databases/production" },
+      { label: "Produktions Images", to: "/databases/production-images" },
       { label: "Assets", to: "/databases/assets" },
     ],
   },
