@@ -1272,18 +1272,18 @@ export default function ControlPlatformPage() {
       try {
         const items = imagePreviewStripItems;
         const curItem = items[ctx.index];
+        const pairRawSec = curItem?.rawSecondary ?? null;
+        const pairSrcSec = curItem?.srcSecondary ?? null;
         const scalingPairRichtig =
           controllMode === "scaling" &&
           action === "richtig" &&
-          !!curItem?.rawSecondary &&
-          !!curItem.srcSecondary;
+          curItem != null &&
+          pairRawSec != null &&
+          pairSrcSec != null;
 
-        if (scalingPairRichtig && curItem) {
+        if (scalingPairRichtig) {
           const kPrimary = r2KeyFromImageUrl(cdnBase, curItem.src);
-          const kSecondary = r2KeyFromImageUrl(
-            cdnBase,
-            curItem.srcSecondary,
-          );
+          const kSecondary = r2KeyFromImageUrl(cdnBase, pairSrcSec);
           await postControllStatus({
             vehicleId: selectedId,
             viewToken: curItem.raw,
@@ -1293,7 +1293,7 @@ export default function ControlPlatformPage() {
           });
           const res = await postControllStatus({
             vehicleId: selectedId,
-            viewToken: curItem.rawSecondary,
+            viewToken: pairRawSec,
             mode: controllMode,
             status,
             key: kSecondary,
