@@ -105,6 +105,24 @@ const FIXED_VIEW_SLOT_SET = new Set<string>(
   FIXED_VIEW_SLOT_LAYOUT.map((slot) => slot.slotSlug),
 );
 
+/** Reihenfolge der Thumbnails in der Lightbox (oben → unten). */
+const LIGHTBOX_STRIP_VIEW_ORDER = [
+  "front_left",
+  "front",
+  "front_right",
+  "right",
+  "rear_right",
+  "rear",
+  "rear_left",
+  "left",
+] as const;
+
+function lightboxStripSortRank(slotSlug: string): number {
+  const s = normalizeSlug(slotSlug);
+  const idx = (LIGHTBOX_STRIP_VIEW_ORDER as readonly string[]).indexOf(s);
+  return idx === -1 ? LIGHTBOX_STRIP_VIEW_ORDER.length : idx;
+}
+
 type ViewGridEntry = {
   slotSlug: string;
   token: string | null;
@@ -261,7 +279,7 @@ export default function ControlPlatformPage() {
 
   const imagePreviewStripItems = useMemo(() => {
     if (!row) return [];
-    const out: {
+    type Row = {
       key: string;
       src: string;
       title: string;
@@ -272,7 +290,10 @@ export default function ControlPlatformPage() {
       hasTransparencyHint: boolean;
       hasScalingHint: boolean;
       hasShadowHint: boolean;
-    }[] = [];
+      sortRank: number;
+      sortIdx: number;
+    };
+    const internal: Row[] = [];
     for (let idx = 0; idx < viewGridEntries.length; idx++) {
       const entry = viewGridEntries[idx];
       if (!entry.token) continue;
@@ -286,7 +307,7 @@ export default function ControlPlatformPage() {
         : undefined;
       const isCorrect = status?.status === "correct";
       const isMain = isMainViewSlug(slot.slug);
-      out.push({
+      internal.push({
         key: `${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`,
         src: href,
         title: `${rowTitle(row)} · ${slot.raw}`,
@@ -297,9 +318,14 @@ export default function ControlPlatformPage() {
         hasTransparencyHint: slot.hasTransparencyHint,
         hasScalingHint: slot.hasScalingHint,
         hasShadowHint: slot.hasShadowHint,
+        sortRank: lightboxStripSortRank(entry.slotSlug),
+        sortIdx: idx,
       });
     }
-    return out;
+    internal.sort((a, b) =>
+      a.sortRank !== b.sortRank ? a.sortRank - b.sortRank : a.sortIdx - b.sortIdx,
+    );
+    return internal.map(({ sortRank: _r, sortIdx: _i, ...item }) => item);
   }, [row, viewGridEntries, cdnBase, imageUrlQuery, controllMode, statusMap]);
 
   /** Platzhalter — Korrektur-Aktionen (API folgt). */
