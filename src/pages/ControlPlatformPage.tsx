@@ -395,7 +395,7 @@ export default function ControlPlatformPage() {
                     "Keine Ansichten in der Datenbank."
                   : "Keine Ansichten für diesen Modus."}
                 </p>
-              : <ul className="grid grid-cols-2 gap-1.5">
+              : <ul className="grid grid-cols-[repeat(2,9rem)] gap-1.5 sm:grid-cols-[repeat(2,10rem)] lg:grid-cols-[repeat(2,11rem)]">
                   {viewGridEntries.map((entry, idx) => {
                     if (!entry.token) {
                       return (
