@@ -50,7 +50,7 @@ const TILES: PlatformTile[] = [
     href: "https://n8n.vehicleimagery.com",
   },
   {
-    title: "Buffer",
+    title: "Social Media Manager",
     icon: Send,
     href: "https://publish.buffer.com/schedule?tab=approvals",
   },
