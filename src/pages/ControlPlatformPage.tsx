@@ -30,10 +30,23 @@ import {
 } from "../lib/controllStatusApi";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
+  areFirstViewsReady,
+  FIRST_VIEWS_SETTINGS_PATH,
+  type FirstViewsApiResponse,
+  isSlotBlockedByFirstViews,
+  makeFirstViewsSet,
+} from "../lib/firstViewsConfig";
+import {
   GENERATION_VIEWS_SETTINGS_PATH,
   type GenerationViewsApiResponse,
   isGenerationAllowedForSlug,
 } from "../lib/generationViewsConfig";
+import {
+  buildGoogleImageSearchQuery,
+  GOOGLE_IMAGE_SEARCH_SETTINGS_PATH,
+  type GoogleImageSearchApiResponse,
+  googleImageSearchUrl,
+} from "../lib/googleImageSearchConfig";
 import {
   PREVIEW_IMAGES_SETTINGS_PATH,
   previewImageForSlug,
@@ -684,6 +697,14 @@ export default function ControlPlatformPage() {
   );
   const controllMode = controllModeForViewsMode(viewsMode);
 
+  // Sind alle `first_views` für die aktuell offene Detail-Row bereits auf
+  // `correction.correct` (check=2)? Solange `false`, sind Tiles, die
+  // **nicht** zu first_views gehören, gesperrt (im Grid + in der Lightbox).
+  const firstViewsReady = useMemo(
+    () => areFirstViewsReady(firstViewsSet, detailApi.data?.statuses),
+    [firstViewsSet, detailApi.data?.statuses],
+  );
+
   const controllButtonsApi = useApi<ControllButtonsSettingsApiResponse>(
     CONTROLL_BUTTONS_SETTINGS_PATH,
   );
@@ -704,6 +725,22 @@ export default function ControlPlatformPage() {
     GENERATION_VIEWS_SETTINGS_PATH,
   );
   const generationViewsConfig = generationViewsApi.data?.views ?? null;
+
+  // `settings.google_image_search` einmalig laden (Template).
+  const googleSearchApi = useApi<GoogleImageSearchApiResponse>(
+    GOOGLE_IMAGE_SEARCH_SETTINGS_PATH,
+  );
+  const googleSearchTemplate = googleSearchApi.data?.template ?? "";
+
+  // `settings.first_views` einmalig laden (Liste der Pflicht-Ansichten).
+  const firstViewsApi = useApi<FirstViewsApiResponse>(
+    FIRST_VIEWS_SETTINGS_PATH,
+  );
+  const firstViewsList = firstViewsApi.data?.views ?? null;
+  const firstViewsSet = useMemo(
+    () => makeFirstViewsSet(firstViewsList),
+    [firstViewsList],
+  );
 
   const [generationSubmittingSlot, setGenerationSubmittingSlot] = useState<
     string | null
@@ -748,6 +785,11 @@ export default function ControlPlatformPage() {
       isApproved: boolean;
       /** Status existiert, aber `check !== 2` → nicht mehr bearbeitbar. */
       isLocked: boolean;
+      /**
+       * Slot ist durch `first_views` blockiert (gesperrt, bis alle
+       * Pflicht-Ansichten correction.correct mit check=2 sind).
+       */
+      isFirstViewsLocked: boolean;
       /** `check === 0` → Badge „lock". */
       isCheckPending: boolean;
       /** `check === 1` → Badge „in Bearbeitung". */
@@ -791,6 +833,11 @@ export default function ControlPlatformPage() {
       const isErrored =
         checkVal != null && checkVal >= 3 && !isTransferred;
       const isLocked = hasStatus && !isApproved;
+      const isFirstViewsLocked = isSlotBlockedByFirstViews(
+        firstViewsSet,
+        firstViewsReady,
+        slot.slug,
+      );
       const isMain = isMainViewSlug(slot.slug);
       internal.push({
         key: `${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`,
@@ -801,6 +848,7 @@ export default function ControlPlatformPage() {
         hasStatus,
         isApproved,
         isLocked,
+        isFirstViewsLocked,
         isCheckPending,
         isInProgress,
         isTransferred,
@@ -819,7 +867,16 @@ export default function ControlPlatformPage() {
       a.sortRank !== b.sortRank ? a.sortRank - b.sortRank : a.sortIdx - b.sortIdx,
     );
     return internal.map(({ sortRank: _r, sortIdx: _i, ...item }) => item);
-  }, [row, viewGridEntries, cdnBase, imageUrlQuery, controllMode, statusMap]);
+  }, [
+    row,
+    viewGridEntries,
+    cdnBase,
+    imageUrlQuery,
+    controllMode,
+    statusMap,
+    firstViewsSet,
+    firstViewsReady,
+  ]);
 
   /** Schreibt eine Control-Aktion in `controll_status` und lädt die Statuses neu.
    * Springt nach Erfolg zur nächsten Ansicht, die noch bearbeitbar ist
@@ -853,7 +910,8 @@ export default function ControlPlatformPage() {
         const isEditable = (i: number) =>
           items[i] &&
           items[i].raw !== ctx.rawToken &&
-          !items[i].hasStatus;
+          !items[i].hasStatus &&
+          !items[i].isFirstViewsLocked;
         let nextIdx: number | null = null;
         for (let i = ctx.index + 1; i < items.length; i++) {
           if (isEditable(i)) {
@@ -949,7 +1007,8 @@ export default function ControlPlatformPage() {
         imagePreviewStripItems.length - 1,
       );
       const cur = imagePreviewStripItems[curIdx];
-      const curEditable = !!cur && !cur.hasStatus;
+      const curEditable =
+        !!cur && !cur.hasStatus && !cur.isFirstViewsLocked;
 
       for (const def of defs) {
         if (flags[def.configKey] !== true) continue;
@@ -1322,10 +1381,19 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       );
                       const isGenSubmitting =
                         generationSubmittingSlot === slug;
+                      const slotBlocked = isSlotBlockedByFirstViews(
+                        firstViewsSet,
+                        firstViewsReady,
+                        slug,
+                      );
                       const showPlus =
-                        allowedForGen && !existingGenStatus;
+                        allowedForGen && !existingGenStatus && !slotBlocked;
                       const showInProgress =
                         allowedForGen && !!existingGenStatus;
+                      const showLockedHint =
+                        allowedForGen &&
+                        !existingGenStatus &&
+                        slotBlocked;
                       return (
                         <li
                           key={`${row.id}-slot-${entry.slotSlug}-${idx}`}
@@ -1367,6 +1435,13 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                     in Bearbeitung
                                   </span>
                                 </div>
+                              : showLockedHint ?
+                                <div className="flex flex-col items-center gap-1 text-zinc-500">
+                                  <Lock className="h-5 w-5" />
+                                  <span className="font-mono text-[8px] uppercase tracking-wide">
+                                    gesperrt
+                                  </span>
+                                </div>
                               : <ImageIcon className="h-8 w-8 text-ink-200/80" />
                               }
                             </div>
@@ -1376,6 +1451,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                   isGenSubmitting ? "wird gesendet…"
                                   : "Generierung anstoßen"
                                 : showInProgress ? "regen_vertex"
+                                : showLockedHint
+                                  ? "wartet auf Pflicht-Ansichten"
                                 : "—"}
                               </span>
                             </div>
@@ -1406,6 +1483,11 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       status?.status === "correct";
                     const isErrored =
                       checkVal != null && checkVal >= 3 && !isTransferred;
+                    const isFirstViewsLocked = isSlotBlockedByFirstViews(
+                      firstViewsSet,
+                      firstViewsReady,
+                      slot.slug,
+                    );
                     return (
                       <li
                         key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}
@@ -1416,12 +1498,16 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       >
                         <article
                           title={
-                            status ?
+                            isFirstViewsLocked ?
+                              `${slot.raw} • gesperrt: zuerst die Pflicht-Ansichten korrigieren`
+                            : status ?
                               `${slot.raw} • ${status.mode}/${status.status} • check ${checkVal ?? "—"}`
                             : slot.raw
                           }
                           className={`flex w-full flex-col bg-paper transition-colors ${
-                            isErrored
+                            isFirstViewsLocked
+                              ? "border border-dashed border-zinc-300 opacity-60"
+                              : isErrored
                               ? "border-2 border-red-400"
                               : isTransferred
                               ? "border-2 border-violet-400"
@@ -1436,7 +1522,9 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         >
                           <button
                             type="button"
+                            disabled={isFirstViewsLocked}
                             onClick={() => {
+                              if (isFirstViewsLocked) return;
                               const i = imagePreviewStripItems.findIndex(
                                 (it) => it.src === href,
                               );
@@ -1444,8 +1532,16 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 index: i >= 0 ? i : 0,
                               });
                             }}
-                            aria-label={`${slot.slug} groß anzeigen`}
-                            className="group relative flex aspect-[3/2] w-full cursor-zoom-in items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
+                            aria-label={
+                              isFirstViewsLocked
+                                ? `${slot.slug} gesperrt – zuerst Pflicht-Ansichten korrigieren`
+                                : `${slot.slug} groß anzeigen`
+                            }
+                            className={`group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
+                              isFirstViewsLocked
+                                ? "cursor-not-allowed"
+                                : "cursor-zoom-in"
+                            }`}
                           >
                             <img
                               src={href}
@@ -1453,7 +1549,11 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                               loading="lazy"
                               decoding="async"
                               className={`max-h-full max-w-full object-contain ${
-                                isApproved ? "opacity-30 grayscale" : ""
+                                isFirstViewsLocked
+                                  ? "opacity-40 grayscale"
+                                  : isApproved
+                                  ? "opacity-30 grayscale"
+                                  : ""
                               }`}
                               onError={(ev) => {
                                 ev.currentTarget.classList.add("hidden");
@@ -1467,6 +1567,14 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             <div className="hidden grid place-items-center px-1">
                               <ImageIcon className="h-8 w-8 text-ink-200" />
                             </div>
+                            {isFirstViewsLocked ?
+                              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/55 backdrop-blur-[1px]">
+                                <span className="inline-flex items-center gap-1 rounded bg-zinc-700/95 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-white shadow">
+                                  <Lock className="h-3 w-3" />
+                                  gesperrt
+                                </span>
+                              </span>
+                            : null}
                             <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-600">
                               {slot.slug}
                             </span>
@@ -1598,6 +1706,53 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                   : <Eye className="h-3 w-3" />}
                   Preview
                 </button>
+                {(() => {
+                  const q = buildGoogleImageSearchQuery(googleSearchTemplate, {
+                    marke: row?.marke,
+                    modell: row?.modell,
+                    jahr: row?.jahr,
+                    body: row?.body,
+                    trim: row?.trim,
+                    farbe: row?.farbe,
+                    ansicht: currentPreviewItem.slotLabel,
+                  });
+                  const disabled = !q;
+                  const href = q ? googleImageSearchUrl(q) : undefined;
+                  const className = `inline-flex items-center gap-0.5 rounded border px-2 py-1 text-[11px] transition ${
+                    disabled
+                      ? "cursor-not-allowed border-ink-700 bg-ink-900 text-ink-500"
+                      : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
+                  }`;
+                  if (disabled) {
+                    return (
+                      <button
+                        type="button"
+                        disabled
+                        className={className}
+                        title={
+                          googleSearchTemplate
+                            ? "Suchanfrage konnte nicht erzeugt werden (fehlende Felder)"
+                            : "Kein Google-Image-Search-Template hinterlegt"
+                        }
+                      >
+                        <Search className="h-3 w-3" />
+                        Google
+                      </button>
+                    );
+                  }
+                  return (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={className}
+                      title={`Google Bilder: „${q}"`}
+                    >
+                      <Search className="h-3 w-3" />
+                      Google
+                    </a>
+                  );
+                })()}
                 <a
                   href={currentPreviewItem.src}
                   target="_blank"
@@ -1794,7 +1949,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         const isBusy = submittingAction === def.stub;
                         const disabled =
                           submittingAction !== null ||
-                          currentPreviewItem.hasStatus;
+                          currentPreviewItem.hasStatus ||
+                          currentPreviewItem.isFirstViewsLocked;
                         return (
                           <button
                             key={def.configKey}
@@ -1826,7 +1982,13 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       })}
                     </div>
                     <div className="min-h-[1rem]">
-                      {currentPreviewItem.hasStatus ?
+                      {currentPreviewItem.isFirstViewsLocked &&
+                      !currentPreviewItem.hasStatus ?
+                        <p className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-300">
+                          <Lock className="h-3 w-3" />
+                          gesperrt — zuerst die Pflicht-Ansichten korrigieren
+                        </p>
+                      : currentPreviewItem.hasStatus ?
                         <p
                           className={`font-mono text-[10px] ${
                             currentPreviewItem.isErrored
