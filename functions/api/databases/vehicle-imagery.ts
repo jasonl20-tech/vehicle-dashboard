@@ -141,10 +141,21 @@ function viewsModeWhereSql(mode: ViewsMode): { clause: string; binds: string[] }
   if (mode === "schatten") {
     return { clause: `${v} LIKE ?`, binds: ["%#shadow%"] };
   }
-  /* korrektur */
+  /*
+   * korrektur: Zeile passt, wenn mind. ein Token *ohne* `#`-Modifier existiert.
+   *   Tokens-Anzahl  = Anzahl(';') + 1
+   *   Tokens-mit-#   = Anzahl('#')
+   *   Tokens-ohne-#  = Tokens − Tokens-mit-#  > 0
+   */
   return {
-    clause: `(${v} NOT LIKE ? AND ${v} NOT LIKE ? AND ${v} NOT LIKE ?)`,
-    binds: ["%#trp%", "%#shadow%", "%#skaliert%"],
+    clause: `(
+      length(ifnull(views, '')) > 0
+      AND (
+        (length(views) - length(replace(views, ';', ''))) + 1
+        - (length(views) - length(replace(views, '#', '')))
+      ) > 0
+    )`,
+    binds: [],
   };
 }
 
