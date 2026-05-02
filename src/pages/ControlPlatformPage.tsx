@@ -6,7 +6,9 @@ import {
   EyeOff,
   ExternalLink,
   Image as ImageIcon,
+  Loader2,
   Lock,
+  Plus,
   Search,
   X,
 } from "lucide-react";
@@ -27,6 +29,11 @@ import {
   r2KeyFromImageUrl,
 } from "../lib/controllStatusApi";
 import { fmtNumber, useApi } from "../lib/customerApi";
+import {
+  GENERATION_VIEWS_SETTINGS_PATH,
+  type GenerationViewsApiResponse,
+  isGenerationAllowedForSlug,
+} from "../lib/generationViewsConfig";
 import {
   PREVIEW_IMAGES_SETTINGS_PATH,
   previewImageForSlug,
@@ -692,6 +699,17 @@ export default function ControlPlatformPage() {
   );
   const previewImagesMap = previewImagesApi.data?.images ?? null;
 
+  // `settings.generation_views` einmalig laden (kein Polling nötig).
+  const generationViewsApi = useApi<GenerationViewsApiResponse>(
+    GENERATION_VIEWS_SETTINGS_PATH,
+  );
+  const generationViewsConfig = generationViewsApi.data?.views ?? null;
+
+  const [generationSubmittingSlot, setGenerationSubmittingSlot] = useState<
+    string | null
+  >(null);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+
   const controllButtonsResolved = useMemo(() => {
     if (controllButtonsApi.data?.buttons) {
       return { buttons: controllButtonsApi.data.buttons };
@@ -867,6 +885,41 @@ export default function ControlPlatformPage() {
       detailApi,
       imagePreviewStripItems,
     ],
+  );
+
+  /**
+   * „+"-Button für fehlende Ansichten: schreibt einen `regen_vertex`-Job
+   * mit `mode = "correction"` in die `controll_status`-Tabelle. Es wird
+   * **kein** Bild benötigt (key=null), und es findet auch keine
+   * Auto-Navigation statt – der Button erzeugt nur den Job.
+   */
+  const submitGenerationJob = useCallback(
+    async (slotSlug: string) => {
+      if (selectedId == null) return;
+      if (generationSubmittingSlot != null) return;
+      const trimmed = slotSlug.trim().toLowerCase();
+      if (!trimmed) return;
+      setGenerationSubmittingSlot(trimmed);
+      setGenerationError(null);
+      try {
+        await postControllStatus({
+          vehicleId: selectedId,
+          viewToken: trimmed,
+          mode: "correction",
+          status: "regen_vertex",
+          key: null,
+        });
+        detailApi.reload();
+        listApi.reload();
+      } catch (err) {
+        setGenerationError(
+          err instanceof Error ? err.message : String(err),
+        );
+      } finally {
+        setGenerationSubmittingSlot(null);
+      }
+    },
+    [selectedId, generationSubmittingSlot, detailApi, listApi],
   );
 
   useEffect(() => {
@@ -1223,6 +1276,28 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                 Ansichten ({filteredViewTokens.length})
               </h2>
 
+              {generationError ?
+                <div
+                  role="alert"
+                  className="mb-1.5 flex items-center gap-1.5 rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] text-red-700"
+                >
+                  <span className="font-mono text-[10px] uppercase tracking-wide">
+                    Fehler
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {generationError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setGenerationError(null)}
+                    className="rounded px-1 text-[10px] text-red-700 hover:bg-red-100"
+                    aria-label="Fehlermeldung schließen"
+                  >
+                    ×
+                  </button>
+                </div>
+              : null}
+
               {filteredViewTokens.length === 0 ?
                 <p className="text-[12px] text-ink-500">
                   {parseViewTokens(row.views).length === 0 ?
@@ -1232,6 +1307,25 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
               : <ul className="grid grid-cols-[repeat(3,minmax(9rem,11rem))] gap-2 sm:grid-cols-[repeat(3,minmax(10rem,12rem))] lg:grid-cols-[repeat(3,minmax(12rem,14rem))]">
                   {viewGridEntries.map((entry, idx) => {
                     if (!entry.token) {
+                      // „+"-Button: nur, wenn die Ansicht in
+                      // settings.generation_views als true markiert ist.
+                      // Existiert für die Ansicht bereits ein
+                      // controll_status-Eintrag (egal in welchem Modus),
+                      // zeigen wir „in Bearbeitung" und kein Plus mehr.
+                      const slug = entry.slotSlug;
+                      const allowedForGen = isGenerationAllowedForSlug(
+                        generationViewsConfig,
+                        slug,
+                      );
+                      const existingGenStatus = statusMap.get(
+                        statusKey(slug, "correction"),
+                      );
+                      const isGenSubmitting =
+                        generationSubmittingSlot === slug;
+                      const showPlus =
+                        allowedForGen && !existingGenStatus;
+                      const showInProgress =
+                        allowedForGen && !!existingGenStatus;
                       return (
                         <li
                           key={`${row.id}-slot-${entry.slotSlug}-${idx}`}
@@ -1242,14 +1336,47 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         >
                           <article className="flex w-full flex-col border border-dashed border-hair bg-paper/50">
                             <div className="relative flex aspect-[3/2] items-center justify-center overflow-hidden bg-ink-50/40">
-                              <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-400">
+                              <span className="pointer-events-none absolute left-1 top-1 z-10 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-400">
                                 {entry.slotSlug}
                               </span>
-                              <ImageIcon className="h-8 w-8 text-ink-200/80" />
+                              {showPlus ?
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void submitGenerationJob(slug);
+                                  }}
+                                  disabled={
+                                    generationSubmittingSlot != null
+                                  }
+                                  title={`Generierung anstoßen (regen_vertex · ${slug})`}
+                                  aria-label={`Generierung für ${slug} anstoßen`}
+                                  className="group flex h-full w-full items-center justify-center bg-emerald-50/40 transition hover:bg-emerald-100/70 focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-500 disabled:cursor-progress disabled:opacity-60"
+                                >
+                                  {isGenSubmitting ?
+                                    <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+                                  : <Plus
+                                      className="h-9 w-9 text-emerald-500 transition group-hover:scale-110 group-hover:text-emerald-600"
+                                      strokeWidth={2.25}
+                                    />
+                                  }
+                                </button>
+                              : showInProgress ?
+                                <div className="flex flex-col items-center gap-1 text-ink-400">
+                                  <Loader2 className="h-6 w-6 animate-spin text-sky-500" />
+                                  <span className="font-mono text-[8px] uppercase tracking-wide">
+                                    in Bearbeitung
+                                  </span>
+                                </div>
+                              : <ImageIcon className="h-8 w-8 text-ink-200/80" />
+                              }
                             </div>
                             <div className="flex min-h-[2rem] items-center gap-1 border-t border-hair px-1 py-0.5">
                               <span className="min-w-0 flex-1 truncate font-mono text-[9px] leading-tight text-ink-400">
-                                —
+                                {showPlus ?
+                                  isGenSubmitting ? "wird gesendet…"
+                                  : "Generierung anstoßen"
+                                : showInProgress ? "regen_vertex"
+                                : "—"}
                               </span>
                             </div>
                           </article>
