@@ -1,7 +1,6 @@
 import {
   BarChart3,
   Database,
-  Gauge,
   Globe,
   LayoutDashboard,
   LineChart,
@@ -26,7 +25,6 @@ export type NavItem = {
 
 export const NAV_PRIMARY: NavItem[] = [
   { label: "Übersicht", icon: LayoutDashboard, to: "/dashboard" },
-  { label: "Control Platform", icon: Gauge, to: "/control-platform" },
   {
     label: "Ansichten",
     icon: View,
