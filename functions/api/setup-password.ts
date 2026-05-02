@@ -120,7 +120,16 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     }
     console.error("[setup-password] hashing fehlgeschlagen:", e);
     return jsonResponse(
-      { error: "Passwort konnte aus technischen Gründen nicht verarbeitet werden." },
+      {
+        error: "Passwort konnte aus technischen Gründen nicht verarbeitet werden.",
+        /**
+         * Sicher: WebCrypto/PBKDF2-Fehlermeldungen enthalten weder Pepper
+         * noch User-Passwort, sondern nur Operationen ("PBKDF2 not supported",
+         * "Worker exceeded CPU time" o.ae.). Hilft, Cloudflare-Limits/-Setup-
+         * Probleme zu erkennen, ohne in Logs schauen zu muessen.
+         */
+        details: msg,
+      },
       { status: 500 },
     );
   }

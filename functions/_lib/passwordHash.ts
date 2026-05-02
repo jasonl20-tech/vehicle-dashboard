@@ -13,8 +13,19 @@
 import type { AuthEnv } from "./auth";
 
 const HASH_SCHEME = "v1";
-/** OWASP-ish Mindest-Anforderungen; identisch quer über alle Plattformen mit derselben DB. */
-const PBKDF2_ITERATIONS = 210_000;
+/**
+ * Iterationszahl für PBKDF2-HMAC-SHA256.
+ *
+ * Cloudflare Workers Free-Plan hat 10 ms CPU-Limit pro Request, Paid-Plan
+ * standardmäßig 30 s. 210.000 Iterationen sind auf Free-Plans regelmäßig
+ * der Grund für „Worker exceeded CPU"-Crashes.
+ *
+ * 100.000 ist der NIST-Mindestwert (SP 800-132 / SP 800-63B 2017+) und passt
+ * sicher in Cloudflare-Limits. Verifikation parst die im Hash gespeicherte
+ * Iterationszahl, daher ist der Wert pro Hash flexibel — die Konstante hier
+ * gilt nur für **neu** erzeugte Hashes.
+ */
+const PBKDF2_ITERATIONS = 100_000;
 const DERIVED_BITS = 256;
 const SALT_BYTES = 16;
 
