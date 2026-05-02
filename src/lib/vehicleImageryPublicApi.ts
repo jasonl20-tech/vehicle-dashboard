@@ -22,6 +22,21 @@ export type VehicleImageryRowLike = {
   farbe: string | null;
 };
 
+/**
+ * Aggregierte `controll_status`-Counts pro Fahrzeug für den aktuellen
+ * `views_mode`. Wird nur von der Controlling-Liste pro Row gefüllt.
+ *
+ * `total` = `done + errored + transferred + inProgress + pending` (Server-Aggregat).
+ */
+export type ControllStatusCountsForRow = {
+  done: number;
+  errored: number;
+  transferred: number;
+  inProgress: number;
+  pending: number;
+  total: number;
+};
+
 export type VehicleImageryPublicRow = VehicleImageryRowLike & {
   id: number;
   views: string | null;
@@ -30,18 +45,9 @@ export type VehicleImageryPublicRow = VehicleImageryRowLike & {
   last_updated: string | null;
   /** Nur bei `vehicleimagery_public_storage`; Controlling-Zeilen ohne dieses Feld. */
   genehmigt?: number | null;
+  /** Nur Controlling-Liste; Aggregat über `controll_status` für aktuellen `views_mode`. */
+  controllStatusCounts?: ControllStatusCountsForRow;
 };
-
-/**
- * Aggregierte `check`-Counts pro `vehicle_id` für den aktuellen `views_mode`.
- * Wird nur von der Controlling-Liste geliefert.
- *
- * Beispiel: `{ "123": { "0": 4, "2": 3 }, "124": { "6": 8 } }`
- */
-export type ControllStatusCountsByVehicle = Record<
-  string,
-  Record<string, number>
->;
 
 export type VehicleImageryListResponse = {
   rows: VehicleImageryPublicRow[];
@@ -51,9 +57,35 @@ export type VehicleImageryListResponse = {
   cdnBase: string;
   /** Anhängen an jede Bild-URL: `?key=<image_url_secret>` (vom Worker). */
   imageUrlQuery: string;
-  /** Nur Controlling-Liste; Public-Liste liefert das nicht. */
-  statusCounts?: ControllStatusCountsByVehicle;
 };
+
+/** Sortier-Optionen der Controlling-Liste (Whitelist; muss zum Server passen). */
+export const CONTROLL_LIST_SORT_OPTIONS = [
+  "default",
+  "id_desc",
+  "id_asc",
+  "done_desc",
+  "errored_desc",
+  "transferred_desc",
+  "inProgress_desc",
+  "pending_desc",
+  "total_desc",
+] as const;
+export type ControllListSortOption =
+  (typeof CONTROLL_LIST_SORT_OPTIONS)[number];
+
+/** Status-Filter der Controlling-Liste (Whitelist; muss zum Server passen). */
+export const CONTROLL_LIST_STATUS_FILTERS = [
+  "any",
+  "errored",
+  "transferred",
+  "done",
+  "inProgress",
+  "pending",
+  "none",
+] as const;
+export type ControllListStatusFilter =
+  (typeof CONTROLL_LIST_STATUS_FILTERS)[number];
 
 /** Eintrag aus `controll_status` (Controlling-Tabelle) für ein Fahrzeug. */
 export type ControllStatusRow = {
@@ -102,6 +134,10 @@ export type VehicleImageryListParams = {
   updated_from?: string;
   /** YYYY-MM-DD */
   updated_to?: string;
+  /** Sortierung; nur von der Controlling-Liste verwertet. */
+  sort?: ControllListSortOption;
+  /** Status-Filter; nur von der Controlling-Liste verwertet. */
+  status_filter?: ControllListStatusFilter;
 };
 
 export function vehicleImageryListUrl(
@@ -133,6 +169,10 @@ export function vehicleImageryListUrl(
   setIf("format", p.format);
   setIf("updated_from", p.updated_from);
   setIf("updated_to", p.updated_to);
+  if (p.sort && p.sort !== "default") u.searchParams.set("sort", p.sort);
+  if (p.status_filter && p.status_filter !== "any") {
+    u.searchParams.set("status_filter", p.status_filter);
+  }
   return u.pathname + u.search;
 }
 

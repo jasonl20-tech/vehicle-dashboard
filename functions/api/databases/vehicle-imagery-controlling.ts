@@ -52,20 +52,6 @@ function searchTokensFromQuery(q: string): string[] {
   return out;
 }
 
-const SEARCH_OR_SQL = `(
-  CAST(id AS TEXT) LIKE ?
-  OR ifnull(marke, '') LIKE ?
-  OR ifnull(modell, '') LIKE ?
-  OR CAST(jahr AS TEXT) LIKE ?
-  OR ifnull(body, '') LIKE ?
-  OR ifnull(trim, '') LIKE ?
-  OR ifnull(farbe, '') LIKE ?
-  OR ifnull(resolution, '') LIKE ?
-  OR ifnull(format, '') LIKE ?
-  OR ifnull(views, '') LIKE ?
-  OR ifnull(sonstiges, '') LIKE ?
-  OR ifnull(last_updated, '') LIKE ?
-)`;
 const BINDS_PER_TOKEN = 12;
 
 export type VehicleImageryControllingRow = {
@@ -116,7 +102,32 @@ function imageUrlQueryFromEnv(env: AuthEnv): string {
   return `?key=${encodeURIComponent(s)}`;
 }
 
-const SELECT_LIST = `SELECT
+/** Spaltenliste der Storage-Tabelle (mit `v.`-Alias). */
+const STORAGE_COLUMNS_VALIASED = `
+  v.id, v.marke, v.modell, v.jahr, v.body, v.trim, v.farbe, v.resolution,
+  v.format, v.views, v.sonstiges, v.active, v.last_updated
+`;
+
+/**
+ * Aggregat-Subquery für `controll_status` – `mode` ist Pflicht-Bind.
+ * Liefert pro `vehicle_id` Counts (n_done/n_errored/...) und n_total.
+ */
+const CONTROLL_STATUS_AGG_SUBQUERY = `(
+  SELECT
+    vehicle_id,
+    SUM(CASE WHEN "check" = 2 THEN 1 ELSE 0 END) AS n_done,
+    SUM(CASE WHEN "check" = 6 THEN 1 ELSE 0 END) AS n_transferred,
+    SUM(CASE WHEN "check" >= 3 AND "check" != 6 THEN 1 ELSE 0 END) AS n_errored,
+    SUM(CASE WHEN "check" = 1 THEN 1 ELSE 0 END) AS n_in_progress,
+    SUM(CASE WHEN "check" = 0 THEN 1 ELSE 0 END) AS n_pending,
+    COUNT(*) AS n_total
+  FROM controll_status
+  WHERE mode = ?
+  GROUP BY vehicle_id
+) cs`;
+
+/** Detail-Lookup (ohne JOIN, ohne Counts). */
+const SELECT_LIST_BY_ID = `SELECT
   id, marke, modell, jahr, body, trim, farbe, resolution, format, views, sonstiges, active, last_updated
 FROM ${STORAGE_TABLE}`;
 
@@ -146,49 +157,62 @@ const VIEWS_MODE_TO_STATUS_MODE: Record<ViewsMode, string> = {
 };
 
 /**
- * Aggregat pro `vehicle_id` (für die Sidebar-Färbung).
- * Schlüssel = vehicle_id als String, Wert = Counts pro `check`-Wert (auch String-Schlüssel).
+ * Sortier-Whitelist (nutzer-input wird *nur* gegen diesen Schlüssel
+ * geprüft, das tatsächliche SQL-Snippet ist hardcoded → kein SQL-Injection-Risiko).
  *
- * Beispiel:
- * `{ "123": { "0": 4, "2": 3 }, "124": { "6": 8 } }`
+ * `default` = letzte Aktualisierung (entspricht dem alten Verhalten).
  */
-type StatusCountsByVehicle = Record<string, Record<string, number>>;
-
-async function loadStatusCountsForList(
-  db: D1Database,
-  vehicleIds: number[],
-  statusMode: string | null,
-): Promise<StatusCountsByVehicle> {
-  if (vehicleIds.length === 0) return {};
-  const placeholders = vehicleIds.map(() => "?").join(",");
-  const where = statusMode
-    ? `mode = ? AND vehicle_id IN (${placeholders})`
-    : `vehicle_id IN (${placeholders})`;
-  const binds: (string | number)[] = statusMode
-    ? [statusMode, ...vehicleIds]
-    : [...vehicleIds];
-  try {
-    const r = await db
-      .prepare(
-        `SELECT vehicle_id, "check" AS chk, COUNT(*) AS n
-         FROM controll_status
-         WHERE ${where}
-         GROUP BY vehicle_id, "check"`,
-      )
-      .bind(...binds)
-      .all<{ vehicle_id: number; chk: number; n: number }>();
-    const out: StatusCountsByVehicle = {};
-    for (const row of r.results ?? []) {
-      const vid = String(row.vehicle_id);
-      const chk = String(row.chk);
-      if (!out[vid]) out[vid] = {};
-      out[vid][chk] = Number(row.n);
-    }
-    return out;
-  } catch {
-    return {};
-  }
+const SORT_OPTIONS = {
+  default: "v.last_updated DESC, v.id DESC",
+  id_desc: "v.id DESC",
+  id_asc: "v.id ASC",
+  done_desc:
+    "ifnull(cs.n_done, 0) DESC, v.last_updated DESC, v.id DESC",
+  errored_desc:
+    "ifnull(cs.n_errored, 0) DESC, v.last_updated DESC, v.id DESC",
+  transferred_desc:
+    "ifnull(cs.n_transferred, 0) DESC, v.last_updated DESC, v.id DESC",
+  inProgress_desc:
+    "ifnull(cs.n_in_progress, 0) DESC, v.last_updated DESC, v.id DESC",
+  pending_desc:
+    "ifnull(cs.n_pending, 0) DESC, v.last_updated DESC, v.id DESC",
+  total_desc:
+    "ifnull(cs.n_total, 0) DESC, v.last_updated DESC, v.id DESC",
+} as const;
+type SortOption = keyof typeof SORT_OPTIONS;
+function isSortOption(s: string): s is SortOption {
+  return Object.prototype.hasOwnProperty.call(SORT_OPTIONS, s);
 }
+
+/**
+ * Status-Filter-Whitelist. SQL-Snippet ist hardcoded; nutzer-input wird *nur*
+ * gegen die Schlüssel geprüft.
+ */
+const STATUS_FILTERS = {
+  any: "",
+  errored: "ifnull(cs.n_errored, 0) > 0",
+  transferred: "ifnull(cs.n_total, 0) > 0 AND cs.n_total = cs.n_transferred",
+  done:
+    "ifnull(cs.n_total, 0) > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_done, 0) > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) = cs.n_total",
+  inProgress:
+    "ifnull(cs.n_in_progress, 0) > 0 AND ifnull(cs.n_errored, 0) = 0",
+  pending:
+    "ifnull(cs.n_pending, 0) > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_in_progress, 0) = 0",
+  none: "(cs.vehicle_id IS NULL OR ifnull(cs.n_total, 0) = 0)",
+} as const;
+type StatusFilter = keyof typeof STATUS_FILTERS;
+function isStatusFilter(s: string): s is StatusFilter {
+  return Object.prototype.hasOwnProperty.call(STATUS_FILTERS, s);
+}
+
+export type ControllStatusCountsForRow = {
+  done: number;
+  errored: number;
+  transferred: number;
+  inProgress: number;
+  pending: number;
+  total: number;
+};
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -209,7 +233,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       return jsonResponse({ error: "id ungültig" }, { status: 400 });
     }
     const row = await db
-      .prepare(`${SELECT_LIST} WHERE id = ?`)
+      .prepare(`${SELECT_LIST_BY_ID} WHERE id = ?`)
       .bind(oneId)
       .first<VehicleImageryControllingRow>();
     if (!row) {
@@ -267,25 +291,74 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "jahr ungültig" }, { status: 400 });
   }
 
+  /**
+   * `views_mode` wird auf Server-Seite **nicht** in einen WHERE-Filter umgesetzt:
+   * alle Fahrzeuge sollen in jedem Modus auftauchen, pro Modus filtert das Frontend
+   * lediglich, welche `views`-Tokens als Kacheln erscheinen.
+   *
+   * Der `mode`-Wert wird aber für die Aggregat-Subquery genutzt
+   * (`controll_status.mode = ?`).
+   */
+  const viewsModeRaw = (url.searchParams.get("views_mode") || "")
+    .trim()
+    .toLowerCase();
+  if (viewsModeRaw && !isViewsMode(viewsModeRaw)) {
+    return jsonResponse(
+      {
+        error:
+          "views_mode muss korrektur, transparenz, skalierung oder schatten sein",
+      },
+      { status: 400 },
+    );
+  }
+  const statusMode =
+    viewsModeRaw && isViewsMode(viewsModeRaw)
+      ? VIEWS_MODE_TO_STATUS_MODE[viewsModeRaw]
+      : "correction";
+
+  const sortRaw = (url.searchParams.get("sort") || "default").trim();
+  if (!isSortOption(sortRaw)) {
+    return jsonResponse(
+      {
+        error: `sort muss einer von: ${Object.keys(SORT_OPTIONS).join(", ")} sein`,
+      },
+      { status: 400 },
+    );
+  }
+  const orderBySql = SORT_OPTIONS[sortRaw];
+
+  const statusFilterRaw = (
+    url.searchParams.get("status_filter") || "any"
+  ).trim();
+  if (!isStatusFilter(statusFilterRaw)) {
+    return jsonResponse(
+      {
+        error: `status_filter muss einer von: ${Object.keys(STATUS_FILTERS).join(", ")} sein`,
+      },
+      { status: 400 },
+    );
+  }
+  const statusFilterSql = STATUS_FILTERS[statusFilterRaw];
+
   const where: string[] = ["1=1"];
   const binds: (string | number)[] = [];
 
   if (activeRaw === "0" || activeRaw === "1") {
-    where.push("active = ?");
+    where.push("v.active = ?");
     binds.push(activeRaw === "1" ? 1 : 0);
   }
 
   if (updatedFrom) {
-    where.push("date(last_updated) >= date(?)");
+    where.push("date(v.last_updated) >= date(?)");
     binds.push(updatedFrom);
   }
   if (updatedTo) {
-    where.push("date(last_updated) <= date(?)");
+    where.push("date(v.last_updated) <= date(?)");
     binds.push(updatedTo);
   }
 
   if (filterId) {
-    where.push("id = ?");
+    where.push("v.id = ?");
     binds.push(Number(filterId));
   }
 
@@ -301,86 +374,144 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   for (const [col, raw] of textFilters) {
     const pat = likeContainsUserInput(raw);
     if (pat) {
-      where.push(`ifnull(${col}, '') LIKE ?`);
+      where.push(`ifnull(v.${col}, '') LIKE ?`);
       binds.push(pat);
     }
   }
 
   if (filterJahr) {
-    where.push("jahr = ?");
+    where.push("v.jahr = ?");
     binds.push(Number(filterJahr));
   }
 
-  /*
-   * `views_mode` wird derzeit auf Server-Seite **nicht** in einen WHERE-Filter umgesetzt.
-   * Alle Fahrzeuge sollen in jedem Modus auftauchen; pro Modus filtert das Frontend
-   * lediglich, welche `views`-Tokens als Kacheln erscheinen (Korrektur: ohne `#`).
-   * Validierung bleibt für API-Konsistenz erhalten.
-   */
-  const viewsModeRaw = (url.searchParams.get("views_mode") || "")
-    .trim()
-    .toLowerCase();
-  if (viewsModeRaw && !isViewsMode(viewsModeRaw)) {
-    return jsonResponse(
-      {
-        error:
-          "views_mode muss korrektur, transparenz, skalierung oder schatten sein",
-      },
-      { status: 400 },
-    );
-  }
-
   for (const pat of searchTokens) {
-    where.push(SEARCH_OR_SQL);
+    where.push(searchOrSqlAliased());
     for (let i = 0; i < BINDS_PER_TOKEN; i++) binds.push(pat);
   }
 
-  const whereSql = ` WHERE ${where.join(" AND ")}`;
+  if (statusFilterSql) {
+    where.push(`(${statusFilterSql})`);
+  }
 
+  const whereSql = ` WHERE ${where.join(" AND ")}`;
+  const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${CONTROLL_STATUS_AGG_SUBQUERY} ON cs.vehicle_id = v.id`;
+
+  const countSql = `SELECT COUNT(*) as n ${fromJoin}${whereSql}`;
   const countRow = await db
-    .prepare(`SELECT COUNT(*) as n FROM ${STORAGE_TABLE}${whereSql}`)
-    .bind(...binds)
+    .prepare(countSql)
+    .bind(statusMode, ...binds)
     .first<{ n: number }>();
   const total = countRow?.n ?? 0;
 
-  const listSql = `${SELECT_LIST}
+  const listSql = `SELECT
+${STORAGE_COLUMNS_VALIASED},
+  ifnull(cs.n_done, 0) AS n_done,
+  ifnull(cs.n_errored, 0) AS n_errored,
+  ifnull(cs.n_transferred, 0) AS n_transferred,
+  ifnull(cs.n_in_progress, 0) AS n_in_progress,
+  ifnull(cs.n_pending, 0) AS n_pending,
+  ifnull(cs.n_total, 0) AS n_total
+${fromJoin}
 ${whereSql}
-ORDER BY last_updated DESC, id DESC
+ORDER BY ${orderBySql}
 LIMIT ? OFFSET ?`;
-  const { results } = await db
-    .prepare(listSql)
-    .bind(...binds, limit, offset)
-    .all<VehicleImageryControllingRow>();
+
+  type ListRowRaw = VehicleImageryControllingRow & {
+    n_done: number;
+    n_errored: number;
+    n_transferred: number;
+    n_in_progress: number;
+    n_pending: number;
+    n_total: number;
+  };
+
+  let results: ListRowRaw[] = [];
+  try {
+    const r = await db
+      .prepare(listSql)
+      .bind(statusMode, ...binds, limit, offset)
+      .all<ListRowRaw>();
+    results = r.results ?? [];
+  } catch (err) {
+    // Fallback ohne JOIN, falls `controll_status` (noch) nicht existiert
+    const fallbackWhere = where
+      .map((w) => w.replace(/\(cs\.[^)]*\)/g, "1=1"))
+      .filter((w) => !w.startsWith("(cs."));
+    const fallbackSql = `SELECT ${STORAGE_COLUMNS_VALIASED}
+FROM ${STORAGE_TABLE} v
+WHERE ${fallbackWhere.join(" AND ")}
+ORDER BY v.last_updated DESC, v.id DESC
+LIMIT ? OFFSET ?`;
+    const r = await db
+      .prepare(fallbackSql)
+      .bind(...binds, limit, offset)
+      .all<VehicleImageryControllingRow>();
+    results = (r.results ?? []).map((row) => ({
+      ...row,
+      n_done: 0,
+      n_errored: 0,
+      n_transferred: 0,
+      n_in_progress: 0,
+      n_pending: 0,
+      n_total: 0,
+    }));
+    void err;
+  }
 
   const cdnBase = controllingCdnBaseFromEnv(env);
   const imageUrlQuery = imageUrlQueryFromEnv(env);
 
-  const pageVehicleIds = (results ?? [])
-    .map((r) => Number(r.id))
-    .filter((n) => Number.isInteger(n) && n > 0);
-  const statusModeForCounts =
-    viewsModeRaw && isViewsMode(viewsModeRaw)
-      ? VIEWS_MODE_TO_STATUS_MODE[viewsModeRaw]
-      : null;
-  const statusCounts = await loadStatusCountsForList(
-    db,
-    pageVehicleIds,
-    statusModeForCounts,
-  );
+  const rows = results.map((r) => {
+    const {
+      n_done,
+      n_errored,
+      n_transferred,
+      n_in_progress,
+      n_pending,
+      n_total,
+      ...storageCols
+    } = r;
+    const controllStatusCounts: ControllStatusCountsForRow = {
+      done: Number(n_done) || 0,
+      errored: Number(n_errored) || 0,
+      transferred: Number(n_transferred) || 0,
+      inProgress: Number(n_in_progress) || 0,
+      pending: Number(n_pending) || 0,
+      total: Number(n_total) || 0,
+    };
+    return { ...storageCols, controllStatusCounts };
+  });
 
   return jsonResponse(
     {
-      rows: results ?? [],
+      rows,
       total,
       offset,
       limit,
       cdnBase,
       imageUrlQuery,
-      statusCounts,
     },
     { status: 200 },
   );
 };
+
+/** SEARCH_OR_SQL mit `v.`-Alias-Spalten (für JOIN-Query). */
+function searchOrSqlAliased(): string {
+  return `(
+  CAST(v.id AS TEXT) LIKE ?
+  OR ifnull(v.marke, '') LIKE ?
+  OR ifnull(v.modell, '') LIKE ?
+  OR CAST(v.jahr AS TEXT) LIKE ?
+  OR ifnull(v.body, '') LIKE ?
+  OR ifnull(v.trim, '') LIKE ?
+  OR ifnull(v.farbe, '') LIKE ?
+  OR ifnull(v.resolution, '') LIKE ?
+  OR ifnull(v.format, '') LIKE ?
+  OR ifnull(v.views, '') LIKE ?
+  OR ifnull(v.sonstiges, '') LIKE ?
+  OR ifnull(v.last_updated, '') LIKE ?
+)`;
+}
 
 type PutBody = { id?: unknown; active?: unknown };
 
@@ -435,7 +566,7 @@ WHERE id = ?`,
   }
 
   const row = await db
-    .prepare(`${SELECT_LIST} WHERE id = ?`)
+    .prepare(`${SELECT_LIST_BY_ID} WHERE id = ?`)
     .bind(id)
     .first<VehicleImageryControllingRow>();
   if (!row) {

@@ -26,6 +26,10 @@ import {
 } from "../lib/controllStatusApi";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
+  type ControllListSortOption,
+  type ControllListStatusFilter,
+  CONTROLL_LIST_SORT_OPTIONS,
+  CONTROLL_LIST_STATUS_FILTERS,
   type ControllStatusRow,
   VEHICLE_IMAGERY_CONTROLLING_API,
   VEHICLE_IMAGERY_CONTROLLING_CDN_FALLBACK,
@@ -333,7 +337,7 @@ function buildStatusMap(
 }
 
 /**
- * Aggregierter Status pro Fahrzeug für die Sidebar-Färbung.
+ * Aggregierter „Schwerpunkt-Status" pro Fahrzeug (für Tag/Tint).
  * Reihenfolge der Priorität (von dominant zu schwach):
  *   1. `errored` – mind. ein `check >= 3` außer 6
  *   2. `transferred` – alle vorhandenen Statuses sind `check === 6`
@@ -350,70 +354,118 @@ type SidebarAggregatedStatus =
   | "pending"
   | "none";
 
+type SidebarRowCounts = {
+  done: number;
+  errored: number;
+  transferred: number;
+  inProgress: number;
+  pending: number;
+  total: number;
+};
+
 function aggregateSidebarStatus(
-  counts: Record<string, number> | undefined,
+  counts: SidebarRowCounts | null | undefined,
 ): SidebarAggregatedStatus {
-  if (!counts) return "none";
-  let total = 0;
-  let n0 = 0,
-    n1 = 0,
-    n2 = 0,
-    n6 = 0,
-    nErr = 0;
-  for (const [k, v] of Object.entries(counts)) {
-    const c = Number(k);
-    const n = Number(v) || 0;
-    total += n;
-    if (c === 0) n0 += n;
-    else if (c === 1) n1 += n;
-    else if (c === 2) n2 += n;
-    else if (c === 6) n6 += n;
-    else if (c >= 3) nErr += n;
-  }
-  if (total === 0) return "none";
-  if (nErr > 0) return "errored";
-  if (n6 === total) return "transferred";
-  if (n2 + n6 === total) return "done";
-  if (n1 > 0) return "inProgress";
-  if (n0 > 0) return "pending";
+  if (!counts || counts.total <= 0) return "none";
+  if (counts.errored > 0) return "errored";
+  if (counts.transferred === counts.total) return "transferred";
+  if (counts.done + counts.transferred === counts.total) return "done";
+  if (counts.inProgress > 0) return "inProgress";
+  if (counts.pending > 0) return "pending";
   return "none";
 }
 
 const SIDEBAR_STATUS_STYLE: Record<
   SidebarAggregatedStatus,
-  { bar: string; label: string; tint: string }
+  { tag: string; label: string; tint: string }
 > = {
   errored: {
-    bar: "bg-red-500",
+    tag: "bg-red-500",
     label: "errored",
     tint: "bg-red-50/60",
   },
   transferred: {
-    bar: "bg-violet-500",
+    tag: "bg-violet-500",
     label: "übertragen",
     tint: "bg-violet-50/60",
   },
   done: {
-    bar: "bg-emerald-500",
+    tag: "bg-emerald-500",
     label: "done",
     tint: "bg-emerald-50/60",
   },
   inProgress: {
-    bar: "bg-sky-500",
+    tag: "bg-sky-500",
     label: "in Bearb.",
     tint: "bg-sky-50/60",
   },
   pending: {
-    bar: "bg-zinc-400",
+    tag: "bg-zinc-400",
     label: "lock",
     tint: "bg-zinc-50/60",
   },
   none: {
-    bar: "bg-transparent",
+    tag: "bg-transparent",
     label: "",
     tint: "",
   },
 };
+
+/** UI-Labels für Sort-Optionen. */
+const SORT_LABELS: Record<ControllListSortOption, string> = {
+  default: "zuletzt geändert",
+  id_desc: "ID ↓",
+  id_asc: "ID ↑",
+  done_desc: "done (Anzahl) ↓",
+  errored_desc: "errored (Anzahl) ↓",
+  transferred_desc: "übertragen (Anzahl) ↓",
+  inProgress_desc: "in Bearbeitung (Anzahl) ↓",
+  pending_desc: "lock/pending (Anzahl) ↓",
+  total_desc: "Status-Gesamt ↓",
+};
+
+/** UI-Labels für Status-Filter. */
+const STATUS_FILTER_LABELS: Record<ControllListStatusFilter, string> = {
+  any: "alle",
+  errored: "mit errored",
+  transferred: "alles übertragen",
+  done: "alles done",
+  inProgress: "in Bearbeitung",
+  pending: "wartend (lock)",
+  none: "ohne Status",
+};
+
+const SORT_STORAGE_KEY = "controlPlatform.list.sort";
+const FILTER_STORAGE_KEY = "controlPlatform.list.statusFilter";
+
+function readSortFromStorage(): ControllListSortOption {
+  if (typeof window === "undefined") return "default";
+  try {
+    const v = window.localStorage.getItem(SORT_STORAGE_KEY);
+    if (v && (CONTROLL_LIST_SORT_OPTIONS as readonly string[]).includes(v)) {
+      return v as ControllListSortOption;
+    }
+  } catch {
+    /* noop */
+  }
+  return "default";
+}
+
+function readFilterFromStorage(): ControllListStatusFilter {
+  if (typeof window === "undefined") return "any";
+  try {
+    const v = window.localStorage.getItem(FILTER_STORAGE_KEY);
+    if (
+      v &&
+      (CONTROLL_LIST_STATUS_FILTERS as readonly string[]).includes(v)
+    ) {
+      return v as ControllListStatusFilter;
+    }
+  } catch {
+    /* noop */
+  }
+  return "any";
+}
 
 export default function ControlPlatformPage() {
   const { viewsMode, liveEnabled, liveIntervalMs } =
@@ -422,6 +474,28 @@ export default function ControlPlatformPage() {
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
+  const [sort, setSort] = useState<ControllListSortOption>(() =>
+    readSortFromStorage(),
+  );
+  const [statusFilter, setStatusFilter] = useState<ControllListStatusFilter>(
+    () => readFilterFromStorage(),
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(SORT_STORAGE_KEY, sort);
+    } catch {
+      /* noop */
+    }
+  }, [sort]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(FILTER_STORAGE_KEY, statusFilter);
+    } catch {
+      /* noop */
+    }
+  }, [statusFilter]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [imagePreview, setImagePreview] = useState<{ index: number } | null>(
     null,
@@ -518,7 +592,7 @@ export default function ControlPlatformPage() {
   useEffect(() => {
     setOffset(0);
     setSelectedId(null);
-  }, [q, viewsMode]);
+  }, [q, viewsMode, sort, statusFilter]);
 
   useEffect(() => {
     setImagePreview(null);
@@ -535,10 +609,12 @@ export default function ControlPlatformPage() {
           offset,
           active: "1",
           views_mode: viewsMode,
+          sort,
+          status_filter: statusFilter,
         },
         VEHICLE_IMAGERY_CONTROLLING_API,
       ),
-    [q, offset, viewsMode],
+    [q, offset, viewsMode, sort, statusFilter],
   );
   const listApi = useApi<VehicleImageryListResponse>(listUrl, {
     pollMs: livePollMs,
@@ -880,6 +956,58 @@ export default function ControlPlatformPage() {
             />
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1">
+            <label
+              className="sr-only"
+              htmlFor="control-platform-list-sort"
+            >
+              Sortierung
+            </label>
+            <select
+              id="control-platform-list-sort"
+              aria-label="Sortierung"
+              title="Sortierung"
+              value={sort}
+              onChange={(e) =>
+                setSort(e.target.value as ControllListSortOption)
+              }
+              className="min-w-0 flex-1 border border-hair bg-paper py-0.5 pl-1.5 pr-5 text-[10.5px] text-ink-700 focus:border-ink-600 focus:outline-none"
+            >
+              {CONTROLL_LIST_SORT_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {SORT_LABELS[s]}
+                </option>
+              ))}
+            </select>
+            <label
+              className="sr-only"
+              htmlFor="control-platform-list-filter"
+            >
+              Filter
+            </label>
+            <select
+              id="control-platform-list-filter"
+              aria-label="Filter"
+              title="Status-Filter"
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(
+                  e.target.value as ControllListStatusFilter,
+                )
+              }
+              className={`min-w-0 flex-1 border py-0.5 pl-1.5 pr-5 text-[10.5px] focus:outline-none ${
+                statusFilter === "any"
+                  ? "border-hair bg-paper text-ink-700 focus:border-ink-600"
+                  : "border-ink-700 bg-ink-50 text-ink-900 focus:border-ink-800"
+              }`}
+            >
+              {CONTROLL_LIST_STATUS_FILTERS.map((f) => (
+                <option key={f} value={f}>
+                  {STATUS_FILTER_LABELS[f]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
             <p className="text-[10px] tabular-nums text-ink-500">{pageLabel}</p>
             {listApi.loading && (
               <span className="text-[10px] text-ink-400">lädt…</span>
@@ -912,16 +1040,47 @@ export default function ControlPlatformPage() {
         <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain" role="listbox" aria-label="Einträge">
           {rows.map((r) => {
             const selected = sidebarSelectedOnPage && r.id === selectedId;
-            const nViews = parseViewTokens(r.views).length;
-            const counts = listApi.data?.statusCounts?.[String(r.id)];
+            const nViewsForMode = parseViewTokens(r.views).filter((t) =>
+              tokenMatchesMode(t, viewsMode),
+            ).length;
+            const rawCounts = r.controllStatusCounts;
+            const counts: SidebarRowCounts = rawCounts
+              ? {
+                  done: Number(rawCounts.done) || 0,
+                  errored: Number(rawCounts.errored) || 0,
+                  transferred: Number(rawCounts.transferred) || 0,
+                  inProgress: Number(rawCounts.inProgress) || 0,
+                  pending: Number(rawCounts.pending) || 0,
+                  total: Number(rawCounts.total) || 0,
+                }
+              : {
+                  done: 0,
+                  errored: 0,
+                  transferred: 0,
+                  inProgress: 0,
+                  pending: 0,
+                  total: 0,
+                };
             const aggStatus = aggregateSidebarStatus(counts);
             const aggStyle = SIDEBAR_STATUS_STYLE[aggStatus];
-            const totalStatuses = counts
-              ? Object.values(counts).reduce(
-                  (s, n) => s + (Number(n) || 0),
-                  0,
-                )
-              : 0;
+            // Bar-Skala: bevorzugt erwartete Bilder im Modus,
+            // ansonsten total der vorhandenen Statuses (falls > Erwartung).
+            const barDenominator = Math.max(
+              nViewsForMode,
+              counts.total,
+              1,
+            );
+            const segments: { className: string; n: number }[] = [
+              { className: "bg-emerald-500", n: counts.done },
+              { className: "bg-violet-500", n: counts.transferred },
+              { className: "bg-red-500", n: counts.errored },
+              { className: "bg-sky-500", n: counts.inProgress },
+              { className: "bg-zinc-400", n: counts.pending },
+            ];
+            const tooltip = `${rowTitle(r)}
+done ${counts.done} · errored ${counts.errored} · übertragen ${counts.transferred}
+in Bearbeitung ${counts.inProgress} · lock ${counts.pending}
+${counts.total} / ${nViewsForMode} im aktuellen Modus`;
             return (
               <li key={r.id}>
                 <button
@@ -929,25 +1088,11 @@ export default function ControlPlatformPage() {
                   role="option"
                   aria-selected={selected}
                   onClick={() => setSelectedId(r.id)}
-                  title={
-                    aggStatus === "none"
-                      ? undefined
-                      : `Status: ${aggStyle.label}${
-                          totalStatuses
-                            ? ` · ${totalStatuses} ${
-                                totalStatuses === 1 ? "Eintrag" : "Einträge"
-                              }`
-                            : ""
-                        }`
-                  }
-                  className={`relative flex w-full items-center gap-1 border-b border-hair py-2 pl-2 pr-1.5 text-left text-[12px] transition-colors hover:bg-ink-50/80 ${
+                  title={tooltip}
+                  className={`relative flex w-full items-center gap-1 border-b border-hair py-2 pl-1.5 pr-1.5 text-left text-[12px] transition-colors hover:bg-ink-50/80 ${
                     selected ? "bg-ink-50" : aggStyle.tint
                   }`}
                 >
-                  <span
-                    aria-hidden
-                    className={`absolute left-0 top-0 h-full w-1 ${aggStyle.bar}`}
-                  />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium leading-tight text-ink-900">
                       {rowTitle(r)}
@@ -955,19 +1100,33 @@ export default function ControlPlatformPage() {
                     <span className="mt-0.5 block truncate font-mono text-[10px] leading-tight text-ink-500">
                       #{r.id} · {rowSubtitle(r)}
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-500">
-                      <span>
-                        {nViews} Ansicht{nViews === 1 ? "" : "en"}
+                    <span className="mt-1 flex items-center gap-1 text-[10px] text-ink-500">
+                      <span className="tabular-nums">
+                        {counts.total}/{nViewsForMode}
                       </span>
                       {aggStatus !== "none" ? (
                         <span
-                          className={`inline-flex items-center rounded px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wide leading-none text-white ${
-                            aggStyle.bar
-                          }`}
+                          className={`inline-flex items-center rounded px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wide leading-none text-white ${aggStyle.tag}`}
                         >
                           {aggStyle.label}
                         </span>
                       ) : null}
+                    </span>
+                    <span
+                      aria-hidden
+                      className="mt-1 flex h-1.5 w-full overflow-hidden rounded-sm bg-ink-100"
+                    >
+                      {segments.map((seg, i) => {
+                        if (seg.n <= 0) return null;
+                        const pct = (seg.n / barDenominator) * 100;
+                        return (
+                          <span
+                            key={i}
+                            className={seg.className}
+                            style={{ width: `${pct}%` }}
+                          />
+                        );
+                      })}
                     </span>
                   </span>
                   <ChevronRight
