@@ -38,6 +38,13 @@ export type SessionUser = {
 export interface AuthEnv {
   user: D1Database;
   SESSION_SECRET?: string;
+  /**
+   * Pepper für PBKDF2 (siehe `functions/_lib/passwordHash.ts`). Exakt gleicher Wert auf
+   * allen Systemen/Dashboard-Produktionen, die dieselbe D1‑`user`‑Datenbank teilen — mind. 16 Zeichen.
+   * Im Dashboard auch als **`password_secret`** anlegbar (Kleinbuchstabennamen).
+   */
+  PASSWORD_SECRET?: string;
+  password_secret?: string;
   /** Cloudflare-Account-ID für Analytics-Engine-SQL-API */
   CF_ACCOUNT_ID?: string;
   /** API-Token mit Account.Analytics:Read */
@@ -432,25 +439,6 @@ export function readSessionCookie(req: Request): string | null {
   }
   return null;
 }
-
-// ---------- Passwort-Vergleich ----------
-//
-// Sicherheitshinweis: Aktuell wird das Passwort als Klartext mit dem DB-Wert
-// verglichen, weil deine `user.password`-Spalte aktuell Klartext speichert.
-// Sobald du auf Hashes (z.B. PBKDF2 oder bcrypt) umstellst, hier anpassen.
-//
-// Constant-time-Vergleich, damit Timing-Attacken weniger Aussage haben.
-export function verifyPassword(input: string, stored: string): boolean {
-  if (typeof input !== "string" || typeof stored !== "string") return false;
-  if (input.length !== stored.length) return false;
-  let result = 0;
-  for (let i = 0; i < input.length; i++) {
-    result |= input.charCodeAt(i) ^ stored.charCodeAt(i);
-  }
-  return result === 0;
-}
-
-// ---------- Aktuellen User aus Cookie laden ----------
 
 export async function getCurrentUser(
   env: AuthEnv,

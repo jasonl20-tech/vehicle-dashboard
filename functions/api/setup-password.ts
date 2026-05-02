@@ -5,6 +5,7 @@ import {
   verifySetupToken,
   type AuthEnv,
 } from "../_lib/auth";
+import { hashPasswordForStorage } from "../_lib/passwordHash";
 
 const MIN_LENGTH = 8;
 
@@ -67,12 +68,26 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     );
   }
 
+  let hashed: string;
+  try {
+    hashed = await hashPasswordForStorage(env, password);
+  } catch {
+    console.error("[setup-password] PASSWORD_SECRET/password_secret fehlt oder zu kurz");
+    return jsonResponse(
+      {
+        error:
+          "Der Server kann das Passwort derzeit nicht sicher speichern. PASSWORD_SECRET (mind. 16 Zeichen) muss gesetzt sein.",
+      },
+      { status: 503 },
+    );
+  }
+
   try {
     await env.user
       .prepare(
         "UPDATE user SET password = ?1, last_login = ?2 WHERE id = ?3",
       )
-      .bind(password, new Date().toISOString(), row.id)
+      .bind(hashed, new Date().toISOString(), row.id)
       .run();
   } catch (err) {
     console.error("[setup-password] DB-Update fehlgeschlagen:", err);

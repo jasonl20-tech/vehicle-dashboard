@@ -1,4 +1,8 @@
-import { getCurrentUser, jsonResponse, verifyPassword, type AuthEnv } from "../../_lib/auth";
+import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import {
+  hashPasswordForStorage,
+  verifyStoredPassword,
+} from "../../_lib/passwordHash";
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
   request,
@@ -37,8 +41,26 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     .bind(user.id)
     .first<{ password: string | null }>();
 
-  if (!row || !verifyPassword(password, (row.password ?? "").trim())) {
+  if (!row) {
     return jsonResponse({ error: "Passwort falsch" }, { status: 401 });
+  }
+
+  const stored = (row.password ?? "").trim();
+  const pwCheck = await verifyStoredPassword(env, password, stored);
+  if (!pwCheck.ok) {
+    return jsonResponse({ error: "Passwort falsch" }, { status: 401 });
+  }
+
+  if (pwCheck.needsLegacyRehash) {
+    try {
+      const hashed = await hashPasswordForStorage(env, password);
+      await env.user
+        .prepare("UPDATE user SET password = ?1 WHERE id = ?2")
+        .bind(hashed, user.id)
+        .run();
+    } catch (e) {
+      console.warn("[mfa/disable] Legacy-Rehash fehlgeschlagen:", e);
+    }
   }
 
   await env.user

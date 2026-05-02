@@ -4,9 +4,12 @@ import {
   createSessionToken,
   createSetupToken,
   jsonResponse,
-  verifyPassword,
   type AuthEnv,
 } from "../_lib/auth";
+import {
+  hashPasswordForStorage,
+  verifyStoredPassword,
+} from "../_lib/passwordHash";
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
   request,
@@ -71,11 +74,24 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     );
   }
 
-  if (!verifyPassword(password, storedPw)) {
+  const pwCheck = await verifyStoredPassword(env, password, storedPw);
+  if (!pwCheck.ok) {
     return jsonResponse(
       { error: "Benutzername oder Passwort falsch" },
       { status: 401 },
     );
+  }
+
+  if (pwCheck.needsLegacyRehash) {
+    try {
+      const hashed = await hashPasswordForStorage(env, password);
+      await env.user
+        .prepare("UPDATE user SET password = ?1 WHERE id = ?2")
+        .bind(hashed, row.id)
+        .run();
+    } catch (err) {
+      console.warn("[login] Legacy-Rehash fehlgeschlagen:", err);
+    }
   }
 
   const totpOn =

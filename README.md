@@ -21,6 +21,7 @@ Repository: [`jasonl20-tech/vehicle-dashboard`](https://github.com/jasonl20-tech
 - **D1-Database-Binding:** `user`  ← Variable-Name in den Functions: `env.user`
 - **KV-Namespace-Binding (Zahlungslinks / Pläne):** Variable **`plans`** → verweist auf `env.plans` in den Functions (Plan-JSON pro Key, Koppelung an Stripe Payment Link Metadaten `price_id`)
 - **Environment Variable (Production + Preview):** `SESSION_SECRET` (mind. 16 Zeichen, am besten 64 zufällige Bytes hex)
+- **`PASSWORD_SECRET` oder `password_secret`:** Pepper für PBKDF2-SHA256 der Spalte `user.password` ([`functions/_lib/passwordHash.ts`](functions/_lib/passwordHash.ts)). **Mind. 16 Zeichen.** Derselbe Wert muss auf allen Instanzen gesetzt sein, die dieselbe `user`-D1 teilen (Dashboard, APIs, …).
 - **Secret (ebenfalls Production + Preview):** `STRIPE_SECRET_KEY` = `sk_live_…` bzw. `sk_test_…` (nur serverseitig; kein `pk_` im Frontend nötig für diese Seite)
 
 ### Tabelle `user`
@@ -61,9 +62,7 @@ ALTER TABLE user ADD COLUMN require_2fa INTEGER NOT NULL DEFAULT 0;
 - `require_2fa = 0` (Default): TOTP ist optional und kann unter
   `/account` selbst aktiviert/deaktiviert werden.
 
-> **Sicherheitshinweis:** `password` ist in der aktuellen Implementierung als **Klartext** gespeichert.
-> Für Produktion bitte auf einen Hash (PBKDF2 / Argon2id / bcrypt) umstellen und die Funktion
-> `verifyPassword` in [`functions/_lib/auth.ts`](functions/_lib/auth.ts) entsprechend anpassen.
+Die Spalte `user.password` speichert **PBKDF2-SHA256**-Strings (Format `v1|…`; siehe [`functions/_lib/passwordHash.ts`](functions/_lib/passwordHash.ts)) mit zufälligem Salt und gemeinsamem Pepper aus `PASSWORD_SECRET` / `password_secret`. **Ältere Klartext-Zeilen** werden weiter akzeptiert und beim nächsten erfolgreichen Login automatisch auf einen Hash umgestellt, sobald der Pepper gesetzt ist. Fehlt der Pepper bei bereits gehashten Accounts, schlagen Logins fehl, bis derselbe Wert wie beim Hashen wieder gesetzt ist.
 
 ### Tabelle `sicherheitsstufen` (Routen pro Sicherheitsstufe)
 
@@ -190,6 +189,7 @@ In Cloudflare:
    - Optional KV: Variable **`plans`** → Namespace für Zahlungslink-/Pläne (siehe oben)
 4. Unter **Settings → Environment variables**:
    - `SESSION_SECRET = <zufälliger String, ≥16 Zeichen>` (für Production **und** Preview)
+   - `PASSWORD_SECRET` **oder** `password_secret` (≥16 Zeichen, **identisch** über alle Umgebungen/Dienste mit gleicher `user`-D1)
    - `STRIPE_SECRET_KEY` (Secret) für `/zahlungslinks`
 5. **Save → Deployment startet automatisch.**
 
