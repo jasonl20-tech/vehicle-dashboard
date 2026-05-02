@@ -5,7 +5,6 @@ import {
   verifyMfaPendingToken,
   type AuthEnv,
 } from "../_lib/auth";
-import { tryConsumeRecoveryHash } from "../_lib/mfaRecovery";
 import { totpVerify } from "../_lib/totp";
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
@@ -20,7 +19,9 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   const pending =
-    typeof body?.mfaPendingToken === "string" ? body.mfaPendingToken.trim() : "";
+    typeof body?.mfaPendingToken === "string"
+      ? body.mfaPendingToken.trim()
+      : "";
   const codeRaw = typeof body?.code === "string" ? body.code.trim() : "";
   if (!pending || !codeRaw) {
     return jsonResponse(
@@ -42,7 +43,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 
   const row = await env.user
     .prepare(
-      "SELECT id, active, totp_enabled, totp_secret, totp_recovery_hashes FROM user WHERE id = ?1 LIMIT 1",
+      "SELECT id, active, totp_enabled, totp_secret FROM user WHERE id = ?1 LIMIT 1",
     )
     .bind(mfaClaims.sub)
     .first<{
@@ -50,7 +51,6 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       active: number;
       totp_enabled: number | null;
       totp_secret: string | null;
-      totp_recovery_hashes: string | null;
     }>();
 
   if (!row || row.active !== 1) {
@@ -64,29 +64,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   const secret = row.totp_secret!.trim();
-
-  let totpOk = await totpVerify(secret, codeRaw, 1);
-  let recoveryUpdate: string | null = null;
-
-  if (!totpOk) {
-    recoveryUpdate = await tryConsumeRecoveryHash(
-      env,
-      row.id,
-      row.totp_recovery_hashes,
-      codeRaw,
-    );
-    totpOk = recoveryUpdate !== null;
-  }
+  const totpOk = await totpVerify(secret, codeRaw, 1);
 
   if (!totpOk) {
     return jsonResponse({ error: "Code ungültig" }, { status: 401 });
-  }
-
-  if (recoveryUpdate !== null) {
-    await env.user
-      .prepare("UPDATE user SET totp_recovery_hashes = ?1 WHERE id = ?2")
-      .bind(recoveryUpdate, row.id)
-      .run();
   }
 
   try {

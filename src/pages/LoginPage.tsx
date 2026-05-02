@@ -27,7 +27,7 @@ export default function LoginPage() {
   const [setup, setSetup] = useState<
     { token: string; benutzername: string } | null
   >(null);
-  /** Zweiter Login-Schritt: TOTP oder Recovery-Code */
+  /** Zweiter Login-Schritt: TOTP-Code aus der Authenticator-App */
   const [mfa, setMfa] = useState<{ token: string } | null>(null);
 
   useEffect(() => {
@@ -447,9 +447,7 @@ function TotpChallengeModal({
     e.preventDefault();
     const trimmed = code.trim().replace(/\s+/g, "");
     if (!trimmed) {
-      setError(
-        "Bitte gib den Authenticator-Code oder einen Wiederherstellungscode ein.",
-      );
+      setError("Bitte gib den 6-stelligen Authenticator-Code ein.");
       return;
     }
     setError(null);
@@ -504,14 +502,12 @@ function TotpChallengeModal({
           </div>
 
           <p className="mt-4 text-[13px] leading-relaxed text-ink-500">
-            Gib den 6-stelligen Code aus deiner Authenticator-App ein, oder einen
-            der gespeicherten Wiederherstellungscodes.
+            Gib den 6-stelligen Code aus deiner Authenticator-App ein.
           </p>
-
           <form onSubmit={onSubmit} className="mt-6 space-y-5" noValidate>
             <Field
               id="totp-code"
-              label="Authenticator- oder Recovery-Code"
+              label="Authenticator-Code"
               value={code}
               onChange={setCode}
               type="text"

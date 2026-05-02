@@ -20,7 +20,7 @@ export type SessionUser = {
  * Ergebnis eines `login`-Aufrufs.
  * - `ok`: Anmeldung war erfolgreich, der User ist im Context.
  * - `needs-totp`: Zweiter Schritt: `completeTotpLogin(mfaPendingToken, code)`
- *   nach erfolgreicher Passwort-Prüfung (Authenticator oder Recovery-Code).
+ *   nach erfolgreicher Passwort-Prüfung (Authenticator-TOTP).
  * - `needs-setup`: Der Account existiert, hat aber noch kein Passwort.
  *   Mit `setupToken` muss anschließend `setupPassword` aufgerufen werden.
  */

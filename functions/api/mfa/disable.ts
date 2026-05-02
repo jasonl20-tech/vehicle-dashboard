@@ -33,7 +33,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 
   await env.user
     .prepare(
-      `UPDATE user SET totp_secret = NULL, totp_enabled = 0, totp_verified_at = NULL, totp_recovery_hashes = NULL
+      `UPDATE user SET totp_secret = NULL, totp_enabled = 0, totp_verified_at = NULL
        WHERE id = ?1`,
     )
     .bind(user.id)

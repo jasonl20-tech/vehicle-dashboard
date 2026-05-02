@@ -1,8 +1,4 @@
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
-import {
-  generateRecoveryCodesPlain,
-  hashesForRecoveryCodes,
-} from "../../_lib/mfaRecovery";
 import { totpVerify } from "../../_lib/totp";
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
@@ -23,7 +19,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const code =
     typeof body?.code === "string" ? body.code.replace(/\s/g, "").trim() : "";
   if (!/^\d{6}$/.test(code)) {
-    return jsonResponse({ error: "Bitte den 6‑stelligen Code eingeben" }, { status: 400 });
+    return jsonResponse(
+      { error: "Bitte den 6‑stelligen Code eingeben" },
+      { status: 400 },
+    );
   }
 
   const row = await env.user
@@ -40,12 +39,17 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "Konto nicht gefunden" }, { status: 404 });
   }
   if (Number(row.totp_enabled) === 1) {
-    return jsonResponse({ error: "Zwei‑Faktor ist bereits aktiv" }, { status: 400 });
+    return jsonResponse(
+      { error: "Zwei‑Faktor ist bereits aktiv" },
+      { status: 400 },
+    );
   }
   const secret = (row.totp_secret ?? "").trim();
   if (!secret) {
     return jsonResponse(
-      { error: "Kein Einrichtungslauf gestartet. Bitte „Einrichten“ wählen." },
+      {
+        error: "Kein Einrichtungslauf gestartet. Bitte „Einrichten“ wählen.",
+      },
       { status: 400 },
     );
   }
@@ -54,16 +58,12 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "Code ungültig" }, { status: 401 });
   }
 
-  const plainCodes = generateRecoveryCodesPlain(10);
-  const hashes = await hashesForRecoveryCodes(env, user.id, plainCodes);
-  const recoveryJson = JSON.stringify(hashes);
-
   await env.user
     .prepare(
-      `UPDATE user SET totp_enabled = 1, totp_verified_at = ?1, totp_recovery_hashes = ?2 WHERE id = ?3`,
+      `UPDATE user SET totp_enabled = 1, totp_verified_at = ?1 WHERE id = ?2`,
     )
-    .bind(new Date().toISOString(), recoveryJson, user.id)
+    .bind(new Date().toISOString(), user.id)
     .run();
 
-  return jsonResponse({ recoveryCodes: plainCodes }, { status: 200 });
+  return jsonResponse({ ok: true }, { status: 200 });
 };

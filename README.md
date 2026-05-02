@@ -45,7 +45,6 @@ CREATE TABLE user (
 ALTER TABLE user ADD COLUMN totp_secret TEXT;
 ALTER TABLE user ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE user ADD COLUMN totp_verified_at TEXT;
-ALTER TABLE user ADD COLUMN totp_recovery_hashes TEXT;
 ```
 
 > **Sicherheitshinweis:** `password` ist in der aktuellen Implementierung als **Klartext** gespeichert.
@@ -146,12 +145,12 @@ Geschützte **SPA-Routen** über [`ProtectedRoute`](src/components/auth/Protecte
 | Methode | Pfad         | Zweck                                                 |
 |---------|--------------|--------------------------------------------------------|
 | `POST`  | `/api/login` | Body `{benutzername, password}` → Session oder `{ needsTotp, mfaPendingToken }`, oder Passwort-Setup |
-| `POST`  | `/api/login-totp` | Body `{ mfaPendingToken, code }` → Session nach TOTP oder Recovery-Code |
+| `POST`  | `/api/login-totp` | Body `{ mfaPendingToken, code }` → Session nach erfolgreicher TOTP-Prüfung |
 | `POST`  | `/api/logout`| Cookie löschen                                         |
 | `GET`   | `/api/me`    | `{ user, erlaubtePfade }` oder `401` / bei D1-Fehler `503` |
 | `GET`   | `/api/mfa/status` | (Login) TOTP-Status |
 | `POST`  | `/api/mfa/enroll-start` | (Login) neues Secret, beginnt Enrollment |
-| `POST`  | `/api/mfa/enroll-confirm` | (Login) Code bestätigen, Recovery-Codes zurück |
+| `POST`  | `/api/mfa/enroll-confirm` | (Login) 6-stelligen Code bestätigen, 2FA aktivieren |
 | `POST`  | `/api/mfa/disable` | (Login) MFA mit Passwort deaktivieren |
 | `GET`   | `/api/billing/payment-links` | (Login) Stripe Payment Links listen |
 | `POST`  | `/api/billing/payment-links` | (Login) Payment Link in Stripe anlegen, nur `{"planKey"}`; `stripe_price_id` kommt aus dem Plan-JSON im KV |

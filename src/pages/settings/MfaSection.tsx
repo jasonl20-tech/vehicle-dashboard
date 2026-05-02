@@ -27,8 +27,6 @@ export default function MfaSection() {
   const [confirmCode, setConfirmCode] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
-
   /** Deaktivieren */
   const [disablePw, setDisablePw] = useState("");
   const [disableOpen, setDisableOpen] = useState(false);
@@ -75,7 +73,6 @@ export default function MfaSection() {
         otpauthUri: data.otpauthUri || "",
       });
       setConfirmCode("");
-      setRecoveryCodes(null);
       await loadStatus();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Einrichtung fehlgeschlagen");
@@ -97,11 +94,9 @@ export default function MfaSection() {
         body: JSON.stringify({ code: confirmCode.replace(/\s/g, "").trim() }),
       });
       const data = (await res.json().catch(() => ({}))) as {
-        recoveryCodes?: string[];
         error?: string;
       };
       if (!res.ok) throw new Error(data.error || "Code ungueltig");
-      setRecoveryCodes(data.recoveryCodes ?? []);
       setDraft(null);
       setConfirmCode("");
       await loadStatus();
@@ -143,8 +138,6 @@ export default function MfaSection() {
     }
   }
 
-  const showRecoveryBanner = recoveryCodes && recoveryCodes.length > 0;
-
   return (
     <section className="rounded-xl border border-hair bg-white/55 p-5 shadow-[0_24px_70px_-50px_rgba(13,13,15,0.35)] sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -158,8 +151,8 @@ export default function MfaSection() {
             </h2>
             <p className="mt-1 max-w-xl text-[12.5px] leading-relaxed text-ink-500">
               Schuetze dieses Konto mit einer Authenticator-App (RFC 6238,
-              SHA-1, 30&nbsp;s). Nach Aktivierung ist beim Login zusätzlich ein
-              6-stelliger Code oder ein Rueckstellungscode erforderlich.
+              SHA-1, 30&nbsp;s). Nach Aktivierung ist beim Login zusaetzlich ein
+              6-stelliger Code erforderlich.
             </p>
           </div>
         </div>
@@ -186,32 +179,6 @@ export default function MfaSection() {
         </div>
       ) : (
         <div className="mt-6 space-y-6">
-          {showRecoveryBanner ? (
-            <div className="rounded-lg border border-hair bg-paper px-4 py-3">
-              <p className="flex items-start gap-2 text-[13px] font-medium text-ink-900">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent-mint" />
-                Rueckstellungscodes sicher aufbewahren
-              </p>
-              <p className="mt-1 text-[12px] leading-relaxed text-ink-500">
-                Diese Liste wird nur hier einmal gezeigt. Ohne diese Codes und ohne
-                dein Smartphone kann dich ein Admin ueber Password-Reset entsperren –
-                dann ist 2FA deaktiviert.
-              </p>
-              <ul className="mt-3 grid grid-cols-1 gap-x-8 gap-y-1 font-mono text-[12px] text-ink-800 sm:grid-cols-2">
-                {recoveryCodes!.map((code) => (
-                  <li key={code}>{code}</li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                onClick={() => setRecoveryCodes(null)}
-                className="mt-3 text-[11.5px] font-medium text-ink-600 underline underline-offset-2 hover:text-ink-900"
-              >
-                Einmal gelesen, Liste ausblenden
-              </button>
-            </div>
-          ) : null}
-
           {status?.totpEnabled && !draft ? (
             <div className="flex flex-wrap gap-3">
               <button

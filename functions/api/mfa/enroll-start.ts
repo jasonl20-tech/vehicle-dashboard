@@ -30,7 +30,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const secret = await generateTotpSecret();
   await env.user
     .prepare(
-      `UPDATE user SET totp_secret = ?1, totp_enabled = 0, totp_verified_at = NULL, totp_recovery_hashes = NULL
+      `UPDATE user SET totp_secret = ?1, totp_enabled = 0, totp_verified_at = NULL
        WHERE id = ?2`,
     )
     .bind(secret, user.id)
