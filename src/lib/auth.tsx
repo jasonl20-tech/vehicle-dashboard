@@ -14,6 +14,16 @@ export type SessionUser = {
   sicherheitsstufe: number;
   profilbild: string | null;
   bannerfarbe: string | null;
+  /**
+   * MFA-Status (Spiegel von `functions/_lib/auth.ts`).
+   * - `totpEnabled`: Authenticator aktiv.
+   * - `requireTotp`: Admin erzwingt 2FA. Wenn aktiv und nicht eingerichtet,
+   *   blockiert das Frontend alles ausser dem Forced-Setup-Modal.
+   */
+  mfa: {
+    totpEnabled: boolean;
+    requireTotp: boolean;
+  };
 };
 
 /**

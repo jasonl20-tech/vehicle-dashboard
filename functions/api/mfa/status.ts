@@ -11,23 +11,26 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   const row = await env.user
     .prepare(
-      "SELECT totp_enabled, totp_secret, totp_verified_at FROM user WHERE id = ?1 LIMIT 1",
+      "SELECT totp_enabled, totp_secret, totp_verified_at, require_2fa FROM user WHERE id = ?1 LIMIT 1",
     )
     .bind(user.id)
     .first<{
       totp_enabled: number | null;
       totp_secret: string | null;
       totp_verified_at: string | null;
+      require_2fa: number | null;
     }>();
 
   const enabled = Number(row?.totp_enabled) === 1;
   const hasSecret = ((row?.totp_secret ?? "") as string).trim().length > 0;
   const enrollmentPending = !enabled && hasSecret;
+  const requireTotp = Number(row?.require_2fa) === 1;
 
   return jsonResponse(
     {
-      totpEnabled: enabled,
+      totpEnabled: enabled && hasSecret,
       enrollmentPending,
+      requireTotp,
       totpVerifiedAt: row?.totp_verified_at ?? null,
     },
     { status: 200 },

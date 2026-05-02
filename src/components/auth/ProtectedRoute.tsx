@@ -2,8 +2,12 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { normalizePathname, pathMatchesPfadliste } from "../../lib/routeAccess";
 
-/** Plattform-Start – immer nach Login ohne gesonderte Routen-Zeile in D1. */
-const SPA_ROUTE_NO_ACL = new Set<string>(["/"]);
+/**
+ * Plattform-Start und persönliche Account-Settings – immer nach Login ohne
+ * gesonderte Routen-Zeile in D1 erreichbar. Damit kann jeder eingeloggte
+ * Nutzer mindestens ausloggen und sein Konto / 2FA einrichten.
+ */
+const SPA_ROUTE_NO_ACL = new Set<string>(["/", "/account"]);
 
 export default function ProtectedRoute({
   children,
@@ -35,8 +39,11 @@ export default function ProtectedRoute({
   }
 
   const pathNorm = normalizePathname(location.pathname);
+  const accountAllowed =
+    pathNorm === "/account" || pathNorm.startsWith("/account/");
   if (
     !SPA_ROUTE_NO_ACL.has(pathNorm) &&
+    !accountAllowed &&
     !pathMatchesPfadliste(pathNorm, erlaubtePfade)
   ) {
     return <Navigate to="/" replace />;

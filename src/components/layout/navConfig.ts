@@ -8,7 +8,6 @@ import {
   Mail,
   ScrollText,
   Server,
-  Settings,
   UserPlus,
   Users,
   View,
@@ -126,9 +125,9 @@ export const NAV_PRIMARY: NavItem[] = [
   },
 ];
 
-export const NAV_FOOTER: NavItem[] = [
-  { label: "Einstellungen", icon: Settings, to: "/dashboard/settings" },
-];
+// Persönliche User-Settings sind ausserhalb des Dashboards: Plattform-Tile
+// „User Settings" auf `/account`. Daher kein Footer-Eintrag in der Sidebar.
+export const NAV_FOOTER: NavItem[] = [];
 
 export type FlatRoute = {
   to: string;

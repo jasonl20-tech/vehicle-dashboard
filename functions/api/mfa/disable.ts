@@ -9,6 +9,16 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
+  if (user.mfa.requireTotp) {
+    return jsonResponse(
+      {
+        error:
+          "2FA ist für dieses Konto Pflicht. Wende dich an einen Administrator, um die Pflicht aufzuheben.",
+      },
+      { status: 403 },
+    );
+  }
+
   let body: { password?: unknown };
   try {
     body = await request.json();

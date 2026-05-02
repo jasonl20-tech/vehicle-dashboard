@@ -82,7 +82,7 @@ const TILES: PlatformTile[] = [
   {
     title: "User Settings",
     icon: Settings,
-    to: "/dashboard/settings",
+    to: "/account",
   },
   {
     title: "Admin Settings",
@@ -109,6 +109,9 @@ export default function PlatformHomePage() {
         if (!dashboardEntry) return [];
         return [{ ...t, to: dashboardEntry }];
       }
+      // /account ist für jeden eingeloggten User immer erreichbar (eigene
+      // Top-Level-Route, keine Sicherheitsstufen-Pflicht).
+      if (t.to === "/account") return [t];
       return pathDirectlyAllowed(t.to, erlaubtePfade) ? [t] : [];
     });
   }, [erlaubtePfade, dashboardEntry]);

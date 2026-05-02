@@ -22,6 +22,17 @@ export type SessionUser = {
   sicherheitsstufe: number;
   profilbild: string | null;
   bannerfarbe: string | null;
+  /**
+   * MFA-Status, getrieben aus Spalten `totp_enabled`, `totp_secret`, `require_2fa`.
+   * - `totpEnabled`: Authenticator ist aktiv (TOTP-Pflicht beim Login).
+   * - `requireTotp`: Admin erzwingt 2FA für diesen Nutzer (Spalte `require_2fa`).
+   *   Ist `requireTotp=true` und `totpEnabled=false`, sperrt Frontend & API alles
+   *   ausser dem Enrollment-Pfad.
+   */
+  mfa: {
+    totpEnabled: boolean;
+    requireTotp: boolean;
+  };
 };
 
 export interface AuthEnv {
@@ -452,7 +463,7 @@ export async function getCurrentUser(
 
   const row = await env.user
     .prepare(
-      "SELECT id, benutzername, titel, sicherheitsstufe, profilbild, bannerfarbe, active FROM user WHERE id = ?1",
+      "SELECT id, benutzername, titel, sicherheitsstufe, profilbild, bannerfarbe, active, totp_enabled, totp_secret, require_2fa FROM user WHERE id = ?1",
     )
     .bind(session.sub)
     .first<{
@@ -463,9 +474,17 @@ export async function getCurrentUser(
       profilbild: string | null;
       bannerfarbe: string | null;
       active: number;
+      totp_enabled: number | null;
+      totp_secret: string | null;
+      require_2fa: number | null;
     }>();
 
   if (!row || row.active !== 1) return null;
+
+  const totpEnabled =
+    Number(row.totp_enabled) === 1 &&
+    (row.totp_secret ?? "").trim().length > 0;
+  const requireTotp = Number(row.require_2fa) === 1;
 
   return {
     id: row.id,
@@ -474,6 +493,10 @@ export async function getCurrentUser(
     sicherheitsstufe: row.sicherheitsstufe ?? 0,
     profilbild: row.profilbild,
     bannerfarbe: row.bannerfarbe,
+    mfa: {
+      totpEnabled,
+      requireTotp,
+    },
   };
 }
 

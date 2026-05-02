@@ -41,6 +41,27 @@ export async function onRequest(context: {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
+  // 2FA wird erzwungen, ist aber noch nicht eingerichtet:
+  // alle APIs außer MFA-Enrollment, Session-Info und Logout sperren.
+  const mfaForcedSetup = user.mfa.requireTotp && !user.mfa.totpEnabled;
+  if (mfaForcedSetup) {
+    if (
+      pathname.startsWith("/api/mfa") ||
+      pathname === "/api/me" ||
+      pathname === "/api/logout"
+    ) {
+      return next();
+    }
+    return jsonResponse(
+      {
+        error:
+          "Zwei-Faktor ist Pflicht für dieses Konto. Bitte zuerst Authenticator einrichten.",
+        mfaSetupRequired: true,
+      },
+      { status: 403 },
+    );
+  }
+
   if (pathname.startsWith("/api/mfa")) {
     return next();
   }

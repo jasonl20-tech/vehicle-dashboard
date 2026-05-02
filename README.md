@@ -47,6 +47,20 @@ ALTER TABLE user ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE user ADD COLUMN totp_verified_at TEXT;
 ```
 
+**Optional — 2FA-Pflicht pro Nutzer:** [`migrations/002_user_require_2fa.sql`](migrations/002_user_require_2fa.sql):
+
+```sql
+ALTER TABLE user ADD COLUMN require_2fa INTEGER NOT NULL DEFAULT 0;
+```
+
+- `require_2fa = 1`: 2FA ist Pflicht. Solange der Nutzer keinen Authenticator
+  hinterlegt hat, sperrt das Frontend die UI mit einem nicht schließbaren
+  Setup-Modal und die API-Middleware blockiert alle Routen ausser
+  `/api/mfa/*`, `/api/me`, `/api/logout`. `/api/mfa/disable` ist in diesem
+  Modus serverseitig deaktiviert.
+- `require_2fa = 0` (Default): TOTP ist optional und kann unter
+  `/account` selbst aktiviert/deaktiviert werden.
+
 > **Sicherheitshinweis:** `password` ist in der aktuellen Implementierung als **Klartext** gespeichert.
 > Für Produktion bitte auf einen Hash (PBKDF2 / Argon2id / bcrypt) umstellen und die Funktion
 > `verifyPassword` in [`functions/_lib/auth.ts`](functions/_lib/auth.ts) entsprechend anpassen.
@@ -132,7 +146,7 @@ Routenstruktur (Auszug):
 | Datenbanken | `/dashboard/databases/*` |
 | Systeme | `/dashboard/systeme/*` |
 | Logs | `/dashboard/logs/*` |
-| User Settings | `/dashboard/settings` |
+| User Settings | `/account` (eigene Top-Level-Route, nicht unter `/dashboard`) |
 | Control Platform | `/control-platform` |
 | N8N (Redirect) | `/n8n` |
 | Social Media (Redirect) | `/socialmediamanager` |
@@ -204,7 +218,7 @@ src/
   pages/
     OverviewPage  ·  FleetPage
     LoginPage      ·  TripsPage     ·  DriversPage
-    MaintenancePage ·  SettingsPage
+    MaintenancePage ·  AccountPage
   App.tsx
   main.tsx
 functions/
