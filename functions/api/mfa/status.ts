@@ -1,4 +1,4 @@
-import { getCurrentUser, jsonResponse, type AuthEnv } from "../_lib/auth";
+import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
