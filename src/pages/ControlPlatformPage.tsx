@@ -7,7 +7,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
@@ -183,10 +183,10 @@ export default function ControlPlatformPage() {
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [imagePreview, setImagePreview] = useState<{
-    src: string;
-    title: string;
-  } | null>(null);
+  const [imagePreview, setImagePreview] = useState<{ index: number } | null>(
+    null,
+  );
+  const activePreviewThumbRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -201,15 +201,6 @@ export default function ControlPlatformPage() {
   useEffect(() => {
     setImagePreview(null);
   }, [selectedId]);
-
-  useEffect(() => {
-    if (!imagePreview) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setImagePreview(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [imagePreview]);
 
   const listUrl = useMemo(
     () =>
@@ -267,6 +258,94 @@ export default function ControlPlatformPage() {
     [detailApi.data?.statuses],
   );
   const controllMode = controllModeForViewsMode(viewsMode);
+
+  const imagePreviewStripItems = useMemo(() => {
+    if (!row) return [];
+    const out: {
+      key: string;
+      src: string;
+      title: string;
+      slotLabel: string;
+      raw: string;
+      isCorrect: boolean;
+      isMain: boolean;
+      hasTransparencyHint: boolean;
+      hasScalingHint: boolean;
+      hasShadowHint: boolean;
+    }[] = [];
+    for (let idx = 0; idx < viewGridEntries.length; idx++) {
+      const entry = viewGridEntries[idx];
+      if (!entry.token) continue;
+      const token = entry.token;
+      const slot = parseViewSlot(token);
+      const slug = viewPathSlug(token);
+      const href = buildVehicleImageUrl(cdnBase, row, slug, imageUrlQuery);
+      const status =
+        controllMode != null ?
+          statusMap.get(statusKey(slot.raw, controllMode))
+        : undefined;
+      const isCorrect = status?.status === "correct";
+      const isMain = isMainViewSlug(slot.slug);
+      out.push({
+        key: `${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`,
+        src: href,
+        title: `${rowTitle(row)} · ${slot.raw}`,
+        slotLabel: slot.slug,
+        raw: slot.raw,
+        isCorrect,
+        isMain,
+        hasTransparencyHint: slot.hasTransparencyHint,
+        hasScalingHint: slot.hasScalingHint,
+        hasShadowHint: slot.hasShadowHint,
+      });
+    }
+    return out;
+  }, [row, viewGridEntries, cdnBase, imageUrlQuery, controllMode, statusMap]);
+
+  useEffect(() => {
+    if (!imagePreview || imagePreviewStripItems.length === 0) return;
+    const n = imagePreviewStripItems.length;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setImagePreview(null);
+        return;
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+        e.preventDefault();
+        setImagePreview((p) => {
+          if (!p) return p;
+          return { index: Math.min(p.index + 1, n - 1) };
+        });
+        return;
+      }
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        setImagePreview((p) => {
+          if (!p) return p;
+          return { index: Math.max(p.index - 1, 0) };
+        });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [imagePreview, imagePreviewStripItems.length]);
+
+  const previewIndexClamped =
+    imagePreview && imagePreviewStripItems.length > 0 ?
+      Math.min(
+        Math.max(0, imagePreview.index),
+        imagePreviewStripItems.length - 1,
+      )
+    : 0;
+  const currentPreviewItem = imagePreviewStripItems[previewIndexClamped];
+
+  useEffect(() => {
+    if (!imagePreview) return;
+    activePreviewThumbRef.current?.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+  }, [imagePreview, previewIndexClamped]);
 
   const atEnd = offset + rows.length >= total;
   const pageLabel =
@@ -485,12 +564,14 @@ export default function ControlPlatformPage() {
                         >
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                              const i = imagePreviewStripItems.findIndex(
+                                (it) => it.src === href,
+                              );
                               setImagePreview({
-                                src: href,
-                                title: `${rowTitle(row)} · ${slot.raw}`,
-                              })
-                            }
+                                index: i >= 0 ? i : 0,
+                              });
+                            }}
                             aria-label={`${slot.slug} groß anzeigen`}
                             className="group relative flex aspect-[3/2] w-full cursor-zoom-in items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
                           >
@@ -573,7 +654,7 @@ export default function ControlPlatformPage() {
         }
       </section>
 
-      {imagePreview ?
+      {imagePreview && currentPreviewItem ?
         <div
           className="fixed inset-0 z-[90] flex flex-col items-center justify-center p-3 sm:p-6"
           role="presentation"
@@ -585,18 +666,21 @@ export default function ControlPlatformPage() {
             onClick={() => setImagePreview(null)}
           />
           <div
-            className="relative z-[91] flex w-full max-w-[min(96vw,1400px)] flex-col gap-2"
+            className="relative z-[91] flex max-h-[92vh] w-full max-w-[min(96vw,960px)] flex-col gap-2"
             role="dialog"
             aria-modal="true"
-            aria-label="Bildvorschau"
+            aria-labelledby="control-platform-preview-title"
           >
             <div className="flex items-start justify-between gap-2 px-0.5">
-              <p className="min-w-0 flex-1 truncate text-left font-mono text-[11px] text-white drop-shadow-sm sm:text-[12px]">
-                {imagePreview.title}
+              <p
+                id="control-platform-preview-title"
+                className="min-w-0 flex-1 truncate text-left font-mono text-[11px] text-white drop-shadow-sm sm:text-[12px]"
+              >
+                {currentPreviewItem.title}
               </p>
               <div className="flex shrink-0 items-center gap-1">
                 <a
-                  href={imagePreview.src}
+                  href={currentPreviewItem.src}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 rounded border border-white/30 bg-white/10 px-2 py-1 text-[11px] text-white backdrop-blur-sm transition hover:bg-white/20"
@@ -614,15 +698,86 @@ export default function ControlPlatformPage() {
                 </button>
               </div>
             </div>
-            <div className="flex max-h-[min(88vh,900px)] items-center justify-center overflow-auto rounded border border-white/15 bg-ink-900/40 p-2 shadow-2xl ring-1 ring-white/10">
-              <img
-                src={imagePreview.src}
-                alt=""
-                className="max-h-[min(85vh,860px)] max-w-full object-contain"
-              />
+            <div className="flex min-h-0 flex-1 flex-col gap-2 sm:min-h-[min(70vh,760px)]">
+              <div className="flex min-h-[min(42vh,420px)] flex-1 items-center justify-center overflow-auto rounded border border-white/15 bg-ink-900/40 p-2 shadow-2xl ring-1 ring-white/10 sm:min-h-[min(52vh,560px)]">
+                <img
+                  src={currentPreviewItem.src}
+                  alt=""
+                  className="max-h-[min(48vh,520px)] max-w-full object-contain sm:max-h-[min(58vh,600px)]"
+                />
+              </div>
+
+              <div className="shrink-0">
+                <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/55">
+                  Alle Ansichten ({imagePreviewStripItems.length})
+                </p>
+                <div className="max-h-[min(30vh,280px)] overflow-y-auto overscroll-contain rounded border border-white/15 bg-ink-950/50 p-1 ring-1 ring-white/10 sm:max-h-[min(34vh,320px)]">
+                  <ul className="flex flex-col gap-1" role="listbox" aria-label="Ansicht wählen">
+                    {imagePreviewStripItems.map((it, i) => {
+                      const selected = i === previewIndexClamped;
+                      return (
+                        <li key={it.key} className="shrink-0">
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            ref={selected ? activePreviewThumbRef : undefined}
+                            onClick={() => setImagePreview({ index: i })}
+                            className={`flex h-14 w-full shrink-0 items-center gap-2 rounded border px-1.5 text-left transition sm:h-16 ${
+                              selected ?
+                                "border-white/70 bg-white/15 ring-1 ring-white/40"
+                              : "border-white/10 bg-ink-900/30 hover:border-white/25 hover:bg-ink-900/50"
+                            }`}
+                          >
+                            <span className="relative flex h-12 w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded bg-ink-900/70 sm:h-[3.25rem] sm:w-[4.75rem]">
+                              <img
+                                src={it.src}
+                                alt=""
+                                className={`max-h-full max-w-full object-contain ${
+                                  it.isCorrect ? "opacity-35 grayscale" : ""
+                                }`}
+                              />
+                              {it.isCorrect && it.isMain ?
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded bg-accent-mint text-white">
+                                  <Star className="h-2 w-2 fill-white" />
+                                </span>
+                              : null}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-mono text-[10px] font-medium text-white">
+                                {it.slotLabel}
+                              </span>
+                              <span className="mt-0.5 line-clamp-2 font-mono text-[9px] leading-tight text-white/55">
+                                {it.raw}
+                              </span>
+                              <span className="mt-0.5 flex flex-wrap gap-0.5">
+                                {it.hasTransparencyHint ?
+                                  <span className="rounded bg-ink-700/90 px-1 py-px font-mono text-[7px] uppercase text-white/90">
+                                    trp
+                                  </span>
+                                : null}
+                                {it.hasScalingHint ?
+                                  <span className="rounded bg-brand-700/90 px-1 py-px font-mono text-[7px] text-white/90">
+                                    sk
+                                  </span>
+                                : null}
+                                {it.hasShadowHint ?
+                                  <span className="rounded bg-ink-600/90 px-1 py-px font-mono text-[7px] text-white/90">
+                                    sh
+                                  </span>
+                                : null}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              </div>
             </div>
             <p className="text-center text-[10px] text-white/70">
-              ESC oder außen klicken zum Schließen
+              ESC oder außen klicken · Pfeiltasten zum Wechseln · Zeile antippen
             </p>
           </div>
         </div>
