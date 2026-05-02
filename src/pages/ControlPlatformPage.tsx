@@ -2260,41 +2260,15 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     </div>
                   : null}
 
-                  {imagePreviewStripItems.length > 0 ?
-                    <div
-                      className="max-h-[30vh] shrink-0 overflow-hidden rounded-lg border border-ink-600 bg-ink-900/90"
-                      aria-label="Bild-URLs"
-                    >
-                      <p className="border-b border-ink-700 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-zinc-400">
-                        Bild-URLs ({imagePreviewStripItems.length})
-                      </p>
-                      <ul className="max-h-[26vh] divide-y divide-ink-800 overflow-y-auto overscroll-contain">
-                        {imagePreviewStripItems.map((it, i) => {
-                          const active = i === previewIndexClamped;
-                          return (
-                            <li
-                              key={it.key}
-                              className={
-                                active ? "bg-ink-800/90 px-2 py-1.5" : "px-2 py-1.5"
-                              }
-                            >
-                              <div className="mb-0.5 font-mono text-[10px] font-medium text-zinc-200">
-                                {it.imageFileLabel}
-                              </div>
-                              <a
-                                href={it.src}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="break-all font-mono text-[9px] leading-snug text-sky-300 underline decoration-sky-600/40 underline-offset-2 hover:text-sky-200"
-                              >
-                                {it.src}
-                              </a>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  : null}
+                  <a
+                    href={currentPreviewItem.src}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={currentPreviewItem.src}
+                    className="block min-h-0 min-w-0 max-w-full truncate font-mono text-[7px] leading-tight text-zinc-600 no-underline hover:text-zinc-500 sm:text-[8px]"
+                  >
+                    {currentPreviewItem.src}
+                  </a>
 
                   <div className="min-h-[1rem]">
                     {currentPreviewItem.isFirstViewsLocked &&
