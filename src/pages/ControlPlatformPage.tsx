@@ -333,7 +333,9 @@ function buildStatusMap(
 }
 
 export default function ControlPlatformPage() {
-  const { viewsMode } = useControlPlatformViewsMode();
+  const { viewsMode, liveEnabled, liveIntervalMs } =
+    useControlPlatformViewsMode();
+  const livePollMs = liveEnabled ? liveIntervalMs : 0;
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
@@ -380,7 +382,9 @@ export default function ControlPlatformPage() {
       ),
     [q, offset, viewsMode],
   );
-  const listApi = useApi<VehicleImageryListResponse>(listUrl);
+  const listApi = useApi<VehicleImageryListResponse>(listUrl, {
+    pollMs: livePollMs,
+  });
 
   const rows = listApi.data?.rows ?? [];
   const total = listApi.data?.total ?? 0;
@@ -396,7 +400,9 @@ export default function ControlPlatformPage() {
     if (selectedId == null || selectedId < 1) return null;
     return vehicleImageryOneUrl(selectedId, VEHICLE_IMAGERY_CONTROLLING_API);
   }, [selectedId]);
-  const detailApi = useApi<VehicleImageryOneResponse>(detailUrl);
+  const detailApi = useApi<VehicleImageryOneResponse>(detailUrl, {
+    pollMs: livePollMs,
+  });
 
   const row = detailApi.data?.row;
   const cdnBase = (

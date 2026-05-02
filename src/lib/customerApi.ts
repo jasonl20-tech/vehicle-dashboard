@@ -150,59 +150,108 @@ type FetchState<T> = {
   reload: () => void;
 };
 
+type UseApiOptions = {
+  /**
+   * Wenn `> 0`, refetcht der Hook im angegebenen Millisekunden-Intervall
+   * **flicker-frei** (kein `loading`-Flackern, kein Daten-Reset bei Fehler).
+   * Auf `0` oder `undefined` gesetzt: deaktiviert.
+   */
+  pollMs?: number;
+};
+
 /**
  * Generischer GET-Hook gegen `/api/...`. Re-fetched wenn sich `url`
- * (vollständige Querystring-URL) ändert.
+ * (vollständige Querystring-URL) ändert. Optional silent Live-Polling
+ * über `options.pollMs`.
  */
-export function useApi<T>(url: string | null): FetchState<T> {
+export function useApi<T>(
+  url: string | null,
+  options: UseApiOptions = {},
+): FetchState<T> {
+  const { pollMs = 0 } = options;
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tick, setTick] = useState(0);
-  const aborter = useRef<AbortController | null>(null);
+  const mainAborter = useRef<AbortController | null>(null);
+  const pollAborter = useRef<AbortController | null>(null);
+
+  const runFetch = useCallback(
+    (currentUrl: string, silent: boolean): AbortController => {
+      const ac = new AbortController();
+      if (silent) {
+        pollAborter.current?.abort();
+        pollAborter.current = ac;
+      } else {
+        mainAborter.current?.abort();
+        pollAborter.current?.abort();
+        mainAborter.current = ac;
+        setLoading(true);
+        setError(null);
+      }
+
+      fetch(currentUrl, { credentials: "include", signal: ac.signal })
+        .then(async (res) => {
+          const json = (await res.json().catch(() => ({}))) as Partial<{
+            error: string;
+            hint: string;
+            status: number;
+            cfRay: string;
+          }> &
+            T;
+          if (!res.ok) {
+            const parts: string[] = [];
+            parts.push(json.error || `HTTP ${res.status}`);
+            if (json.hint) parts.push(`Hinweis: ${json.hint}`);
+            if (json.cfRay) parts.push(`CF-Ray: ${json.cfRay}`);
+            throw new Error(parts.join(" • "));
+          }
+          setData(json as T);
+          if (silent) setError(null);
+        })
+        .catch((err) => {
+          if (ac.signal.aborted) return;
+          if (silent) {
+            // Silent-Polling-Fehler nicht aggressiv anzeigen,
+            // bestehende Daten behalten.
+            return;
+          }
+          setError(err instanceof Error ? err.message : String(err));
+          setData(null);
+        })
+        .finally(() => {
+          if (ac.signal.aborted) return;
+          if (!silent) setLoading(false);
+        });
+
+      return ac;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!url) {
+      mainAborter.current?.abort();
+      pollAborter.current?.abort();
       setData(null);
       setError(null);
       setLoading(false);
       return;
     }
-    aborter.current?.abort();
-    const ac = new AbortController();
-    aborter.current = ac;
-    setLoading(true);
-    setError(null);
-
-    fetch(url, { credentials: "include", signal: ac.signal })
-      .then(async (res) => {
-        const json = (await res.json().catch(() => ({}))) as Partial<{
-          error: string;
-          hint: string;
-          status: number;
-          cfRay: string;
-        }> &
-          T;
-        if (!res.ok) {
-          const parts: string[] = [];
-          parts.push(json.error || `HTTP ${res.status}`);
-          if (json.hint) parts.push(`Hinweis: ${json.hint}`);
-          if (json.cfRay) parts.push(`CF-Ray: ${json.cfRay}`);
-          throw new Error(parts.join(" • "));
-        }
-        setData(json as T);
-      })
-      .catch((err) => {
-        if (ac.signal.aborted) return;
-        setError(err instanceof Error ? err.message : String(err));
-        setData(null);
-      })
-      .finally(() => {
-        if (!ac.signal.aborted) setLoading(false);
-      });
-
+    const ac = runFetch(url, false);
     return () => ac.abort();
-  }, [url, tick]);
+  }, [url, tick, runFetch]);
+
+  useEffect(() => {
+    if (!url || pollMs <= 0) return;
+    const id = window.setInterval(() => {
+      runFetch(url, true);
+    }, pollMs);
+    return () => {
+      window.clearInterval(id);
+      pollAborter.current?.abort();
+    };
+  }, [url, pollMs, runFetch]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { data, error, loading, reload };
