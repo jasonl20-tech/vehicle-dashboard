@@ -23,7 +23,7 @@ const MAX_BODY_LEN = 2_000_000; // 2 MB Schutz; D1 verkraftet mehr
 
 const ID_RE = /^[a-zA-Z0-9_.\-:]+$/;
 
-const DEFAULT_BODY_HTML = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:Helvetica,Arial,sans-serif;background:#f6f6f6;">
+const DEFAULT_BODY_HTML = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',Helvetica,Arial,sans-serif;background:#f6f6f6;">
   <tr>
     <td align="center" style="padding:32px 16px;">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border-radius:8px;">

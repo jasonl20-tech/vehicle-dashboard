@@ -1,6 +1,3 @@
-@import url("https://rsms.me/inter/inter.css");
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -16,12 +13,13 @@ body,
 }
 
 html {
-  font-family: "InterVariable", "Inter", system-ui, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, ui-sans-serif,
+    system-ui, sans-serif;
 }
 
 body {
   @apply bg-paper text-ink-800 antialiased;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01", "ss03";
 }
 
 /* Bildempfang: einheitlicher Hintergrund wie Karten-„Meer“ (CARTO dark_all) */

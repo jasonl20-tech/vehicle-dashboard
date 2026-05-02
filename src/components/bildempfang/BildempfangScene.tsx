@@ -28,6 +28,7 @@ import type {
   ImageUrlIpBreakdownAttempt,
   ImageUrlIpBreakdownResponse,
 } from "../../lib/bildempfangIpApi";
+import { APPLE_MONO_STACK } from "../../lib/appleFontStacks";
 import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
 import { iataToLatLng } from "../../lib/iataEdgeCodes";
 import {
@@ -882,8 +883,7 @@ function DebugPanel({
             <pre
               style={{
                 margin: 0,
-                fontFamily:
-                  "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                fontFamily: APPLE_MONO_STACK,
                 fontSize: 10.5,
                 lineHeight: 1.4,
                 color: "rgba(186, 232, 240, 0.85)",
@@ -936,8 +936,7 @@ function DebugPanel({
               >
                 <span
                   style={{
-                    fontFamily:
-                      "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontFamily: APPLE_MONO_STACK,
                     fontWeight: 600,
                     color: a.ok ? "rgb(125,225,238)" : "rgb(228,150,245)",
                     letterSpacing: "0.04em",
@@ -965,8 +964,7 @@ function DebugPanel({
                   style={{
                     marginTop: 4,
                     color: "rgba(186,232,240,0.85)",
-                    fontFamily:
-                      "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontFamily: APPLE_MONO_STACK,
                     fontSize: 10,
                     wordBreak: "break-word",
                   }}
@@ -987,8 +985,7 @@ function DebugPanel({
                 <pre
                   style={{
                     margin: "4px 0 0",
-                    fontFamily:
-                      "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+                    fontFamily: APPLE_MONO_STACK,
                     fontSize: 10,
                     color: "rgba(186, 232, 240, 0.75)",
                     whiteSpace: "pre-wrap",
@@ -1042,8 +1039,7 @@ function DebugSection({
     <section style={{ marginBottom: 12 }}>
       <div
         style={{
-          fontFamily:
-            "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          fontFamily: APPLE_MONO_STACK,
           fontSize: 10,
           fontWeight: 700,
           letterSpacing: "0.18em",
@@ -1089,8 +1085,7 @@ function DebugKV({ entries }: { entries: [string, string][] }) {
             style={{
               margin: 0,
               color: "rgba(186,232,240,0.95)",
-              fontFamily:
-                "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+              fontFamily: APPLE_MONO_STACK,
               wordBreak: "break-word",
             }}
           >

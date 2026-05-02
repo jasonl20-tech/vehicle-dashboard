@@ -14,6 +14,7 @@ import type { BildaustrahlungArc } from "../../lib/bildaustrahlungArcsApi";
 import type { IpMapMarker } from "../../lib/bildempfangMapMarkers";
 import { getTacticalGeographyStyles } from "../../lib/tacticalChoropleth";
 import { iso2Latlng, iso2Name } from "../../lib/iso2Countries";
+import { APPLE_SANS_STACK } from "../../lib/appleFontStacks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ComposableMap,
@@ -269,8 +270,7 @@ export default function Map2DWorldSvg({
                     style={{
                       fontSize: 2.15,
                       fill: "rgba(226, 232, 240, 0.42)",
-                      fontFamily:
-                        "ui-sans-serif, system-ui, -apple-system, sans-serif",
+                      fontFamily: APPLE_SANS_STACK,
                       fontWeight: 500,
                       letterSpacing: "0.04em",
                     }}

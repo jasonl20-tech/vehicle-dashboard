@@ -55,6 +55,7 @@ import {
   type CreateEmailJobInput,
   type EmailJobFull,
 } from "../lib/emailJobsApi";
+import { APPLE_SANS_STACK_HTML } from "../lib/appleFontStacks";
 
 const noopSetHeader: DashboardOutletContext["setHeaderTrailing"] = () => {};
 
@@ -91,7 +92,7 @@ function bodyEditorToHtml(s: string): string {
     const inner = escapeHtml(p).replace(/\n/g, "<br>");
     return `  <p style="margin:0 0 1em 0;">${inner}</p>`;
   });
-  return `<div style="font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6;color:#222;">
+  return `<div style="font-family:${APPLE_SANS_STACK_HTML};font-size:14px;line-height:1.6;color:#222;">
 ${paragraphs.join("\n")}
 </div>`;
 }

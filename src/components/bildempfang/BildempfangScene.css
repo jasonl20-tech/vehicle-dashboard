@@ -81,8 +81,7 @@
   flex-direction: column;
   gap: 8px;
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
-    monospace;
+    "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   pointer-events: none;
 }
 .bg-scene__hud-row {
@@ -169,8 +168,7 @@
   bottom: 14px;
   z-index: 12;
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
-    monospace;
+    "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   background: rgba(8, 11, 18, 0.65);
   border: 1px solid rgba(34, 211, 238, 0.22);
   padding: 8px 10px;
@@ -224,8 +222,8 @@
     0 0 0 1px rgba(34, 211, 238, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
   font-family:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Helvetica, Arial, sans-serif;
+    -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica,
+    ui-sans-serif, system-ui, sans-serif;
 }
 .bg-detail__head {
   display: flex;
@@ -256,8 +254,7 @@
 }
 .bg-detail__title {
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
-    monospace;
+    "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   font-size: 12.5px;
   font-weight: 600;
   word-break: break-all;
@@ -269,8 +266,7 @@
 }
 .bg-detail__badge {
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
-    monospace;
+    "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.16em;
@@ -314,8 +310,7 @@
 }
 .bg-detail__mono {
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
-    monospace;
+    "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
 }
 .bg-detail__edge-code {
   color: rgb(255, 180, 90);
