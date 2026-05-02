@@ -461,6 +461,19 @@ const STATUS_FILTER_LABELS: Record<ControllListStatusFilter, string> = {
 
 const SORT_STORAGE_KEY = "controlPlatform.list.sort";
 const FILTER_STORAGE_KEY = "controlPlatform.list.statusFilter";
+const EASY_MODE_STORAGE_KEY = "controlPlatform.lightbox.easyMode";
+
+function readEasyModeFromStorage(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const v = window.localStorage.getItem(EASY_MODE_STORAGE_KEY);
+    if (v === "1" || v === "true") return true;
+    if (v === "0" || v === "false") return false;
+  } catch {
+    /* noop */
+  }
+  return false;
+}
 
 function readSortFromStorage(): ControllListSortOption {
   // Default: nach "noch offen" absteigend, damit Fahrzeuge mit der
@@ -526,6 +539,12 @@ export default function ControlPlatformPage() {
   const [statusFilter, setStatusFilter] = useState<ControllListStatusFilter>(
     () => readFilterFromStorage(),
   );
+  // „Easy Mode" der Lightbox: beim Vehicle-Wechsel werden Fahrzeuge
+  // übersprungen, in denen es im aktuellen Modus keine bearbeitbare
+  // Ansicht mehr gibt (alle erwarteten Views haben bereits einen Status).
+  const [easyMode, setEasyMode] = useState<boolean>(() =>
+    readEasyModeFromStorage(),
+  );
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -534,6 +553,17 @@ export default function ControlPlatformPage() {
       /* noop */
     }
   }, [sort]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        EASY_MODE_STORAGE_KEY,
+        easyMode ? "1" : "0",
+      );
+    } catch {
+      /* noop */
+    }
+  }, [easyMode]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -906,6 +936,10 @@ export default function ControlPlatformPage() {
    * direkt das erste (next) bzw. letzte (prev) Bild des neuen Fahrzeugs
    * im Großbild geöffnet wird, sobald dessen Strip-Items geladen sind.
    *
+   * Im **Easy Mode** werden Fahrzeuge übersprungen, in denen alle
+   * erwarteten Views bereits einen `controll_status`-Eintrag haben –
+   * dort kann der Nutzer ohnehin keine Buttons mehr drücken.
+   *
    * Funktioniert nur innerhalb der aktuellen Pagination-Seite; ist man
    * an einer Page-Grenze, wird kein Wechsel durchgeführt (Rückgabewert
    * `false`).
@@ -915,14 +949,30 @@ export default function ControlPlatformPage() {
       if (rows.length === 0 || selectedId == null) return false;
       const idx = rows.findIndex((r) => r.id === selectedId);
       if (idx < 0) return false;
-      const targetIdx = direction === "next" ? idx + 1 : idx - 1;
-      if (targetIdx < 0 || targetIdx >= rows.length) return false;
-      pendingPreviewSlotRef.current =
-        direction === "next" ? "first" : "last";
-      setSelectedId(rows[targetIdx].id);
-      return true;
+      const step = direction === "next" ? 1 : -1;
+      let targetIdx = idx + step;
+      while (targetIdx >= 0 && targetIdx < rows.length) {
+        const candidate = rows[targetIdx];
+        // Im Easy Mode überspringen, wenn alle erwarteten Views bereits
+        // einen Status-Eintrag haben (= total >= n_expected).
+        if (easyMode) {
+          const nExp = parseViewTokens(candidate.views).filter((t) =>
+            tokenMatchesMode(t, viewsMode),
+          ).length;
+          const total = candidate.controllStatusCounts?.total ?? 0;
+          if (nExp > 0 && total >= nExp) {
+            targetIdx += step;
+            continue;
+          }
+        }
+        pendingPreviewSlotRef.current =
+          direction === "next" ? "first" : "last";
+        setSelectedId(candidate.id);
+        return true;
+      }
+      return false;
     },
-    [rows, selectedId],
+    [rows, selectedId, easyMode, viewsMode],
   );
 
   // Pending-Slot auflösen, sobald die Strip-Items des neuen Fahrzeugs
@@ -1806,6 +1856,29 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     <EyeOff className="h-3 w-3" />
                   : <Eye className="h-3 w-3" />}
                   Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEasyMode((v) => !v)}
+                  aria-pressed={easyMode}
+                  title={
+                    easyMode
+                      ? "Easy Mode aus: Fahrzeuge ohne offene Aktionen werden NICHT mehr übersprungen"
+                      : "Easy Mode an: Fahrzeuge ohne offene Aktionen werden beim Wechsel übersprungen"
+                  }
+                  className={`inline-flex items-center gap-0.5 rounded border px-2 py-1 text-[11px] transition ${
+                    easyMode
+                      ? "border-amber-400 bg-amber-600 text-white hover:bg-amber-500"
+                      : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      easyMode ? "bg-white" : "bg-ink-400"
+                    }`}
+                  />
+                  Easy Mode
                 </button>
                 {(() => {
                   const q = buildGoogleImageSearchQuery(googleSearchTemplate, {
