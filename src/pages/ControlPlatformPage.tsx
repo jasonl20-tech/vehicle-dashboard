@@ -440,7 +440,16 @@ export default function ControlPlatformPage() {
       title: string;
       slotLabel: string;
       raw: string;
-      isCorrect: boolean;
+      /** Status existiert in `controll_status` für (vehicle, view_token, mode). */
+      hasStatus: boolean;
+      /** `check === 2` → final freigegeben (grüner Rand, ausgegraut). */
+      isApproved: boolean;
+      /** Status existiert, aber `check < 2` → nicht mehr bearbeitbar. */
+      isLocked: boolean;
+      /** Status existiert mit `check === 0` → Badge „check“. */
+      isCheckPending: boolean;
+      /** Roher status-Wert (z. B. `correct`, `regen_vertex`, `delete`) — falls vorhanden. */
+      statusValue: string | null;
       isMain: boolean;
       hasTransparencyHint: boolean;
       hasScalingHint: boolean;
@@ -456,8 +465,12 @@ export default function ControlPlatformPage() {
       const slot = parseViewSlot(token);
       const slug = viewPathSlug(token);
       const href = buildVehicleImageUrl(cdnBase, row, slug, imageUrlQuery);
-      const status = statusMap.get(statusKey(slot.raw, controllMode));
-      const isCorrect = status?.status === "correct";
+      const statusRow = statusMap.get(statusKey(slot.raw, controllMode));
+      const hasStatus = !!statusRow;
+      const checkVal = statusRow ? Number(statusRow.check) : null;
+      const isApproved = checkVal === 2;
+      const isLocked = hasStatus && !isApproved;
+      const isCheckPending = checkVal === 0;
       const isMain = isMainViewSlug(slot.slug);
       internal.push({
         key: `${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`,
@@ -465,7 +478,11 @@ export default function ControlPlatformPage() {
         title: `${rowTitle(row)} · ${slot.raw}`,
         slotLabel: slot.slug,
         raw: slot.raw,
-        isCorrect,
+        hasStatus,
+        isApproved,
+        isLocked,
+        isCheckPending,
+        statusValue: statusRow?.status ?? null,
         isMain,
         hasTransparencyHint: slot.hasTransparencyHint,
         hasScalingHint: slot.hasScalingHint,
@@ -480,11 +497,14 @@ export default function ControlPlatformPage() {
     return internal.map(({ sortRank: _r, sortIdx: _i, ...item }) => item);
   }, [row, viewGridEntries, cdnBase, imageUrlQuery, controllMode, statusMap]);
 
-  /** Schreibt eine Control-Aktion in `controll_status` und lädt die Statuses neu. */
+  /** Schreibt eine Control-Aktion in `controll_status` und lädt die Statuses neu.
+   * Springt nach Erfolg zur nächsten Ansicht, die noch bearbeitbar ist
+   * (kein `controll_status`-Eintrag in `view_token + mode`).
+   */
   const submitControllAction = useCallback(
     async (
       action: ControllActionStub,
-      ctx: { rawToken: string; imageHref: string },
+      ctx: { rawToken: string; imageHref: string; index: number },
     ) => {
       if (selectedId == null) return;
       const status = CONTROLL_ACTION_TO_STATUS[action];
@@ -504,6 +524,29 @@ export default function ControlPlatformPage() {
           raw: res.row.view_token,
           status: res.row.status,
         });
+
+        const items = imagePreviewStripItems;
+        const isEditable = (i: number) =>
+          items[i] &&
+          items[i].raw !== ctx.rawToken &&
+          !items[i].hasStatus;
+        let nextIdx: number | null = null;
+        for (let i = ctx.index + 1; i < items.length; i++) {
+          if (isEditable(i)) {
+            nextIdx = i;
+            break;
+          }
+        }
+        if (nextIdx == null) {
+          for (let i = 0; i < ctx.index; i++) {
+            if (isEditable(i)) {
+              nextIdx = i;
+              break;
+            }
+          }
+        }
+        if (nextIdx != null) setImagePreview({ index: nextIdx });
+
         detailApi.reload();
       } catch (err) {
         setActionError(err instanceof Error ? err.message : String(err));
@@ -511,7 +554,13 @@ export default function ControlPlatformPage() {
         setSubmittingAction(null);
       }
     },
-    [selectedId, cdnBase, controllMode, detailApi],
+    [
+      selectedId,
+      cdnBase,
+      controllMode,
+      detailApi,
+      imagePreviewStripItems,
+    ],
   );
 
   useEffect(() => {
@@ -536,6 +585,13 @@ export default function ControlPlatformPage() {
         return;
       }
 
+      const curIdx = Math.min(
+        Math.max(0, imagePreview.index),
+        imagePreviewStripItems.length - 1,
+      );
+      const cur = imagePreviewStripItems[curIdx];
+      const curEditable = !!cur && !cur.hasStatus;
+
       for (const def of defs) {
         if (flags[def.configKey] !== true) continue;
         const list = shortcuts[def.configKey];
@@ -543,16 +599,12 @@ export default function ControlPlatformPage() {
         if (matchesShortcutKey(e.key, list)) {
           e.preventDefault();
           if (submittingAction) return;
-          const cur = imagePreviewStripItems[Math.min(
-            Math.max(0, imagePreview.index),
-            imagePreviewStripItems.length - 1,
-          )];
-          if (cur) {
-            void submitControllAction(def.stub, {
-              rawToken: cur.raw,
-              imageHref: cur.src,
-            });
-          }
+          if (!cur || !curEditable) return;
+          void submitControllAction(def.stub, {
+            rawToken: cur.raw,
+            imageHref: cur.src,
+            index: curIdx,
+          });
           return;
         }
       }
@@ -793,7 +845,10 @@ export default function ControlPlatformPage() {
                     const status = statusMap.get(
                       statusKey(slot.raw, controllMode),
                     );
-                    const isCorrect = status?.status === "correct";
+                    const checkVal = status ? Number(status.check) : null;
+                    const isApproved = checkVal === 2;
+                    const isLocked = !!status && !isApproved;
+                    const isCheckPending = checkVal === 0;
                     const isMain = isMainViewSlug(slot.slug);
                     return (
                       <li
@@ -806,12 +861,14 @@ export default function ControlPlatformPage() {
                         <article
                           title={
                             status ?
-                              `${slot.raw} • ${status.mode}/${status.status}`
+                              `${slot.raw} • ${status.mode}/${status.status} • check ${checkVal ?? "—"}`
                             : slot.raw
                           }
                           className={`flex w-full flex-col bg-paper transition-colors ${
-                            isCorrect
+                            isApproved
                               ? "border-2 border-accent-mint"
+                              : isLocked
+                              ? "border border-amber-300"
                               : "border border-hair"
                           }`}
                         >
@@ -834,7 +891,7 @@ export default function ControlPlatformPage() {
                               loading="lazy"
                               decoding="async"
                               className={`max-h-full max-w-full object-contain ${
-                                isCorrect ? "opacity-30 grayscale" : ""
+                                isApproved ? "opacity-30 grayscale" : ""
                               }`}
                               onError={(ev) => {
                                 ev.currentTarget.classList.add("hidden");
@@ -852,9 +909,14 @@ export default function ControlPlatformPage() {
                               {slot.slug}
                             </span>
                             <span className="pointer-events-none absolute right-1 top-1 flex max-w-[55%] flex-wrap justify-end gap-0.5">
-                              {isCorrect && isMain ?
+                              {isApproved && isMain ?
                                 <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-accent-mint text-white">
                                   <Star className="h-2.5 w-2.5 fill-white" />
+                                </span>
+                              : null}
+                              {isCheckPending ?
+                                <span className="rounded bg-amber-500/95 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
+                                  check
                                 </span>
                               : null}
                               {slot.hasTransparencyHint ?
@@ -985,12 +1047,17 @@ export default function ControlPlatformPage() {
                                 src={it.src}
                                 alt=""
                                 className={`max-h-full max-w-full object-contain ${
-                                  it.isCorrect ? "opacity-35 grayscale" : ""
+                                  it.isApproved ? "opacity-35 grayscale" : ""
                                 }`}
                               />
-                              {it.isCorrect && it.isMain ?
+                              {it.isApproved && it.isMain ?
                                 <span className="pointer-events-none absolute right-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded bg-accent-mint text-white">
                                   <Star className="h-1.5 w-1.5 fill-white" />
+                                </span>
+                              : null}
+                              {it.isCheckPending ?
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-amber-500/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                  check
                                 </span>
                               : null}
                             </span>
@@ -1043,6 +1110,9 @@ export default function ControlPlatformPage() {
                       {toolbarDefsVisible.map((def) => {
                         const isDanger = def.variant === "danger";
                         const isBusy = submittingAction === def.stub;
+                        const disabled =
+                          submittingAction !== null ||
+                          currentPreviewItem.hasStatus;
                         return (
                           <button
                             key={def.configKey}
@@ -1051,11 +1121,12 @@ export default function ControlPlatformPage() {
                               void submitControllAction(def.stub, {
                                 rawToken: currentPreviewItem.raw,
                                 imageHref: currentPreviewItem.src,
+                                index: previewIndexClamped,
                               })
                             }
-                            disabled={submittingAction !== null}
+                            disabled={disabled}
                             aria-busy={isBusy}
-                            className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[10.5rem] ${
+                            className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[10.5rem] ${
                               isDanger ?
                                 "border-red-800 bg-red-950 text-red-100 hover:bg-red-900"
                               : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
@@ -1074,7 +1145,19 @@ export default function ControlPlatformPage() {
                         );
                       })}
                     </div>
-                    {actionError ?
+                    {currentPreviewItem.hasStatus ?
+                      <p className="font-mono text-[10px] text-amber-300">
+                        gesperrt:{" "}
+                        {currentPreviewItem.isApproved ?
+                          "freigegeben (check 2)"
+                        : currentPreviewItem.isCheckPending ?
+                          'wartet auf Prüfung (check 0 = "check")'
+                        : "in Bearbeitung (check 1)"}
+                        {currentPreviewItem.statusValue ?
+                          <> · status: {currentPreviewItem.statusValue}</>
+                        : null}
+                      </p>
+                    : actionError ?
                       <p className="font-mono text-[10px] text-red-300">
                         Fehler: {actionError}
                       </p>
