@@ -1,10 +1,11 @@
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Image as ImageIcon,
+  Lock,
   Search,
-  Star,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -135,13 +136,31 @@ function lightboxStripSortRank(slotSlug: string): number {
   return idx === -1 ? LIGHTBOX_STRIP_VIEW_ORDER.length : idx;
 }
 
+type ControllToolbarColor = "green" | "blue" | "orange" | "red";
+
 type ControllToolbarDef = {
   configKey: string;
   label: string;
   stub: ControllActionStub;
-  variant: "default" | "danger";
+  color: ControllToolbarColor;
   /** Anzeige-Hinweis Tastenkürzel, z. B. „1 / R“. */
   hint: string;
+};
+
+const TOOLBAR_BUTTON_CLASSES: Record<ControllToolbarColor, string> = {
+  green:
+    "border-emerald-500 bg-ink-800 text-white hover:bg-emerald-950/40 hover:border-emerald-400",
+  blue: "border-sky-500 bg-ink-800 text-white hover:bg-sky-950/40 hover:border-sky-400",
+  orange:
+    "border-orange-500 bg-ink-800 text-white hover:bg-orange-950/40 hover:border-orange-400",
+  red: "border-red-500 bg-ink-800 text-white hover:bg-red-950/50 hover:border-red-400",
+};
+
+const TOOLBAR_HINT_CLASSES: Record<ControllToolbarColor, string> = {
+  green: "text-emerald-300/85",
+  blue: "text-sky-300/85",
+  orange: "text-orange-300/90",
+  red: "text-red-300/85",
 };
 
 function controlPlatformToolbarDefs(
@@ -153,28 +172,28 @@ function controlPlatformToolbarDefs(
         configKey: "correct",
         label: "Richtig",
         stub: "richtig",
-        variant: "default",
+        color: "green",
         hint: "1 / R",
       },
       {
         configKey: "regen_transparent",
         label: "Neu Transparent",
         stub: "regen_transparent",
-        variant: "default",
+        color: "blue",
         hint: "2 / T",
       },
       {
         configKey: "regen_scaling",
         label: "Neu Skalieren",
         stub: "regen_scaling",
-        variant: "default",
+        color: "orange",
         hint: "3 / S",
       },
       {
         configKey: "delete",
         label: "Löschen",
         stub: "loeschen",
-        variant: "danger",
+        color: "red",
         hint: "4 / L / Del",
       },
     ];
@@ -184,28 +203,28 @@ function controlPlatformToolbarDefs(
       configKey: "correct",
       label: "Richtig",
       stub: "richtig",
-      variant: "default",
+      color: "green",
       hint: "1 / R",
     },
     {
       configKey: "regen_vertex",
       label: "Neu Generieren ( Vertex )",
       stub: "vertex",
-      variant: "default",
+      color: "blue",
       hint: "2 / V",
     },
     {
       configKey: "regen_batch",
       label: "Neu Generieren ( Batch )",
       stub: "batch",
-      variant: "default",
+      color: "orange",
       hint: "3 / B",
     },
     {
       configKey: "delete",
       label: "Löschen",
       stub: "loeschen",
-      variant: "danger",
+      color: "red",
       hint: "4 / L / Del",
     },
   ];
@@ -847,9 +866,8 @@ export default function ControlPlatformPage() {
                     );
                     const checkVal = status ? Number(status.check) : null;
                     const isApproved = checkVal === 2;
-                    const isLocked = !!status && !isApproved;
+                    const isInProgress = checkVal === 1;
                     const isCheckPending = checkVal === 0;
-                    const isMain = isMainViewSlug(slot.slug);
                     return (
                       <li
                         key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}
@@ -867,8 +885,10 @@ export default function ControlPlatformPage() {
                           className={`flex w-full flex-col bg-paper transition-colors ${
                             isApproved
                               ? "border-2 border-accent-mint"
-                              : isLocked
-                              ? "border border-amber-300"
+                              : isInProgress
+                              ? "border border-sky-300"
+                              : isCheckPending
+                              ? "border border-zinc-400"
                               : "border border-hair"
                           }`}
                         >
@@ -908,15 +928,22 @@ export default function ControlPlatformPage() {
                             <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-600">
                               {slot.slug}
                             </span>
-                            <span className="pointer-events-none absolute right-1 top-1 flex max-w-[55%] flex-wrap justify-end gap-0.5">
-                              {isApproved && isMain ?
-                                <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-accent-mint text-white">
-                                  <Star className="h-2.5 w-2.5 fill-white" />
+                            <span className="pointer-events-none absolute right-1 top-1 flex max-w-[60%] flex-wrap justify-end gap-0.5">
+                              {isApproved ?
+                                <span className="inline-flex items-center gap-0.5 rounded bg-accent-mint px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
+                                  <Check className="h-2.5 w-2.5" />
+                                  done
+                                </span>
+                              : null}
+                              {isInProgress ?
+                                <span className="rounded bg-sky-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold tracking-wide text-white">
+                                  in Bearbeitung
                                 </span>
                               : null}
                               {isCheckPending ?
-                                <span className="rounded bg-amber-500/95 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
-                                  check
+                                <span className="inline-flex items-center gap-0.5 rounded bg-ink-800/90 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
+                                  <Lock className="h-2.5 w-2.5" />
+                                  lock
                                 </span>
                               : null}
                               {slot.hasTransparencyHint ?
@@ -1050,14 +1077,21 @@ export default function ControlPlatformPage() {
                                   it.isApproved ? "opacity-35 grayscale" : ""
                                 }`}
                               />
-                              {it.isApproved && it.isMain ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded bg-accent-mint text-white">
-                                  <Star className="h-1.5 w-1.5 fill-white" />
+                              {it.isApproved ?
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-accent-mint px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                  <Check className="h-1.5 w-1.5" />
+                                  done
+                                </span>
+                              : null}
+                              {it.isLocked && !it.isCheckPending ?
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-sky-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
+                                  bearb.
                                 </span>
                               : null}
                               {it.isCheckPending ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-amber-500/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
-                                  check
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-ink-800/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                  <Lock className="h-1.5 w-1.5" />
+                                  lock
                                 </span>
                               : null}
                             </span>
@@ -1108,7 +1142,6 @@ export default function ControlPlatformPage() {
                       aria-label="Control-Aktionen"
                     >
                       {toolbarDefsVisible.map((def) => {
-                        const isDanger = def.variant === "danger";
                         const isBusy = submittingAction === def.stub;
                         const disabled =
                           submittingAction !== null ||
@@ -1126,18 +1159,14 @@ export default function ControlPlatformPage() {
                             }
                             disabled={disabled}
                             aria-busy={isBusy}
-                            className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[10.5rem] ${
-                              isDanger ?
-                                "border-red-800 bg-red-950 text-red-100 hover:bg-red-900"
-                              : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
-                            }`}
+                            className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border-2 px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[10.5rem] ${TOOLBAR_BUTTON_CLASSES[def.color]}`}
                           >
                             <span className="text-[15px] font-semibold leading-tight sm:text-base">
                               {def.label}
-                              {isBusy ? <span className="ml-1.5 font-normal text-zinc-300">…</span> : null}
+                              {isBusy ? <span className="ml-1.5 font-normal text-white/80">…</span> : null}
                             </span>
                             <span
-                              className={`font-mono text-[11px] ${isDanger ? "text-red-200/80" : "text-zinc-400"}`}
+                              className={`font-mono text-[11px] ${TOOLBAR_HINT_CLASSES[def.color]}`}
                             >
                               {def.hint}
                             </span>
@@ -1146,13 +1175,20 @@ export default function ControlPlatformPage() {
                       })}
                     </div>
                     {currentPreviewItem.hasStatus ?
-                      <p className="font-mono text-[10px] text-amber-300">
-                        gesperrt:{" "}
-                        {currentPreviewItem.isApproved ?
-                          "freigegeben (check 2)"
-                        : currentPreviewItem.isCheckPending ?
-                          'wartet auf Prüfung (check 0 = "check")'
-                        : "in Bearbeitung (check 1)"}
+                      <p
+                        className={`font-mono text-[10px] ${
+                          currentPreviewItem.isApproved
+                            ? "text-emerald-300"
+                            : currentPreviewItem.isCheckPending
+                            ? "text-zinc-300"
+                            : "text-sky-300"
+                        }`}
+                      >
+                        {currentPreviewItem.isApproved
+                          ? "done · freigegeben (check 2)"
+                          : currentPreviewItem.isCheckPending
+                          ? "lock · wartet auf Prüfung (check 0)"
+                          : "in Bearbeitung (check 1)"}
                         {currentPreviewItem.statusValue ?
                           <> · status: {currentPreviewItem.statusValue}</>
                         : null}
