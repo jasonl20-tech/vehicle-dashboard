@@ -126,26 +126,8 @@ function viewsModeWhereSql(mode: ViewsMode): { clause: string; binds: string[] }
   if (mode === "schatten") {
     return { clause: `${v} LIKE ?`, binds: ["%#shadow%"] };
   }
-
-  /*
-   * Korrektur: Zeile erscheint, wenn mindestens ein `views`-Token *ohne* `#`-Modifier
-   * vorhanden ist (Annahme: jedes Token hat höchstens ein `#`, was bei eurem Schema gilt).
-   *   Tokens-Anzahl  = #(';') + 1   (wenn views nicht leer)
-   *   Tokens-mit-#   = #('#')
-   *   Tokens-ohne-#  = Tokens-Anzahl − Tokens-mit-#
-   *
-   * Bedingung: views nicht leer UND Tokens-ohne-# > 0.
-   */
-  return {
-    clause: `(
-      length(ifnull(views, '')) > 0
-      AND (
-        (length(views) - length(replace(views, ';', ''))) + 1
-        - (length(views) - length(replace(views, '#', '')))
-      ) > 0
-    )`,
-    binds: [],
-  };
+  /* Korrektur: Zeilen mit *irgendeinem* `#`-Modifier in `views` ausblenden. */
+  return { clause: `${v} NOT LIKE ?`, binds: ["%#%"] };
 }
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({

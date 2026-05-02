@@ -141,22 +141,8 @@ function viewsModeWhereSql(mode: ViewsMode): { clause: string; binds: string[] }
   if (mode === "schatten") {
     return { clause: `${v} LIKE ?`, binds: ["%#shadow%"] };
   }
-  /*
-   * korrektur: Zeile passt, wenn mind. ein Token *ohne* `#`-Modifier existiert.
-   *   Tokens-Anzahl  = Anzahl(';') + 1
-   *   Tokens-mit-#   = Anzahl('#')
-   *   Tokens-ohne-#  = Tokens − Tokens-mit-#  > 0
-   */
-  return {
-    clause: `(
-      length(ifnull(views, '')) > 0
-      AND (
-        (length(views) - length(replace(views, ';', ''))) + 1
-        - (length(views) - length(replace(views, '#', '')))
-      ) > 0
-    )`,
-    binds: [],
-  };
+  /* Korrektur: Zeilen mit irgendeinem `#`-Modifier in `views` ausblenden. */
+  return { clause: `${v} NOT LIKE ?`, binds: ["%#%"] };
 }
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
