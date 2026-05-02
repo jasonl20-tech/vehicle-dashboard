@@ -32,9 +32,14 @@ function coerceTrimmedSecret(val: unknown): string | undefined {
   return t.length ? t : undefined;
 }
 
-/** Normalisiert Workers/Pages-Variablennamen (z.B. PASSWORD_SECRET, password-secret). */
+/**
+ * Normalisiert Workers/Pages-Variablennamen.
+ * - `trim()` fängt versehentliche Leerzeichen im Cloudflare-Dashboard ab
+ *   (z.B. „password_secret " ≠ „password_secret" ohne Toleranz).
+ * - Bindestriche → Underscores, alles lowercase.
+ */
 function canonicalPasswordSecretKey(localName: string): string {
-  return localName.replaceAll("-", "_").toLowerCase();
+  return localName.trim().replaceAll("-", "_").toLowerCase();
 }
 
 /**
@@ -58,6 +63,8 @@ function resolvePasswordSecretPepper(env: AuthEnv): string {
     const n = canonicalPasswordSecretKey(key);
     own.add(key);
     if (n !== "password_secret") continue;
+    // Wichtig: Property-Zugriff muss mit dem **Original-Key** erfolgen, sonst
+    // findet das Lookup z.B. „password_secret " (mit Leerzeichen) nicht.
     const v = tryKey(key);
     if (v && v.length >= PEPPER_MIN_LEN) return v;
   }
@@ -117,20 +124,20 @@ export function diagnosePasswordSecret(env: AuthEnv): {
   relevantKeys.sort();
 
   const pepper = resolvePasswordSecretPepper(env);
-  const resolved = pepper
-    ? {
-        name:
-          (Object.prototype.hasOwnProperty.call(r, "password_secret") &&
-          typeof r.password_secret === "string"
-            ? "password_secret"
-            : null) ||
-          (Object.prototype.hasOwnProperty.call(r, "PASSWORD_SECRET") &&
-          typeof r.PASSWORD_SECRET === "string"
-            ? "PASSWORD_SECRET"
-            : null) ||
-          "(case-insensitive Treffer)",
-        length: pepper.length,
+  let resolvedName: string | null = null;
+  if (pepper) {
+    for (const key of Reflect.ownKeys(r)) {
+      if (typeof key !== "string") continue;
+      if (canonicalPasswordSecretKey(key) !== "password_secret") continue;
+      const v = coerceTrimmedSecret(r[key]);
+      if (v && v.length >= PEPPER_MIN_LEN) {
+        resolvedName = key;
+        break;
       }
+    }
+  }
+  const resolved = pepper
+    ? { name: resolvedName ?? "(unbekannt)", length: pepper.length }
     : { name: null, length: 0 };
 
   return {
