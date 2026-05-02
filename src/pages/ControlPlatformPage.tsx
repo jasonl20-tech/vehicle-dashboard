@@ -947,16 +947,22 @@ export default function ControlPlatformPage() {
 
   /**
    * „+"-Button für fehlende Ansichten: schreibt einen `regen_vertex`-Job
-   * mit `mode = "correction"` in die `controll_status`-Tabelle. Es wird
-   * **kein** Bild benötigt (key=null), und es findet auch keine
-   * Auto-Navigation statt – der Button erzeugt nur den Job.
+   * mit `mode = "correction"` in die `controll_status`-Tabelle. Der `key`
+   * wird aus der Ziel-URL (gleiche Pfad-Struktur wie die anderen Views
+   * dieses Fahrzeugs, nur mit dem neuen Slug als Datei-Name) abgeleitet,
+   * damit der Worker später weiß, in welche R2-Datei er das gerenderte
+   * Bild ablegen soll.
+   *
+   * Es findet keine Auto-Navigation statt – der Button erzeugt nur den
+   * Job und triggert ein detail/list-Reload.
    */
   const submitGenerationJob = useCallback(
-    async (slotSlug: string) => {
+    async (slotSlug: string, imageHref: string) => {
       if (selectedId == null) return;
       if (generationSubmittingSlot != null) return;
       const trimmed = slotSlug.trim().toLowerCase();
       if (!trimmed) return;
+      const r2Key = r2KeyFromImageUrl(cdnBase, imageHref);
       setGenerationSubmittingSlot(trimmed);
       setGenerationError(null);
       try {
@@ -965,7 +971,7 @@ export default function ControlPlatformPage() {
           viewToken: trimmed,
           mode: "correction",
           status: "regen_vertex",
-          key: null,
+          key: r2Key,
         });
         detailApi.reload();
         listApi.reload();
@@ -977,7 +983,7 @@ export default function ControlPlatformPage() {
         setGenerationSubmittingSlot(null);
       }
     },
-    [selectedId, generationSubmittingSlot, detailApi, listApi],
+    [selectedId, generationSubmittingSlot, cdnBase, detailApi, listApi],
   );
 
   useEffect(() => {
@@ -1411,7 +1417,20 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    void submitGenerationJob(slug);
+                                    // Ziel-URL nach gleichem Schema wie
+                                    // existierende Views des Fahrzeugs
+                                    // erzeugen, sodass `r2KeyFromImageUrl`
+                                    // den passenden R2-Pfad liefern kann.
+                                    const targetHref = buildVehicleImageUrl(
+                                      cdnBase,
+                                      row,
+                                      slug,
+                                      imageUrlQuery,
+                                    );
+                                    void submitGenerationJob(
+                                      slug,
+                                      targetHref,
+                                    );
                                   }}
                                   disabled={
                                     generationSubmittingSlot != null
