@@ -14,6 +14,10 @@
  * für `vehicle_id = ?id` (alle modes/statuses; Frontend filtert pro Modus).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import {
+  correctionExpectedViewCountFromViews,
+  scalingPairExpectedCountFromViews,
+} from "../../_lib/controllStorageViewCounts";
 
 const STORAGE_TABLE = "vehicleimagery_controlling_storage";
 
@@ -787,17 +791,31 @@ async function sumRemainingViewSlotsByStatusMode(
   db: D1Database,
   statusMode: "correction" | "scaling",
 ): Promise<number> {
-  const nExp = expectedViewsExpr(statusMode);
   const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${controllStatusAggSubquery(statusMode)} cs ON cs.vehicle_id = v.id`;
-  const remainder = `max(0, ${nExp} - ifnull(cs.n_done, 0) - ifnull(cs.n_transferred, 0))`;
-  const sql = `SELECT COALESCE(SUM(${remainder}), 0) AS n ${fromJoin}`;
+  const sql = `SELECT v.views AS views, ifnull(cs.n_done, 0) AS n_done, ifnull(cs.n_transferred, 0) AS n_transferred ${fromJoin}`;
+  const nExpFn =
+    statusMode === "correction"
+      ? correctionExpectedViewCountFromViews
+      : scalingPairExpectedCountFromViews;
   try {
-    const row = await db
-      .prepare(sql)
-      .bind(statusMode)
-      .first<{ n: number }>();
-    return Number(row?.n ?? 0) || 0;
-  } catch {
+    const r = await db.prepare(sql).bind(statusMode).all<{
+      views: string | null;
+      n_done: number;
+      n_transferred: number;
+    }>();
+    let sum = 0;
+    for (const row of r.results ?? []) {
+      const nExp = nExpFn(row.views);
+      const done = Number(row.n_done) || 0;
+      const transferred = Number(row.n_transferred) || 0;
+      sum += Math.max(0, nExp - done - transferred);
+    }
+    return sum;
+  } catch (err) {
+    console.error(
+      `[vehicle-imagery-controlling] sumRemainingViewSlotsByStatusMode(${statusMode})`,
+      err,
+    );
     return 0;
   }
 }
