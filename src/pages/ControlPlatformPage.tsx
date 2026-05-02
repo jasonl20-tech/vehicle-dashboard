@@ -414,6 +414,7 @@ const SIDEBAR_STATUS_STYLE: Record<
 /** UI-Labels für Sort-Optionen. */
 const SORT_LABELS: Record<ControllListSortOption, string> = {
   default: "zuletzt geändert",
+  not_done_desc: "noch offen ↓",
   id_desc: "ID ↓",
   id_asc: "ID ↑",
   done_desc: "done (Anzahl) ↓",
@@ -440,7 +441,10 @@ const SORT_STORAGE_KEY = "controlPlatform.list.sort";
 const FILTER_STORAGE_KEY = "controlPlatform.list.statusFilter";
 
 function readSortFromStorage(): ControllListSortOption {
-  if (typeof window === "undefined") return "default";
+  // Default: nach "noch offen" absteigend, damit Fahrzeuge mit der
+  // meisten zu erledigenden Arbeit oben stehen.
+  const fallback: ControllListSortOption = "not_done_desc";
+  if (typeof window === "undefined") return fallback;
   try {
     const v = window.localStorage.getItem(SORT_STORAGE_KEY);
     if (v && (CONTROLL_LIST_SORT_OPTIONS as readonly string[]).includes(v)) {
@@ -449,7 +453,7 @@ function readSortFromStorage(): ControllListSortOption {
   } catch {
     /* noop */
   }
-  return "default";
+  return fallback;
 }
 
 function readFilterFromStorage(): ControllListStatusFilter {

@@ -62,6 +62,7 @@ export type VehicleImageryListResponse = {
 /** Sortier-Optionen der Controlling-Liste (Whitelist; muss zum Server passen). */
 export const CONTROLL_LIST_SORT_OPTIONS = [
   "default",
+  "not_done_desc",
   "id_desc",
   "id_asc",
   "done_desc",

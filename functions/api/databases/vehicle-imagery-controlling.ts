@@ -171,31 +171,57 @@ const VIEWS_MODE_TO_STATUS_MODE: Record<ViewsMode, string> = {
 };
 
 /**
- * Sortier-Whitelist (nutzer-input wird *nur* gegen diesen Schlüssel
- * geprüft, das tatsächliche SQL-Snippet ist hardcoded → kein SQL-Injection-Risiko).
+ * Sortier-Whitelist (Schlüssel). SQL-Snippets werden in
+ * `buildSortOptionsSql()` mode-abhängig gebaut – nutzer-input wird *nur*
+ * gegen die Schlüssel geprüft, das tatsächliche SQL ist hardcoded
+ * → kein SQL-Injection-Risiko.
  *
- * `default` = letzte Aktualisierung (entspricht dem alten Verhalten).
+ * `default` = letzte Aktualisierung. `not_done_desc` = absteigend nach
+ * "noch offen" (erwartete Views minus done minus übertragen).
  */
-const SORT_OPTIONS = {
-  default: "v.last_updated DESC, v.id DESC",
-  id_desc: "v.id DESC",
-  id_asc: "v.id ASC",
-  done_desc:
-    "ifnull(cs.n_done, 0) DESC, v.last_updated DESC, v.id DESC",
-  errored_desc:
-    "ifnull(cs.n_errored, 0) DESC, v.last_updated DESC, v.id DESC",
-  transferred_desc:
-    "ifnull(cs.n_transferred, 0) DESC, v.last_updated DESC, v.id DESC",
-  inProgress_desc:
-    "ifnull(cs.n_in_progress, 0) DESC, v.last_updated DESC, v.id DESC",
-  pending_desc:
-    "ifnull(cs.n_pending, 0) DESC, v.last_updated DESC, v.id DESC",
-  total_desc:
-    "ifnull(cs.n_total, 0) DESC, v.last_updated DESC, v.id DESC",
-} as const;
-type SortOption = keyof typeof SORT_OPTIONS;
+const SORT_OPTION_KEYS = [
+  "default",
+  "not_done_desc",
+  "id_desc",
+  "id_asc",
+  "done_desc",
+  "errored_desc",
+  "transferred_desc",
+  "inProgress_desc",
+  "pending_desc",
+  "total_desc",
+] as const;
+type SortOption = (typeof SORT_OPTION_KEYS)[number];
 function isSortOption(s: string): s is SortOption {
-  return Object.prototype.hasOwnProperty.call(SORT_OPTIONS, s);
+  return (SORT_OPTION_KEYS as readonly string[]).includes(s);
+}
+
+function buildSortOptionsSql(
+  statusMode: string,
+): Record<SortOption, string> {
+  const nExp = expectedViewsExpr(statusMode);
+  // "Anzahl noch offener Views" = erwartete Views minus done minus übertragen.
+  // Negative Werte (kann passieren wenn die views-Spalte weniger Tokens
+  // listet als wirklich Status-Einträge existieren) auf 0 clampen.
+  const openExpr = `MAX(0, ${nExp} - ifnull(cs.n_done, 0) - ifnull(cs.n_transferred, 0))`;
+  return {
+    default: "v.last_updated DESC, v.id DESC",
+    not_done_desc: `${openExpr} DESC, ifnull(cs.n_errored, 0) DESC, v.last_updated DESC, v.id DESC`,
+    id_desc: "v.id DESC",
+    id_asc: "v.id ASC",
+    done_desc:
+      "ifnull(cs.n_done, 0) DESC, v.last_updated DESC, v.id DESC",
+    errored_desc:
+      "ifnull(cs.n_errored, 0) DESC, v.last_updated DESC, v.id DESC",
+    transferred_desc:
+      "ifnull(cs.n_transferred, 0) DESC, v.last_updated DESC, v.id DESC",
+    inProgress_desc:
+      "ifnull(cs.n_in_progress, 0) DESC, v.last_updated DESC, v.id DESC",
+    pending_desc:
+      "ifnull(cs.n_pending, 0) DESC, v.last_updated DESC, v.id DESC",
+    total_desc:
+      "ifnull(cs.n_total, 0) DESC, v.last_updated DESC, v.id DESC",
+  };
 }
 
 /**
@@ -374,12 +400,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (!isSortOption(sortRaw)) {
     return jsonResponse(
       {
-        error: `sort muss einer von: ${Object.keys(SORT_OPTIONS).join(", ")} sein`,
+        error: `sort muss einer von: ${SORT_OPTION_KEYS.join(", ")} sein`,
       },
       { status: 400 },
     );
   }
-  const orderBySql = SORT_OPTIONS[sortRaw];
+  const sortOptionsSql = buildSortOptionsSql(statusMode);
+  const orderBySql = sortOptionsSql[sortRaw];
 
   const statusFilterRaw = (
     url.searchParams.get("status_filter") || "any"
