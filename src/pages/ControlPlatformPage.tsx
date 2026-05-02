@@ -12,7 +12,14 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Link } from "react-router-dom";
 import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
@@ -73,6 +80,14 @@ import {
   viewPathSlug,
   viewTokenImageFileName,
 } from "../lib/vehicleImageryUrl";
+
+/** Grünes Schachbrett hinter Fahrzeugbildern im Skalierungs-Modus. */
+const SCALING_MODE_VEHICLE_BACKDROP_STYLE: CSSProperties = {
+  backgroundColor: "#c5e1a5",
+  backgroundImage:
+    "repeating-conic-gradient(from 0deg, #aed581 0deg 90deg, #9ccc65 0deg 180deg)",
+  backgroundSize: "16px 16px",
+};
 
 const PAGE_SIZE = 50;
 
@@ -1638,7 +1653,18 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                           }}
                         >
                           <article className="flex w-full flex-col border border-dashed border-hair bg-paper/50">
-                            <div className="relative flex aspect-[3/2] items-center justify-center overflow-hidden bg-ink-50/40">
+                            <div
+                              className={`relative flex aspect-[3/2] items-center justify-center overflow-hidden ${
+                                viewsMode === "skalierung" ?
+                                  ""
+                                : "bg-ink-50/40"
+                              }`}
+                              style={
+                                viewsMode === "skalierung" ?
+                                  SCALING_MODE_VEHICLE_BACKDROP_STYLE
+                                : undefined
+                              }
+                            >
                               <span className="pointer-events-none absolute left-1 top-1 z-10 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-400">
                                 {entry.slotSlug}
                               </span>
@@ -1794,11 +1820,18 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 ? `${imageFileLabel} gesperrt – zuerst Pflicht-Ansichten korrigieren`
                                 : `${imageFileLabel} groß anzeigen`
                             }
-                            className={`group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
+                            className={`group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
+                              viewsMode === "skalierung" ? "" : "bg-ink-50"
+                            } ${
                               isFirstViewsLocked
                                 ? "cursor-not-allowed"
                                 : "cursor-zoom-in"
                             }`}
+                            style={
+                              viewsMode === "skalierung" ?
+                                SCALING_MODE_VEHICLE_BACKDROP_STYLE
+                              : undefined
+                            }
                           >
                             <img
                               src={href}
@@ -2084,7 +2117,16 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                               : "border-ink-700 bg-ink-950 hover:border-ink-500 hover:bg-ink-900"
                             }`}
                           >
-                            <span className="relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded bg-zinc-100">
+                            <span
+                              className={`relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded ${
+                                viewsMode === "skalierung" ? "" : "bg-zinc-100"
+                              }`}
+                              style={
+                                viewsMode === "skalierung" ?
+                                  SCALING_MODE_VEHICLE_BACKDROP_STYLE
+                                : undefined
+                              }
+                            >
                               <img
                                 src={it.src}
                                 alt=""
@@ -2165,8 +2207,17 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
               </div>
 
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 bg-white shadow-inner">
-                  <div className="flex h-full w-full items-center justify-center overflow-auto bg-white p-1 sm:p-2">
+                <div
+                  className={`relative flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 shadow-inner ${
+                    viewsMode === "skalierung" ? "" : "bg-white"
+                  }`}
+                  style={
+                    viewsMode === "skalierung" ?
+                      SCALING_MODE_VEHICLE_BACKDROP_STYLE
+                    : undefined
+                  }
+                >
+                  <div className="flex h-full w-full items-center justify-center overflow-auto bg-transparent p-1 sm:p-2">
                     <img
                       src={currentPreviewItem.src}
                       alt=""
