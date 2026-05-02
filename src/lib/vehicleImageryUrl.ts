@@ -106,3 +106,18 @@ export function isScalingControlViewToken(raw: string): boolean {
   const mod = t.slice(i + 1).trim().toLowerCase();
   return mod === "skaliert" || mod === "skaliert_weiß";
 }
+
+/**
+ * Anzahl **Skalierungs-Slots** in `views`: `#skaliert` und `#skaliert_weiß`
+ * zum selben Basis-Slug zählen wie **eine** erwartete Ansicht (eine Kachel).
+ */
+export function countScalingViewPairsInViews(
+  views: string | null | undefined,
+): number {
+  const slugs = new Set<string>();
+  for (const t of parseViewTokens(views)) {
+    if (!isScalingControlViewToken(t)) continue;
+    slugs.add(parseViewSlot(t).slug.trim().toLowerCase());
+  }
+  return slugs.size;
+}

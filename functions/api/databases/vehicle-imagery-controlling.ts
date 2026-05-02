@@ -116,15 +116,13 @@ const STORAGE_COLUMNS_VALIASED = `
  * und nur wenn `status = 'correct'` und `check = 6`. In allen anderen Modi
  * zählt `n_transferred = 0`. Ein `check = 6` mit anderem Kontext fällt unter
  * `n_errored` (alle `check >= 3` außer der spezifischen scaling/correct/6-Kombi).
+ *
+ * Skalierung: `#skaliert` und `#skaliert_weiß` zum **selben Basis-Slug** werden
+ * zu **einer** logischen Ansicht zusammengefasst (wie die gekoppelte Kachel);
+ * die Counts beziehen sich auf diese Paare, nicht auf einzelne Zeilen.
  */
 function controllStatusAggSubquery(statusMode: string): string {
   const isScaling = statusMode === "scaling";
-  const transferredExpr = isScaling
-    ? `SUM(CASE WHEN "check" = 6 AND status = 'correct' THEN 1 ELSE 0 END)`
-    : `0`;
-  const erroredExpr = isScaling
-    ? `SUM(CASE WHEN "check" >= 3 AND NOT ("check" = 6 AND status = 'correct') THEN 1 ELSE 0 END)`
-    : `SUM(CASE WHEN "check" >= 3 THEN 1 ELSE 0 END)`;
   /** Nur `view_token` mit exakt `#skaliert` / `#skaliert_weiß` (kein `#skaliert_foo`). */
   const scalingViewFilter = isScaling
     ? ` AND (
@@ -135,6 +133,33 @@ function controllStatusAggSubquery(statusMode: string): string {
         )
       )`
     : "";
+  if (isScaling) {
+    return `(
+  SELECT
+    vehicle_id,
+    SUM(CASE WHEN ne = 0 AND rc > 0 AND NOT (nt = rc) AND n2 = rc THEN 1 ELSE 0 END) AS n_done,
+    SUM(CASE WHEN ne > 0 THEN 1 ELSE 0 END) AS n_errored,
+    SUM(CASE WHEN ne = 0 AND rc > 0 AND nt = rc THEN 1 ELSE 0 END) AS n_transferred,
+    SUM(CASE WHEN ne = 0 AND rc > 0 AND NOT (nt = rc) AND NOT (n2 = rc) AND NOT (n0 = rc) THEN 1 ELSE 0 END) AS n_in_progress,
+    SUM(CASE WHEN ne = 0 AND rc > 0 AND NOT (nt = rc) AND NOT (n2 = rc) AND n0 = rc THEN 1 ELSE 0 END) AS n_pending,
+    SUM(1) AS n_total
+  FROM (
+    SELECT
+      vehicle_id,
+      COUNT(*) AS rc,
+      SUM(CASE WHEN "check" = 2 THEN 1 ELSE 0 END) AS n2,
+      SUM(CASE WHEN "check" = 6 AND lower(ifnull(status, '')) = 'correct' THEN 1 ELSE 0 END) AS nt,
+      SUM(CASE WHEN "check" >= 3 AND NOT ("check" = 6 AND lower(ifnull(status, '')) = 'correct') THEN 1 ELSE 0 END) AS ne,
+      SUM(CASE WHEN "check" = 0 THEN 1 ELSE 0 END) AS n0
+    FROM controll_status
+    WHERE mode = ?${scalingViewFilter}
+    GROUP BY vehicle_id, lower(substr(view_token, 1, instr(lower(view_token), '#') - 1))
+  ) grp
+  GROUP BY vehicle_id
+) cs`;
+  }
+  const transferredExpr = `0`;
+  const erroredExpr = `SUM(CASE WHEN "check" >= 3 THEN 1 ELSE 0 END)`;
   return `(
   SELECT
     vehicle_id,
@@ -258,8 +283,9 @@ const STATUS_FILTER_DEFAULT: StatusFilter = "open";
  * Approximierung über `;`-Trennzeichen in `v.views`.
  *
  * - Korrektur: nur Tokens **ohne** `#` (d. h. `gesamt - mit_#`).
- * - Skalierung: nur Tokens mit exakt `#skaliert` bzw. `#skaliert_weiß`
- *   (Zeilenende vor `;`, analog zum Frontend `isScalingControlViewToken`).
+ * - Skalierung: nur Tokens mit exakt `#skaliert` bzw. `#skaliert_weiß`;
+ *   **ein Basis-Slug** (z. B. `front#…` + `front#…weiß`) zählt als **eine**
+ *   erwartete Ansicht (analog gekoppelte Kachel / `countScalingViewPairsInViews`).
  * - Sonst: alle Tokens (Anzahl Semikolon-Segmente).
  *
  * Edge-Case: leere `views`-Spalte → `0` (Fahrzeuge ohne erwartete Views
@@ -276,13 +302,35 @@ function expectedViewsExpr(statusMode: string): string {
     return `(CASE WHEN ${viewsEmpty} THEN 0 ELSE ${formula} END)`;
   }
   if (statusMode === "scaling") {
-    const norm =
-      "(lower(replace(replace(ifnull(v.views, ''), char(13), ''), char(10), ';')) || ';')";
-    const needlePlain = "'#skaliert;'";
-    const needleWeiss = "'#skaliert_weiß;'";
-    const countPlain = `((length(${norm}) - length(replace(${norm}, ${needlePlain}, ''))) / length(${needlePlain}))`;
-    const countWeiss = `((length(${norm}) - length(replace(${norm}, ${needleWeiss}, ''))) / length(${needleWeiss}))`;
-    return `(CASE WHEN ${viewsEmpty} THEN 0 ELSE (${countPlain} + ${countWeiss}) END)`;
+    return `(CASE WHEN ${viewsEmpty} THEN 0 ELSE (
+  COALESCE((
+    SELECT COUNT(*) FROM (
+      WITH RECURSIVE
+        split(rest) AS (
+          SELECT replace(replace(ifnull(v.views, ''), char(13), ''), char(10), ';') || ';'
+          UNION ALL
+          SELECT substr(rest, instr(rest, ';') + 1)
+          FROM split
+          WHERE instr(rest, ';') > 0
+        ),
+        tok_row(tok) AS (
+          SELECT trim(substr(rest, 1, instr(rest, ';') - 1))
+          FROM split
+          WHERE instr(rest, ';') > 0
+        )
+      SELECT DISTINCT lower(substr(tok, 1, instr(tok, '#') - 1)) AS slug
+      FROM tok_row
+      WHERE instr(tok, '#') > 0
+        AND (
+          lower(tok) GLOB '*#skaliert_weiß'
+          OR (
+            lower(tok) GLOB '*#skaliert'
+            AND NOT lower(tok) GLOB '*#skaliert_*'
+          )
+        )
+    )
+  ), 0)
+) END)`;
   }
   const formula = tokensTotal;
   return `(CASE WHEN ${viewsEmpty} THEN 0 ELSE ${formula} END)`;

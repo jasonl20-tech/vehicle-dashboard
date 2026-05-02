@@ -74,6 +74,7 @@ import {
 } from "../lib/vehicleImageryPublicApi";
 import {
   buildVehicleImageUrl,
+  countScalingViewPairsInViews,
   isScalingControlViewToken,
   parseViewSlot,
   parseViewTokens,
@@ -1217,9 +1218,12 @@ export default function ControlPlatformPage() {
         // Im Easy Mode überspringen, wenn alle erwarteten Views bereits
         // einen Status-Eintrag haben (= total >= n_expected).
         if (easyMode) {
-          const nExp = parseViewTokens(candidate.views).filter((t) =>
-            tokenMatchesMode(t, viewsMode),
-          ).length;
+          const nExp =
+            viewsMode === "skalierung" ?
+              countScalingViewPairsInViews(candidate.views)
+            : parseViewTokens(candidate.views).filter((t) =>
+                tokenMatchesMode(t, viewsMode),
+              ).length;
           const total = candidate.controllStatusCounts?.total ?? 0;
           if (nExp > 0 && total >= nExp) {
             targetIdx += step;
@@ -1662,9 +1666,12 @@ export default function ControlPlatformPage() {
         <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain" role="listbox" aria-label="Einträge">
           {rows.map((r) => {
             const selected = sidebarSelectedOnPage && r.id === selectedId;
-            const nViewsForMode = parseViewTokens(r.views).filter((t) =>
-              tokenMatchesMode(t, viewsMode),
-            ).length;
+            const nViewsForMode =
+              viewsMode === "skalierung" ?
+                countScalingViewPairsInViews(r.views)
+              : parseViewTokens(r.views).filter((t) =>
+                  tokenMatchesMode(t, viewsMode),
+                ).length;
             const rawCounts = r.controllStatusCounts;
             const counts: SidebarRowCounts = rawCounts
               ? {
