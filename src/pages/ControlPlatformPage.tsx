@@ -951,8 +951,12 @@ export default function ControlPlatformPage() {
       if (!entry.token) continue;
       const token = entry.token;
       const slot = parseViewSlot(token);
-      const slug = viewPathSlug(token);
-      const baseHref = buildVehicleImageUrl(cdnBase, row, slug, imageUrlQuery);
+      const baseHref = buildVehicleImageUrl(
+        cdnBase,
+        row,
+        slot.raw,
+        imageUrlQuery,
+      );
       const href = buildImageSrcWithReload(
         baseHref,
         row.id,
@@ -1707,11 +1711,10 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
 
                     const token = entry.token;
                     const slot = parseViewSlot(token);
-                    const slug = viewPathSlug(token);
                     const baseHref = buildVehicleImageUrl(
                       cdnBase,
                       row,
-                      slug,
+                      slot.raw,
                       imageUrlQuery,
                     );
                     const href = buildImageSrcWithReload(

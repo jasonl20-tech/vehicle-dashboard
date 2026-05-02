@@ -22,8 +22,9 @@ export function viewTokenImageFileName(
 }
 
 /**
- * Letztes Segment: `{view}.{format}` (z. B. `left.png`), danach `?key=…`.
- * `/v1/{format}/{resolution}/marke/…/farbe/left.png?key=…`
+ * Letztes URL-Segment: `{viewToken}.{ext}` mit **vollem** DB-Token
+ * inkl. Modifier (z. B. `front_left#skaliert.png` → im Pfad als
+ * `front_left%23skaliert.png` kodiert), danach `?key=…`.
  */
 export function buildVehicleImageUrl(
   cdnBase: string,
