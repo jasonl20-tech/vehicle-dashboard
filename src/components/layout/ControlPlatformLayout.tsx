@@ -1,5 +1,13 @@
+import { useEffect, useMemo } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { Logo } from "../brand/Logo";
+import {
+  ACTIVE_CONTROLL_MODE_SETTINGS_PATH,
+  type ActiveControllModeApiResponse,
+  activeViewsModes,
+  DEFAULT_ACTIVE_CONTROLL_MODE_CONFIG,
+  isViewsModeActive,
+} from "../../lib/activeControllModeConfig";
 import {
   type ControlPlatformViewsMode,
   CONTROL_PLATFORM_LIVE_INTERVAL_OPTIONS_MS,
@@ -8,6 +16,7 @@ import {
   ControlPlatformModeProvider,
   useControlPlatformViewsMode,
 } from "../../lib/controlPlatformModeContext";
+import { useApi } from "../../lib/customerApi";
 
 function formatIntervalLabel(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
@@ -75,6 +84,36 @@ function LiveControls() {
 function ControlChrome() {
   const { viewsMode, setViewsMode } = useControlPlatformViewsMode();
 
+  // `settings.active_controll_mode` aus D1 laden — kein Live-Polling nötig,
+  // einmal pro Session reicht. Wenn der Endpoint (noch) keine Daten
+  // liefert, verhalten wir uns wie bisher und zeigen alle Modi an.
+  const activeModeApi = useApi<ActiveControllModeApiResponse>(
+    ACTIVE_CONTROLL_MODE_SETTINGS_PATH,
+  );
+  const activeModeConfig =
+    activeModeApi.data?.modes ?? DEFAULT_ACTIVE_CONTROLL_MODE_CONFIG;
+
+  const visibleModes = useMemo(
+    () => activeViewsModes(activeModeConfig),
+    [activeModeConfig],
+  );
+
+  // Falls der aktuelle Modus deaktiviert wurde, automatisch auf den
+  // ersten verfügbaren wechseln. Wenn alle Modi deaktiviert sind, lassen
+  // wir den vorhandenen Wert stehen (nichts sinnvolles, aber kein Crash).
+  useEffect(() => {
+    if (visibleModes.length === 0) return;
+    if (!isViewsModeActive(activeModeConfig, viewsMode)) {
+      setViewsMode(visibleModes[0]);
+    }
+  }, [activeModeConfig, viewsMode, visibleModes, setViewsMode]);
+
+  // Während die Konfig noch lädt wären alle Optionen aktiv; das lassen
+  // wir bewusst so, damit der Select nie leer ist. Sobald die Daten da
+  // sind, filtern wir.
+  const renderedModes =
+    visibleModes.length > 0 ? visibleModes : CONTROL_PLATFORM_MODES;
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-paper text-ink-800">
       <header className="flex h-9 shrink-0 items-center gap-2 border-b border-hair bg-paper px-2 py-1">
@@ -98,7 +137,7 @@ function ControlChrome() {
           }
           className="max-w-[min(100vw-7rem,200px)] border border-hair bg-white py-0.5 pr-7 pl-1.5 text-[11px] text-ink-800 focus:border-ink-600 focus:outline-none"
         >
-          {CONTROL_PLATFORM_MODES.map((m) => (
+          {renderedModes.map((m) => (
             <option key={m} value={m}>
               {CONTROL_PLATFORM_MODE_LABEL[m]}
             </option>
