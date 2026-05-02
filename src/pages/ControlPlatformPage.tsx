@@ -90,16 +90,19 @@ function tokenMatchesMode(
 
 const MAIN_VIEW_SLUGS = new Set(["front", "rear", "right", "left"]);
 const FIXED_VIEW_SLOT_ORDER = [
-  "front_left",
-  "left",
-  "front",
-  "right",
   "front_right",
-  "rear_left",
-  "rear",
+  "right",
   "rear_right",
+  "front",
+  "left",
+  "rear",
+  "front_left",
+  "__spacer_col_2_row_3",
+  "rear_left",
 ] as const;
-const FIXED_VIEW_SLOT_SET = new Set<string>(FIXED_VIEW_SLOT_ORDER);
+const FIXED_VIEW_SLOT_SET = new Set<string>(
+  FIXED_VIEW_SLOT_ORDER.filter((slot) => !slot.startsWith("__spacer")),
+);
 
 type ViewGridEntry = {
   slotSlug: string;
@@ -133,7 +136,8 @@ function buildViewGridEntries(tokens: string[]): ViewGridEntry[] {
 
   const fixed = FIXED_VIEW_SLOT_ORDER.map((slotSlug) => ({
     slotSlug,
-    token: slotToToken.get(slotSlug) ?? null,
+    token:
+      slotSlug.startsWith("__spacer") ? null : slotToToken.get(slotSlug) ?? null,
   }));
 
   const extras = extraTokens.map((token) => ({
@@ -395,9 +399,18 @@ export default function ControlPlatformPage() {
                     "Keine Ansichten in der Datenbank."
                   : "Keine Ansichten für diesen Modus."}
                 </p>
-              : <ul className="grid grid-cols-[repeat(2,9rem)] gap-1.5 sm:grid-cols-[repeat(2,10rem)] lg:grid-cols-[repeat(2,11rem)]">
+              : <ul className="grid justify-center grid-cols-[repeat(3,7.5rem)] gap-2 sm:grid-cols-[repeat(3,9rem)] lg:grid-cols-[repeat(3,10rem)]">
                   {viewGridEntries.map((entry, idx) => {
                     if (!entry.token) {
+                      if (entry.slotSlug.startsWith("__spacer")) {
+                        return (
+                          <li
+                            key={`${row.id}-spacer-${idx}`}
+                            aria-hidden="true"
+                            className="pointer-events-none invisible"
+                          />
+                        );
+                      }
                       return (
                         <li key={`${row.id}-slot-${entry.slotSlug}-${idx}`}>
                           <article className="flex w-full flex-col border border-dashed border-hair bg-paper/50">
