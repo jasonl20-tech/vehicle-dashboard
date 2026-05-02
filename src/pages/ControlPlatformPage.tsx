@@ -469,6 +469,23 @@ function isCorrectionDoneRow(row: ControllStatusRow): boolean {
 }
 
 /**
+ * Ob für den Slot bereits eine Korrektur-/Basis-Ansicht in `vehicle.views`
+ * eingetragen ist (Token ohne #skaliert/#trp/#shadow), z. B. `front`.
+ * Im Skalierungsmodus: dann kein „Generieren“-Plus — nur Platzhalter.
+ */
+function hasBaseKorrekturViewForSlot(
+  views: string | null | undefined,
+  slotSlug: string,
+): boolean {
+  const n = normalizeSlug(slotSlug);
+  for (const t of parseViewTokens(views)) {
+    if (!tokenMatchesMode(t, "korrektur")) continue;
+    if (normalizeSlug(parseViewSlot(t).slug) === n) return true;
+  }
+  return false;
+}
+
+/**
  * Aggregierter „Schwerpunkt-Status" pro Fahrzeug (für Tag/Tint).
  * Reihenfolge der Priorität (von dominant zu schwach):
  *   1. `errored` – mind. ein `check >= 3` außer 6
@@ -1834,8 +1851,9 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       // `controll_status` (mode correction) existiert.
                       // Skalierungs-Modus: Plus nur, wenn für den Slot **keine**
                       // laufende/offene Korrektur mehr da ist — eine abgeschlossene
-                      // Korrektur (check 2 · correct) blockiert nicht (Skalierung
-                      // kann dann fehlendes #skaliert anstoßen).
+                      // Korrektur (check 2 · correct) blockiert nicht.
+                      // Zusätzlich: Wenn die Basis-Ansicht schon in `row.views`
+                      // steht (#skaliert fehlt nur), kein Generieren — nur Platzhalter.
                       const slug = entry.slotSlug;
                       const allowedForGen = isGenerationAllowedForSlug(
                         generationViewsConfig,
@@ -1852,6 +1870,9 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       const genBlockedByCorrection =
                         existingGenStatus != null &&
                         (viewsMode !== "skalierung" || !correctionDone);
+                      const scalingBaseInViewsBlocksGen =
+                        viewsMode === "skalierung" &&
+                        hasBaseKorrekturViewForSlot(row.views, slug);
                       const isGenSubmitting =
                         generationSubmittingSlot === slug;
                       const slotBlocked = isSlotBlockedByFirstViews(
@@ -1862,11 +1883,13 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       const showPlus =
                         allowedForGen &&
                         !genBlockedByCorrection &&
-                        !slotBlocked;
+                        !slotBlocked &&
+                        !scalingBaseInViewsBlocksGen;
                       const showInProgress =
                         allowedForGen &&
                         !!existingGenStatus &&
-                        !correctionDone;
+                        !correctionDone &&
+                        !scalingBaseInViewsBlocksGen;
                       const showLockedHint =
                         allowedForGen &&
                         !existingGenStatus &&
@@ -1954,6 +1977,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 : showInProgress ? "regen_vertex"
                                 : showLockedHint
                                   ? "wartet auf Pflicht-Ansichten"
+                                : scalingBaseInViewsBlocksGen
+                                  ? "Basis vorhanden · kein #skaliert"
                                 : "—"}
                               </span>
                             </div>
