@@ -690,47 +690,6 @@ export default function ControlPlatformPage() {
   /** Letzter gesehener Hash pro `(vehicleId, view_token, mode)`. */
   const lastStatusHashRef = useRef<Map<string, string>>(new Map());
 
-  useEffect(() => {
-    if (selectedId == null) return;
-    const statuses = detailApi.data?.statuses ?? [];
-    const seenKeys = new Set<string>();
-    const changedKeys: string[] = [];
-    const prefix = `${selectedId}__`;
-
-    for (const s of statuses) {
-      const key = `${selectedId}__${s.view_token}__${s.mode}`;
-      seenKeys.add(key);
-      const hash = `${s.updated_at ?? ""}__${s.status ?? ""}__${s.check ?? ""}`;
-      const lastHash = lastStatusHashRef.current.get(key);
-      // Nur bumpen, wenn wir den Status schon mal gesehen haben und er
-      // sich seither verändert hat. Beim ersten Sehen merken wir nur.
-      if (lastHash != null && lastHash !== hash) {
-        changedKeys.push(key);
-      }
-      lastStatusHashRef.current.set(key, hash);
-    }
-
-    // Verschwundene Status-Einträge des aktuellen Fahrzeugs
-    // (= Worker hat den Job abgeschlossen und Eintrag entfernt) ebenfalls
-    // als „Bild neu" werten.
-    for (const key of Array.from(lastStatusHashRef.current.keys())) {
-      if (key.startsWith(prefix) && !seenKeys.has(key)) {
-        changedKeys.push(key);
-        lastStatusHashRef.current.delete(key);
-      }
-    }
-
-    if (changedKeys.length > 0) {
-      setImageReloadByKey((prev) => {
-        const next = { ...prev };
-        for (const k of changedKeys) {
-          next[k] = (next[k] ?? 0) + 1;
-        }
-        return next;
-      });
-    }
-  }, [selectedId, detailApi.data?.statuses]);
-
   /**
    * Hängt einen `&_v=N`-Cache-Buster an eine Bild-URL an, falls für die
    * Kombination `(vehicleId, view_token, mode)` mindestens ein Reload-
@@ -800,6 +759,47 @@ export default function ControlPlatformPage() {
   const detailApi = useApi<VehicleImageryOneResponse>(detailUrl, {
     pollMs: livePollMs,
   });
+
+  useEffect(() => {
+    if (selectedId == null) return;
+    const statuses = detailApi.data?.statuses ?? [];
+    const seenKeys = new Set<string>();
+    const changedKeys: string[] = [];
+    const prefix = `${selectedId}__`;
+
+    for (const s of statuses) {
+      const key = `${selectedId}__${s.view_token}__${s.mode}`;
+      seenKeys.add(key);
+      const hash = `${s.updated_at ?? ""}__${s.status ?? ""}__${s.check ?? ""}`;
+      const lastHash = lastStatusHashRef.current.get(key);
+      // Nur bumpen, wenn wir den Status schon mal gesehen haben und er
+      // sich seither verändert hat. Beim ersten Sehen merken wir nur.
+      if (lastHash != null && lastHash !== hash) {
+        changedKeys.push(key);
+      }
+      lastStatusHashRef.current.set(key, hash);
+    }
+
+    // Verschwundene Status-Einträge des aktuellen Fahrzeugs
+    // (= Worker hat den Job abgeschlossen und Eintrag entfernt) ebenfalls
+    // als „Bild neu" werten.
+    for (const key of Array.from(lastStatusHashRef.current.keys())) {
+      if (key.startsWith(prefix) && !seenKeys.has(key)) {
+        changedKeys.push(key);
+        lastStatusHashRef.current.delete(key);
+      }
+    }
+
+    if (changedKeys.length > 0) {
+      setImageReloadByKey((prev) => {
+        const next = { ...prev };
+        for (const k of changedKeys) {
+          next[k] = (next[k] ?? 0) + 1;
+        }
+        return next;
+      });
+    }
+  }, [selectedId, detailApi.data?.statuses]);
 
   const row = detailApi.data?.row;
   const cdnBase = (
