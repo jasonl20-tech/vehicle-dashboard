@@ -13,11 +13,16 @@ import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext
 import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import {
   CONTROL_PLATFORM_MODE_TO_SETTING,
+  CONTROLL_ACTION_TO_STATUS,
   CONTROLL_BUTTONS_SETTINGS_PATH,
   DEFAULT_CONTROLL_BUTTONS_CONFIG,
   type ControllActionStub,
   type ControllButtonsSettingsApiResponse,
 } from "../lib/controllButtonsConfig";
+import {
+  postControllStatus,
+  r2KeyFromImageUrl,
+} from "../lib/controllStatusApi";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   type ControllStatusRow,
@@ -135,8 +140,8 @@ type ControllToolbarDef = {
   label: string;
   stub: ControllActionStub;
   variant: "default" | "danger";
-  /** Nur sinnvoll im Modus Korrektur (Kurztasten-Hinweis). */
-  hint?: string;
+  /** Anzeige-Hinweis Tastenkürzel, z. B. „1 / R“. */
+  hint: string;
 };
 
 function controlPlatformToolbarDefs(
@@ -149,24 +154,28 @@ function controlPlatformToolbarDefs(
         label: "Richtig",
         stub: "richtig",
         variant: "default",
+        hint: "1 / R",
       },
       {
         configKey: "regen_transparent",
-        label: "Neu Generieren ( Transparenz )",
+        label: "Neu Transparent",
         stub: "regen_transparent",
         variant: "default",
+        hint: "2 / T",
       },
       {
         configKey: "regen_scaling",
-        label: "Neu Generieren ( Skalierung )",
+        label: "Neu Skalieren",
         stub: "regen_scaling",
         variant: "default",
+        hint: "3 / S",
       },
       {
         configKey: "delete",
         label: "Löschen",
         stub: "loeschen",
         variant: "danger",
+        hint: "4 / L / Del",
       },
     ];
   }
@@ -190,15 +199,46 @@ function controlPlatformToolbarDefs(
       label: "Neu Generieren ( Batch )",
       stub: "batch",
       variant: "default",
+      hint: "3 / B",
     },
     {
       configKey: "delete",
       label: "Löschen",
       stub: "loeschen",
       variant: "danger",
-      hint: "4 / L",
+      hint: "4 / L / Del",
     },
   ];
+}
+
+/**
+ * Tastatur-Bindings je Modus + `configKey` (in `controll_buttons`).
+ * Wert = Liste akzeptierter `e.key`-Werte (case-insensitiv für Buchstaben);
+ * Wird nur ausgewertet, wenn der Button aktuell sichtbar ist.
+ */
+function controlPlatformShortcutKeys(
+  viewsMode: ControlPlatformViewsMode,
+): Record<string, string[]> {
+  if (viewsMode === "skalierung") {
+    return {
+      correct: ["1", "r"],
+      regen_transparent: ["2", "t"],
+      regen_scaling: ["3", "s"],
+      delete: ["4", "l", "Delete", "Backspace"],
+    };
+  }
+  return {
+    correct: ["1", "r"],
+    regen_vertex: ["2", "v"],
+    regen_batch: ["3", "b"],
+    delete: ["4", "l", "Delete", "Backspace"],
+  };
+}
+
+function matchesShortcutKey(eventKey: string, list: string[]): boolean {
+  if (list.includes(eventKey)) return true;
+  const lower = eventKey.toLowerCase();
+  return list.some((k) => k.length === 1 && k.toLowerCase() === lower);
 }
 
 type ViewGridEntry = {
@@ -251,11 +291,11 @@ function buildViewGridEntries(tokens: string[]): ViewGridEntry[] {
 /** Modus-Mapping zwischen Frontend-Auswahl und `controll_status.mode`. */
 function controllModeForViewsMode(
   m: ControlPlatformViewsMode,
-): string | null {
+): "correction" | "scaling" | "shadow" | "transparency" {
   if (m === "korrektur") return "correction";
   if (m === "skalierung") return "scaling";
-  /* Transparenz/Schatten: später, sobald die Modi in controll_status definiert sind. */
-  return null;
+  if (m === "schatten") return "shadow";
+  return "transparency";
 }
 
 /** Lookup-Schlüssel für `controll_status` (case-insensitiv pro view_token). */
@@ -283,6 +323,13 @@ export default function ControlPlatformPage() {
     null,
   );
   const activePreviewThumbRef = useRef<HTMLButtonElement | null>(null);
+  const [submittingAction, setSubmittingAction] =
+    useState<ControllActionStub | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [lastActionToken, setLastActionToken] = useState<{
+    raw: string;
+    status: string;
+  } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -296,6 +343,8 @@ export default function ControlPlatformPage() {
 
   useEffect(() => {
     setImagePreview(null);
+    setActionError(null);
+    setLastActionToken(null);
   }, [selectedId]);
 
   const listUrl = useMemo(
@@ -376,17 +425,12 @@ export default function ControlPlatformPage() {
     );
   }, [controllButtonsResolved, viewsMode]);
 
-  const korrekturShortcutsFooter = useMemo(() => {
-    if (viewsMode !== "korrektur") return null;
-    const has = (k: string) =>
-      toolbarDefsVisible.some((d) => d.configKey === k);
-    const parts: string[] = [];
-    if (has("correct")) parts.push("1/R");
-    if (has("regen_vertex")) parts.push("2/V");
-    if (has("delete")) parts.push("4/L");
-    if (parts.length === 0) return null;
-    return parts.join(", ");
-  }, [viewsMode, toolbarDefsVisible]);
+  const shortcutsFooter = useMemo(() => {
+    const parts = toolbarDefsVisible.map((d) =>
+      d.hint.replace(/ \/ Del$/, ""),
+    );
+    return parts.length ? parts.join(" · ") : null;
+  }, [toolbarDefsVisible]);
 
   const imagePreviewStripItems = useMemo(() => {
     if (!row) return [];
@@ -412,10 +456,7 @@ export default function ControlPlatformPage() {
       const slot = parseViewSlot(token);
       const slug = viewPathSlug(token);
       const href = buildVehicleImageUrl(cdnBase, row, slug, imageUrlQuery);
-      const status =
-        controllMode != null ?
-          statusMap.get(statusKey(slot.raw, controllMode))
-        : undefined;
+      const status = statusMap.get(statusKey(slot.raw, controllMode));
       const isCorrect = status?.status === "correct";
       const isMain = isMainViewSlug(slot.slug);
       internal.push({
@@ -439,8 +480,39 @@ export default function ControlPlatformPage() {
     return internal.map(({ sortRank: _r, sortIdx: _i, ...item }) => item);
   }, [row, viewGridEntries, cdnBase, imageUrlQuery, controllMode, statusMap]);
 
-  /** Platzhalter — Control-Aktionen (API folgt). */
-  const onControllActionStub = useCallback((_action: ControllActionStub) => {}, []);
+  /** Schreibt eine Control-Aktion in `controll_status` und lädt die Statuses neu. */
+  const submitControllAction = useCallback(
+    async (
+      action: ControllActionStub,
+      ctx: { rawToken: string; imageHref: string },
+    ) => {
+      if (selectedId == null) return;
+      const status = CONTROLL_ACTION_TO_STATUS[action];
+      if (!status) return;
+      const r2Key = r2KeyFromImageUrl(cdnBase, ctx.imageHref);
+      setSubmittingAction(action);
+      setActionError(null);
+      try {
+        const res = await postControllStatus({
+          vehicleId: selectedId,
+          viewToken: ctx.rawToken,
+          mode: controllMode,
+          status,
+          key: r2Key,
+        });
+        setLastActionToken({
+          raw: res.row.view_token,
+          status: res.row.status,
+        });
+        detailApi.reload();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSubmittingAction(null);
+      }
+    },
+    [selectedId, cdnBase, controllMode, detailApi],
+  );
 
   useEffect(() => {
     if (!imagePreview || imagePreviewStripItems.length === 0) return;
@@ -449,35 +521,38 @@ export default function ControlPlatformPage() {
     const flags =
       controllButtonsResolved.buttons[modeKey] ??
       DEFAULT_CONTROLL_BUTTONS_CONFIG.buttons[modeKey];
+    const shortcuts = controlPlatformShortcutKeys(viewsMode);
+    const defs = controlPlatformToolbarDefs(viewsMode);
+
     const onKey = (e: KeyboardEvent) => {
       const t = e.target;
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) {
         return;
       }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
 
       if (e.key === "Escape") {
         setImagePreview(null);
         return;
       }
 
-      if (viewsMode === "korrektur") {
-        const k = e.key;
-        if (k === "1" || k === "r" || k === "R") {
-          if (flags.correct !== true) return;
+      for (const def of defs) {
+        if (flags[def.configKey] !== true) continue;
+        const list = shortcuts[def.configKey];
+        if (!list) continue;
+        if (matchesShortcutKey(e.key, list)) {
           e.preventDefault();
-          onControllActionStub("richtig");
-          return;
-        }
-        if (k === "2" || k === "v" || k === "V") {
-          if (flags.regen_vertex !== true) return;
-          e.preventDefault();
-          onControllActionStub("vertex");
-          return;
-        }
-        if (k === "4" || k === "l" || k === "L") {
-          if (flags.delete !== true) return;
-          e.preventDefault();
-          onControllActionStub("loeschen");
+          if (submittingAction) return;
+          const cur = imagePreviewStripItems[Math.min(
+            Math.max(0, imagePreview.index),
+            imagePreviewStripItems.length - 1,
+          )];
+          if (cur) {
+            void submitControllAction(def.stub, {
+              rawToken: cur.raw,
+              imageHref: cur.src,
+            });
+          }
           return;
         }
       }
@@ -502,8 +577,9 @@ export default function ControlPlatformPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [
     imagePreview,
-    imagePreviewStripItems.length,
-    onControllActionStub,
+    imagePreviewStripItems,
+    submitControllAction,
+    submittingAction,
     viewsMode,
     controllButtonsResolved,
   ]);
@@ -714,10 +790,9 @@ export default function ControlPlatformPage() {
                       slug,
                       imageUrlQuery,
                     );
-                    const status =
-                      controllMode != null ?
-                        statusMap.get(statusKey(slot.raw, controllMode))
-                      : undefined;
+                    const status = statusMap.get(
+                      statusKey(slot.raw, controllMode),
+                    );
                     const isCorrect = status?.status === "correct";
                     const isMain = isMainViewSlug(slot.slug);
                     return (
@@ -959,37 +1034,57 @@ export default function ControlPlatformPage() {
                 </div>
 
                 {toolbarDefsVisible.length > 0 ?
-                  <div
-                    className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch"
-                    role="toolbar"
-                    aria-label="Control-Aktionen"
-                  >
-                    {toolbarDefsVisible.map((def) => {
-                      const isDanger = def.variant === "danger";
-                      return (
-                        <button
-                          key={def.configKey}
-                          type="button"
-                          onClick={() => onControllActionStub(def.stub)}
-                          className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border px-4 py-3 text-left transition sm:min-w-[10.5rem] ${
-                            isDanger ?
-                              "border-red-800 bg-red-950 text-red-100 hover:bg-red-900"
-                            : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
-                          }`}
-                        >
-                          <span className="text-[15px] font-semibold leading-tight sm:text-base">
-                            {def.label}
-                          </span>
-                          {def.hint && viewsMode === "korrektur" ?
+                  <div className="flex shrink-0 flex-col gap-1.5">
+                    <div
+                      className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch"
+                      role="toolbar"
+                      aria-label="Control-Aktionen"
+                    >
+                      {toolbarDefsVisible.map((def) => {
+                        const isDanger = def.variant === "danger";
+                        const isBusy = submittingAction === def.stub;
+                        return (
+                          <button
+                            key={def.configKey}
+                            type="button"
+                            onClick={() =>
+                              void submitControllAction(def.stub, {
+                                rawToken: currentPreviewItem.raw,
+                                imageHref: currentPreviewItem.src,
+                              })
+                            }
+                            disabled={submittingAction !== null}
+                            aria-busy={isBusy}
+                            className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 sm:min-w-[10.5rem] ${
+                              isDanger ?
+                                "border-red-800 bg-red-950 text-red-100 hover:bg-red-900"
+                              : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
+                            }`}
+                          >
+                            <span className="text-[15px] font-semibold leading-tight sm:text-base">
+                              {def.label}
+                              {isBusy ? <span className="ml-1.5 font-normal text-zinc-300">…</span> : null}
+                            </span>
                             <span
                               className={`font-mono text-[11px] ${isDanger ? "text-red-200/80" : "text-zinc-400"}`}
                             >
                               {def.hint}
                             </span>
-                          : null}
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {actionError ?
+                      <p className="font-mono text-[10px] text-red-300">
+                        Fehler: {actionError}
+                      </p>
+                    : lastActionToken &&
+                      lastActionToken.raw === currentPreviewItem.raw ?
+                      <p className="font-mono text-[10px] text-emerald-300">
+                        gespeichert: {lastActionToken.status} ·{" "}
+                        {lastActionToken.raw}
+                      </p>
+                    : null}
                   </div>
                 : null}
               </div>
@@ -997,11 +1092,10 @@ export default function ControlPlatformPage() {
 
             <p className="shrink-0 text-center text-[10px] text-zinc-400">
               ESC oder außen klicken · Pfeiltasten · Kachel antippen
-              {korrekturShortcutsFooter ?
+              {shortcutsFooter ?
                 <>
-                  {" "}
-                  · Korrektur:{" "}
-                  <span className="font-mono">{korrekturShortcutsFooter}</span>
+                  {" · "}
+                  <span className="font-mono">{shortcutsFooter}</span>
                 </>
               : null}
             </p>

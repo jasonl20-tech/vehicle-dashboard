@@ -67,3 +67,16 @@ export type ControllActionStub =
   | "loeschen"
   | "regen_transparent"
   | "regen_scaling";
+
+/**
+ * Mapping: UI-Aktion → `status`-Wert in `controll_status`.
+ * Die `status`-Werte selbst sind je nach Modus unterschiedlich (z. B. „regen_transparent“ nur bei Skalierung).
+ */
+export const CONTROLL_ACTION_TO_STATUS: Record<ControllActionStub, string> = {
+  richtig: "correct",
+  vertex: "regen_vertex",
+  batch: "regen_batch",
+  loeschen: "delete",
+  regen_transparent: "regen_transparent",
+  regen_scaling: "regen_scaling",
+};
