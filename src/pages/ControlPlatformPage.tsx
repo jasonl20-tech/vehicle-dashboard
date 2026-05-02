@@ -2392,14 +2392,12 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         )
                       : null;
 
-                    const checkVal = fp.checkVal;
                     const isApprovedP = fp.isApproved;
                     const isInProgressP = fp.isInProgress;
                     const isCheckPendingP = fp.isCheckPending;
                     const isTransferredP = fp.isTransferred;
                     const isErroredP = fp.isErrored;
 
-                    const checkValS = fs ? fs.checkVal : null;
                     const isApprovedS = fs?.isApproved ?? false;
                     const isInProgressS = fs?.isInProgress ?? false;
                     const isCheckPendingS = fs?.isCheckPending ?? false;
