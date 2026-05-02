@@ -9,7 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Logo } from "../brand/Logo";
 import {
@@ -88,7 +88,15 @@ function Brand({
         collapsed ? "justify-center px-2" : "justify-between px-5"
       }`}
     >
-      {!collapsed && <Logo className="h-[22px] w-auto text-white" />}
+      {!collapsed && (
+        <Link
+          to="/"
+          className="min-w-0 shrink rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-night-900"
+          aria-label="Zur Plattform-Auswahl"
+        >
+          <Logo className="h-[22px] w-auto text-white" />
+        </Link>
+      )}
       <button
         type="button"
         onClick={onToggleCollapse}
