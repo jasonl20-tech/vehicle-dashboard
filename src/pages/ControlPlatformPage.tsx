@@ -7,7 +7,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
@@ -302,14 +302,45 @@ export default function ControlPlatformPage() {
     return out;
   }, [row, viewGridEntries, cdnBase, imageUrlQuery, controllMode, statusMap]);
 
+  /** Platzhalter — Korrektur-Aktionen (API folgt). */
+  const onCorrectionActionStub = useCallback(
+    (_action: "richtig" | "vertex" | "batch" | "loeschen") => {},
+    [],
+  );
+
   useEffect(() => {
     if (!imagePreview || imagePreviewStripItems.length === 0) return;
     const n = imagePreviewStripItems.length;
     const onKey = (e: KeyboardEvent) => {
+      const t = e.target;
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) {
+        return;
+      }
+
       if (e.key === "Escape") {
         setImagePreview(null);
         return;
       }
+
+      if (viewsMode === "korrektur") {
+        const k = e.key;
+        if (k === "1" || k === "r" || k === "R") {
+          e.preventDefault();
+          onCorrectionActionStub("richtig");
+          return;
+        }
+        if (k === "2" || k === "v" || k === "V") {
+          e.preventDefault();
+          onCorrectionActionStub("vertex");
+          return;
+        }
+        if (k === "4" || k === "l" || k === "L") {
+          e.preventDefault();
+          onCorrectionActionStub("loeschen");
+          return;
+        }
+      }
+
       if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
         setImagePreview((p) => {
@@ -328,7 +359,12 @@ export default function ControlPlatformPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [imagePreview, imagePreviewStripItems.length]);
+  }, [
+    imagePreview,
+    imagePreviewStripItems.length,
+    onCorrectionActionStub,
+    viewsMode,
+  ]);
 
   const previewIndexClamped =
     imagePreview && imagePreviewStripItems.length > 0 ?
@@ -782,33 +818,59 @@ export default function ControlPlatformPage() {
 
                 {viewsMode === "korrektur" ?
                   <div
-                    className="flex shrink-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center"
+                    className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch"
                     role="toolbar"
                     aria-label="Korrektur-Aktionen"
                   >
                     <button
                       type="button"
-                      className="rounded border border-ink-600 bg-ink-800 px-2.5 py-1.5 text-left text-[11px] font-medium text-white transition hover:bg-ink-700 sm:text-center"
+                      onClick={() => onCorrectionActionStub("richtig")}
+                      className="flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border border-ink-600 bg-ink-800 px-4 py-3 text-left text-white transition hover:bg-ink-700 sm:min-w-[10.5rem]"
                     >
-                      Richtig
+                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
+                        Richtig
+                      </span>
+                      <span className="font-mono text-[11px] text-zinc-400">
+                        1 / R
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className="rounded border border-ink-600 bg-ink-800 px-2.5 py-1.5 text-left text-[11px] font-medium text-white transition hover:bg-ink-700 sm:text-center"
+                      onClick={() => onCorrectionActionStub("vertex")}
+                      className="flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border border-ink-600 bg-ink-800 px-4 py-3 text-left text-white transition hover:bg-ink-700 sm:min-w-[10.5rem]"
                     >
-                      Neu Generieren (Vertex)
+                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
+                        Neu Generieren ( Vertex )
+                      </span>
+                      <span className="font-mono text-[11px] text-zinc-400">
+                        2 / V
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className="rounded border border-ink-600 bg-ink-800 px-2.5 py-1.5 text-left text-[11px] font-medium text-white transition hover:bg-ink-700 sm:text-center"
+                      disabled
+                      aria-disabled="true"
+                      title="Derzeit deaktiviert"
+                      className="flex min-h-[3.75rem] flex-1 cursor-not-allowed flex-col items-start justify-center gap-0.5 rounded-lg border border-ink-800 bg-ink-950 px-4 py-3 text-left text-zinc-500 opacity-60 sm:min-w-[10.5rem]"
                     >
-                      Neu Generieren (Batch)
+                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
+                        Neu Generieren ( Batch )
+                      </span>
+                      <span className="font-mono text-[11px] text-zinc-500">
+                        deaktiviert
+                      </span>
                     </button>
                     <button
                       type="button"
-                      className="rounded border border-red-900 bg-red-950 px-2.5 py-1.5 text-left text-[11px] font-medium text-red-100 transition hover:bg-red-900 sm:text-center"
+                      onClick={() => onCorrectionActionStub("loeschen")}
+                      className="flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-left text-red-100 transition hover:bg-red-900 sm:min-w-[10.5rem]"
                     >
-                      Löschen
+                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
+                        Löschen
+                      </span>
+                      <span className="font-mono text-[11px] text-red-200/80">
+                        4 / L
+                      </span>
                     </button>
                   </div>
                 : null}
@@ -817,6 +879,20 @@ export default function ControlPlatformPage() {
 
             <p className="shrink-0 text-center text-[10px] text-zinc-400">
               ESC oder außen klicken · Pfeiltasten · Kachel antippen
+              {viewsMode === "korrektur" ?
+                <>
+                  {" "}
+                  · Korrektur:{" "}
+                  <span className="font-mono">1</span>/<span className="font-mono">
+                    R
+                  </span>
+                  , <span className="font-mono">2</span>/
+                  <span className="font-mono">V</span>,{" "}
+                  <span className="font-mono">4</span>/<span className="font-mono">
+                    L
+                  </span>
+                </>
+              : null}
             </p>
           </div>
         </div>
