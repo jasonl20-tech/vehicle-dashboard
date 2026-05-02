@@ -676,6 +676,83 @@ export default function ControlPlatformPage() {
   // an den Anfang oder ans Ende der neuen Liste gesprungen werden soll.
   const pendingPreviewSlotRef = useRef<"first" | "last" | null>(null);
 
+  /**
+   * Cache-Buster pro `(vehicleId, view_token, mode)`. Wird inkrementiert,
+   * sobald sich der zugehörige `controll_status` ändert oder ganz
+   * verschwindet — das ist das Signal, dass der Worker im Hintergrund
+   * ein neues Bild unter dem gleichen R2-Key abgelegt hat. Wir hängen
+   * den Counter als zusätzlichen Query-Parameter an die Bild-URL, damit
+   * der Browser-/CDN-Cache umgangen wird.
+   */
+  const [imageReloadByKey, setImageReloadByKey] = useState<
+    Record<string, number>
+  >({});
+  /** Letzter gesehener Hash pro `(vehicleId, view_token, mode)`. */
+  const lastStatusHashRef = useRef<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (selectedId == null) return;
+    const statuses = detailApi.data?.statuses ?? [];
+    const seenKeys = new Set<string>();
+    const changedKeys: string[] = [];
+    const prefix = `${selectedId}__`;
+
+    for (const s of statuses) {
+      const key = `${selectedId}__${s.view_token}__${s.mode}`;
+      seenKeys.add(key);
+      const hash = `${s.updated_at ?? ""}__${s.status ?? ""}__${s.check ?? ""}`;
+      const lastHash = lastStatusHashRef.current.get(key);
+      // Nur bumpen, wenn wir den Status schon mal gesehen haben und er
+      // sich seither verändert hat. Beim ersten Sehen merken wir nur.
+      if (lastHash != null && lastHash !== hash) {
+        changedKeys.push(key);
+      }
+      lastStatusHashRef.current.set(key, hash);
+    }
+
+    // Verschwundene Status-Einträge des aktuellen Fahrzeugs
+    // (= Worker hat den Job abgeschlossen und Eintrag entfernt) ebenfalls
+    // als „Bild neu" werten.
+    for (const key of Array.from(lastStatusHashRef.current.keys())) {
+      if (key.startsWith(prefix) && !seenKeys.has(key)) {
+        changedKeys.push(key);
+        lastStatusHashRef.current.delete(key);
+      }
+    }
+
+    if (changedKeys.length > 0) {
+      setImageReloadByKey((prev) => {
+        const next = { ...prev };
+        for (const k of changedKeys) {
+          next[k] = (next[k] ?? 0) + 1;
+        }
+        return next;
+      });
+    }
+  }, [selectedId, detailApi.data?.statuses]);
+
+  /**
+   * Hängt einen `&_v=N`-Cache-Buster an eine Bild-URL an, falls für die
+   * Kombination `(vehicleId, view_token, mode)` mindestens ein Reload-
+   * Event registriert wurde. Der CDN-/Browser-Cache wird so frischen
+   * Inhalt holen, ohne dass die Seite neu geladen werden muss.
+   */
+  const buildImageSrcWithReload = useCallback(
+    (
+      href: string,
+      vehicleId: number,
+      viewToken: string,
+      mode: string,
+    ): string => {
+      const key = `${vehicleId}__${viewToken}__${mode}`;
+      const tok = imageReloadByKey[key];
+      if (!tok) return href;
+      const sep = href.includes("?") ? "&" : "?";
+      return `${href}${sep}_v=${tok}`;
+    },
+    [imageReloadByKey],
+  );
+
   useEffect(() => {
     setActionError(null);
     setLastActionToken(null);
@@ -868,7 +945,13 @@ export default function ControlPlatformPage() {
       const token = entry.token;
       const slot = parseViewSlot(token);
       const slug = viewPathSlug(token);
-      const href = buildVehicleImageUrl(cdnBase, row, slug, imageUrlQuery);
+      const baseHref = buildVehicleImageUrl(cdnBase, row, slug, imageUrlQuery);
+      const href = buildImageSrcWithReload(
+        baseHref,
+        row.id,
+        slot.raw,
+        controllMode,
+      );
       const statusRow = statusMap.get(statusKey(slot.raw, controllMode));
       const hasStatus = !!statusRow;
       const checkVal = statusRow ? Number(statusRow.check) : null;
@@ -928,6 +1011,7 @@ export default function ControlPlatformPage() {
     statusMap,
     firstViewsSet,
     firstViewsReady,
+    buildImageSrcWithReload,
   ]);
 
   /**
@@ -1615,11 +1699,17 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     const token = entry.token;
                     const slot = parseViewSlot(token);
                     const slug = viewPathSlug(token);
-                    const href = buildVehicleImageUrl(
+                    const baseHref = buildVehicleImageUrl(
                       cdnBase,
                       row,
                       slug,
                       imageUrlQuery,
+                    );
+                    const href = buildImageSrcWithReload(
+                      baseHref,
+                      row.id,
+                      slot.raw,
+                      controllMode,
                     );
                     const status = statusMap.get(
                       statusKey(slot.raw, controllMode),
