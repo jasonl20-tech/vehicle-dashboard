@@ -49,6 +49,7 @@ import {
 import {
   GENERATION_VIEWS_SETTINGS_PATH,
   type GenerationViewsApiResponse,
+  type GenerationViewsConfig,
   isGenerationAllowedForSlug,
 } from "../lib/generationViewsConfig";
 import {
@@ -491,6 +492,46 @@ function mergeKorrekturGeneratingPlaceholderEntries(
     });
   }
   return [...base, ...toAdd];
+}
+
+/**
+ * Jedes auf `true` gesetztes Slug in `settings.generation_views` soll eine
+ * Kachel haben — nicht nur die 8 Umriss-Slots (`FIXED_VIEW_SLOT_LAYOUT`).
+ * Z. B. `dashboard` liegt außerhalb des Umrisses und erhält ohne diese
+ * Ergänzung gar keinen „+“-Platzhalter.
+ */
+function mergeGenerationViewsConfigSlots(
+  entries: ViewGridEntry[],
+  config: GenerationViewsConfig | null | undefined,
+): ViewGridEntry[] {
+  if (!config) return entries;
+
+  const covered = new Set(
+    entries.map((e) => normalizeSlug(e.slotSlug)),
+  );
+  const toAdd: ViewGridEntry[] = [];
+
+  const extraSlugs = Object.entries(config)
+    .filter(([, enabled]) => enabled === true)
+    .map(([slug]) => normalizeSlug(slug))
+    .filter((slug) => slug.length > 0 && !covered.has(slug))
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const slug of extraSlugs) {
+    covered.add(slug);
+    const pool = [...entries, ...toAdd];
+    const col4Rows = pool.filter((e) => e.col === 4).map((e) => e.row);
+    const nextRow = col4Rows.length ? Math.max(...col4Rows) + 1 : 1;
+    toAdd.push({
+      slotSlug: slug,
+      token: null,
+      col: 4,
+      row: nextRow,
+      supplemental: true,
+    });
+  }
+
+  return toAdd.length === 0 ? entries : [...entries, ...toAdd];
 }
 
 /** Modus-Mapping zwischen Frontend-Auswahl und `controll_status.mode`. */
@@ -1015,15 +1056,26 @@ export default function ControlPlatformPage() {
       parseViewTokens(row.views).filter((t) => tokenMatchesMode(t, viewsMode))
     : [];
 
+  const generationViewsApi = useApi<GenerationViewsApiResponse>(
+    GENERATION_VIEWS_SETTINGS_PATH,
+  );
+  const generationViewsConfig = generationViewsApi.data?.views ?? null;
+
   const viewGridEntries = useMemo(() => {
-    const base = buildViewGridEntries(filteredViewTokens, viewsMode);
+    let base = buildViewGridEntries(filteredViewTokens, viewsMode);
+    base = mergeGenerationViewsConfigSlots(base, generationViewsConfig);
     return mergeKorrekturGeneratingPlaceholderEntries(
       base,
       detailApi.data?.statuses,
       viewsMode,
       filteredViewTokens,
     );
-  }, [filteredViewTokens, viewsMode, detailApi.data?.statuses]);
+  }, [
+    filteredViewTokens,
+    viewsMode,
+    detailApi.data?.statuses,
+    generationViewsConfig,
+  ]);
 
   const gridHasSupplementalColumn = useMemo(
     () => viewGridEntries.some((e) => e.supplemental),
@@ -1055,12 +1107,6 @@ export default function ControlPlatformPage() {
     previewImagesUrl,
   );
   const previewImagesMap = previewImagesApi.data?.images ?? null;
-
-  // `settings.generation_views` einmalig laden (kein Polling nötig).
-  const generationViewsApi = useApi<GenerationViewsApiResponse>(
-    GENERATION_VIEWS_SETTINGS_PATH,
-  );
-  const generationViewsConfig = generationViewsApi.data?.views ?? null;
 
   // `settings.google_image_search` einmalig laden (Template).
   const googleSearchApi = useApi<GoogleImageSearchApiResponse>(
