@@ -32,7 +32,11 @@ export function pathMatchesPfadliste(
   return false;
 }
 
-/** Leere Zuordnung in D1 für diese Stufe = keine Einschränkung (vor dem ersten Daten-Import). */
+/**
+ * Whitelist-Modus: Liefert ausschließlich die in `sicherheitsstufen` für diese
+ * Stufe hinterlegten Pfade. Keine Einträge = keinerlei Routen freigegeben
+ * (Plattform-Start `/` ist clientseitig in `ProtectedRoute` separat erlaubt).
+ */
 export async function fetchPathsForSecurityLevel(
   env: Pick<AuthEnv, "user">,
   sicherheitsstufeId: number,
@@ -42,10 +46,9 @@ export async function fetchPathsForSecurityLevel(
   ).bind(sicherheitsstufeId);
   try {
     const { results } = await stmt.all<{ pfad: string }>();
-    const list = results
+    return results
       .map((r) => (typeof r.pfad === "string" ? r.pfad.trim() : ""))
       .filter(Boolean);
-    return list.length > 0 ? list : ["*"];
   } catch (e) {
     console.error("[routeAccess] fetchPathsForSecurityLevel:", e);
     throw e;

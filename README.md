@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_sicherheitsstufen_stufe ON sicherheitsstufen (sic
 - `sicherheitsstufe_id` entspricht `user.sicherheitsstufe`.
 - `pfad`: **`*`** = alles; **`/dashboard`** = nur genau diese Route; **`/dashboard/*`** = `/dashboard` und alle Unterpfade unter `/dashboard/…`; für JSON-Endpunkte z. B. **`/api/overview/*`** (Middleware prüft die URL ohne Query-String).
 
-Ist für eine `sicherheitsstufe_id` keine Zeile hinterlegt, verhält sich die App wie mit **`*`** (voller Zugriff), bis du die ersten Einträge setzt.
+Whitelist-Modus: Sind für eine `sicherheitsstufe_id` **keine** Zeilen hinterlegt, gibt es **keinen** Zugriff auf irgendeine Route. Plattform-Start (`/`) bleibt sichtbar – damit ein User mit fehlenden Rechten zumindest abmelden kann.
 
 Beispiel „Stufe 0 darf alles“:
 

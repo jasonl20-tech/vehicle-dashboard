@@ -51,9 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data: { user: SessionUser; erlaubtePfade?: string[] } =
           await res.json();
         setUser(data.user);
-        const p = data.erlaubtePfade;
         setErlaubtePfade(
-          Array.isArray(p) && p.length > 0 ? p : ["*"],
+          Array.isArray(data.erlaubtePfade) ? data.erlaubtePfade : [],
         );
       } else {
         setUser(null);
