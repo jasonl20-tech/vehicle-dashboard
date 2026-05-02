@@ -1289,8 +1289,8 @@ export default function ControlPlatformPage() {
     [insideViewsList],
   );
 
-  // Sind alle `first_views` erledigt (Korrektur check 2 oder Inside check 0)?
-  // Solange `false`, sind Tiles, die **nicht** zu first_views gehören, gesperrt.
+  // Sind alle first_views-Pflicht-Slots erledigt? Bis dahin gilt für alle
+  // **anderen** Slots: Großansicht erlaubt, Control-Buttons aus (Raster + Shortcuts).
   const firstViewsReady = useMemo(
     () => areFirstViewsReady(firstViewsSet, detailApi.data?.statuses),
     [firstViewsSet, detailApi.data?.statuses],
@@ -2460,7 +2460,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         <article
                           title={
                             isFirstViewsLocked ?
-                              `${slot.raw}${secTok ? ` · ${secTok}` : ""} • gesperrt`
+                              `${slot.raw}${secTok ? ` · ${secTok}` : ""} · Großansicht möglich · Steuerung bis Pflicht-Ansichten gesperrt`
                             : `${slot.raw}${secTok ? ` · ${secTok}` : ""}`
                           }
                           className={`flex w-full flex-col bg-paper transition-colors ${
@@ -2481,9 +2481,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         >
                           <button
                             type="button"
-                            disabled={isFirstViewsLocked}
                             onClick={() => {
-                              if (isFirstViewsLocked) return;
                               setImagePreview({
                                 index:
                                   pairStripIndex >= 0 ? pairStripIndex : 0,
@@ -2491,7 +2489,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                             }}
                             aria-label={
                               isFirstViewsLocked
-                                ? `${entry.slotSlug} · Skalierung gesperrt – zuerst Pflicht-Ansichten`
+                                ? `${entry.slotSlug} groß anzeigen (nur Ansehen – zuerst Pflicht-Ansichten aus first_views)`
                                 : secTok ?
                                   `${entry.slotSlug}: #skaliert + #skaliert_weiß groß anzeigen`
                                 : `${imageFileLabel} groß anzeigen`
@@ -2502,11 +2500,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                               : "items-center justify-center"
                             } ${
                               viewsMode === "skalierung" ? "" : "bg-ink-50"
-                            } ${
-                              isFirstViewsLocked
-                                ? "cursor-not-allowed"
-                                : "cursor-zoom-in"
-                            }`}
+                            } cursor-zoom-in`}
                             style={
                               viewsMode === "skalierung" ?
                                 SCALING_MODE_VEHICLE_BACKDROP_STYLE
@@ -2522,9 +2516,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                     loading="lazy"
                                     decoding="async"
                                     className={`max-h-full max-w-full object-contain ${
-                                      isFirstViewsLocked
-                                        ? "opacity-40 grayscale"
-                                        : isApprovedP
+                                      isApprovedP
                                         ? "opacity-30 grayscale"
                                         : ""
                                     }`}
@@ -2545,9 +2537,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                     loading="lazy"
                                     decoding="async"
                                     className={`max-h-full max-w-full object-contain ${
-                                      isFirstViewsLocked
-                                        ? "opacity-40 grayscale"
-                                        : isApprovedS
+                                      isApprovedS
                                         ? "opacity-30 grayscale"
                                         : ""
                                     }`}
@@ -2569,9 +2559,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                   loading="lazy"
                                   decoding="async"
                                   className={`max-h-full max-w-full object-contain ${
-                                    isFirstViewsLocked
-                                      ? "opacity-40 grayscale"
-                                      : isApproved
+                                    isApproved
                                       ? "opacity-30 grayscale"
                                       : ""
                                   }`}
@@ -2590,11 +2578,9 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                               </>
                             }
                             {isFirstViewsLocked ?
-                              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/55 backdrop-blur-[1px]">
-                                <span className="inline-flex items-center gap-1 rounded bg-zinc-700/95 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-white shadow">
-                                  <Lock className="h-3 w-3" />
-                                  gesperrt
-                                </span>
+                              <span className="pointer-events-none absolute left-1 top-8 z-[1] max-w-[calc(100%-0.5rem)] truncate rounded bg-amber-600/95 px-1 py-0.5 font-mono text-[7px] font-semibold uppercase tracking-wide text-white shadow sm:text-[8px]">
+                                <Lock className="relative -top-px mr-px inline h-2.5 w-2.5" />
+                                nur Ansehen
                               </span>
                             : null}
                             {!hrefS ?
@@ -2933,6 +2919,11 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                     <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-sky-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
                                       bearb.
                                     </span>
+                                  : it.isFirstViewsLocked ?
+                                    <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-amber-600/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                      <Lock className="h-1.5 w-1.5" />
+                                      ansehen
+                                    </span>
                                   : it.isCheckPending ?
                                     <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-ink-800/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
                                       <Lock className="h-1.5 w-1.5" />
@@ -3164,14 +3155,16 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     {scalingActiveSide?.src ?? currentPreviewItem.src}
                   </a>
 
-                  <div className="min-h-[1rem]">
-                    {currentPreviewItem.isFirstViewsLocked &&
-                    !(scalingActiveSide?.hasStatus ?? false) ?
-                      <p className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-300">
-                        <Lock className="h-3 w-3" />
-                        gesperrt — zuerst die Pflicht-Ansichten korrigieren
+                  <div className="flex min-h-[1rem] flex-col gap-0.5">
+                    {currentPreviewItem.isFirstViewsLocked ?
+                      <p className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-200/95">
+                        <Lock className="h-3 w-3 shrink-0" />
+                        Steuerung gesperrt · zuerst die Pflicht-Ansichten aus{" "}
+                        <span className="font-semibold">first_views</span>{" "}
+                        (Vorschau und Großansicht bleiben möglich)
                       </p>
-                    : scalingActiveSide?.hasStatus ?
+                    : null}
+                    {scalingActiveSide?.hasStatus ?
                       <p
                         className={`font-mono text-[10px] ${
                           scalingActiveSide.isErrored

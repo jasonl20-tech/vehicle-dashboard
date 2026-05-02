@@ -75,9 +75,10 @@ export function areFirstViewsReady(
 }
 
 /**
- * Hilft beim Tile-Rendern: ist dieser Slot durch die first-views-Regel
- * blockiert? Slots, die *selbst* in `firstViews` enthalten sind, sind
- * niemals blockiert (sie sind ja diejenigen, die zuerst dran sind).
+ * Ist die **Steuerung** für diesen Slot durch first_views blockiert?
+ * (Pflicht-Ansichten noch nicht fertig.) Ansehen / Großansicht bleiben möglich;
+ * gemeint sind die Control-Aktionen (Buttons, Kurzbefehle), nicht die Vorschau.
+ * Slots aus `firstViews` selbst sind nie so blockiert.
  */
 export function isSlotBlockedByFirstViews(
   firstViews: Set<string> | readonly string[] | null | undefined,
