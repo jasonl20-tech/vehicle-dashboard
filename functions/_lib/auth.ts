@@ -12,6 +12,9 @@ export const SESSION_COOKIE = "vh_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 Tage
 export const SETUP_TOKEN_TTL_SECONDS = 60 * 10; // 10 Minuten
 
+/** Nach korrektem Passwort bei aktivem TOTP: zweiter Schritt ohne Session. */
+export const MFA_PENDING_TOKEN_TTL_SECONDS = 60 * 5;
+
 export type SessionUser = {
   id: number;
   benutzername: string;
@@ -313,6 +316,64 @@ export async function verifySetupToken(
     );
     if (
       json?.intent !== "pw-setup" ||
+      typeof json?.exp !== "number" ||
+      typeof json?.sub !== "number"
+    ) {
+      return null;
+    }
+    if (json.exp < Math.floor(Date.now() / 1000)) return null;
+    return { sub: json.sub };
+  } catch {
+    return null;
+  }
+}
+
+// ---------- MFA Pending (Zwischenschritt nach Passwort, vor Session-Cookie) ----------
+
+export async function createMfaPendingToken(
+  env: AuthEnv,
+  userId: number,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    sub: userId,
+    iat: now,
+    exp: now + MFA_PENDING_TOKEN_TTL_SECONDS,
+    intent: "mfa-pending",
+  };
+  const payloadB64 = base64UrlEncode(
+    new TextEncoder().encode(JSON.stringify(payload)),
+  );
+  const key = await importKey(getSecret(env));
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(payloadB64),
+  );
+  return `${payloadB64}.${base64UrlEncode(sig)}`;
+}
+
+export async function verifyMfaPendingToken(
+  env: AuthEnv,
+  token: string,
+): Promise<{ sub: number } | null> {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, sigB64] = parts;
+  try {
+    const key = await importKey(getSecret(env));
+    const ok = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      base64UrlDecode(sigB64),
+      new TextEncoder().encode(payloadB64),
+    );
+    if (!ok) return null;
+    const json = JSON.parse(
+      new TextDecoder().decode(base64UrlDecode(payloadB64)),
+    );
+    if (
+      json?.intent !== "mfa-pending" ||
       typeof json?.exp !== "number" ||
       typeof json?.sub !== "number"
     ) {

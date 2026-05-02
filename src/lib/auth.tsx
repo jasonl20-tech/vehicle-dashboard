@@ -19,12 +19,15 @@ export type SessionUser = {
 /**
  * Ergebnis eines `login`-Aufrufs.
  * - `ok`: Anmeldung war erfolgreich, der User ist im Context.
+ * - `needs-totp`: Zweiter Schritt: `completeTotpLogin(mfaPendingToken, code)`
+ *   nach erfolgreicher Passwort-Prüfung (Authenticator oder Recovery-Code).
  * - `needs-setup`: Der Account existiert, hat aber noch kein Passwort.
  *   Mit `setupToken` muss anschließend `setupPassword` aufgerufen werden.
  */
 export type LoginResult =
   | { kind: "ok" }
-  | { kind: "needs-setup"; setupToken: string; benutzername: string };
+  | { kind: "needs-setup"; setupToken: string; benutzername: string }
+  | { kind: "needs-totp"; mfaPendingToken: string };
 
 type AuthState = {
   user: SessionUser | null;
@@ -34,6 +37,10 @@ type AuthState = {
   refresh: () => Promise<void>;
   login: (benutzername: string, password: string) => Promise<LoginResult>;
   setupPassword: (setupToken: string, password: string) => Promise<void>;
+  completeTotpLogin: (
+    mfaPendingToken: string,
+    code: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -79,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .json()
         .catch(() => ({}))) as Partial<{
         ok: boolean;
+        needsTotp: boolean;
+        mfaPendingToken: string;
         needsPasswordSetup: boolean;
         setupToken: string;
         benutzername: string;
@@ -87,6 +96,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!res.ok) {
         throw new Error(data.error || "Anmeldung fehlgeschlagen");
+      }
+
+      if (data.needsTotp === true && typeof data.mfaPendingToken === "string") {
+        return {
+          kind: "needs-totp",
+          mfaPendingToken: data.mfaPendingToken,
+        };
       }
 
       if (data.needsPasswordSetup && data.setupToken) {
@@ -122,6 +138,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   );
 
+  const completeTotpLogin = useCallback<AuthState["completeTotpLogin"]>(
+    async (mfaPendingToken, code) => {
+      const res = await fetch("/api/login-totp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ mfaPendingToken, code: code.trim() }),
+      });
+      const data = (await res
+        .json()
+        .catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok) {
+        throw new Error(data.error || "Bestätigung fehlgeschlagen");
+      }
+      await refresh();
+    },
+    [refresh],
+  );
+
   const logout = useCallback(async () => {
     try {
       await fetch("/api/logout", {
@@ -147,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refresh,
         login,
         setupPassword,
+        completeTotpLogin,
         logout,
       }}
     >

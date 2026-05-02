@@ -1,4 +1,5 @@
 import PageHeader from "../components/ui/PageHeader";
+import MfaSection from "./settings/MfaSection";
 
 export default function SettingsPage() {
   return (
@@ -6,17 +7,18 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Konfiguration"
         title="Einstellungen"
-        description="Mandanten-, Benutzer- und Integrationseinstellungen."
+        description="Sicherheit, Profil und Zugangsoptionen fuer dein Konsole-Konto."
       />
-      <div className="flex min-h-[40vh] items-center justify-center border-y border-hair">
-        <div className="max-w-md px-6 py-16 text-center">
-          <p className="font-display text-[20px] tracking-tightish text-ink-900">
-            Workspace
+      <div className="mx-auto mt-8 w-full max-w-3xl space-y-10 px-0 pb-14">
+        <MfaSection />
+        <section className="rounded-xl border border-dashed border-hair bg-white/[0.35] p-8 text-center">
+          <p className="font-display text-[18px] text-ink-800">
+            Weitere Bereiche folgen.
           </p>
-          <p className="mt-2 text-[13px] leading-relaxed text-ink-500">
-            Profile, Team, API-Keys und Integrationen folgen hier.
+          <p className="mt-2 text-[12.5px] text-ink-500">
+            Profilbild und Team koennen spaeter hier ergänzt werden.
           </p>
-        </div>
+        </section>
       </div>
     </>
   );

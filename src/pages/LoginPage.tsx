@@ -13,7 +13,7 @@ import { Logo, LogoMark } from "../components/brand/Logo";
 import { useAuth } from "../lib/auth";
 
 export default function LoginPage() {
-  const { user, loading, login, setupPassword } = useAuth();
+  const { user, loading, login, setupPassword, completeTotpLogin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -24,15 +24,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Wenn der Server „needs-setup" antwortet, halten wir hier den
-  // Setup-Token + Benutzername fest und zeigen das Modal.
   const [setup, setSetup] = useState<
     { token: string; benutzername: string } | null
   >(null);
+  /** Zweiter Login-Schritt: TOTP oder Recovery-Code */
+  const [mfa, setMfa] = useState<{ token: string } | null>(null);
 
   useEffect(() => {
     setError(null);
-  }, [benutzername, password]);
+  }, [benutzername, password, mfa]);
 
   const target = useMemo(() => {
     const from = (location.state as { from?: string } | null)?.from;
@@ -54,6 +54,10 @@ export default function LoginPage() {
     setError(null);
     try {
       const res = await login(benutzername, password);
+      if (res.kind === "needs-totp") {
+        setMfa({ token: res.mfaPendingToken });
+        return;
+      }
       if (res.kind === "needs-setup") {
         setSetup({ token: res.setupToken, benutzername: res.benutzername });
         return;
@@ -231,6 +235,17 @@ export default function LoginPage() {
           }}
         />
       )}
+
+      {mfa && (
+        <TotpChallengeModal
+          onClose={() => setMfa(null)}
+          onDone={async (code) => {
+            await completeTotpLogin(mfa.token, code);
+            setMfa(null);
+            navigate(target, { replace: true });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -402,6 +417,132 @@ function Hero() {
           </span>
           Edge online
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------- TOTP zweiter Schritt nach Login ----------
+
+function TotpChallengeModal({
+  onClose,
+  onDone,
+}: {
+  onClose: () => void;
+  onDone: (code: string) => Promise<void>;
+}) {
+  const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !submitting) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, submitting]);
+
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = code.trim().replace(/\s+/g, "");
+    if (!trimmed) {
+      setError(
+        "Bitte gib den Authenticator-Code oder einen Wiederherstellungscode ein.",
+      );
+      return;
+    }
+    setError(null);
+    setSubmitting(true);
+    try {
+      await onDone(trimmed);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Code konnte nicht geprüft werden",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      className="vh-modal-root fixed inset-0 z-50 grid place-items-center px-4 py-8"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="totp-title"
+    >
+      <button
+        type="button"
+        aria-label="Schließen"
+        onClick={() => !submitting && onClose()}
+        className="vh-modal-backdrop absolute inset-0 cursor-default bg-night-900/55 backdrop-blur-sm"
+      />
+
+      <div className="vh-modal-card relative w-full max-w-[440px] overflow-hidden rounded-xl border border-hair bg-paper shadow-[0_30px_80px_-30px_rgba(15,18,30,0.45)]">
+        <div
+          aria-hidden
+          className="h-[3px] w-full bg-gradient-to-r from-brand-500 via-accent-mint to-accent-mint"
+        />
+
+        <div className="px-7 pt-7 pb-6">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-md bg-ink-900 text-white">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.2em] text-ink-400">
+                Zweifaktor
+              </p>
+              <h2
+                id="totp-title"
+                className="font-display text-[22px] leading-tight tracking-tighter2 text-ink-900"
+              >
+                Code bestätigen
+              </h2>
+            </div>
+          </div>
+
+          <p className="mt-4 text-[13px] leading-relaxed text-ink-500">
+            Gib den 6-stelligen Code aus deiner Authenticator-App ein, oder einen
+            der gespeicherten Wiederherstellungscodes.
+          </p>
+
+          <form onSubmit={onSubmit} className="mt-6 space-y-5" noValidate>
+            <Field
+              id="totp-code"
+              label="Authenticator- oder Recovery-Code"
+              value={code}
+              onChange={setCode}
+              type="text"
+              autoFocus
+              autoComplete="one-time-code"
+              disabled={submitting}
+            />
+            <ErrorMessage message={error} />
+            <button
+              type="submit"
+              disabled={submitting}
+              className="group mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-ink-900 py-[13px] text-[13px] font-medium text-white shadow-sm transition-colors hover:bg-ink-800 disabled:pointer-events-none disabled:opacity-50"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Anmelden
+                  <ArrowRight className="h-4 w-4 opacity-90 transition-transform group-hover:translate-x-0.5" />
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => !submitting && onClose()}
+              className="w-full rounded-md py-2.5 text-[12.5px] text-ink-500 transition-colors hover:text-ink-800"
+            >
+              Zurück
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -39,6 +39,15 @@ CREATE TABLE user (
 );
 ```
 
+**Optional — TOTP (Authenticator-App):** zusätzliche Spalten per Migration [`migrations/001_totp_columns.sql`](migrations/001_totp_columns.sql):
+
+```sql
+ALTER TABLE user ADD COLUMN totp_secret TEXT;
+ALTER TABLE user ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user ADD COLUMN totp_verified_at TEXT;
+ALTER TABLE user ADD COLUMN totp_recovery_hashes TEXT;
+```
+
 > **Sicherheitshinweis:** `password` ist in der aktuellen Implementierung als **Klartext** gespeichert.
 > Für Produktion bitte auf einen Hash (PBKDF2 / Argon2id / bcrypt) umstellen und die Funktion
 > `verifyPassword` in [`functions/_lib/auth.ts`](functions/_lib/auth.ts) entsprechend anpassen.
@@ -130,15 +139,20 @@ Routenstruktur (Auszug):
 | Social Media (Redirect) | `/socialmediamanager` |
 | Docusign (Redirect) | `/docusign` |
 
-Geschützte **SPA-Routen** über [`ProtectedRoute`](src/components/auth/ProtectedRoute.tsx) und gefilterte Navigation; geschützte **API-Aufrufe** über [`functions/api/_middleware.ts`](functions/api/_middleware.ts). Ausnahmen ohne Pfadliste: **`/api/login`**, **`/api/setup-password`**, **`/api/logout`**, sowie **`GET /api/me`** (liefert u. a. `erlaubtePfade`).
+Geschützte **SPA-Routen** über [`ProtectedRoute`](src/components/auth/ProtectedRoute.tsx) und gefilterte Navigation; geschützte **API-Aufrufe** über [`functions/api/_middleware.ts`](functions/api/_middleware.ts). Vor der Session ohne Routenliste: **`/api/login`**, **`/api/login-totp`** (TOTP-Zweitschritt nach Login), **`/api/setup-password`**, **`/api/logout`**. **`GET /api/me`** sowie alle **`/api/mfa/*`** (nur mit gültiger Session, ohne Pfadliste) laden bzw. verwalten den aktuellen User bzw. MFA.
 
 ### API-Routen (Pages Functions)
 
 | Methode | Pfad         | Zweck                                                 |
 |---------|--------------|--------------------------------------------------------|
-| `POST`  | `/api/login` | Body `{benutzername, password}` → setzt Session-Cookie |
+| `POST`  | `/api/login` | Body `{benutzername, password}` → Session oder `{ needsTotp, mfaPendingToken }`, oder Passwort-Setup |
+| `POST`  | `/api/login-totp` | Body `{ mfaPendingToken, code }` → Session nach TOTP oder Recovery-Code |
 | `POST`  | `/api/logout`| Cookie löschen                                         |
 | `GET`   | `/api/me`    | `{ user, erlaubtePfade }` oder `401` / bei D1-Fehler `503` |
+| `GET`   | `/api/mfa/status` | (Login) TOTP-Status |
+| `POST`  | `/api/mfa/enroll-start` | (Login) neues Secret, beginnt Enrollment |
+| `POST`  | `/api/mfa/enroll-confirm` | (Login) Code bestätigen, Recovery-Codes zurück |
+| `POST`  | `/api/mfa/disable` | (Login) MFA mit Passwort deaktivieren |
 | `GET`   | `/api/billing/payment-links` | (Login) Stripe Payment Links listen |
 | `POST`  | `/api/billing/payment-links` | (Login) Payment Link in Stripe anlegen, nur `{"planKey"}`; `stripe_price_id` kommt aus dem Plan-JSON im KV |
 | `POST`  | `/api/billing/payment-link`   | (Login) Metadaten am Payment Link setzen (`price_id` → KV-Key) |

@@ -12,6 +12,7 @@ import {
 /** Keine Session oder kein Zugriffs-Check für diese Routen erforderlich. */
 const PRE_SESSION_PATH = new Set<string>([
   "/api/login",
+  "/api/login-totp",
   "/api/setup-password",
   "/api/logout",
 ]);
@@ -38,6 +39,10 @@ export async function onRequest(context: {
   const user = await getCurrentUser(env, request);
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+
+  if (pathname.startsWith("/api/mfa")) {
+    return next();
   }
 
   if (AUTH_NO_ROUTE_ACL.has(pathname)) {

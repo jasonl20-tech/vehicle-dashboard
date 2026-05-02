@@ -1,5 +1,6 @@
 import {
   buildSessionCookie,
+  createMfaPendingToken,
   createSessionToken,
   createSetupToken,
   jsonResponse,
@@ -31,7 +32,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 
   const row = await env.user
     .prepare(
-      "SELECT id, benutzername, password, active FROM user WHERE benutzername = ?1 LIMIT 1",
+      "SELECT id, benutzername, password, active, totp_enabled, totp_secret FROM user WHERE benutzername = ?1 LIMIT 1",
     )
     .bind(benutzername)
     .first<{
@@ -39,6 +40,8 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       benutzername: string;
       password: string | null;
       active: number;
+      totp_enabled: number | null;
+      totp_secret: string | null;
     }>();
 
   if (!row || row.active !== 1) {
@@ -72,6 +75,17 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     return jsonResponse(
       { error: "Benutzername oder Passwort falsch" },
       { status: 401 },
+    );
+  }
+
+  const totpOn =
+    Number(row.totp_enabled) === 1 &&
+    (row.totp_secret ?? "").trim().length > 0;
+  if (totpOn) {
+    const mfaPendingToken = await createMfaPendingToken(env, row.id);
+    return jsonResponse(
+      { needsTotp: true, mfaPendingToken },
+      { status: 200 },
     );
   }
 
