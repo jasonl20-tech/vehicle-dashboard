@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Search,
   Star,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -182,6 +183,10 @@ export default function ControlPlatformPage() {
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [imagePreview, setImagePreview] = useState<{
+    src: string;
+    title: string;
+  } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -192,6 +197,19 @@ export default function ControlPlatformPage() {
     setOffset(0);
     setSelectedId(null);
   }, [q, viewsMode]);
+
+  useEffect(() => {
+    setImagePreview(null);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (!imagePreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setImagePreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [imagePreview]);
 
   const listUrl = useMemo(
     () =>
@@ -465,11 +483,16 @@ export default function ControlPlatformPage() {
                               : "border border-hair"
                           }`}
                         >
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="group relative flex aspect-[3/2] items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setImagePreview({
+                                src: href,
+                                title: `${rowTitle(row)} · ${slot.raw}`,
+                              })
+                            }
+                            aria-label={`${slot.slug} groß anzeigen`}
+                            className="group relative flex aspect-[3/2] w-full cursor-zoom-in items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
                           >
                             <img
                               src={href}
@@ -516,15 +539,21 @@ export default function ControlPlatformPage() {
                                 </span>
                               : null}
                             </span>
-                          </a>
+                          </button>
                           <div className="flex min-h-[2rem] items-center gap-1 border-t border-hair px-1 py-0.5">
                             <span className="min-w-0 flex-1 truncate font-mono text-[9px] leading-tight text-ink-500">
                               {slot.raw}
                             </span>
-                            <ExternalLink
-                              className="h-3 w-3 shrink-0 text-ink-400"
-                              aria-hidden
-                            />
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 text-ink-400 transition hover:text-ink-700"
+                              aria-label="Bild in neuem Tab öffnen"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
                           </div>
                         </article>
                       </li>
@@ -543,6 +572,61 @@ export default function ControlPlatformPage() {
           </div>
         }
       </section>
+
+      {imagePreview ?
+        <div
+          className="fixed inset-0 z-[90] flex flex-col items-center justify-center p-3 sm:p-6"
+          role="presentation"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-ink-950/88 backdrop-blur-[2px]"
+            aria-label="Schließen"
+            onClick={() => setImagePreview(null)}
+          />
+          <div
+            className="relative z-[91] flex w-full max-w-[min(96vw,1400px)] flex-col gap-2"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Bildvorschau"
+          >
+            <div className="flex items-start justify-between gap-2 px-0.5">
+              <p className="min-w-0 flex-1 truncate text-left font-mono text-[11px] text-white drop-shadow-sm sm:text-[12px]">
+                {imagePreview.title}
+              </p>
+              <div className="flex shrink-0 items-center gap-1">
+                <a
+                  href={imagePreview.src}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 rounded border border-white/30 bg-white/10 px-2 py-1 text-[11px] text-white backdrop-blur-sm transition hover:bg-white/20"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Neuer Tab
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setImagePreview(null)}
+                  className="rounded border border-white/30 bg-white/10 p-1.5 text-white backdrop-blur-sm transition hover:bg-white/20"
+                  aria-label="Schließen"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[min(88vh,900px)] items-center justify-center overflow-auto rounded border border-white/15 bg-ink-900/40 p-2 shadow-2xl ring-1 ring-white/10">
+              <img
+                src={imagePreview.src}
+                alt=""
+                className="max-h-[min(85vh,860px)] max-w-full object-contain"
+              />
+            </div>
+            <p className="text-center text-[10px] text-white/70">
+              ESC oder außen klicken zum Schließen
+            </p>
+          </div>
+        </div>
+      : null}
     </div>
   );
 }
