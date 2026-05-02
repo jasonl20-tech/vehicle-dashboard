@@ -37,7 +37,7 @@ const TILES: PlatformTile[] = [
   {
     title: "Control Platform",
     icon: Gauge,
-    status: "Bald verfügbar",
+    to: "/control-platform",
   },
   {
     title: "Job Manager",

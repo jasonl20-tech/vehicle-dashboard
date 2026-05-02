@@ -5,6 +5,7 @@ import KundenApiPage from "./pages/KundenApiPage";
 import KundenKeysPage, { KundenTestKeysPage } from "./pages/KundenKeysPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControllingPage from "./pages/ControllingPage";
+import ControlPlatformPage from "./pages/ControlPlatformPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
 import OneautoApiPage from "./pages/OneautoApiPage";
@@ -48,6 +49,10 @@ export default function App() {
         <Route index element={<PlatformHomePage />} />
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<OverviewPage />} />
+          <Route
+            path="/control-platform"
+            element={<ControlPlatformPage />}
+          />
           <Route
             path="/ansichten"
             element={<Navigate to="/ansichten/bildaustrahlung" replace />}
