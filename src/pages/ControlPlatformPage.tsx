@@ -661,20 +661,20 @@ export default function ControlPlatformPage() {
         >
           <button
             type="button"
-            className="absolute inset-0 bg-ink-950/88 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-ink-950/90"
             aria-label="Schließen"
             onClick={() => setImagePreview(null)}
           />
           <div
-            className="relative z-[91] flex h-[min(92dvh,92vh)] w-full max-w-[min(98vw,1720px)] flex-col gap-1.5 sm:gap-2"
+            className="relative z-[91] flex h-[min(92dvh,92vh)] w-full max-w-[min(98vw,1720px)] flex-col gap-1.5 rounded-lg border border-ink-700 bg-ink-950 p-2 shadow-2xl sm:gap-2 sm:p-3"
             role="dialog"
             aria-modal="true"
             aria-labelledby="control-platform-preview-title"
           >
-            <div className="flex shrink-0 items-start justify-between gap-2 px-0.5">
+            <div className="flex shrink-0 items-start justify-between gap-2">
               <p
                 id="control-platform-preview-title"
-                className="min-w-0 flex-1 truncate text-left font-mono text-[11px] text-white drop-shadow-sm sm:text-[12px]"
+                className="min-w-0 flex-1 truncate text-left font-mono text-[11px] text-white sm:text-[12px]"
               >
                 {currentPreviewItem.title}
               </p>
@@ -683,7 +683,7 @@ export default function ControlPlatformPage() {
                   href={currentPreviewItem.src}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-0.5 rounded border border-white/30 bg-white/10 px-2 py-1 text-[11px] text-white backdrop-blur-sm transition hover:bg-white/20"
+                  className="inline-flex items-center gap-0.5 rounded border border-ink-600 bg-ink-800 px-2 py-1 text-[11px] text-white transition hover:bg-ink-700"
                 >
                   <ExternalLink className="h-3 w-3" />
                   Neuer Tab
@@ -691,7 +691,7 @@ export default function ControlPlatformPage() {
                 <button
                   type="button"
                   onClick={() => setImagePreview(null)}
-                  className="rounded border border-white/30 bg-white/10 p-1.5 text-white backdrop-blur-sm transition hover:bg-white/20"
+                  className="rounded border border-ink-600 bg-ink-800 p-1.5 text-white transition hover:bg-ink-700"
                   aria-label="Schließen"
                 >
                   <X className="h-4 w-4" />
@@ -701,10 +701,10 @@ export default function ControlPlatformPage() {
 
             <div className="flex min-h-0 flex-1 flex-row gap-2 overflow-hidden sm:gap-3">
               <aside className="flex w-[5.75rem] shrink-0 flex-col gap-1 overflow-hidden sm:w-[6.75rem] md:w-[7.5rem]">
-                <p className="shrink-0 text-[8px] font-medium uppercase leading-tight tracking-[0.12em] text-white/55 sm:text-[9px]">
+                <p className="shrink-0 text-[8px] font-medium uppercase leading-tight tracking-[0.12em] text-zinc-400 sm:text-[9px]">
                   Ansichten ({imagePreviewStripItems.length})
                 </p>
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded border border-white/15 bg-ink-950/55 p-1 ring-1 ring-white/10">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded border border-ink-600 bg-ink-900 p-1">
                   <ul
                     className="flex flex-col gap-1"
                     role="listbox"
@@ -723,11 +723,11 @@ export default function ControlPlatformPage() {
                             title={`${it.raw}`}
                             className={`flex w-full flex-col gap-0.5 rounded border p-1 text-left transition ${
                               selected ?
-                                "border-white/70 bg-white/15 ring-1 ring-white/40"
-                              : "border-white/10 bg-ink-900/35 hover:border-white/25 hover:bg-ink-900/55"
+                                "border-white bg-ink-800"
+                              : "border-ink-700 bg-ink-950 hover:border-ink-500 hover:bg-ink-900"
                             }`}
                           >
-                            <span className="relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded bg-ink-900/70">
+                            <span className="relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded bg-zinc-100">
                               <img
                                 src={it.src}
                                 alt=""
@@ -746,17 +746,17 @@ export default function ControlPlatformPage() {
                             </span>
                             <span className="flex min-h-[10px] flex-wrap gap-0.5">
                               {it.hasTransparencyHint ?
-                                <span className="rounded bg-ink-700/90 px-0.5 py-px font-mono text-[6px] uppercase leading-none text-white/90">
+                                <span className="rounded bg-ink-700 px-0.5 py-px font-mono text-[6px] uppercase leading-none text-white">
                                   trp
                                 </span>
                               : null}
                               {it.hasScalingHint ?
-                                <span className="rounded bg-brand-700/90 px-0.5 py-px font-mono text-[6px] leading-none text-white/90">
+                                <span className="rounded bg-brand-700 px-0.5 py-px font-mono text-[6px] leading-none text-white">
                                   sk
                                 </span>
                               : null}
                               {it.hasShadowHint ?
-                                <span className="rounded bg-ink-600/90 px-0.5 py-px font-mono text-[6px] leading-none text-white/90">
+                                <span className="rounded bg-ink-600 px-0.5 py-px font-mono text-[6px] leading-none text-white">
                                   sh
                                 </span>
                               : null}
@@ -769,8 +769,8 @@ export default function ControlPlatformPage() {
                 </div>
               </aside>
 
-              <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-white/15 bg-ink-900/40 shadow-2xl ring-1 ring-white/10">
-                <div className="flex h-full w-full items-center justify-center overflow-auto p-1 sm:p-2">
+              <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 bg-white shadow-inner">
+                <div className="flex h-full w-full items-center justify-center overflow-auto bg-white p-1 sm:p-2">
                   <img
                     src={currentPreviewItem.src}
                     alt=""
@@ -780,7 +780,7 @@ export default function ControlPlatformPage() {
               </div>
             </div>
 
-            <p className="shrink-0 text-center text-[10px] text-white/70">
+            <p className="shrink-0 text-center text-[10px] text-zinc-400">
               ESC oder außen klicken · Pfeiltasten · Kachel antippen
             </p>
           </div>
