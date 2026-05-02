@@ -8,6 +8,20 @@ function fileExtFromRowFormat(format: string | null | undefined): string {
 }
 
 /**
+ * Dateiname wie im CDN-Pfad (`buildVehicleImageUrl`): vollständiger
+ * `view_token` inkl. `#…`, z. B. `front#skaliert_weiß.png`.
+ */
+export function viewTokenImageFileName(
+  viewToken: string,
+  format: string | null | undefined,
+): string {
+  const ext = fileExtFromRowFormat(format);
+  const view = (viewToken ?? "").trim();
+  if (!view) return `.${ext}`;
+  return `${view}.${ext}`;
+}
+
+/**
  * Letztes Segment: `{view}.{format}` (z. B. `left.png`), danach `?key=…`.
  * `/v1/{format}/{resolution}/marke/…/farbe/left.png?key=…`
  */

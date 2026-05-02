@@ -71,6 +71,7 @@ import {
   parseViewSlot,
   parseViewTokens,
   viewPathSlug,
+  viewTokenImageFileName,
 } from "../lib/vehicleImageryUrl";
 
 const PAGE_SIZE = 50;
@@ -909,7 +910,10 @@ export default function ControlPlatformPage() {
       key: string;
       src: string;
       title: string;
+      /** Basis-Ansicht für Preview-Map / Kurzlabels, z. B. `front`. */
       slotLabel: string;
+      /** CDN-Dateiname inkl. Modifier, z. B. `front#skaliert_weiß.png`. */
+      imageFileLabel: string;
       raw: string;
       /** Status existiert in `controll_status` für (vehicle, view_token, mode). */
       hasStatus: boolean;
@@ -977,11 +981,13 @@ export default function ControlPlatformPage() {
         slot.slug,
       );
       const isMain = isMainViewSlug(slot.slug);
+      const imageFileLabel = viewTokenImageFileName(slot.raw, row.format);
       internal.push({
         key: `${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`,
         src: href,
-        title: `${rowTitle(row)} · ${slot.raw}`,
+        title: `${rowTitle(row)} · ${imageFileLabel}`,
         slotLabel: slot.slug,
+        imageFileLabel,
         raw: slot.raw,
         hasStatus,
         isApproved,
@@ -1732,6 +1738,10 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       firstViewsReady,
                       slot.slug,
                     );
+                    const imageFileLabel = viewTokenImageFileName(
+                      slot.raw,
+                      row.format,
+                    );
                     return (
                       <li
                         key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}
@@ -1778,8 +1788,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             }}
                             aria-label={
                               isFirstViewsLocked
-                                ? `${slot.slug} gesperrt – zuerst Pflicht-Ansichten korrigieren`
-                                : `${slot.slug} groß anzeigen`
+                                ? `${imageFileLabel} gesperrt – zuerst Pflicht-Ansichten korrigieren`
+                                : `${imageFileLabel} groß anzeigen`
                             }
                             className={`group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
                               isFirstViewsLocked
@@ -1789,7 +1799,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                           >
                             <img
                               src={href}
-                              alt={slot.slug}
+                              alt={imageFileLabel}
                               loading="lazy"
                               decoding="async"
                               className={`max-h-full max-w-full object-contain ${
@@ -1820,7 +1830,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                               </span>
                             : null}
                             <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-600">
-                              {slot.slug}
+                              {imageFileLabel}
                             </span>
                             <span className="pointer-events-none absolute right-1 top-1 flex max-w-[60%] flex-wrap justify-end gap-0.5">
                               {isErrored ?
@@ -1869,7 +1879,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                           </button>
                           <div className="flex min-h-[2rem] items-center gap-1 border-t border-hair px-1 py-0.5">
                             <span className="min-w-0 flex-1 truncate font-mono text-[9px] leading-tight text-ink-500">
-                              {slot.raw}
+                              {imageFileLabel}
                             </span>
                             <a
                               href={href}
@@ -1981,7 +1991,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     body: row?.body,
                     trim: row?.trim,
                     farbe: row?.farbe,
-                    ansicht: currentPreviewItem.slotLabel,
+                    ansicht: currentPreviewItem.raw,
                   });
                   const disabled = !q;
                   const href = q ? googleImageSearchUrl(q) : undefined;
@@ -2064,7 +2074,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             aria-selected={selected}
                             ref={selected ? activePreviewThumbRef : undefined}
                             onClick={() => setImagePreview({ index: i })}
-                            title={`${it.raw}`}
+                            title={it.imageFileLabel}
                             className={`flex w-full flex-col gap-0.5 rounded border p-1 text-left transition ${
                               selected ?
                                 "border-white bg-ink-800"
@@ -2104,7 +2114,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                               : null}
                             </span>
                             <span className="truncate px-px font-mono text-[8px] font-medium leading-none text-white sm:text-[9px]">
-                              {it.slotLabel}
+                              {it.imageFileLabel}
                             </span>
                             <span className="flex min-h-[10px] flex-wrap gap-0.5">
                               {it.hasTransparencyHint ?
@@ -2175,7 +2185,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         >
                           <div className="flex items-center justify-between gap-1 border-b border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
                             <span className="font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-800">
-                              Preview · {currentPreviewItem.slotLabel}
+                              Preview · {currentPreviewItem.imageFileLabel}
                             </span>
                           </div>
                           <div className="relative flex flex-1 items-center justify-center bg-zinc-50">
@@ -2196,7 +2206,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 Fehler beim Laden
                               </span>
                             : <span className="px-2 py-3 text-center font-mono text-[10px] text-ink-500">
-                                kein Preview für „{currentPreviewItem.slotLabel}"
+                                kein Preview für „{currentPreviewItem.imageFileLabel}"
                               </span>}
                           </div>
                         </div>
@@ -2205,8 +2215,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                   : null}
                 </div>
 
-                {toolbarDefsVisible.length > 0 ?
-                  <div className="flex shrink-0 flex-col gap-1">
+                <div className="flex shrink-0 flex-col gap-1">
+                  {toolbarDefsVisible.length > 0 ?
                     <div
                       className="flex h-[4.25rem] shrink-0 flex-row items-stretch gap-2"
                       role="toolbar"
@@ -2235,9 +2245,9 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                           >
                             <span className="truncate text-[15px] font-semibold leading-tight sm:text-base">
                               {def.label}
-                              {isBusy ? (
+                              {isBusy ?
                                 <span className="ml-1.5 font-normal text-white/80">…</span>
-                              ) : null}
+                              : null}
                             </span>
                             <span
                               className={`font-mono text-[11px] ${TOOLBAR_HINT_CLASSES[def.color]}`}
@@ -2248,54 +2258,91 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         );
                       })}
                     </div>
-                    <div className="min-h-[1rem]">
-                      {currentPreviewItem.isFirstViewsLocked &&
-                      !currentPreviewItem.hasStatus ?
-                        <p className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-300">
-                          <Lock className="h-3 w-3" />
-                          gesperrt — zuerst die Pflicht-Ansichten korrigieren
-                        </p>
-                      : currentPreviewItem.hasStatus ?
-                        <p
-                          className={`font-mono text-[10px] ${
-                            currentPreviewItem.isErrored
-                              ? "text-red-300"
-                              : currentPreviewItem.isTransferred
-                              ? "text-violet-300"
-                              : currentPreviewItem.isApproved
-                              ? "text-emerald-300"
-                              : currentPreviewItem.isCheckPending
-                              ? "text-zinc-300"
-                              : "text-sky-300"
-                          }`}
-                        >
-                          {currentPreviewItem.isErrored
-                            ? `errored (check ${currentPreviewItem.checkVal})`
-                            : currentPreviewItem.isTransferred
-                            ? "übertragen (check 6)"
-                            : currentPreviewItem.isApproved
-                            ? "done · freigegeben (check 2)"
-                            : currentPreviewItem.isCheckPending
-                            ? "lock · wartet auf Prüfung (check 0)"
-                            : "in Bearbeitung (check 1)"}
-                          {currentPreviewItem.statusValue ?
-                            <> · status: {currentPreviewItem.statusValue}</>
-                          : null}
-                        </p>
-                      : actionError ?
-                        <p className="font-mono text-[10px] text-red-300">
-                          Fehler: {actionError}
-                        </p>
-                      : lastActionToken &&
-                        lastActionToken.raw === currentPreviewItem.raw ?
-                        <p className="font-mono text-[10px] text-emerald-300">
-                          gespeichert: {lastActionToken.status} ·{" "}
-                          {lastActionToken.raw}
-                        </p>
-                      : null}
+                  : null}
+
+                  {imagePreviewStripItems.length > 0 ?
+                    <div
+                      className="max-h-[30vh] shrink-0 overflow-hidden rounded-lg border border-ink-600 bg-ink-900/90"
+                      aria-label="Bild-URLs"
+                    >
+                      <p className="border-b border-ink-700 px-2 py-1 font-mono text-[9px] uppercase tracking-wide text-zinc-400">
+                        Bild-URLs ({imagePreviewStripItems.length})
+                      </p>
+                      <ul className="max-h-[26vh] divide-y divide-ink-800 overflow-y-auto overscroll-contain">
+                        {imagePreviewStripItems.map((it, i) => {
+                          const active = i === previewIndexClamped;
+                          return (
+                            <li
+                              key={it.key}
+                              className={
+                                active ? "bg-ink-800/90 px-2 py-1.5" : "px-2 py-1.5"
+                              }
+                            >
+                              <div className="mb-0.5 font-mono text-[10px] font-medium text-zinc-200">
+                                {it.imageFileLabel}
+                              </div>
+                              <a
+                                href={it.src}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="break-all font-mono text-[9px] leading-snug text-sky-300 underline decoration-sky-600/40 underline-offset-2 hover:text-sky-200"
+                              >
+                                {it.src}
+                              </a>
+                            </li>
+                          );
+                        })}
+                      </ul>
                     </div>
+                  : null}
+
+                  <div className="min-h-[1rem]">
+                    {currentPreviewItem.isFirstViewsLocked &&
+                    !currentPreviewItem.hasStatus ?
+                      <p className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-300">
+                        <Lock className="h-3 w-3" />
+                        gesperrt — zuerst die Pflicht-Ansichten korrigieren
+                      </p>
+                    : currentPreviewItem.hasStatus ?
+                      <p
+                        className={`font-mono text-[10px] ${
+                          currentPreviewItem.isErrored
+                            ? "text-red-300"
+                            : currentPreviewItem.isTransferred
+                            ? "text-violet-300"
+                            : currentPreviewItem.isApproved
+                            ? "text-emerald-300"
+                            : currentPreviewItem.isCheckPending
+                            ? "text-zinc-300"
+                            : "text-sky-300"
+                        }`}
+                      >
+                        {currentPreviewItem.isErrored
+                          ? `errored (check ${currentPreviewItem.checkVal})`
+                          : currentPreviewItem.isTransferred
+                          ? "übertragen (check 6)"
+                          : currentPreviewItem.isApproved
+                          ? "done · freigegeben (check 2)"
+                          : currentPreviewItem.isCheckPending
+                          ? "lock · wartet auf Prüfung (check 0)"
+                          : "in Bearbeitung (check 1)"}
+                        {currentPreviewItem.statusValue ?
+                          <> · status: {currentPreviewItem.statusValue}</>
+                        : null}
+                      </p>
+                    : actionError ?
+                      <p className="font-mono text-[10px] text-red-300">
+                        Fehler: {actionError}
+                      </p>
+                    : lastActionToken &&
+                      lastActionToken.raw === currentPreviewItem.raw ?
+                      <p className="font-mono text-[10px] text-emerald-300">
+                        gespeichert: {lastActionToken.status} ·{" "}
+                        {lastActionToken.raw}
+                      </p>
+                    : null}
                   </div>
-                : null}
+                </div>
               </div>
             </div>
 
