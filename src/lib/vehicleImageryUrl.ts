@@ -39,3 +39,31 @@ export function parseViewTokens(views: string | null | undefined): string[] {
     .map((s) => s.trim())
     .filter(Boolean);
 }
+
+/** Dateiname-Basis ohne Modifier nach `#` (z. B. `right` aus `right#trp`). */
+export function viewPathSlug(raw: string): string {
+  const t = (raw ?? "").trim();
+  const i = t.indexOf("#");
+  return (i === -1 ? t : t.slice(0, i)).trim() || t;
+}
+
+/** Eine gespeicherte View-Zeichenkette (z. B. `rear_left#trp`) für die UI. */
+export function parseViewSlot(raw: string): {
+  raw: string;
+  slug: string;
+  /** `true`, wenn Modifier `trp` vorkommt (z. B. Transparenz-Hinweis). */
+  hasTransparencyHint: boolean;
+} {
+  const t = (raw ?? "").trim();
+  const i = t.indexOf("#");
+  if (i === -1) {
+    return { raw: t, slug: t, hasTransparencyHint: false };
+  }
+  const slug = t.slice(0, i).trim();
+  const mods = t.slice(i + 1).trim().toLowerCase();
+  return {
+    raw: t,
+    slug: slug || t,
+    hasTransparencyHint: mods.includes("trp"),
+  };
+}
