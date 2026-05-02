@@ -11,6 +11,7 @@ import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext
 import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
+  VEHICLE_IMAGERY_CONTROLLING_API,
   type VehicleImageryListResponse,
   type VehicleImageryOneResponse,
   vehicleImageryListUrl,
@@ -103,13 +104,16 @@ export default function ControlPlatformPage() {
 
   const listUrl = useMemo(
     () =>
-      vehicleImageryListUrl({
-        q,
-        limit: PAGE_SIZE,
-        offset,
-        active: "1",
-        views_mode: viewsMode,
-      }),
+      vehicleImageryListUrl(
+        {
+          q,
+          limit: PAGE_SIZE,
+          offset,
+          active: "1",
+          views_mode: viewsMode,
+        },
+        VEHICLE_IMAGERY_CONTROLLING_API,
+      ),
     [q, offset, viewsMode],
   );
   const listApi = useApi<VehicleImageryListResponse>(listUrl);
@@ -126,7 +130,7 @@ export default function ControlPlatformPage() {
 
   const detailUrl = useMemo(() => {
     if (selectedId == null || selectedId < 1) return null;
-    return vehicleImageryOneUrl(selectedId);
+    return vehicleImageryOneUrl(selectedId, VEHICLE_IMAGERY_CONTROLLING_API);
   }, [selectedId]);
   const detailApi = useApi<VehicleImageryOneResponse>(detailUrl);
 
@@ -264,11 +268,15 @@ export default function ControlPlatformPage() {
                   </p>
                   <p className="mt-1 text-[10px] text-ink-500">
                     Aktualisiert {fmtWhen(row.last_updated)}
-                    <span className="mx-1 text-ink-300">·</span>
-                    genehmigt{" "}
-                    <span className="font-mono">
-                      {row.genehmigt === 1 ? "ja" : "nein"}
-                    </span>
+                    {"genehmigt" in row && row.genehmigt !== undefined ? (
+                      <>
+                        <span className="mx-1 text-ink-300">·</span>
+                        genehmigt{" "}
+                        <span className="font-mono">
+                          {row.genehmigt === 1 ? "ja" : "nein"}
+                        </span>
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 <Link

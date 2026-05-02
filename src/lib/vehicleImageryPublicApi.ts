@@ -1,5 +1,9 @@
 export const VEHICLE_IMAGERY_API = "/api/databases/vehicle-imagery";
 
+/** Control Platform: D1-Tabelle `vehicleimagery_controlling_storage` (ohne `genehmigt`). */
+export const VEHICLE_IMAGERY_CONTROLLING_API =
+  "/api/databases/vehicle-imagery-controlling";
+
 export const VEHICLE_IMAGERY_STATUS_API =
   "/api/databases/vehicle-imagery-status";
 
@@ -20,7 +24,8 @@ export type VehicleImageryPublicRow = VehicleImageryRowLike & {
   sonstiges: string | null;
   active: number | null;
   last_updated: string | null;
-  genehmigt: number | null;
+  /** Nur bei `vehicleimagery_public_storage`; Controlling-Zeilen ohne dieses Feld. */
+  genehmigt?: number | null;
 };
 
 export type VehicleImageryListResponse = {
@@ -64,8 +69,11 @@ export type VehicleImageryListParams = {
   updated_to?: string;
 };
 
-export function vehicleImageryListUrl(p: VehicleImageryListParams): string {
-  const u = new URL(VEHICLE_IMAGERY_API, "https://x");
+export function vehicleImageryListUrl(
+  p: VehicleImageryListParams,
+  apiPath: string = VEHICLE_IMAGERY_API,
+): string {
+  const u = new URL(apiPath, "https://x");
   u.searchParams.set("limit", String(p.limit));
   u.searchParams.set("offset", String(p.offset));
   if (p.q.trim()) u.searchParams.set("q", p.q.trim());
@@ -93,8 +101,11 @@ export function vehicleImageryListUrl(p: VehicleImageryListParams): string {
   return u.pathname + u.search;
 }
 
-export function vehicleImageryOneUrl(id: number): string {
-  const u = new URL(VEHICLE_IMAGERY_API, "https://x");
+export function vehicleImageryOneUrl(
+  id: number,
+  apiPath: string = VEHICLE_IMAGERY_API,
+): string {
+  const u = new URL(apiPath, "https://x");
   u.searchParams.set("id", String(id));
   return u.pathname + u.search;
 }

@@ -98,7 +98,7 @@ export interface AuthEnv {
    */
   blocked_vehicles?: KVNamespace;
   /**
-   * D1: Fahrzeug-/Bild-Metadaten (z. B. Tabelle `vehicleimagery_public_storage`). Nur SELECT im Code.
+   * D1: Fahrzeug-/Bild-Metadaten u. a. `vehicleimagery_public_storage`, `vehicleimagery_controlling_storage`.
    * Binding-Name im Dashboard: `vehicledatabase` → `env.vehicledatabase`
    */
   vehicledatabase?: D1Database;
