@@ -70,19 +70,19 @@ function rowSubtitle(r: {
   return parts.length ? parts.join(" · ") : "—";
 }
 
-/** Zeigt im aktuellen Modus nur passende View-Tokens. */
+/**
+ * Welche View-Tokens werden im aktuellen Modus als Kachel angezeigt?
+ * - Korrektur: nur Tokens **ohne** `#`-Modifier (keine `#trp`/`#skaliert`/`#shadow`).
+ * - Transparenz / Skalierung / Schatten: vorerst **alle** Tokens (Detail-Filter folgt später).
+ */
 function tokenMatchesMode(
   token: string,
   mode: ControlPlatformViewsMode,
 ): boolean {
+  if (mode !== "korrektur") return true;
   const s = parseViewSlot(token);
-  if (mode === "transparenz") return s.hasTransparencyHint;
-  if (mode === "skalierung") return s.hasScalingHint;
-  if (mode === "schatten") return s.hasShadowHint;
   return (
-    !s.hasTransparencyHint &&
-    !s.hasScalingHint &&
-    !s.hasShadowHint
+    !s.hasTransparencyHint && !s.hasScalingHint && !s.hasShadowHint
   );
 }
 

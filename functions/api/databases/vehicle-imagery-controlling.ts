@@ -114,22 +114,6 @@ function isViewsMode(s: string): s is ViewsMode {
   return (VIEWS_MODES as readonly string[]).includes(s);
 }
 
-function viewsModeWhereSql(mode: ViewsMode): { clause: string; binds: string[] } {
-  const v = "lower(ifnull(views, ''))";
-
-  if (mode === "transparenz") {
-    return { clause: `${v} LIKE ?`, binds: ["%#trp%"] };
-  }
-  if (mode === "skalierung") {
-    return { clause: `${v} LIKE ?`, binds: ["%#skaliert%"] };
-  }
-  if (mode === "schatten") {
-    return { clause: `${v} LIKE ?`, binds: ["%#shadow%"] };
-  }
-  /* Korrektur: Zeilen mit *irgendeinem* `#`-Modifier in `views` ausblenden. */
-  return { clause: `${v} NOT LIKE ?`, binds: ["%#%"] };
-}
-
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
   env,
@@ -250,6 +234,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     binds.push(Number(filterJahr));
   }
 
+  /*
+   * `views_mode` wird derzeit auf Server-Seite **nicht** in einen WHERE-Filter umgesetzt.
+   * Alle Fahrzeuge sollen in jedem Modus auftauchen; pro Modus filtert das Frontend
+   * lediglich, welche `views`-Tokens als Kacheln erscheinen (Korrektur: ohne `#`).
+   * Validierung bleibt für API-Konsistenz erhalten.
+   */
   const viewsModeRaw = (url.searchParams.get("views_mode") || "")
     .trim()
     .toLowerCase();
@@ -261,11 +251,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       },
       { status: 400 },
     );
-  }
-  if (viewsModeRaw) {
-    const ex = viewsModeWhereSql(viewsModeRaw);
-    where.push(`(${ex.clause})`);
-    binds.push(...ex.binds);
   }
 
   for (const pat of searchTokens) {

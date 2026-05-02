@@ -128,23 +128,6 @@ function isViewsMode(s: string): s is ViewsMode {
   return (VIEWS_MODES as readonly string[]).includes(s);
 }
 
-/** SQL-Fragment + Bindings für gültiges `views_mode`. */
-function viewsModeWhereSql(mode: ViewsMode): { clause: string; binds: string[] } {
-  const v = "lower(ifnull(views, ''))";
-
-  if (mode === "transparenz") {
-    return { clause: `${v} LIKE ?`, binds: ["%#trp%"] };
-  }
-  if (mode === "skalierung") {
-    return { clause: `${v} LIKE ?`, binds: ["%#skaliert%"] };
-  }
-  if (mode === "schatten") {
-    return { clause: `${v} LIKE ?`, binds: ["%#shadow%"] };
-  }
-  /* Korrektur: Zeilen mit irgendeinem `#`-Modifier in `views` ausblenden. */
-  return { clause: `${v} NOT LIKE ?`, binds: ["%#%"] };
-}
-
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
   env,
@@ -280,6 +263,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     binds.push(Number(filterJahr));
   }
 
+  /*
+   * `views_mode` wird derzeit nicht mehr serverseitig gefiltert (alle Zeilen pro Modus).
+   * Validierung bleibt aus API-Kompatibilitätsgründen.
+   */
   const viewsModeRaw = (url.searchParams.get("views_mode") || "")
     .trim()
     .toLowerCase();
@@ -291,11 +278,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       },
       { status: 400 },
     );
-  }
-  if (viewsModeRaw) {
-    const ex = viewsModeWhereSql(viewsModeRaw);
-    where.push(`(${ex.clause})`);
-    binds.push(...ex.binds);
   }
 
   /* Pro Suchwort: irgendein passendes Feld; alle Wörter müssen (AND) erfüllt sein. */
