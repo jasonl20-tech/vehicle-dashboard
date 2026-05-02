@@ -21,7 +21,8 @@ Repository: [`jasonl20-tech/vehicle-dashboard`](https://github.com/jasonl20-tech
 - **D1-Database-Binding:** `user`  ← Variable-Name in den Functions: `env.user`
 - **KV-Namespace-Binding (Zahlungslinks / Pläne):** Variable **`plans`** → verweist auf `env.plans` in den Functions (Plan-JSON pro Key, Koppelung an Stripe Payment Link Metadaten `price_id`)
 - **Environment Variable (Production + Preview):** `SESSION_SECRET` (mind. 16 Zeichen, am besten 64 zufällige Bytes hex)
-- **`password_secret`:** Pepper für PBKDF2-SHA256 in `user.password` ([`functions/_lib/passwordHash.ts`](functions/_lib/passwordHash.ts)); in Cloudflare als Variable genau so angelegt (`env.password_secret`). **Mind. 16 Zeichen**, derselbe Wert auf allen Instanzen mit derselben `user`‑D1. Optional zusätzlich **`PASSWORD_SECRET`** (wird nur genutzt, wenn `password_secret` fehlt oder zu kurz ist).
+- **`password_secret`:** Pepper für PBKDF2-SHA256 in `user.password` ([`functions/_lib/passwordHash.ts`](functions/_lib/passwordHash.ts)); in Cloudflare **Pages** unter **Workers & Pages → dein Pages-Projekt → Settings → Environment variables** für **Production** und ggf. **Preview** als **Variable** oder **Secret** eintragen (`env.password_secret`). **Mind. 16 Zeichen** (nach Leerzeichen-`trim()`). Gleicher Wert auf allen Deployments mit derselben `user`‑D1. Fallback: **`PASSWORD_SECRET`**, wenn `password_secret` fehlt oder zu kurz ist. Nur Variablen am **gleichen Pages-Projekt** wie diese App erreichen die **Pages Functions**; eine reine Workers-Konfiguration ohne Pages reicht dort nicht.
+
 - **Secret (ebenfalls Production + Preview):** `STRIPE_SECRET_KEY` = `sk_live_…` bzw. `sk_test_…` (nur serverseitig; kein `pk_` im Frontend nötig für diese Seite)
 
 ### Tabelle `user`

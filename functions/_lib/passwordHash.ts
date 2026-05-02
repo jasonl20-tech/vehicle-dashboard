@@ -23,16 +23,63 @@ const PEPPER_MARKER = "\0vehicleimagery-password-v1\0";
 /** Mindestlänge des Pepper gleiche Philosophie wie `SESSION_SECRET` im Projekt */
 const PEPPER_MIN_LEN = 16;
 
-function normalizePepper(env: Pick<AuthEnv, "PASSWORD_SECRET" | "password_secret">): string {
-  // Primär: env.password_secret (Cloudflare-Variable). Fallback: PASSWORD_SECRET.
-  const lowercase =
-    typeof env.password_secret === "string" ? env.password_secret.trim() : "";
-  const uppercase =
-    typeof env.PASSWORD_SECRET === "string" ? env.PASSWORD_SECRET.trim() : "";
-  const pepper =
-    (lowercase.length >= PEPPER_MIN_LEN ? lowercase : "") ||
-    (uppercase.length >= PEPPER_MIN_LEN ? uppercase : "");
-  return pepper;
+/** Stabiler Vergleichwert wenn `catch` zwischen Modulgrenzen läuft */
+export const PASSWORD_SECRET_MISSING_MESSAGE = "password_secret_not_configured";
+
+function coerceTrimmedSecret(val: unknown): string | undefined {
+  if (typeof val !== "string") return undefined;
+  const t = val.trim().replaceAll("\uFEFF", "");
+  return t.length ? t : undefined;
+}
+
+/** Normalisiert Workers/Pages-Variablennamen (z.B. PASSWORD_SECRET, password-secret). */
+function canonicalPasswordSecretKey(localName: string): string {
+  return localName.replaceAll("-", "_").toLowerCase();
+}
+
+/**
+ * Liest Pepper aus `env`: zuerst exakte Felder wie `password_secret`, dann jeder **eigene**
+ * Property-Key, der nach Normalisierung `password_secret` entspricht.
+ * Workers/Pages können Keys unterschiedlich injizieren; `Reflect.ownKeys` erfasst auch
+ * nicht-enumerable Einträge, die `for...in` verpassen kann.
+ */
+function resolvePasswordSecretPepper(env: AuthEnv): string {
+  const r = env as unknown as Record<string, unknown>;
+  const tryKey = (k: string): string | undefined => coerceTrimmedSecret(r[k]);
+
+  for (const k of ["password_secret", "PASSWORD_SECRET", "passwordSecret"]) {
+    const v = tryKey(k);
+    if (v && v.length >= PEPPER_MIN_LEN) return v;
+  }
+
+  const own = new Set<string>();
+  for (const key of Reflect.ownKeys(r)) {
+    if (typeof key !== "string") continue;
+    const n = canonicalPasswordSecretKey(key);
+    own.add(key);
+    if (n !== "password_secret") continue;
+    const v = tryKey(key);
+    if (v && v.length >= PEPPER_MIN_LEN) return v;
+  }
+
+  for (const k of ["password_secret", "PASSWORD_SECRET"]) {
+    const pv = coerceTrimmedSecret(r[k]);
+    if (pv !== undefined && pv.length > 0 && pv.length < PEPPER_MIN_LEN) {
+      console.warn(
+        `[password] Umgebungsvariable »${k}« ist nach trim nur ${pv.length} Zeichen lang (${PEPPER_MIN_LEN} erforderlich).`,
+      );
+    }
+  }
+
+  console.warn(
+    "[password] password_secret nicht nutzbar. String-Env-Keys (nur Namen, für Diagnose):",
+    [...own.values()]
+      .filter((k) => coerceTrimmedSecret(r[k]))
+      .filter((k) => /pass|pwd|secret|pepper/i.test(k))
+      .sort()
+      .join(", ") || "(keine oder nur Non-Strings)",
+  );
+  return "";
 }
 
 function timingSafeEqBytes(a: Uint8Array, b: Uint8Array): boolean {
@@ -131,12 +178,12 @@ function parseStoredHash(stored: string): null | {
  * @throws Error wenn kein gültiges Pepper gesetzt ist
  */
 export async function hashPasswordForStorage(
-  env: Pick<AuthEnv, "PASSWORD_SECRET" | "password_secret">,
+  env: AuthEnv,
   plaintext: string,
 ): Promise<string> {
-  const pepper = normalizePepper(env);
+  const pepper = resolvePasswordSecretPepper(env);
   if (!pepper) {
-    throw new Error("password_secret_not_configured");
+    throw new Error(PASSWORD_SECRET_MISSING_MESSAGE);
   }
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const dk = await deriveV1({
@@ -163,7 +210,7 @@ export type StoredPasswordVerification = {
  * Vergleicht User-Eingabe mit DB-Wert. Unterstützt `v1|…|` und Legacy-Klartext.
  */
 export async function verifyStoredPassword(
-  env: Pick<AuthEnv, "PASSWORD_SECRET" | "password_secret">,
+  env: AuthEnv,
   plaintext: string,
   storedTrimmed: string,
 ): Promise<StoredPasswordVerification> {
@@ -171,10 +218,10 @@ export async function verifyStoredPassword(
 
   const parsed = parseStoredHash(trimmed);
   if (parsed) {
-    const pepper = normalizePepper(env);
+    const pepper = resolvePasswordSecretPepper(env);
     if (!pepper) {
       console.warn(
-        "[password] PBKDF2-Hash vorhanden, aber password_secret (mind. 16 Zeichen) fehlt.",
+        "[password] PBKDF2-Hash vorhanden, aber password_secret (mind. 16 Zeichen, env) wird nicht gefunden.",
       );
       return { ok: false, needsLegacyRehash: false };
     }
@@ -192,7 +239,7 @@ export async function verifyStoredPassword(
   if (!legacyOk) {
     return { ok: false, needsLegacyRehash: false };
   }
-  const pepper = normalizePepper(env);
+  const pepper = resolvePasswordSecretPepper(env);
   return {
     ok: true,
     needsLegacyRehash: Boolean(pepper),

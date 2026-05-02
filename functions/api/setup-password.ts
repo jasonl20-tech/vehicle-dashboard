@@ -5,7 +5,7 @@ import {
   verifySetupToken,
   type AuthEnv,
 } from "../_lib/auth";
-import { hashPasswordForStorage } from "../_lib/passwordHash";
+import { hashPasswordForStorage, PASSWORD_SECRET_MISSING_MESSAGE } from "../_lib/passwordHash";
 
 const MIN_LENGTH = 8;
 
@@ -71,14 +71,22 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   let hashed: string;
   try {
     hashed = await hashPasswordForStorage(env, password);
-  } catch {
-    console.error("[setup-password] password_secret fehlt oder zu kurz (<16 Zeichen)");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === PASSWORD_SECRET_MISSING_MESSAGE) {
+      console.error("[setup-password] password_secret/fehlend – siehe Cloudflare Logs + README (Pages-Umgebung)");
+      return jsonResponse(
+        {
+          error:
+            "Der Server kann das Passwort derzeit nicht sicher speichern. Lege im **gleichen Cloudflare Pages-Projekt** (Production und ggf. Preview) die Variable **password_secret** als Text oder Secret mit mind. 16 Zeichen an. Ohne diese Variable erreichen Functions das Secret nicht.",
+        },
+        { status: 503 },
+      );
+    }
+    console.error("[setup-password] hashing fehlgeschlagen:", e);
     return jsonResponse(
-      {
-        error:
-          "Der Server kann das Passwort derzeit nicht sicher speichern. `password_secret` (mind. 16 Zeichen, env) muss gesetzt sein.",
-      },
-      { status: 503 },
+      { error: "Passwort konnte aus technischen Gründen nicht verarbeitet werden." },
+      { status: 500 },
     );
   }
 
