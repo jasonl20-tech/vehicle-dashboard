@@ -14,7 +14,7 @@ import {
   View,
   Wallet,
 } from "lucide-react";
-import { pathMatchesPfadliste } from "../../lib/routeAccess";
+import { pathDirectlyAllowed } from "../../lib/routeAccess";
 
 export type NavChild = { label: string; to: string; end?: boolean };
 export type NavItem = {
@@ -157,7 +157,7 @@ export function flattenNav(items: NavItem[] = [...NAV_PRIMARY, ...NAV_FOOTER]): 
   return out;
 }
 
-/** Sidebar: Untereinträge bzw. Top-Level nur anzeigen, wenn Routen-Recht besteht. */
+/** Sidebar: Untereinträge bzw. Top-Level nur anzeigen, wenn ein direktes Recht besteht. */
 export function filterNavByAccess(
   items: NavItem[],
   erlaubtePfade: readonly string[],
@@ -166,14 +166,33 @@ export function filterNavByAccess(
   for (const it of items) {
     if (it.children) {
       const children = it.children.filter((c) =>
-        pathMatchesPfadliste(c.to, erlaubtePfade),
+        pathDirectlyAllowed(c.to, erlaubtePfade),
       );
       if (children.length > 0) {
         next.push({ ...it, children });
       }
-    } else if (it.to && pathMatchesPfadliste(it.to, erlaubtePfade)) {
+    } else if (it.to && pathDirectlyAllowed(it.to, erlaubtePfade)) {
       next.push(it);
     }
   }
   return next;
+}
+
+/**
+ * Erste tatsächlich erlaubte Navigationsroute (für Plattform-Kachel
+ * „Dashboard" als Einstiegspunkt).
+ */
+export function firstAllowedNavRoute(
+  items: NavItem[],
+  erlaubtePfade: readonly string[],
+): string | null {
+  for (const it of items) {
+    if (it.to && pathDirectlyAllowed(it.to, erlaubtePfade)) return it.to;
+    if (it.children) {
+      for (const c of it.children) {
+        if (pathDirectlyAllowed(c.to, erlaubtePfade)) return c.to;
+      }
+    }
+  }
+  return null;
 }

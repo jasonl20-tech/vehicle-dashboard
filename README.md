@@ -61,10 +61,43 @@ CREATE INDEX IF NOT EXISTS idx_sicherheitsstufen_stufe ON sicherheitsstufen (sic
 
 Whitelist-Modus: Sind für eine `sicherheitsstufe_id` **keine** Zeilen hinterlegt, gibt es **keinen** Zugriff auf irgendeine Route. Plattform-Start (`/`) bleibt sichtbar – damit ein User mit fehlenden Rechten zumindest abmelden kann.
 
-Beispiel „Stufe 0 darf alles“:
+#### Eltern-Pfad als „Transit"
+
+Damit Index-Redirects funktionieren (z. B. `/kunden` → `/kunden/anfragen`, `/ansichten` → `/ansichten/bildaustrahlung`), gilt **nur im Frontend** (`ProtectedRoute`):
+
+> Hat ein User **irgendeinen** erlaubten Pfad **unterhalb** von `X` (z. B. `/X/foo` oder `/X/*`), darf er auch `X` aufrufen – aber nur als Durchgang. In Sidebar, Befehlspalette und Plattform-Kacheln werden Pfade weiterhin **direkt** ausgewertet, damit dort nichts „Leeres" auftaucht.
+
+In der API-Middleware gibt es **kein** Transit; jede `/api/...`-Route muss explizit erlaubt sein.
+
+#### Plattform-Kachel „Dashboard"
+
+Die Dashboard-Kachel auf der Startseite wird angezeigt, sobald **mindestens ein** Sidebar-Eintrag erlaubt ist. Klick landet auf der ersten erlaubten Route in der Reihenfolge der Navigation – also automatisch z. B. `/kunden/anfragen`, wenn `/dashboard` selbst nicht freigegeben ist.
+
+#### Beispiele
+
+Stufe 0 darf alles:
 
 ```sql
 INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES (0, '*');
+```
+
+Stufe 2 sieht nur Kundenmanagement und benötigte APIs:
+
+```sql
+INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
+  (2, '/kunden/*'),
+  (2, '/api/crm/*'),
+  (2, '/api/customers/*'),
+  (2, '/api/website/submissions'),
+  (2, '/api/website/trial-submissions');
+```
+
+Stufe 3 nur eine konkrete Unterseite:
+
+```sql
+INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
+  (3, '/kunden/anfragen'),
+  (3, '/api/website/submissions');
 ```
 
 Geschützte **SPA-Routen** über [`ProtectedRoute`](src/components/auth/ProtectedRoute.tsx) und gefilterte Navigation; geschützte **API-Aufrufe** über [`functions/api/_middleware.ts`](functions/api/_middleware.ts). Ausnahmen ohne Pfadliste: **`/api/login`**, **`/api/setup-password`**, **`/api/logout`**, sowie **`GET /api/me`** (liefert u. a. `erlaubtePfade`).

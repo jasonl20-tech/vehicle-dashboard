@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
-import { pathMatchesPfadliste } from "../lib/routeAccess";
+import { pathDirectlyAllowed } from "../lib/routeAccess";
 import { flattenNav, type FlatRoute } from "./layout/navConfig";
 
 type Props = {
@@ -28,7 +28,7 @@ export default function CommandPalette({ open, onClose }: Props) {
 
   const all = useMemo<FlatRoute[]>(() => {
     return flattenNav().filter((r) =>
-      pathMatchesPfadliste(r.to, erlaubtePfade),
+      pathDirectlyAllowed(r.to, erlaubtePfade),
     );
   }, [erlaubtePfade]);
 

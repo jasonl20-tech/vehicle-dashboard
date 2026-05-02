@@ -14,16 +14,30 @@ import {
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Logo } from "../components/brand/Logo";
+import {
+  NAV_FOOTER,
+  NAV_PRIMARY,
+  firstAllowedNavRoute,
+} from "../components/layout/navConfig";
 import { useAuth } from "../lib/auth";
-import { pathMatchesPfadliste } from "../lib/routeAccess";
+import { pathDirectlyAllowed } from "../lib/routeAccess";
 
 type PlatformTile = {
   title: string;
   icon: LucideIcon;
-  /** Pflicht: Pfad für Sicherheitsstufen-Filter und Routing. */
+  /**
+   * Konkrete Zielroute (Pflicht). Sichtbarkeit entscheidet `to` direkt
+   * außer `area` ist gesetzt – dann zählt mindestens ein erlaubter Pfad daraus.
+   */
   to: string;
   /** Wenn gesetzt → Kachel sichtbar, aber nicht klickbar. */
   status?: string;
+  /**
+   * Optional: Sammel-Bereich (z. B. „Dashboard" enthält alle Sidebar-Routen).
+   * Sichtbar, sobald ein Pfad daraus erlaubt ist; Klick landet auf dem ersten
+   * erlaubten Pfad innerhalb dieses Bereichs.
+   */
+  area?: "dashboard";
 };
 
 const TILES: PlatformTile[] = [
@@ -31,6 +45,7 @@ const TILES: PlatformTile[] = [
     title: "Dashboard",
     icon: LayoutDashboard,
     to: "/dashboard",
+    area: "dashboard",
   },
   {
     title: "Content Management System",
@@ -80,10 +95,23 @@ const TILES: PlatformTile[] = [
 export default function PlatformHomePage() {
   const { user, logout, erlaubtePfade } = useAuth();
 
-  const sichtbareTiles = useMemo(
-    () => TILES.filter((t) => pathMatchesPfadliste(t.to, erlaubtePfade)),
-    [erlaubtePfade],
-  );
+  const dashboardEntry = useMemo(() => {
+    if (pathDirectlyAllowed("/dashboard", erlaubtePfade)) return "/dashboard";
+    return firstAllowedNavRoute(
+      [...NAV_PRIMARY, ...NAV_FOOTER],
+      erlaubtePfade,
+    );
+  }, [erlaubtePfade]);
+
+  const sichtbareTiles = useMemo<PlatformTile[]>(() => {
+    return TILES.flatMap<PlatformTile>((t) => {
+      if (t.area === "dashboard") {
+        if (!dashboardEntry) return [];
+        return [{ ...t, to: dashboardEntry }];
+      }
+      return pathDirectlyAllowed(t.to, erlaubtePfade) ? [t] : [];
+    });
+  }, [erlaubtePfade, dashboardEntry]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-paper text-ink-900">
