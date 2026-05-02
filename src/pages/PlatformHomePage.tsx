@@ -7,6 +7,7 @@ import {
   LogOut,
   Send,
   Settings,
+  Shield,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -62,6 +63,11 @@ const TILES: PlatformTile[] = [
     title: "User Settings",
     icon: Settings,
     to: "/settings",
+  },
+  {
+    title: "Admin Settings",
+    icon: Shield,
+    status: "Bald verfügbar",
   },
 ];
 
