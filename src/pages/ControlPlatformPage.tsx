@@ -324,6 +324,11 @@ type ViewGridEntry = {
   tokenSecondary?: string | null;
   col: number;
   row: number;
+  /**
+   * Zusätzliche Ansichten (z. B. mehrere Kamerawinkel oder Duplikat-Slug):
+   * 4. Spalte im Raster, keine `first_views`-Sperre — gleiches Status-/Toolbar-Verhalten wie Standard-Slots.
+   */
+  supplemental?: boolean;
 };
 
 /** Hauptansicht (front/rear/right/left, slug-Vergleich, case-insensitive). */
@@ -336,8 +341,9 @@ function normalizeSlug(x: string): string {
 }
 
 /**
- * Feste Positionen für Standard-Ansichten; unbekannte/zusätzliche Ansichten hängen hinten an.
- * Im Skalierungs-Modus: ein Raster-Eintrag pro Basis-Slug (skaliert + skaliert_weiß gekoppelt).
+ * Feste Positions-Spalten 1–3 für das Standard‑Umrisslayout; zusätzliche
+ * Ansichten (weitere Basis-Slots, Duplikate eines Slugs, Zusatzwinkel) in
+ * **Spalte 4**, untereinander — Korrektur und Skalierung gleicher Ansatz.
  */
 function buildViewGridEntries(
   tokens: string[],
@@ -373,6 +379,7 @@ function buildViewGridEntries(
         tokenSecondary: secondary,
         col: slot.col,
         row: slot.row,
+        supplemental: false,
       };
     });
 
@@ -391,8 +398,9 @@ function buildViewGridEntries(
         slotSlug: slug,
         token: primary,
         tokenSecondary: secondary,
-        col: (idx % 3) + 1,
-        row: 4 + Math.floor(idx / 3),
+        col: 4,
+        row: 1 + idx,
+        supplemental: true,
       };
     });
 
@@ -400,6 +408,7 @@ function buildViewGridEntries(
   }
 
   const slotToToken = new Map<string, string>();
+  /** Mehrere Basis-Tokens gleichen Standardslugs oder Zusatzwinkel → 4. Spalte */
   const extraTokens: string[] = [];
 
   for (const token of tokens) {
@@ -412,15 +421,19 @@ function buildViewGridEntries(
   }
 
   const fixed = FIXED_VIEW_SLOT_LAYOUT.map((slot) => ({
-    ...slot,
+    slotSlug: slot.slotSlug,
     token: slotToToken.get(slot.slotSlug) ?? null,
+    col: slot.col,
+    row: slot.row,
+    supplemental: false,
   }));
 
   const extras = extraTokens.map((token, idx) => ({
     slotSlug: normalizeSlug(viewPathSlug(token)),
     token,
-    col: (idx % 3) + 1,
-    row: 4 + Math.floor(idx / 3),
+    col: 4,
+    row: 1 + idx,
+    supplemental: true,
   }));
 
   return [...fixed, ...extras];
@@ -953,6 +966,16 @@ export default function ControlPlatformPage() {
     [filteredViewTokens, viewsMode],
   );
 
+  const gridHasSupplementalColumn = useMemo(
+    () => viewGridEntries.some((e) => e.supplemental),
+    [viewGridEntries],
+  );
+
+  const gridGalleryClassName =
+    gridHasSupplementalColumn ?
+      "grid grid-cols-[repeat(4,minmax(8rem,11rem))] gap-2 sm:grid-cols-[repeat(4,minmax(9rem,12rem))] lg:grid-cols-[repeat(4,minmax(10rem,13rem))]"
+    : "grid grid-cols-[repeat(3,minmax(9rem,11rem))] gap-2 sm:grid-cols-[repeat(3,minmax(10rem,12rem))] lg:grid-cols-[repeat(3,minmax(12rem,14rem))]";
+
   const statusMap = useMemo(
     () => buildStatusMap(detailApi.data?.statuses),
     [detailApi.data?.statuses],
@@ -1133,11 +1156,14 @@ export default function ControlPlatformPage() {
           )
         : null;
 
-      const isFirstViewsLocked = isSlotBlockedByFirstViews(
-        firstViewsSet,
-        firstViewsReady,
-        slugLabel,
-      );
+      const supplemental = entry.supplemental === true;
+      const isFirstViewsLocked =
+        !supplemental &&
+        isSlotBlockedByFirstViews(
+          firstViewsSet,
+          firstViewsReady,
+          slugLabel,
+        );
       const isMain = isMainViewSlug(slugLabel);
       const imageFileLabel = viewTokenImageFileName(primaryRaw, row.format);
 
@@ -1903,7 +1929,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     "Keine Ansichten in der Datenbank."
                   : "Keine Ansichten für diesen Modus."}
                 </p>
-              : <ul className="grid grid-cols-[repeat(3,minmax(9rem,11rem))] gap-2 sm:grid-cols-[repeat(3,minmax(10rem,12rem))] lg:grid-cols-[repeat(3,minmax(12rem,14rem))]">
+              : <ul className={gridGalleryClassName}>
                   {viewGridEntries.map((entry, idx) => {
                     if (!entry.token) {
                       // „+"-Button: nur, wenn die Ansicht in
@@ -2100,11 +2126,14 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       isTransferredP && (!secTok || isTransferredS);
                     const isErrored = isErroredP || isErroredS;
 
-                    const isFirstViewsLocked = isSlotBlockedByFirstViews(
-                      firstViewsSet,
-                      firstViewsReady,
-                      normalizeSlug(entry.slotSlug),
-                    );
+                    const supplemental = entry.supplemental === true;
+                    const isFirstViewsLocked =
+                      !supplemental &&
+                      isSlotBlockedByFirstViews(
+                        firstViewsSet,
+                        firstViewsReady,
+                        normalizeSlug(entry.slotSlug),
+                      );
                     const imageFileLabel = viewTokenImageFileName(
                       slot.raw,
                       row.format,
@@ -2129,8 +2158,10 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       : null;
                     const pairStripIndex = imagePreviewStripItems.findIndex(
                       (it) =>
-                        normalizeSlug(it.slotLabel) ===
-                        normalizeSlug(entry.slotSlug),
+                        it.raw === slot.raw &&
+                        (secTok ?
+                          it.rawSecondary === secTok
+                        : (it.rawSecondary == null || it.rawSecondary === "")),
                     );
                     return (
                       <li
