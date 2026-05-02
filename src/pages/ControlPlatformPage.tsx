@@ -89,24 +89,25 @@ function tokenMatchesMode(
 }
 
 const MAIN_VIEW_SLUGS = new Set(["front", "rear", "right", "left"]);
-const FIXED_VIEW_SLOT_ORDER = [
-  "front_right",
-  "right",
-  "rear_right",
-  "front",
-  "left",
-  "rear",
-  "front_left",
-  "__spacer_col_2_row_3",
-  "rear_left",
+const FIXED_VIEW_SLOT_LAYOUT = [
+  { slotSlug: "front_right", col: 1, row: 1 },
+  { slotSlug: "front", col: 1, row: 2 },
+  { slotSlug: "front_left", col: 1, row: 3 },
+  { slotSlug: "right", col: 2, row: 1 },
+  { slotSlug: "left", col: 2, row: 2 },
+  { slotSlug: "rear_right", col: 3, row: 1 },
+  { slotSlug: "rear", col: 3, row: 2 },
+  { slotSlug: "rear_left", col: 3, row: 3 },
 ] as const;
 const FIXED_VIEW_SLOT_SET = new Set<string>(
-  FIXED_VIEW_SLOT_ORDER.filter((slot) => !slot.startsWith("__spacer")),
+  FIXED_VIEW_SLOT_LAYOUT.map((slot) => slot.slotSlug),
 );
 
 type ViewGridEntry = {
   slotSlug: string;
   token: string | null;
+  col: number;
+  row: number;
 };
 
 /** Hauptansicht (front/rear/right/left, slug-Vergleich, case-insensitive). */
@@ -134,15 +135,16 @@ function buildViewGridEntries(tokens: string[]): ViewGridEntry[] {
     }
   }
 
-  const fixed = FIXED_VIEW_SLOT_ORDER.map((slotSlug) => ({
-    slotSlug,
-    token:
-      slotSlug.startsWith("__spacer") ? null : slotToToken.get(slotSlug) ?? null,
+  const fixed = FIXED_VIEW_SLOT_LAYOUT.map((slot) => ({
+    ...slot,
+    token: slotToToken.get(slot.slotSlug) ?? null,
   }));
 
-  const extras = extraTokens.map((token) => ({
+  const extras = extraTokens.map((token, idx) => ({
     slotSlug: normalizeSlug(viewPathSlug(token)),
     token,
+    col: (idx % 3) + 1,
+    row: 4 + Math.floor(idx / 3),
   }));
 
   return [...fixed, ...extras];
@@ -402,19 +404,16 @@ export default function ControlPlatformPage() {
               : <ul className="grid justify-center grid-cols-[repeat(3,7.5rem)] gap-2 sm:grid-cols-[repeat(3,9rem)] lg:grid-cols-[repeat(3,10rem)]">
                   {viewGridEntries.map((entry, idx) => {
                     if (!entry.token) {
-                      if (entry.slotSlug.startsWith("__spacer")) {
-                        return (
-                          <li
-                            key={`${row.id}-spacer-${idx}`}
-                            aria-hidden="true"
-                            className="pointer-events-none invisible"
-                          />
-                        );
-                      }
                       return (
-                        <li key={`${row.id}-slot-${entry.slotSlug}-${idx}`}>
+                        <li
+                          key={`${row.id}-slot-${entry.slotSlug}-${idx}`}
+                          style={{
+                            gridColumn: entry.col,
+                            gridRow: entry.row,
+                          }}
+                        >
                           <article className="flex w-full flex-col border border-dashed border-hair bg-paper/50">
-                            <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-ink-50/40">
+                            <div className="relative flex aspect-[3/2] items-center justify-center overflow-hidden bg-ink-50/40">
                               <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-400">
                                 {entry.slotSlug}
                               </span>
@@ -446,7 +445,13 @@ export default function ControlPlatformPage() {
                     const isCorrect = status?.status === "correct";
                     const isMain = isMainViewSlug(slot.slug);
                     return (
-                      <li key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}>
+                      <li
+                        key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}
+                        style={{
+                          gridColumn: entry.col,
+                          gridRow: entry.row,
+                        }}
+                      >
                         <article
                           title={
                             status ?
@@ -463,7 +468,7 @@ export default function ControlPlatformPage() {
                             href={href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
+                            className="group relative flex aspect-[3/2] items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
                           >
                             <img
                               src={href}
