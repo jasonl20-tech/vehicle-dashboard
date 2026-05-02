@@ -228,21 +228,20 @@ function buildSortOptionsSql(
  * Status-Filter-Whitelist (Schlüssel). SQL-Snippets werden in
  * `buildStatusFiltersSql()` mode-abhängig zusammengebaut – nutzer-input
  * wird *nur* gegen die Schlüssel geprüft.
+ *
+ * - `open`: alle Fahrzeuge, die im aktuellen Modus noch Arbeit haben
+ *   (mindestens eine Ansicht offen ODER ein `errored` vorhanden).
+ *   Default für die Liste.
+ * - `all`: alles (auch Fahrzeuge ohne erwartete Views in diesem Modus).
+ * - `done`: alle erwarteten Views des aktuellen Modus sind erledigt
+ *   (`done`/`übertragen`) und kein `errored` mehr aktiv.
  */
-const STATUS_FILTER_KEYS = [
-  "any",
-  "not_done",
-  "errored",
-  "transferred",
-  "done",
-  "inProgress",
-  "pending",
-  "none",
-] as const;
+const STATUS_FILTER_KEYS = ["open", "all", "done"] as const;
 type StatusFilter = (typeof STATUS_FILTER_KEYS)[number];
 function isStatusFilter(s: string): s is StatusFilter {
   return (STATUS_FILTER_KEYS as readonly string[]).includes(s);
 }
+const STATUS_FILTER_DEFAULT: StatusFilter = "open";
 
 /**
  * SQL-Ausdruck für die "Anzahl erwarteter Views im aktuellen Modus".
@@ -252,7 +251,7 @@ function isStatusFilter(s: string): s is StatusFilter {
  * - Sonst: alle Tokens.
  *
  * Edge-Case: leere `views`-Spalte → `0` (Fahrzeuge ohne erwartete Views
- * tauchen damit in "done"/"not_done" gar nicht auf).
+ * tauchen damit in "done"/"open" gar nicht auf).
  */
 function expectedViewsExpr(statusMode: string): string {
   const tokensTotal =
@@ -271,17 +270,9 @@ function buildStatusFiltersSql(
 ): Record<StatusFilter, string> {
   const nExp = expectedViewsExpr(statusMode);
   return {
-    any: "",
-    not_done: `(${nExp} > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) < ${nExp}) OR ifnull(cs.n_errored, 0) > 0`,
-    errored: "ifnull(cs.n_errored, 0) > 0",
-    transferred:
-      "ifnull(cs.n_total, 0) > 0 AND cs.n_total = cs.n_transferred",
+    all: "",
+    open: `(${nExp} > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) < ${nExp}) OR ifnull(cs.n_errored, 0) > 0`,
     done: `${nExp} > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) = ${nExp}`,
-    inProgress:
-      "ifnull(cs.n_in_progress, 0) > 0 AND ifnull(cs.n_errored, 0) = 0",
-    pending:
-      "ifnull(cs.n_pending, 0) > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_in_progress, 0) = 0",
-    none: "(cs.vehicle_id IS NULL OR ifnull(cs.n_total, 0) = 0)",
   };
 }
 
@@ -409,7 +400,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const orderBySql = sortOptionsSql[sortRaw];
 
   const statusFilterRaw = (
-    url.searchParams.get("status_filter") || "any"
+    url.searchParams.get("status_filter") || STATUS_FILTER_DEFAULT
   ).trim();
   if (!isStatusFilter(statusFilterRaw)) {
     return jsonResponse(
@@ -477,9 +468,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
   // Im aktuellen Modus „leere" Fahrzeuge (n_views_expected = 0 UND
   // keine Status-Einträge) werden bei jedem expliziten Filter ausgeblendet
-  // — sie tauchen nur unter „alle" (any) auf, weil dort bewusst
+  // — sie tauchen nur unter „alle" (all) auf, weil dort bewusst
   // alles zur Ansicht gehört.
-  if (statusFilterRaw !== "any") {
+  if (statusFilterRaw !== "all") {
     const nExp = expectedViewsExpr(statusMode);
     where.push(`(${nExp} > 0 OR ifnull(cs.n_total, 0) > 0)`);
   }

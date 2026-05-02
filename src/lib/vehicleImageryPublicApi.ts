@@ -75,19 +75,22 @@ export const CONTROLL_LIST_SORT_OPTIONS = [
 export type ControllListSortOption =
   (typeof CONTROLL_LIST_SORT_OPTIONS)[number];
 
-/** Status-Filter der Controlling-Liste (Whitelist; muss zum Server passen). */
-export const CONTROLL_LIST_STATUS_FILTERS = [
-  "any",
-  "not_done",
-  "errored",
-  "transferred",
-  "done",
-  "inProgress",
-  "pending",
-  "none",
-] as const;
+/**
+ * Status-Filter der Controlling-Liste (Whitelist; muss zum Server passen).
+ *
+ * - `open`: Fahrzeuge, bei denen im aktuellen Modus mindestens eine Ansicht
+ *   noch nicht `done`/`übertragen` ist oder ein `errored`-Status existiert.
+ *   Server-Default; bildet den primären Arbeits-Workflow ab.
+ * - `all`: alles (auch Fahrzeuge ohne erwartete Views in diesem Modus).
+ * - `done`: nur Fahrzeuge, bei denen im aktuellen Modus ALLE erwarteten
+ *   Views fertig sind und kein `errored`-Status existiert.
+ */
+export const CONTROLL_LIST_STATUS_FILTERS = ["open", "all", "done"] as const;
 export type ControllListStatusFilter =
   (typeof CONTROLL_LIST_STATUS_FILTERS)[number];
+
+export const CONTROLL_LIST_STATUS_FILTER_DEFAULT: ControllListStatusFilter =
+  "open";
 
 /** Eintrag aus `controll_status` (Controlling-Tabelle) für ein Fahrzeug. */
 export type ControllStatusRow = {
@@ -172,7 +175,10 @@ export function vehicleImageryListUrl(
   setIf("updated_from", p.updated_from);
   setIf("updated_to", p.updated_to);
   if (p.sort && p.sort !== "default") u.searchParams.set("sort", p.sort);
-  if (p.status_filter && p.status_filter !== "any") {
+  // Status-Filter immer mitschicken, damit kein impliziter Server-Default
+  // den Wert überschreibt (auch `open` wird gesetzt, weil das der
+  // Default-Wert ist und dem Server explizit übermittelt wird).
+  if (p.status_filter) {
     u.searchParams.set("status_filter", p.status_filter);
   }
   return u.pathname + u.search;

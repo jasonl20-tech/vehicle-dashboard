@@ -454,14 +454,9 @@ const SORT_LABELS: Record<ControllListSortOption, string> = {
 
 /** UI-Labels für Status-Filter. */
 const STATUS_FILTER_LABELS: Record<ControllListStatusFilter, string> = {
-  any: "alle",
-  not_done: "noch offen",
-  errored: "mit errored",
-  transferred: "alles übertragen",
-  done: "alles done",
-  inProgress: "in Bearbeitung",
-  pending: "wartend (lock)",
-  none: "ohne Status",
+  open: "Offen",
+  all: "Alle",
+  done: "Komplett done",
 };
 
 const SORT_STORAGE_KEY = "controlPlatform.list.sort";
@@ -484,8 +479,9 @@ function readSortFromStorage(): ControllListSortOption {
 }
 
 function readFilterFromStorage(): ControllListStatusFilter {
-  // Default: "noch offen" (alle Fahrzeuge mit nicht abgeschlossenem Status).
-  const fallback: ControllListStatusFilter = "not_done";
+  // Default: "Offen" – Fokus auf alle Fahrzeuge, die im aktuellen Modus
+  // noch Arbeit haben.
+  const fallback: ControllListStatusFilter = "open";
   if (typeof window === "undefined") return fallback;
   try {
     const v = window.localStorage.getItem(FILTER_STORAGE_KEY);
@@ -494,6 +490,22 @@ function readFilterFromStorage(): ControllListStatusFilter {
       (CONTROLL_LIST_STATUS_FILTERS as readonly string[]).includes(v)
     ) {
       return v as ControllListStatusFilter;
+    }
+    // Migration: alte Filter-Werte (any/not_done/errored/...) auf die
+    // neue, vereinfachte Auswahl mappen.
+    if (v) {
+      const migrated: Record<string, ControllListStatusFilter> = {
+        any: "all",
+        not_done: "open",
+        errored: "open",
+        transferred: "done",
+        done: "done",
+        inProgress: "open",
+        pending: "open",
+        none: "all",
+      };
+      const m = migrated[v];
+      if (m) return m;
     }
   } catch {
     /* noop */
@@ -1144,7 +1156,7 @@ export default function ControlPlatformPage() {
                 )
               }
               className={`min-w-0 flex-1 border py-0.5 pl-1.5 pr-5 text-[10.5px] focus:outline-none ${
-                statusFilter === "any" || statusFilter === "not_done"
+                statusFilter === "open"
                   ? "border-hair bg-paper text-ink-700 focus:border-ink-600"
                   : "border-ink-700 bg-ink-50 text-ink-900 focus:border-ink-800"
               }`}
