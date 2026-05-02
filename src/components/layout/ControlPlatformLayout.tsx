@@ -12,7 +12,7 @@ function ControlChrome() {
   const { viewsMode, setViewsMode } = useControlPlatformViewsMode();
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper text-ink-800">
+    <div className="flex h-screen flex-col overflow-hidden bg-paper text-ink-800">
       <header className="flex h-9 shrink-0 items-center gap-2 border-b border-hair bg-paper px-2 py-1">
         <Link
           to="/"
@@ -42,7 +42,7 @@ function ControlChrome() {
         </select>
       </header>
 
-      <main className="min-h-0 min-w-0 flex-1 p-1">
+      <main className="flex min-h-0 min-w-0 flex-1 p-1">
         <Outlet />
       </main>
     </div>

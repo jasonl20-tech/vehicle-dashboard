@@ -159,8 +159,8 @@ export default function ControlPlatformPage() {
     selectedId != null && rows.some((r) => r.id === selectedId);
 
   return (
-    <div className="flex min-h-[calc(100dvh-44px)] flex-col border border-hair bg-white lg:flex-row lg:min-h-[calc(100dvh-44px)]">
-      <aside className="flex max-h-[min(48vh,calc(100dvh-44px))] w-full shrink-0 flex-col border-b border-hair lg:max-h-none lg:w-[240px] lg:border-b-0 lg:border-r lg:border-hair lg:min-h-[calc(100dvh-44px)]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col border border-hair bg-white lg:flex-row">
+      <aside className="flex max-h-[48vh] w-full min-h-0 shrink-0 flex-col border-b border-hair lg:h-full lg:max-h-none lg:w-[240px] lg:border-b-0 lg:border-r lg:border-hair">
         <div className="shrink-0 border-b border-hair px-1.5 py-1.5">
           <label className="sr-only" htmlFor="control-platform-search">
             Einträge filtern
@@ -249,7 +249,7 @@ export default function ControlPlatformPage() {
         </ul>
       </aside>
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col lg:min-h-[calc(100dvh-44px)]">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col lg:h-full">
         {detailApi.error && (
           <div className="border-b border-hair bg-accent-rose/5 px-2 py-1.5 text-[11.5px] text-accent-rose">
             {detailApi.error}
