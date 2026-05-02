@@ -656,7 +656,7 @@ export default function ControlPlatformPage() {
 
       {imagePreview && currentPreviewItem ?
         <div
-          className="fixed inset-0 z-[90] flex flex-col items-center justify-center p-3 sm:p-6"
+          className="fixed inset-0 z-[90] flex items-center justify-center p-2 sm:p-4"
           role="presentation"
         >
           <button
@@ -666,12 +666,12 @@ export default function ControlPlatformPage() {
             onClick={() => setImagePreview(null)}
           />
           <div
-            className="relative z-[91] flex max-h-[92vh] w-full max-w-[min(96vw,960px)] flex-col gap-2"
+            className="relative z-[91] flex h-[min(92dvh,92vh)] w-full max-w-[min(98vw,1720px)] flex-col gap-1.5 sm:gap-2"
             role="dialog"
             aria-modal="true"
             aria-labelledby="control-platform-preview-title"
           >
-            <div className="flex items-start justify-between gap-2 px-0.5">
+            <div className="flex shrink-0 items-start justify-between gap-2 px-0.5">
               <p
                 id="control-platform-preview-title"
                 className="min-w-0 flex-1 truncate text-left font-mono text-[11px] text-white drop-shadow-sm sm:text-[12px]"
@@ -698,21 +698,18 @@ export default function ControlPlatformPage() {
                 </button>
               </div>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col gap-2 sm:min-h-[min(70vh,760px)]">
-              <div className="flex min-h-[min(42vh,420px)] flex-1 items-center justify-center overflow-auto rounded border border-white/15 bg-ink-900/40 p-2 shadow-2xl ring-1 ring-white/10 sm:min-h-[min(52vh,560px)]">
-                <img
-                  src={currentPreviewItem.src}
-                  alt=""
-                  className="max-h-[min(48vh,520px)] max-w-full object-contain sm:max-h-[min(58vh,600px)]"
-                />
-              </div>
 
-              <div className="shrink-0">
-                <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/55">
-                  Alle Ansichten ({imagePreviewStripItems.length})
+            <div className="flex min-h-0 flex-1 flex-row gap-2 overflow-hidden sm:gap-3">
+              <aside className="flex w-[5.75rem] shrink-0 flex-col gap-1 overflow-hidden sm:w-[6.75rem] md:w-[7.5rem]">
+                <p className="shrink-0 text-[8px] font-medium uppercase leading-tight tracking-[0.12em] text-white/55 sm:text-[9px]">
+                  Ansichten ({imagePreviewStripItems.length})
                 </p>
-                <div className="max-h-[min(30vh,280px)] overflow-y-auto overscroll-contain rounded border border-white/15 bg-ink-950/50 p-1 ring-1 ring-white/10 sm:max-h-[min(34vh,320px)]">
-                  <ul className="flex flex-col gap-1" role="listbox" aria-label="Ansicht wählen">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain rounded border border-white/15 bg-ink-950/55 p-1 ring-1 ring-white/10">
+                  <ul
+                    className="flex flex-col gap-1"
+                    role="listbox"
+                    aria-label="Ansicht wählen"
+                  >
                     {imagePreviewStripItems.map((it, i) => {
                       const selected = i === previewIndexClamped;
                       return (
@@ -723,13 +720,14 @@ export default function ControlPlatformPage() {
                             aria-selected={selected}
                             ref={selected ? activePreviewThumbRef : undefined}
                             onClick={() => setImagePreview({ index: i })}
-                            className={`flex h-14 w-full shrink-0 items-center gap-2 rounded border px-1.5 text-left transition sm:h-16 ${
+                            title={`${it.raw}`}
+                            className={`flex w-full flex-col gap-0.5 rounded border p-1 text-left transition ${
                               selected ?
                                 "border-white/70 bg-white/15 ring-1 ring-white/40"
-                              : "border-white/10 bg-ink-900/30 hover:border-white/25 hover:bg-ink-900/50"
+                              : "border-white/10 bg-ink-900/35 hover:border-white/25 hover:bg-ink-900/55"
                             }`}
                           >
-                            <span className="relative flex h-12 w-[4.25rem] shrink-0 items-center justify-center overflow-hidden rounded bg-ink-900/70 sm:h-[3.25rem] sm:w-[4.75rem]">
+                            <span className="relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded bg-ink-900/70">
                               <img
                                 src={it.src}
                                 alt=""
@@ -738,35 +736,30 @@ export default function ControlPlatformPage() {
                                 }`}
                               />
                               {it.isCorrect && it.isMain ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded bg-accent-mint text-white">
-                                  <Star className="h-2 w-2 fill-white" />
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 flex h-3 w-3 items-center justify-center rounded bg-accent-mint text-white">
+                                  <Star className="h-1.5 w-1.5 fill-white" />
                                 </span>
                               : null}
                             </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate font-mono text-[10px] font-medium text-white">
-                                {it.slotLabel}
-                              </span>
-                              <span className="mt-0.5 line-clamp-2 font-mono text-[9px] leading-tight text-white/55">
-                                {it.raw}
-                              </span>
-                              <span className="mt-0.5 flex flex-wrap gap-0.5">
-                                {it.hasTransparencyHint ?
-                                  <span className="rounded bg-ink-700/90 px-1 py-px font-mono text-[7px] uppercase text-white/90">
-                                    trp
-                                  </span>
-                                : null}
-                                {it.hasScalingHint ?
-                                  <span className="rounded bg-brand-700/90 px-1 py-px font-mono text-[7px] text-white/90">
-                                    sk
-                                  </span>
-                                : null}
-                                {it.hasShadowHint ?
-                                  <span className="rounded bg-ink-600/90 px-1 py-px font-mono text-[7px] text-white/90">
-                                    sh
-                                  </span>
-                                : null}
-                              </span>
+                            <span className="truncate px-px font-mono text-[8px] font-medium leading-none text-white sm:text-[9px]">
+                              {it.slotLabel}
+                            </span>
+                            <span className="flex min-h-[10px] flex-wrap gap-0.5">
+                              {it.hasTransparencyHint ?
+                                <span className="rounded bg-ink-700/90 px-0.5 py-px font-mono text-[6px] uppercase leading-none text-white/90">
+                                  trp
+                                </span>
+                              : null}
+                              {it.hasScalingHint ?
+                                <span className="rounded bg-brand-700/90 px-0.5 py-px font-mono text-[6px] leading-none text-white/90">
+                                  sk
+                                </span>
+                              : null}
+                              {it.hasShadowHint ?
+                                <span className="rounded bg-ink-600/90 px-0.5 py-px font-mono text-[6px] leading-none text-white/90">
+                                  sh
+                                </span>
+                              : null}
                             </span>
                           </button>
                         </li>
@@ -774,10 +767,21 @@ export default function ControlPlatformPage() {
                     })}
                   </ul>
                 </div>
+              </aside>
+
+              <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-white/15 bg-ink-900/40 shadow-2xl ring-1 ring-white/10">
+                <div className="flex h-full w-full items-center justify-center overflow-auto p-1 sm:p-2">
+                  <img
+                    src={currentPreviewItem.src}
+                    alt=""
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
               </div>
             </div>
-            <p className="text-center text-[10px] text-white/70">
-              ESC oder außen klicken · Pfeiltasten zum Wechseln · Zeile antippen
+
+            <p className="shrink-0 text-center text-[10px] text-white/70">
+              ESC oder außen klicken · Pfeiltasten · Kachel antippen
             </p>
           </div>
         </div>
