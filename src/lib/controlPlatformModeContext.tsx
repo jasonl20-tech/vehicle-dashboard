@@ -27,22 +27,39 @@ export const CONTROL_PLATFORM_MODE_LABEL: Record<
   schatten: "Schatten",
 };
 
-/** Untergrenze für das Live-Polling-Intervall (Millisekunden). */
-export const CONTROL_PLATFORM_LIVE_MIN_MS = 50;
-/** Obergrenze, oberhalb derer Live nicht mehr sinnvoll ist. */
-export const CONTROL_PLATFORM_LIVE_MAX_MS = 600_000;
+/**
+ * Erlaubte Polling-Intervalle (in Millisekunden) – die Auswahl ist auf
+ * eine kleine, sinnvolle Whitelist beschränkt, damit der Server nicht
+ * unnötig hart angefragt wird.
+ */
+export const CONTROL_PLATFORM_LIVE_INTERVAL_OPTIONS_MS = [
+  1_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000,
+] as const;
+
+export type ControlPlatformLiveIntervalMs =
+  (typeof CONTROL_PLATFORM_LIVE_INTERVAL_OPTIONS_MS)[number];
+
 /** Default-Intervall, wenn der Nutzer nichts gesetzt hat. */
-export const CONTROL_PLATFORM_LIVE_DEFAULT_MS = 1000;
+export const CONTROL_PLATFORM_LIVE_DEFAULT_MS: ControlPlatformLiveIntervalMs =
+  1_000;
 
 const LIVE_ENABLED_STORAGE_KEY = "controlPlatform.live.enabled";
 const LIVE_INTERVAL_STORAGE_KEY = "controlPlatform.live.intervalMs";
 
-function clampInterval(n: number): number {
+/** Snappt einen beliebigen Wert auf den nächsten erlaubten Options-Wert. */
+function snapInterval(n: number): ControlPlatformLiveIntervalMs {
   if (!Number.isFinite(n)) return CONTROL_PLATFORM_LIVE_DEFAULT_MS;
-  return Math.min(
-    CONTROL_PLATFORM_LIVE_MAX_MS,
-    Math.max(CONTROL_PLATFORM_LIVE_MIN_MS, Math.round(n)),
-  );
+  let best: ControlPlatformLiveIntervalMs =
+    CONTROL_PLATFORM_LIVE_DEFAULT_MS;
+  let bestDiff = Number.POSITIVE_INFINITY;
+  for (const opt of CONTROL_PLATFORM_LIVE_INTERVAL_OPTIONS_MS) {
+    const d = Math.abs(opt - n);
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = opt;
+    }
+  }
+  return best;
 }
 
 function readBoolFromStorage(key: string, fallback: boolean): boolean {
@@ -57,14 +74,14 @@ function readBoolFromStorage(key: string, fallback: boolean): boolean {
   return fallback;
 }
 
-function readIntervalFromStorage(): number {
+function readIntervalFromStorage(): ControlPlatformLiveIntervalMs {
   if (typeof window === "undefined") return CONTROL_PLATFORM_LIVE_DEFAULT_MS;
   try {
     const v = window.localStorage.getItem(LIVE_INTERVAL_STORAGE_KEY);
     if (v == null) return CONTROL_PLATFORM_LIVE_DEFAULT_MS;
     const n = Number(v);
     if (!Number.isFinite(n)) return CONTROL_PLATFORM_LIVE_DEFAULT_MS;
-    return clampInterval(n);
+    return snapInterval(n);
   } catch {
     return CONTROL_PLATFORM_LIVE_DEFAULT_MS;
   }
@@ -76,8 +93,8 @@ type Ctx = {
   /** Live-Polling aktiv? */
   liveEnabled: boolean;
   setLiveEnabled: (b: boolean) => void;
-  /** Polling-Intervall in Millisekunden (geclamped auf [min, max]). */
-  liveIntervalMs: number;
+  /** Polling-Intervall in Millisekunden (snapt auf erlaubte Optionen). */
+  liveIntervalMs: ControlPlatformLiveIntervalMs;
   setLiveIntervalMs: (ms: number) => void;
 };
 
@@ -94,9 +111,8 @@ export function ControlPlatformModeProvider({
   const [liveEnabled, setLiveEnabledState] = useState<boolean>(() =>
     readBoolFromStorage(LIVE_ENABLED_STORAGE_KEY, false),
   );
-  const [liveIntervalMs, setLiveIntervalMsState] = useState<number>(() =>
-    readIntervalFromStorage(),
-  );
+  const [liveIntervalMs, setLiveIntervalMsState] =
+    useState<ControlPlatformLiveIntervalMs>(() => readIntervalFromStorage());
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -131,7 +147,7 @@ export function ControlPlatformModeProvider({
   }, []);
 
   const setLiveIntervalMs = useCallback((ms: number) => {
-    setLiveIntervalMsState(clampInterval(ms));
+    setLiveIntervalMsState(snapInterval(ms));
   }, []);
 
   const v = useMemo<Ctx>(

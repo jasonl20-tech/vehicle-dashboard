@@ -1,51 +1,23 @@
-import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
 import { Logo } from "../brand/Logo";
 import {
   type ControlPlatformViewsMode,
-  CONTROL_PLATFORM_LIVE_MAX_MS,
-  CONTROL_PLATFORM_LIVE_MIN_MS,
+  CONTROL_PLATFORM_LIVE_INTERVAL_OPTIONS_MS,
   CONTROL_PLATFORM_MODE_LABEL,
   CONTROL_PLATFORM_MODES,
   ControlPlatformModeProvider,
   useControlPlatformViewsMode,
 } from "../../lib/controlPlatformModeContext";
 
-function clampInterval(n: number): number {
-  if (!Number.isFinite(n)) return CONTROL_PLATFORM_LIVE_MIN_MS;
-  return Math.min(
-    CONTROL_PLATFORM_LIVE_MAX_MS,
-    Math.max(CONTROL_PLATFORM_LIVE_MIN_MS, Math.round(n)),
-  );
-}
-
 function formatIntervalLabel(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
-  if (ms % 1000 === 0) return `${ms / 1000} s`;
-  return `${(ms / 1000).toFixed(2)} s`;
+  const s = ms / 1000;
+  return Number.isInteger(s) ? `${s} s` : `${s.toFixed(1)} s`;
 }
 
 function LiveControls() {
   const { liveEnabled, setLiveEnabled, liveIntervalMs, setLiveIntervalMs } =
     useControlPlatformViewsMode();
-  const [draft, setDraft] = useState<string>(String(liveIntervalMs));
-
-  // Externe Updates (z. B. Hot-Reload) auf den Draft spiegeln,
-  // wenn der Nutzer gerade nicht editiert.
-  useEffect(() => {
-    setDraft(String(liveIntervalMs));
-  }, [liveIntervalMs]);
-
-  const commitDraft = () => {
-    const n = Number(draft);
-    if (!Number.isFinite(n)) {
-      setDraft(String(liveIntervalMs));
-      return;
-    }
-    const clamped = clampInterval(n);
-    setLiveIntervalMs(clamped);
-    setDraft(String(clamped));
-  };
 
   return (
     <div className="ml-auto flex shrink-0 items-center gap-1">
@@ -75,38 +47,27 @@ function LiveControls() {
         Live
       </button>
 
-      <div
-        className={`inline-flex h-6 items-center overflow-hidden rounded border ${
-          liveEnabled ? "border-emerald-300 bg-white" : "border-hair bg-white"
+      <label className="sr-only" htmlFor="control-platform-live-interval">
+        Aktualisierungsintervall
+      </label>
+      <select
+        id="control-platform-live-interval"
+        aria-label="Aktualisierungsintervall"
+        title="Wie oft die Status-Daten aktualisiert werden"
+        value={liveIntervalMs}
+        onChange={(e) => setLiveIntervalMs(Number(e.target.value))}
+        className={`h-6 border bg-white py-0 pr-6 pl-1.5 text-[11px] tabular-nums focus:outline-none ${
+          liveEnabled
+            ? "border-emerald-300 text-ink-800 focus:border-emerald-500"
+            : "border-hair text-ink-600 focus:border-ink-600"
         }`}
-        title="Aktualisierungsintervall in Millisekunden"
       >
-        <label className="sr-only" htmlFor="control-platform-live-ms">
-          Aktualisierungsintervall in Millisekunden
-        </label>
-        <input
-          id="control-platform-live-ms"
-          type="number"
-          inputMode="numeric"
-          min={CONTROL_PLATFORM_LIVE_MIN_MS}
-          max={CONTROL_PLATFORM_LIVE_MAX_MS}
-          step={50}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commitDraft}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitDraft();
-              (e.target as HTMLInputElement).blur();
-            }
-          }}
-          className="h-full w-[68px] border-0 bg-transparent px-1.5 text-right font-mono text-[11px] tabular-nums text-ink-800 focus:outline-none"
-        />
-        <span className="select-none border-l border-hair px-1 font-mono text-[10px] text-ink-500">
-          ms
-        </span>
-      </div>
+        {CONTROL_PLATFORM_LIVE_INTERVAL_OPTIONS_MS.map((ms) => (
+          <option key={ms} value={ms}>
+            {formatIntervalLabel(ms)}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
