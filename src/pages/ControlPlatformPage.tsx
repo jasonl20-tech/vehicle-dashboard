@@ -439,6 +439,60 @@ function buildViewGridEntries(
   return [...fixed, ...extras];
 }
 
+/**
+ * `controll_status` mit laufender Korrektur-Generierung (check 0/1) zählt in
+ * der Liste mit (z. B. 9/8), bevor `views` das neue Bild enthält. Fehlt der
+ * Slot sonst im Raster (kein Standard-Slot), erscheint hier ein Platzhalter
+ * in Spalte 4 — dieselbe leere-Kachel-Logik wie bei den 8 Fix-Slots.
+ */
+function mergeKorrekturGeneratingPlaceholderEntries(
+  entries: ViewGridEntry[],
+  statuses: ControllStatusRow[] | undefined | null,
+  viewsMode: ControlPlatformViewsMode,
+  korrekturTokensFromViews: readonly string[],
+): ViewGridEntry[] {
+  if (viewsMode !== "korrektur" || !statuses?.length) return entries;
+
+  const slugHasKorrekturImage = new Set(
+    korrekturTokensFromViews.map((t) => normalizeSlug(viewPathSlug(t))),
+  );
+  const slugsWithGridCell = new Set(
+    entries.map((e) => normalizeSlug(e.slotSlug)),
+  );
+
+  const pendingSlugs = new Set<string>();
+  for (const s of statuses) {
+    if ((s.mode ?? "").toLowerCase() !== "correction") continue;
+    const ch = Number(s.check);
+    if (ch !== 0 && ch !== 1) continue;
+    const rawTok = (s.view_token ?? "").trim();
+    if (rawTok.includes("#")) continue;
+    const slug = normalizeSlug(parseViewSlot(s.view_token).slug);
+    if (!slug) continue;
+    if (slugHasKorrekturImage.has(slug)) continue;
+    if (slugsWithGridCell.has(slug)) continue;
+    pendingSlugs.add(slug);
+  }
+  if (pendingSlugs.size === 0) return entries;
+
+  const sorted = [...pendingSlugs].sort();
+  const base = [...entries];
+  const toAdd: ViewGridEntry[] = [];
+  for (const slug of sorted) {
+    const pool = base.concat(toAdd);
+    const col4Rows = pool.filter((e) => e.col === 4).map((e) => e.row);
+    const nextRow = col4Rows.length ? Math.max(...col4Rows) + 1 : 1;
+    toAdd.push({
+      slotSlug: slug,
+      token: null,
+      col: 4,
+      row: nextRow,
+      supplemental: true,
+    });
+  }
+  return [...base, ...toAdd];
+}
+
 /** Modus-Mapping zwischen Frontend-Auswahl und `controll_status.mode`. */
 function controllModeForViewsMode(
   m: ControlPlatformViewsMode,
@@ -961,10 +1015,15 @@ export default function ControlPlatformPage() {
       parseViewTokens(row.views).filter((t) => tokenMatchesMode(t, viewsMode))
     : [];
 
-  const viewGridEntries = useMemo(
-    () => buildViewGridEntries(filteredViewTokens, viewsMode),
-    [filteredViewTokens, viewsMode],
-  );
+  const viewGridEntries = useMemo(() => {
+    const base = buildViewGridEntries(filteredViewTokens, viewsMode);
+    return mergeKorrekturGeneratingPlaceholderEntries(
+      base,
+      detailApi.data?.statuses,
+      viewsMode,
+      filteredViewTokens,
+    );
+  }, [filteredViewTokens, viewsMode, detailApi.data?.statuses]);
 
   const gridHasSupplementalColumn = useMemo(
     () => viewGridEntries.some((e) => e.supplemental),
@@ -1779,6 +1838,11 @@ export default function ControlPlatformPage() {
               counts.total,
               1,
             );
+            const sidebarCountTotal = Math.max(
+              nViewsForMode,
+              counts.total,
+              1,
+            );
             const segments: { className: string; n: number }[] = [
               { className: "bg-emerald-500", n: counts.done },
               { className: "bg-violet-500", n: counts.transferred },
@@ -1789,7 +1853,7 @@ export default function ControlPlatformPage() {
             const tooltip = `${rowTitle(r)}
 done ${counts.done} · errored ${counts.errored} · übertragen ${counts.transferred}
 in Bearbeitung ${counts.inProgress} · lock ${counts.pending}
-${counts.total} / ${nViewsForMode} im aktuellen Modus`;
+${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut views-Feld: ${nViewsForMode}${counts.total > nViewsForMode ? " · es läuft u. U. noch eine Generierung ohne Eintrag im views-Feld" : ""})`;
             return (
               <li key={r.id}>
                 <button
@@ -1811,7 +1875,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     </span>
                     <span className="mt-1 flex items-center gap-1 text-[10px] text-ink-500">
                       <span className="tabular-nums">
-                        {counts.total}/{nViewsForMode}
+                        {counts.total}/{sidebarCountTotal}
                       </span>
                       {aggStatus !== "none" ? (
                         <span
@@ -1973,7 +2037,6 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         !slotBlocked &&
                         !scalingBaseInViewsBlocksGen;
                       const showInProgress =
-                        allowedForGen &&
                         !!existingGenStatus &&
                         !correctionDone &&
                         !scalingBaseInViewsBlocksGen;
@@ -2061,7 +2124,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 {showPlus ?
                                   isGenSubmitting ? "wird gesendet…"
                                   : "Generierung anstoßen"
-                                : showInProgress ? "regen_vertex"
+                                : showInProgress ?
+                                  `Generierung · ${(existingGenStatus?.status ?? "regen_vertex").slice(0, 28)}`
                                 : showLockedHint
                                   ? "wartet auf Pflicht-Ansichten"
                                 : scalingBaseInViewsBlocksGen
