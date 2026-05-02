@@ -1270,25 +1270,57 @@ export default function ControlPlatformPage() {
       setSubmittingAction(action);
       setActionError(null);
       try {
-        const res = await postControllStatus({
-          vehicleId: selectedId,
-          viewToken: ctx.rawToken,
-          mode: controllMode,
-          status,
-          key: r2Key,
-        });
-        setLastActionToken({
-          raw: res.row.view_token,
-          status: res.row.status,
-        });
-
         const items = imagePreviewStripItems;
         const curItem = items[ctx.index];
+        const scalingPairRichtig =
+          controllMode === "scaling" &&
+          action === "richtig" &&
+          !!curItem?.rawSecondary &&
+          !!curItem.srcSecondary;
+
+        if (scalingPairRichtig && curItem) {
+          const kPrimary = r2KeyFromImageUrl(cdnBase, curItem.src);
+          const kSecondary = r2KeyFromImageUrl(
+            cdnBase,
+            curItem.srcSecondary,
+          );
+          await postControllStatus({
+            vehicleId: selectedId,
+            viewToken: curItem.raw,
+            mode: controllMode,
+            status,
+            key: kPrimary,
+          });
+          const res = await postControllStatus({
+            vehicleId: selectedId,
+            viewToken: curItem.rawSecondary,
+            mode: controllMode,
+            status,
+            key: kSecondary,
+          });
+          setLastActionToken({
+            raw: res.row.view_token,
+            status: res.row.status,
+          });
+        } else {
+          const res = await postControllStatus({
+            vehicleId: selectedId,
+            viewToken: ctx.rawToken,
+            mode: controllMode,
+            status,
+            key: r2Key,
+          });
+          setLastActionToken({
+            raw: res.row.view_token,
+            status: res.row.status,
+          });
+        }
 
         if (
           viewsMode === "skalierung" &&
           curItem?.rawSecondary &&
-          ctx.rawToken === curItem.raw
+          ctx.rawToken === curItem.raw &&
+          !scalingPairRichtig
         ) {
           setScalingStripFocus("weiss");
           detailApi.reload();

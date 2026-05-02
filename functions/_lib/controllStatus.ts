@@ -140,8 +140,8 @@ LIMIT 1`;
 
 /**
  * UPSERT (INSERT … ON CONFLICT DO UPDATE) gemäß `UNIQUE(vehicle_id, view_token, mode)`.
- * `updated_at` wird auf den aktuellen Zeitpunkt gesetzt; `"check"` bleibt unverändert
- * (bei INSERT auf 0 belassen, bei Conflict `excluded` ignorieren).
+ * Bei INSERT ist `"check" = 0`; bei Konflikt werden Status/Key/`check` aus der
+ * Anfrage übernommen (Control-Platform setzt nach „richtig“ wieder Pending).
  */
 export const UPSERT_CONTROLL_STATUS_SQL = `INSERT INTO controll_status
   (vehicle_id, view_token, mode, status, key, updated_at, "check")
@@ -149,4 +149,5 @@ VALUES (?, ?, ?, ?, ?, datetime('now'), 0)
 ON CONFLICT(vehicle_id, view_token, mode) DO UPDATE SET
   status = excluded.status,
   key = excluded.key,
-  updated_at = datetime('now')`;
+  updated_at = datetime('now'),
+  "check" = 0`;
