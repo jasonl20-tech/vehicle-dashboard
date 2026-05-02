@@ -158,6 +158,17 @@ export interface AuthEnv {
   AI_GATEWAY_ID?: string;
   /** Tippfehler-Toleranz */
   AIGATEWAY_ID?: string;
+  /**
+   * Workers Analytics Engine Dataset: Control-Platform-Klicks
+   * (Dashboard-Binding: `controll_analytics` → `env.controll_analytics`).
+   */
+  controll_analytics?: {
+    writeDataPoint(data: {
+      blobs?: string[];
+      doubles?: number[];
+      indexes?: string[];
+    }): void;
+  };
 }
 
 // ---------- base64url helpers ----------

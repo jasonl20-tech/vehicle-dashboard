@@ -22,7 +22,10 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
-import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
+import {
+  CONTROL_PLATFORM_MODE_LABEL,
+  useControlPlatformViewsMode,
+} from "../lib/controlPlatformModeContext";
 import {
   CONTROL_PLATFORM_MODE_TO_SETTING,
   CONTROLL_ACTION_TO_STATUS,
@@ -72,6 +75,9 @@ import {
   vehicleImageryListUrl,
   vehicleImageryOneUrl,
 } from "../lib/vehicleImageryPublicApi";
+import {
+  postControllPlatformAnalyticsFireAndForget,
+} from "../lib/controllPlatformAnalyticsApi";
 import {
   buildVehicleImageUrl,
   countScalingViewPairsInViews,
@@ -1262,6 +1268,7 @@ export default function ControlPlatformPage() {
     async (
       action: ControllActionStub,
       ctx: { rawToken: string; imageHref: string; index: number },
+      origin: "shortcut" | "toolbar" = "toolbar",
     ) => {
       if (selectedId == null) return;
       const status = CONTROLL_ACTION_TO_STATUS[action];
@@ -1315,6 +1322,21 @@ export default function ControlPlatformPage() {
             status: res.row.status,
           });
         }
+
+        const keyForAnalytics =
+          scalingPairRichtig && curItem ?
+            r2KeyFromImageUrl(cdnBase, curItem.src)
+          : r2Key;
+
+        postControllPlatformAnalyticsFireAndForget({
+          actionLabel: `${origin}:${status}`,
+          viewsModeLabel: CONTROL_PLATFORM_MODE_LABEL[viewsMode],
+          imageKey: keyForAnalytics,
+          metaJson: JSON.stringify({
+            vehicleId: selectedId,
+            viewToken: ctx.rawToken,
+          }),
+        });
 
         if (
           viewsMode === "skalierung" &&
@@ -1476,7 +1498,7 @@ export default function ControlPlatformPage() {
             rawToken: actRaw,
             imageHref: actSrc,
             index: curIdx,
-          });
+          }, "shortcut");
           return;
         }
       }
@@ -2776,15 +2798,19 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             key={def.configKey}
                             type="button"
                             onClick={() =>
-                              void submitControllAction(def.stub, {
-                                rawToken:
-                                  scalingActiveSide?.raw ??
-                                  currentPreviewItem.raw,
-                                imageHref:
-                                  scalingActiveSide?.src ??
-                                  currentPreviewItem.src,
-                                index: previewIndexClamped,
-                              })
+                              void submitControllAction(
+                                def.stub,
+                                {
+                                  rawToken:
+                                    scalingActiveSide?.raw ??
+                                    currentPreviewItem.raw,
+                                  imageHref:
+                                    scalingActiveSide?.src ??
+                                    currentPreviewItem.src,
+                                  index: previewIndexClamped,
+                                },
+                                "toolbar",
+                              )
                             }
                             disabled={disabled}
                             aria-busy={isBusy}

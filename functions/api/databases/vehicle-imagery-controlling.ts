@@ -732,6 +732,36 @@ WHERE id = ?`,
 };
 
 /**
+ * Fahrzeuge im Controlling-Speicher, die für den Modus den Listen-Filter
+ * „open“ erfüllen — **ohne** Suche/Textfilter (globaler Umfang offener Arbeit).
+ * `statusMode`: `correction` (Korrektur) oder `scaling` (Skalierung).
+ */
+export async function countControllingOpenByStatusMode(
+  db: D1Database,
+  statusMode: "correction" | "scaling",
+): Promise<number> {
+  const statusFilterSql = buildStatusFiltersSql(statusMode).open;
+  const nExp = expectedViewsExpr(statusMode);
+  const where: string[] = [
+    "1=1",
+    `(${statusFilterSql})`,
+    `(${nExp} > 0 OR ifnull(cs.n_total, 0) > 0)`,
+  ];
+  const whereSql = ` WHERE ${where.join(" AND ")}`;
+  const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${controllStatusAggSubquery(statusMode)} ON cs.vehicle_id = v.id`;
+  const countSql = `SELECT COUNT(*) as n ${fromJoin}${whereSql}`;
+  try {
+    const countRow = await db
+      .prepare(countSql)
+      .bind(statusMode)
+      .first<{ n: number }>();
+    return countRow?.n ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Lädt die Status-Einträge zu einer `vehicle_id` aus `controll_status`.
  * Fängt einen "kein Tabelle"-Fehler ab und gibt dann ein leeres Array zurück.
  */
