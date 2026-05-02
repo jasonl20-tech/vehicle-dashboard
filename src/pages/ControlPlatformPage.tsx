@@ -11,6 +11,7 @@ import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext
 import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
+  type ControllStatusRow,
   VEHICLE_IMAGERY_CONTROLLING_API,
   VEHICLE_IMAGERY_CONTROLLING_CDN_FALLBACK,
   type VehicleImageryListResponse,
@@ -86,6 +87,38 @@ function tokenMatchesMode(
   );
 }
 
+const MAIN_VIEW_SLUGS = new Set(["front", "rear", "right", "left"]);
+
+/** Hauptansicht (front/rear/right/left, slug-Vergleich, case-insensitive). */
+function isMainViewSlug(slug: string): boolean {
+  return MAIN_VIEW_SLUGS.has(slug.trim().toLowerCase());
+}
+
+/** Modus-Mapping zwischen Frontend-Auswahl und `controll_status.mode`. */
+function controllModeForViewsMode(
+  m: ControlPlatformViewsMode,
+): string | null {
+  if (m === "korrektur") return "correction";
+  if (m === "skalierung") return "scaling";
+  /* Transparenz/Schatten: später, sobald die Modi in controll_status definiert sind. */
+  return null;
+}
+
+/** Lookup-Schlüssel für `controll_status` (case-insensitiv pro view_token). */
+function statusKey(viewToken: string, mode: string): string {
+  return `${viewToken.trim().toLowerCase()}::${mode.trim().toLowerCase()}`;
+}
+
+function buildStatusMap(
+  statuses: ControllStatusRow[] | undefined,
+): Map<string, ControllStatusRow> {
+  const m = new Map<string, ControllStatusRow>();
+  for (const s of statuses ?? []) {
+    m.set(statusKey(s.view_token, s.mode), s);
+  }
+  return m;
+}
+
 export default function ControlPlatformPage() {
   const { viewsMode } = useControlPlatformViewsMode();
   const [qIn, setQIn] = useState("");
@@ -148,6 +181,12 @@ export default function ControlPlatformPage() {
     row ?
       parseViewTokens(row.views).filter((t) => tokenMatchesMode(t, viewsMode))
     : [];
+
+  const statusMap = useMemo(
+    () => buildStatusMap(detailApi.data?.statuses),
+    [detailApi.data?.statuses],
+  );
+  const controllMode = controllModeForViewsMode(viewsMode);
 
   const atEnd = offset + rows.length >= total;
   const pageLabel =
@@ -311,17 +350,33 @@ export default function ControlPlatformPage() {
                       slug,
                       imageUrlQuery,
                     );
+                    const status =
+                      controllMode != null ?
+                        statusMap.get(statusKey(slot.raw, controllMode))
+                      : undefined;
+                    const isCorrect = status?.status === "correct";
+                    const isMain = isMainViewSlug(slot.slug);
                     return (
                       <li key={`${row.id}-${idx}-${slot.raw}`}>
                         <article
-                          title={slot.raw}
-                          className="flex w-full flex-col border border-hair bg-paper"
+                          title={
+                            status ?
+                              `${slot.raw} • ${status.mode}/${status.status}`
+                            : slot.raw
+                          }
+                          className={`flex w-full flex-col border bg-paper transition-colors ${
+                            isCorrect
+                              ? "border-accent-mint/80"
+                              : "border-hair"
+                          }`}
                         >
                           <a
                             href={href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
+                            className={`group relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
+                              isCorrect ? "opacity-50 grayscale" : ""
+                            }`}
                           >
                             <img
                               src={href}
@@ -342,9 +397,17 @@ export default function ControlPlatformPage() {
                               <ImageIcon className="h-8 w-8 text-ink-200" />
                             </div>
                             <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-600">
+                              {isCorrect && isMain ? (
+                                <span className="mr-0.5 text-accent-mint">★</span>
+                              ) : null}
                               {slot.slug}
                             </span>
                             <span className="pointer-events-none absolute right-1 top-1 flex max-w-[55%] flex-wrap justify-end gap-0.5">
+                              {isCorrect ?
+                                <span className="rounded bg-accent-mint px-1 py-0.5 font-mono text-[8px] font-medium uppercase text-white">
+                                  ok
+                                </span>
+                              : null}
                               {slot.hasTransparencyHint ?
                                 <span className="rounded bg-ink-800/90 px-1 py-0.5 font-mono text-[8px] font-medium uppercase text-white">
                                   trp

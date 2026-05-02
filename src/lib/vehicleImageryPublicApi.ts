@@ -42,11 +42,29 @@ export type VehicleImageryListResponse = {
   imageUrlQuery: string;
 };
 
+/** Eintrag aus `controll_status` (Controlling-Tabelle) für ein Fahrzeug. */
+export type ControllStatusRow = {
+  id: number;
+  vehicle_id: number;
+  /** Token wie in der `views`-Spalte, z. B. `front`, `rear#trp`, `front#skaliert_weiß`. */
+  view_token: string;
+  /** `correction` | `scaling` (weitere möglich). */
+  mode: string;
+  /** `correct` | `regen_vertex` | `regen_batch` | `delete` (weitere möglich). */
+  status: string;
+  updated_at: string | null;
+  key: string | null;
+  /** SQL-Spalte `"check"`; `0`/`1`. */
+  check: number;
+};
+
 /** GET ?id= (ein Fahrzeug) bzw. PUT-Antwort */
 export type VehicleImageryOneResponse = {
   row: VehicleImageryPublicRow;
   cdnBase: string;
   imageUrlQuery: string;
+  /** Nur bei der Controlling-API gefüllt; Public-API liefert kein `statuses`. */
+  statuses?: ControllStatusRow[];
 };
 
 export type VehicleImageryListParams = {

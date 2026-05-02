@@ -9,6 +9,9 @@
  *
  * CDN-Basis für `cdnBase`: `IMAGE_CDN_CONTROLLING_BASE` oder Default
  * `https://vehicleimagery-controlling.vehicleimagery.com` (Pfad `v1/…` wie beim Public-CDN).
+ *
+ * Detail-Antwort (`?id=`) liefert zusätzlich `statuses[]` aus `controll_status`
+ * für `vehicle_id = ?id` (alle modes/statuses; Frontend filtert pro Modus).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -81,6 +84,26 @@ export type VehicleImageryControllingRow = {
   last_updated: string | null;
 };
 
+/** Eintrag aus `controll_status` für ein Fahrzeug. */
+export type ControllStatusRow = {
+  id: number;
+  vehicle_id: number;
+  view_token: string;
+  /** z. B. `correction`, `scaling`. */
+  mode: string;
+  /** z. B. `correct`, `regen_vertex`, `regen_batch`, `delete`. */
+  status: string;
+  updated_at: string | null;
+  key: string | null;
+  /** Spalte heißt `"check"` (reserviertes Wort). */
+  check: number;
+};
+
+const SELECT_CONTROLL_STATUS = `SELECT
+  id, vehicle_id, view_token, mode, status, updated_at, key, "check" AS "check"
+FROM controll_status
+WHERE vehicle_id = ?`;
+
 function controllingCdnBaseFromEnv(env: AuthEnv): string {
   const raw = (env.IMAGE_CDN_CONTROLLING_BASE ?? "").trim();
   if (raw) return raw.replace(/\/$/, "");
@@ -141,8 +164,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     }
     const cdnBase = controllingCdnBaseFromEnv(env);
     const imageUrlQuery = imageUrlQueryFromEnv(env);
+    const statuses = await loadControllStatuses(db, oneId);
     return jsonResponse(
-      { row, cdnBase, imageUrlQuery },
+      { row, cdnBase, imageUrlQuery, statuses },
       { status: 200 },
     );
   }
@@ -352,5 +376,25 @@ WHERE id = ?`,
   }
   const cdnBase = controllingCdnBaseFromEnv(env);
   const imageUrlQuery = imageUrlQueryFromEnv(env);
-  return jsonResponse({ row, cdnBase, imageUrlQuery }, { status: 200 });
+  const statuses = await loadControllStatuses(db, id);
+  return jsonResponse({ row, cdnBase, imageUrlQuery, statuses }, { status: 200 });
 };
+
+/**
+ * Lädt die Status-Einträge zu einer `vehicle_id` aus `controll_status`.
+ * Fängt einen "kein Tabelle"-Fehler ab und gibt dann ein leeres Array zurück.
+ */
+async function loadControllStatuses(
+  db: D1Database,
+  vehicleId: number,
+): Promise<ControllStatusRow[]> {
+  try {
+    const r = await db
+      .prepare(SELECT_CONTROLL_STATUS)
+      .bind(vehicleId)
+      .all<ControllStatusRow>();
+    return r.results ?? [];
+  } catch (_err) {
+    return [];
+  }
+}
