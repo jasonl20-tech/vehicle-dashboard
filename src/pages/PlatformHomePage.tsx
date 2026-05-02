@@ -156,7 +156,7 @@ export default function PlatformHomePage() {
         </section>
 
         <section
-          className="mt-10 grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-4"
+          className="mt-10 flex w-full max-w-7xl flex-wrap justify-center gap-x-5 gap-y-5"
           aria-label="Plattform Bereiche"
         >
           {sichtbareTiles.map((tile) => (
@@ -207,7 +207,7 @@ function PlatformCard({ tile }: { tile: PlatformTile }) {
     return (
       <Link
         to={tile.to}
-        className="group relative min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/75 p-5 shadow-[0_24px_70px_-45px_rgba(13,13,15,0.45)] backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-ink-200 hover:bg-white"
+        className="group relative w-[min(100%,268px)] shrink-0 min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/75 p-5 shadow-[0_24px_70px_-45px_rgba(13,13,15,0.45)] backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-ink-200 hover:bg-white"
       >
         <span
           aria-hidden
@@ -219,7 +219,7 @@ function PlatformCard({ tile }: { tile: PlatformTile }) {
   }
 
   return (
-    <div className="relative min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/45 p-5 opacity-85 backdrop-blur">
+    <div className="relative w-[min(100%,268px)] shrink-0 min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/45 p-5 opacity-85 backdrop-blur">
       {content}
     </div>
   );
