@@ -3,7 +3,7 @@
  *
  * Schreibt einen Eintrag in `controll_status` (D1-Binding `vehicledatabase`).
  * Body:
- *   { vehicleId: number, viewToken: string, mode: string, status: string, key: string|null }
+ *   { vehicleId: number, viewToken: string, mode: string (correction|inside|scaling|shadow|transparency), status: string, key: string|null }
  *
  * Antwort: { row: ControllStatusRow }
  */

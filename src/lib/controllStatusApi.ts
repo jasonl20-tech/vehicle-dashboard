@@ -4,6 +4,7 @@ export const CONTROLL_STATUS_API = "/api/configs/controll-status";
 
 export type ControllStatusMode =
   | "correction"
+  | "inside"
   | "scaling"
   | "shadow"
   | "transparency";

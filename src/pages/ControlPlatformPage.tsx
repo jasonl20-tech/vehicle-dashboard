@@ -47,6 +47,11 @@ import {
   makeFirstViewsSet,
 } from "../lib/firstViewsConfig";
 import {
+  INSIDE_VIEWS_SETTINGS_PATH,
+  type InsideViewsApiResponse,
+  makeInsideViewsSet,
+} from "../lib/insideViewsConfig";
+import {
   GENERATION_VIEWS_SETTINGS_PATH,
   type GenerationViewsApiResponse,
   type GenerationViewsConfig,
@@ -559,6 +564,129 @@ function buildStatusMap(
   return m;
 }
 
+/** UI-Flag-Satz wie im Lightbox-Strip / Raster (inkl. inside vs. Korrektur). */
+type ControllStripVisualFlags = {
+  hasStatus: boolean;
+  checkVal: number | null;
+  statusValue: string | null;
+  isApproved: boolean;
+  isInProgress: boolean;
+  isCheckPending: boolean;
+  isTransferred: boolean;
+  isErrored: boolean;
+  isLocked: boolean;
+};
+
+function emptyStripVisualFlags(): ControllStripVisualFlags {
+  return {
+    hasStatus: false,
+    checkVal: null,
+    statusValue: null,
+    isApproved: false,
+    isInProgress: false,
+    isCheckPending: false,
+    isTransferred: false,
+    isErrored: false,
+    isLocked: false,
+  };
+}
+
+/** Priorität: `inside`-Zeile, sonst weiterhin Korrektur (z. B. Vertex-Job vor Freigabe). */
+function korrekturStatusRowForToken(
+  raw: string,
+  insideViewsSet: Set<string>,
+  statusMap: Map<string, ControllStatusRow>,
+): ControllStatusRow | undefined {
+  const slug = normalizeSlug(parseViewSlot(raw).slug);
+  if (!insideViewsSet.has(slug)) {
+    return statusMap.get(statusKey(raw, "correction"));
+  }
+  return (
+    statusMap.get(statusKey(raw, "inside")) ??
+    statusMap.get(statusKey(raw, "correction"))
+  );
+}
+
+function resolveStatusRowForToken(
+  viewsMode: ControlPlatformViewsMode,
+  raw: string,
+  insideViewsSet: Set<string>,
+  statusMap: Map<string, ControllStatusRow>,
+  controllMode: ReturnType<typeof controllModeForViewsMode>,
+): ControllStatusRow | undefined {
+  if (viewsMode === "korrektur") {
+    return korrekturStatusRowForToken(raw, insideViewsSet, statusMap);
+  }
+  return statusMap.get(statusKey(raw, controllMode));
+}
+
+function resolveWriteControllMode(
+  viewsMode: ControlPlatformViewsMode,
+  rawToken: string,
+  insideViewsSet: Set<string>,
+): "correction" | "inside" | "scaling" | "shadow" | "transparency" {
+  const base = controllModeForViewsMode(viewsMode);
+  if (viewsMode !== "korrektur") return base;
+  const slug = normalizeSlug(parseViewSlot(rawToken).slug);
+  return insideViewsSet.has(slug) ? "inside" : "correction";
+}
+
+function controllStripFlagsFromRow(
+  statusRow: ControllStatusRow | undefined,
+  viewsMode: ControlPlatformViewsMode,
+): ControllStripVisualFlags {
+  if (!statusRow) return emptyStripVisualFlags();
+  const rawCheck = Number(statusRow.check);
+  const checkVal = Number.isFinite(rawCheck) ? rawCheck : null;
+  const statusValueRaw = statusRow.status ?? null;
+  const sv = (statusValueRaw ?? "").trim().toLowerCase();
+  const md = (statusRow.mode ?? "").trim().toLowerCase();
+
+  if (viewsMode === "skalierung") {
+    const isTransferred =
+      checkVal === 6 && md === "scaling" && sv === "correct";
+    const isErrored =
+      checkVal != null && checkVal >= 3 && !isTransferred;
+    const isApproved = checkVal === 2;
+    const isInProgress = checkVal === 1;
+    const isCheckPending = checkVal === 0;
+    return {
+      hasStatus: true,
+      checkVal,
+      statusValue: statusValueRaw,
+      isApproved,
+      isInProgress,
+      isCheckPending,
+      isTransferred,
+      isErrored,
+      isLocked: !isApproved,
+    };
+  }
+
+  const isApproved =
+    md === "inside" ?
+      checkVal === 0 && sv === "correct"
+    : checkVal === 2 && sv === "correct";
+  const isInProgress = checkVal === 1;
+  const isCheckPending =
+    checkVal === 0 && !(md === "inside" && sv === "correct");
+  const isTransferred = false;
+  const isErrored =
+    checkVal != null && checkVal >= 3 && !isTransferred;
+
+  return {
+    hasStatus: true,
+    checkVal,
+    statusValue: statusValueRaw,
+    isApproved,
+    isInProgress,
+    isCheckPending,
+    isTransferred,
+    isErrored,
+    isLocked: !isApproved,
+  };
+}
+
 /**
  * Korrektur-Eintrag zu einem Raster-Slot (`front`, `rear_left`, …),
  * unabhängig davon, ob `view_token` exakt dem Slug entspricht (Normalisierung
@@ -581,6 +709,34 @@ function isCorrectionDoneRow(row: ControllStatusRow): boolean {
     Number(row.check) === 2 &&
     (row.status ?? "").trim().toLowerCase() === "correct"
   );
+}
+
+function isInsideDoneRow(row: ControllStatusRow): boolean {
+  return (
+    (row.mode ?? "").trim().toLowerCase() === "inside" &&
+    Number(row.check) === 0 &&
+    (row.status ?? "").trim().toLowerCase() === "correct"
+  );
+}
+
+/**
+ * Für Zusatz-Slots/Skalierung: Basis-Korrektur als `correction.done` oder
+ * (Inside-Konfiguration) `inside.correct`/`check 0`.
+ */
+function isImageryCorrectionSlotApproved(
+  statuses: ControllStatusRow[] | undefined,
+  slotSlug: string,
+): boolean {
+  const n = normalizeSlug(slotSlug);
+  for (const s of statuses ?? []) {
+    const m = (s.mode ?? "").trim().toLowerCase();
+    if (
+      normalizeSlug(parseViewSlot(s.view_token).slug) !== n
+    ) continue;
+    if (m === "correction" && isCorrectionDoneRow(s)) return true;
+    if (m === "inside" && isInsideDoneRow(s)) return true;
+  }
+  return false;
 }
 
 /**
@@ -1124,9 +1280,17 @@ export default function ControlPlatformPage() {
     [firstViewsList],
   );
 
-  // Sind alle `first_views` für die aktuell offene Detail-Row bereits auf
-  // `correction.correct` (check=2)? Solange `false`, sind Tiles, die
-  // **nicht** zu first_views gehören, gesperrt (im Grid + in der Lightbox).
+  const insideViewsApi = useApi<InsideViewsApiResponse>(
+    INSIDE_VIEWS_SETTINGS_PATH,
+  );
+  const insideViewsList = insideViewsApi.data?.views ?? null;
+  const insideViewsSet = useMemo(
+    () => makeInsideViewsSet(insideViewsList),
+    [insideViewsList],
+  );
+
+  // Sind alle `first_views` erledigt (Korrektur check 2 oder Inside check 0)?
+  // Solange `false`, sind Tiles, die **nicht** zu first_views gehören, gesperrt.
   const firstViewsReady = useMemo(
     () => areFirstViewsReady(firstViewsSet, detailApi.data?.statuses),
     [firstViewsSet, detailApi.data?.statuses],
@@ -1201,31 +1365,14 @@ export default function ControlPlatformPage() {
     };
 
     const flagsFor = (raw: string) => {
-      const statusRow = statusMap.get(statusKey(raw, controllMode));
-      const hasStatus = !!statusRow;
-      const checkVal = statusRow ? Number(statusRow.check) : null;
-      const statusValueRaw = statusRow?.status ?? null;
-      const isApproved = checkVal === 2;
-      const isInProgress = checkVal === 1;
-      const isCheckPending = checkVal === 0;
-      const isTransferred =
-        checkVal === 6 &&
-        controllMode === "scaling" &&
-        statusValueRaw === "correct";
-      const isErrored =
-        checkVal != null && checkVal >= 3 && !isTransferred;
-      const isLocked = hasStatus && !isApproved;
-      return {
-        hasStatus,
-        checkVal,
-        statusValue: statusValueRaw,
-        isApproved,
-        isInProgress,
-        isCheckPending,
-        isTransferred,
-        isErrored,
-        isLocked,
-      };
+      const resolvedRow = resolveStatusRowForToken(
+        viewsMode,
+        raw,
+        insideViewsSet,
+        statusMap,
+        controllMode,
+      );
+      return controllStripFlagsFromRow(resolvedRow, viewsMode);
     };
 
     const internal: Row[] = [];
@@ -1324,6 +1471,8 @@ export default function ControlPlatformPage() {
     imageUrlQuery,
     controllMode,
     statusMap,
+    viewsMode,
+    insideViewsSet,
     firstViewsSet,
     firstViewsReady,
     buildImageSrcWithReload,
@@ -1444,7 +1593,11 @@ export default function ControlPlatformPage() {
           const res = await postControllStatus({
             vehicleId: selectedId,
             viewToken: ctx.rawToken,
-            mode: controllMode,
+            mode: resolveWriteControllMode(
+              viewsMode,
+              ctx.rawToken,
+              insideViewsSet,
+            ),
             status,
             key: r2Key,
           });
@@ -1529,6 +1682,7 @@ export default function ControlPlatformPage() {
       imagePreviewStripItems,
       navigateToSiblingVehicle,
       viewsMode,
+      insideViewsSet,
     ],
   );
 
@@ -2045,10 +2199,10 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                       // „+"-Button: nur, wenn die Ansicht in
                       // settings.generation_views als true markiert ist.
                       // Korrektur-Modus: kein Plus, sobald ein passender
-                      // `controll_status` (mode correction) existiert.
-                      // Skalierungs-Modus: Plus nur, wenn für den Slot **keine**
-                      // laufende/offene Korrektur mehr da ist — eine abgeschlossene
-                      // Korrektur (check 2 · correct) blockiert nicht.
+                      // Korrektur-Job (`correction`-Zeile) existiert (Vertex usw.).
+                      // Skalierungs-Modus: Plus nur, wenn noch eine offene Basis-Korrektur
+                      // aktiv ist — abgeschlossen bedeutet correction/check 2 + status
+                      // „correct“, oder inside/check 0 + „correct“ (Slug in inside_views).
                       // Zusätzlich: Wenn die Basis-Ansicht schon in `row.views`
                       // steht (#skaliert fehlt nur), kein Generieren — nur Platzhalter.
                       const slug = entry.slotSlug;
@@ -2060,13 +2214,19 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         detailApi.data?.statuses,
                         slug,
                       );
+                      const correctionApproved =
+                        isImageryCorrectionSlotApproved(
+                          detailApi.data?.statuses,
+                          slug,
+                        );
                       const correctionDone =
                         existingGenStatus ?
                           isCorrectionDoneRow(existingGenStatus)
                         : false;
                       const genBlockedByCorrection =
                         existingGenStatus != null &&
-                        (viewsMode !== "skalierung" || !correctionDone);
+                        (viewsMode !== "skalierung" ||
+                          !correctionApproved);
                       const scalingBaseInViewsBlocksGen =
                         viewsMode === "skalierung" &&
                         hasBaseKorrekturViewForSlot(row.views, slug);
@@ -2203,34 +2363,48 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                       slot.raw,
                       controllMode,
                     );
-                    const status = statusMap.get(
-                      statusKey(slot.raw, controllMode),
+                    const resolvedRowP = resolveStatusRowForToken(
+                      viewsMode,
+                      slot.raw,
+                      insideViewsSet,
+                      statusMap,
+                      controllMode,
                     );
-                    const checkVal = status ? Number(status.check) : null;
-                    const isApprovedP = checkVal === 2;
-                    const isInProgressP = checkVal === 1;
-                    const isCheckPendingP = checkVal === 0;
-                    const isTransferredP =
-                      checkVal === 6 &&
-                      controllMode === "scaling" &&
-                      status?.status === "correct";
-                    const isErroredP =
-                      checkVal != null && checkVal >= 3 && !isTransferredP;
+                    const fp = controllStripFlagsFromRow(
+                      resolvedRowP,
+                      viewsMode,
+                    );
 
-                    const statusS =
+                    const resolvedRowS =
                       secTok ?
-                        statusMap.get(statusKey(secTok, controllMode))
+                        resolveStatusRowForToken(
+                          viewsMode,
+                          secTok,
+                          insideViewsSet,
+                          statusMap,
+                          controllMode,
+                        )
                       : undefined;
-                    const checkValS = statusS ? Number(statusS.check) : null;
-                    const isApprovedS = checkValS === 2;
-                    const isInProgressS = checkValS === 1;
-                    const isCheckPendingS = checkValS === 0;
-                    const isTransferredS =
-                      checkValS === 6 &&
-                      controllMode === "scaling" &&
-                      statusS?.status === "correct";
-                    const isErroredS =
-                      checkValS != null && checkValS >= 3 && !isTransferredS;
+                    const fs = secTok
+                      ? controllStripFlagsFromRow(
+                          resolvedRowS,
+                          viewsMode,
+                        )
+                      : null;
+
+                    const checkVal = fp.checkVal;
+                    const isApprovedP = fp.isApproved;
+                    const isInProgressP = fp.isInProgress;
+                    const isCheckPendingP = fp.isCheckPending;
+                    const isTransferredP = fp.isTransferred;
+                    const isErroredP = fp.isErrored;
+
+                    const checkValS = fs ? fs.checkVal : null;
+                    const isApprovedS = fs?.isApproved ?? false;
+                    const isInProgressS = fs?.isInProgress ?? false;
+                    const isCheckPendingS = fs?.isCheckPending ?? false;
+                    const isTransferredS = fs?.isTransferred ?? false;
+                    const isErroredS = fs?.isErrored ?? false;
 
                     const isApproved =
                       isApprovedP && (!secTok || isApprovedS);
@@ -3017,8 +3191,10 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                           ? `errored (check ${scalingActiveSide.checkVal})`
                           : scalingActiveSide.isTransferred
                           ? "übertragen (check 6)"
-                          : scalingActiveSide.isApproved
-                          ? "done · freigegeben (check 2)"
+                          : scalingActiveSide.isApproved ?
+                            scalingActiveSide.checkVal === 0 ?
+                              "done · inside · freigegeben (check 0)"
+                            : "done · freigegeben (check 2)"
                           : scalingActiveSide.isCheckPending
                           ? "lock · wartet auf Prüfung (check 0)"
                           : "in Bearbeitung (check 1)"}

@@ -121,6 +121,9 @@ const STORAGE_COLUMNS_VALIASED = `
  * zählt `n_transferred = 0`. Ein `check = 6` mit anderem Kontext fällt unter
  * `n_errored` (alle `check >= 3` außer der spezifischen scaling/correct/6-Kombi).
  *
+ * Korrektur: Zeilen mit `mode = inside` sind eingeschlossen. „Done“ ist wahlweise
+ * `correction`: `correct`/`check = 2` oder `inside`: `correct`/`check = 0`.
+ *
  * Skalierung: `#skaliert` und `#skaliert_weiß` zum **selben Basis-Slug** werden
  * zu **einer** logischen Ansicht zusammengefasst (wie die gekoppelte Kachel);
  * die Counts beziehen sich auf diese Paare, nicht auf einzelne Zeilen.
@@ -156,7 +159,7 @@ function controllStatusAggSubquery(statusMode: string): string {
       SUM(CASE WHEN "check" >= 3 AND NOT ("check" = 6 AND lower(ifnull(status, '')) = 'correct') THEN 1 ELSE 0 END) AS ne,
       SUM(CASE WHEN "check" = 0 THEN 1 ELSE 0 END) AS n0
     FROM controll_status
-    WHERE mode = ?${scalingViewFilter}
+    WHERE mode = 'scaling'${scalingViewFilter}
     GROUP BY vehicle_id, lower(substr(view_token, 1, instr(lower(view_token), '#') - 1))
   ) grp
   GROUP BY vehicle_id
@@ -164,6 +167,33 @@ function controllStatusAggSubquery(statusMode: string): string {
   }
   const transferredExpr = `0`;
   const erroredExpr = `SUM(CASE WHEN "check" >= 3 THEN 1 ELSE 0 END)`;
+  if (statusMode === "correction") {
+    const modeWhere = `lower(ifnull(mode, '')) IN ('correction', 'inside')`;
+    const doneExpr = `SUM(CASE WHEN (
+        (lower(ifnull(mode, '')) = 'correction' AND "check" = 2 AND lower(ifnull(status, '')) = 'correct')
+        OR (lower(ifnull(mode, '')) = 'inside' AND "check" = 0 AND lower(ifnull(status, '')) = 'correct')
+      ) THEN 1 ELSE 0 END)`;
+    const pendingExpr = `SUM(CASE WHEN "check" = 0 AND NOT (
+        lower(ifnull(mode, '')) = 'inside' AND lower(ifnull(status, '')) = 'correct'
+      ) THEN 1 ELSE 0 END)`;
+    const inProgExpr = `SUM(CASE WHEN "check" = 1 THEN 1 ELSE 0 END)`;
+    return `(
+  SELECT
+    vehicle_id,
+    ${doneExpr} AS n_done,
+    ${transferredExpr} AS n_transferred,
+    ${erroredExpr} AS n_errored,
+    ${inProgExpr} AS n_in_progress,
+    ${pendingExpr} AS n_pending,
+    COUNT(*) AS n_total
+  FROM controll_status
+  WHERE ${modeWhere}${scalingViewFilter}
+  GROUP BY vehicle_id
+) cs`;
+  }
+
+  const modeWhere =
+    statusMode === "shadow" ? `mode = 'shadow'` : `mode = 'transparency'`;
   return `(
   SELECT
     vehicle_id,
@@ -174,7 +204,7 @@ function controllStatusAggSubquery(statusMode: string): string {
     SUM(CASE WHEN "check" = 0 THEN 1 ELSE 0 END) AS n_pending,
     COUNT(*) AS n_total
   FROM controll_status
-  WHERE mode = ?${scalingViewFilter}
+  WHERE ${modeWhere}${scalingViewFilter}
   GROUP BY vehicle_id
 ) cs`;
 }
@@ -554,10 +584,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${controllStatusAggSubquery(statusMode)} ON cs.vehicle_id = v.id`;
 
   const countSql = `SELECT COUNT(*) as n ${fromJoin}${whereSql}`;
-  const countRow = await db
-    .prepare(countSql)
-    .bind(statusMode, ...binds)
-    .first<{ n: number }>();
+  const countRow = await db.prepare(countSql).bind(...binds).first<{ n: number }>();
   const total = countRow?.n ?? 0;
 
   const listSql = `SELECT
@@ -586,7 +613,7 @@ LIMIT ? OFFSET ?`;
   try {
     const r = await db
       .prepare(listSql)
-      .bind(statusMode, ...binds, limit, offset)
+      .bind(...binds, limit, offset)
       .all<ListRowRaw>();
     results = r.results ?? [];
   } catch (err) {
@@ -755,10 +782,7 @@ export async function countControllingOpenByStatusMode(
   const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${controllStatusAggSubquery(statusMode)} ON cs.vehicle_id = v.id`;
   const countSql = `SELECT COUNT(*) as n ${fromJoin}${whereSql}`;
   try {
-    const countRow = await db
-      .prepare(countSql)
-      .bind(statusMode)
-      .first<{ n: number }>();
+    const countRow = await db.prepare(countSql).bind().first<{ n: number }>();
     return countRow?.n ?? 0;
   } catch {
     return 0;
@@ -798,7 +822,7 @@ async function sumRemainingViewSlotsByStatusMode(
       ? correctionExpectedViewCountFromViews
       : scalingPairExpectedCountFromViews;
   try {
-    const r = await db.prepare(sql).bind(statusMode).all<{
+    const r = await db.prepare(sql).bind().all<{
       views: string | null;
       n_done: number;
       n_transferred: number;

@@ -80,6 +80,8 @@ export const CONTROL_PLATFORM_API_PATH_PREFIXES: readonly string[] = [
   "/api/configs/active-controll-mode",
   "/api/configs/controll-buttons",
   "/api/configs/controll-status",
+  "/api/configs/first-views",
+  "/api/configs/inside-views",
   "/api/intern-analytics/controll-platform-action",
 ];
 
@@ -107,6 +109,7 @@ export const DASHBOARD_API_PATH_PREFIXES: readonly string[] = [
   "/api/configs/controll-buttons",
   "/api/configs/controll-status",
   "/api/configs/first-views",
+  "/api/configs/inside-views",
   "/api/configs/generation-views",
   "/api/configs/google-image-search",
   "/api/configs/preview-images",

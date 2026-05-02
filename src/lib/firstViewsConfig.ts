@@ -1,9 +1,10 @@
 /**
  * Frontend-Typen + API-Pfad für die `first_views`-Settings.
  *
- * Die Liste enthält View-Slugs (lowercase), die für ein Fahrzeug zuerst
- * `correction.correct` (check=2) sein müssen, bevor andere Views
- * bearbeitet werden dürfen.
+ * Die Liste enthält View-Slugs (lowercase), die für ein Fahrzeug zuerst auf
+ * `correction.correct` (check=2) stehen müssen — oder alternativ bei
+ * `inside.correct` (check=0), wenn derselbe Slug zusätzlich als Inside-Ansicht
+ * geführt wird — bevor andere Views bearbeitet werden dürfen.
  */
 
 import type { ControllStatusRow } from "./vehicleImageryPublicApi";
@@ -36,9 +37,9 @@ export function makeFirstViewsSet(
 }
 
 /**
- * Prüft, ob *alle* `first_views` für ein Fahrzeug bereits auf
- * `correction.correct` mit `check === 2` stehen. Wenn die Liste leer ist,
- * gilt das Vehicle als „first views erledigt".
+ * Prüft, ob alle `first_views` erledigt sind: `correction.correct` (check 2)
+ * oder `inside.correct` (check 0). Bei leerer Liste gilt das Fahrzeug als
+ * „first views erledigt”.
  */
 export function areFirstViewsReady(
   firstViews: Set<string> | readonly string[] | null | undefined,
@@ -49,17 +50,26 @@ export function areFirstViewsReady(
   if (set.size === 0) return true;
   if (!statuses || statuses.length === 0) return false;
 
-  // Index: viewToken (lowercase) → ControllStatusRow für mode=correction
-  const byToken = new Map<string, ControllStatusRow>();
+  const corrBy = new Map<string, ControllStatusRow>();
+  const insBy = new Map<string, ControllStatusRow>();
   for (const s of statuses) {
-    if ((s.mode ?? "").toLowerCase() !== "correction") continue;
-    byToken.set(norm(s.view_token), s);
+    const m = (s.mode ?? "").toLowerCase();
+    const k = norm(s.view_token);
+    if (m === "correction") corrBy.set(k, s);
+    else if (m === "inside") insBy.set(k, s);
   }
   for (const slug of set) {
-    const row = byToken.get(slug);
-    if (!row) return false;
-    if (Number(row.check) !== 2) return false;
-    if ((row.status ?? "").toLowerCase() !== "correct") return false;
+    const c = corrBy.get(slug);
+    const i = insBy.get(slug);
+    const corrOk =
+      c != null &&
+      Number(c.check) === 2 &&
+      (c.status ?? "").trim().toLowerCase() === "correct";
+    const insOk =
+      i != null &&
+      Number(i.check) === 0 &&
+      (i.status ?? "").trim().toLowerCase() === "correct";
+    if (!(corrOk || insOk)) return false;
   }
   return true;
 }

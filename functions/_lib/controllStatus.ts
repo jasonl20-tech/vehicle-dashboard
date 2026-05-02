@@ -15,6 +15,7 @@
  */
 export const CONTROLL_STATUS_MODES = [
   "correction",
+  "inside",
   "scaling",
   "shadow",
   "transparency",
@@ -27,6 +28,7 @@ export const CONTROLL_STATUS_VALUES_BY_MODE: Record<
   readonly string[]
 > = {
   correction: ["correct", "regen_vertex", "regen_batch", "delete"],
+  inside: ["correct", "regen_vertex", "regen_batch", "delete"],
   shadow: ["correct", "regen_vertex", "regen_batch", "delete"],
   transparency: ["correct", "regen_vertex", "regen_batch", "delete"],
   scaling: ["correct", "regen_transparent", "regen_scaling", "delete"],
@@ -88,7 +90,8 @@ export function validateControllStatusBody(
   if (!isControllStatusMode(b.mode)) {
     return {
       ok: false,
-      error: "mode muss correction | scaling | shadow | transparency sein.",
+      error:
+        "mode muss correction | inside | scaling | shadow | transparency sein.",
     };
   }
   const mode: ControllStatusMode = b.mode;
