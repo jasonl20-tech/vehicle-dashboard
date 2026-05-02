@@ -17,7 +17,7 @@ type Props = {
 };
 
 /**
- * Plan-Editor für `/zahlungen/plaene`. Lädt das Modell aus dem KV-Wert,
+ * Plan-Editor für `/dashboard/zahlungen/plaene`. Lädt das Modell aus dem KV-Wert,
  * delegiert das Rendering an `PlanFormFields` und schreibt beim Speichern
  * über `putPlan` zurück in die `plans`-KV.
  */

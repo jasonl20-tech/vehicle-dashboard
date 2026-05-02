@@ -256,8 +256,8 @@ export function shortKey(id: string): string {
   return `${id.slice(0, 8)}…${id.slice(-6)}`;
 }
 
-const PATH_KUNDEN_KEYS = "/kunden/keys";
-const PATH_KUNDENTEST_KEYS = "/kunden/test-keys";
+const PATH_KUNDEN_KEYS = "/dashboard/kunden/keys";
+const PATH_KUNDENTEST_KEYS = "/dashboard/kunden/test-keys";
 
 /**
  * Link zur Key-Detailseite. `test` = Route unter /kunden/test-keys/…

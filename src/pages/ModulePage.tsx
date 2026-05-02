@@ -5,82 +5,82 @@ const META: Record<
   string,
   { title: string; eyebrow: string; description: string }
 > = {
-  "/ansichten/bildaustrahlung": {
+  "/dashboard/ansichten/bildaustrahlung": {
     title: "Bildaustrahlung",
     eyebrow: "Ansichten",
     description: "Ausgabe und Verteilung von Fahrzeugbildern – Inhalte folgen.",
   },
-  "/leads": {
+  "/dashboard/leads": {
     title: "Leads",
     eyebrow: "Leads",
     description: "Interessenten und Lead-Übersicht – Inhalte folgen.",
   },
-  "/kunden/keys": {
+  "/dashboard/kunden/keys": {
     title: "Kunden keys",
     eyebrow: "Kundenmanagement",
     description: "Produktive API-Schlüssel und Kundenbindung – Inhalte folgen.",
   },
-  "/kunden/test-keys": {
+  "/dashboard/kunden/test-keys": {
     title: "Kundentest keys",
     eyebrow: "Kundenmanagement",
     description: "Test- und Staging-Keys, getrennt von Produktion – Inhalte folgen.",
   },
-  "/logs/skalierungs-worker": {
+  "/dashboard/logs/skalierungs-worker": {
     title: "Skalierungs Worker",
     eyebrow: "Logs",
     description: "Protokolle und Einstellungen des Skalierungs-Workers – Inhalte folgen.",
   },
-  "/logs/generierungs-worker": {
+  "/dashboard/logs/generierungs-worker": {
     title: "Generierungs Worker",
     eyebrow: "Logs",
     description: "Protokolle und Einstellungen des Generierungs-Workers – Inhalte folgen.",
   },
-  "/emails/logs": {
+  "/dashboard/emails/logs": {
     title: "Email Logs",
     eyebrow: "Emails",
     description: "Versand- und Zustellprotokolle – Inhalte folgen.",
   },
-  "/emails/tracking": {
+  "/dashboard/emails/tracking": {
     title: "Email Tracking",
     eyebrow: "Emails",
     description: "Öffnungs- und Klick-Tracking – Inhalte folgen.",
   },
-  "/emails/automator": {
+  "/dashboard/emails/automator": {
     title: "Email Automator",
     eyebrow: "Emails",
     description: "Regeln und Abläufe für automatisierte E-Mails – Inhalte folgen.",
   },
-  "/website/blogs": {
+  "/dashboard/website/blogs": {
     title: "Blogs",
     eyebrow: "Webseite",
     description: "Blog-Artikel und Kategorien.",
   },
-  "/website/landing-pages": {
+  "/dashboard/website/landing-pages": {
     title: "Landing Pages",
     eyebrow: "Webseite",
     description: "Conversion-Seiten und Traffic-Einstiege.",
   },
-  "/website/faq": {
+  "/dashboard/website/faq": {
     title: "FAQ",
     eyebrow: "Webseite",
     description: "Häufige Fragen – Struktur und Inhalte.",
   },
-  "/website/tutorials": {
+  "/dashboard/website/tutorials": {
     title: "Tutorials",
     eyebrow: "Webseite",
     description: "Anleitungen und Video-Inhalte.",
   },
-  "/website/whitepaper": {
+  "/dashboard/website/whitepaper": {
     title: "Whitepaper",
     eyebrow: "Webseite",
     description: "Downloads und Leads.",
   },
-  "/website/company": {
+  "/dashboard/website/company": {
     title: "Company Info",
     eyebrow: "Webseite",
     description: "Unternehmensseiten und Team.",
   },
-  "/website/changelog": {
+  "/dashboard/website/changelog": {
     title: "Changelog",
     eyebrow: "Webseite",
     description: "Produkt- und Release-Notizen.",

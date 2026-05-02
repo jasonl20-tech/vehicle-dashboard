@@ -31,12 +31,12 @@ function useIsLg(): boolean {
   return isLg;
 }
 
-const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/kunden/test-anfragen" as const;
-const BILDEMPFANG_PAGE = "/ansichten/bildempfang" as const;
-const KUNDEN_CRM = "/kunden/crm" as const;
-const KUNDEN_ANFRAGEN = "/kunden/anfragen" as const;
-const EMAIL_TEMPLATES = "/emails/templates" as const;
-const ASSETS_PAGE = "/databases/assets" as const;
+const FULL_WIDTH_KUNDEN_TEST_ANFRAGEN = "/dashboard/kunden/test-anfragen" as const;
+const BILDEMPFANG_PAGE = "/dashboard/ansichten/bildempfang" as const;
+const KUNDEN_CRM = "/dashboard/kunden/crm" as const;
+const KUNDEN_ANFRAGEN = "/dashboard/kunden/anfragen" as const;
+const EMAIL_TEMPLATES = "/dashboard/emails/templates" as const;
+const ASSETS_PAGE = "/dashboard/databases/assets" as const;
 
 /**
  * Pfade, die das Split-View-Layout (kollabierbare Sidebar links + Editor
@@ -45,12 +45,12 @@ const ASSETS_PAGE = "/databases/assets" as const;
  * geprüft.
  */
 const SPLIT_VIEW_PREFIXES = [
-  "/kunden/keys",
-  "/kunden/test-keys",
-  "/systeme/prompts",
-  "/systeme/mapping",
-  "/systeme/blockierte-fahrzeuge",
-  "/emails/logs",
+  "/dashboard/kunden/keys",
+  "/dashboard/kunden/test-keys",
+  "/dashboard/systeme/prompts",
+  "/dashboard/systeme/mapping",
+  "/dashboard/systeme/blockierte-fahrzeuge",
+  "/dashboard/emails/logs",
 ] as const;
 
 function isSplitViewPath(pathname: string): boolean {

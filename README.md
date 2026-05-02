@@ -85,7 +85,7 @@ Stufe 2 sieht nur Kundenmanagement und benötigte APIs:
 
 ```sql
 INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
-  (2, '/kunden/*'),
+  (2, '/dashboard/kunden/*'),
   (2, '/api/crm/*'),
   (2, '/api/customers/*'),
   (2, '/api/website/submissions'),
@@ -96,9 +96,39 @@ Stufe 3 nur eine konkrete Unterseite:
 
 ```sql
 INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
-  (3, '/kunden/anfragen'),
+  (3, '/dashboard/kunden/anfragen'),
   (3, '/api/website/submissions');
 ```
+
+Stufe 4 darf alles im Dashboard inkl. aller Unterbereiche:
+
+```sql
+INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
+  (4, '/dashboard/*'),
+  (4, '/api/*');
+```
+
+Routenstruktur (Auszug):
+
+| Bereich | Pfad |
+|---------|------|
+| Übersicht | `/dashboard` |
+| Ansichten | `/dashboard/ansichten/*` |
+| Kundenmanagement | `/dashboard/kunden/*` |
+| Leads | `/dashboard/leads` |
+| API Analytics | `/dashboard/analytics/*` |
+| Intern Analytics | `/dashboard/intern-analytics/*` |
+| Zahlungen | `/dashboard/zahlungen/*` |
+| Emails | `/dashboard/emails/*` |
+| Webseite | `/dashboard/website/*` |
+| Datenbanken | `/dashboard/databases/*` |
+| Systeme | `/dashboard/systeme/*` |
+| Logs | `/dashboard/logs/*` |
+| User Settings | `/dashboard/settings` |
+| Control Platform | `/control-platform` |
+| N8N (Redirect) | `/n8n` |
+| Social Media (Redirect) | `/socialmediamanager` |
+| Docusign (Redirect) | `/docusign` |
 
 Geschützte **SPA-Routen** über [`ProtectedRoute`](src/components/auth/ProtectedRoute.tsx) und gefilterte Navigation; geschützte **API-Aufrufe** über [`functions/api/_middleware.ts`](functions/api/_middleware.ts). Ausnahmen ohne Pfadliste: **`/api/login`**, **`/api/setup-password`**, **`/api/logout`**, sowie **`GET /api/me`** (liefert u. a. `erlaubtePfade`).
 

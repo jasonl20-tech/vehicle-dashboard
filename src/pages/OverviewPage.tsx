@@ -905,7 +905,7 @@ export default function OverviewPage() {
           loading={stat.loading}
           color={C.blue}
           icon={Inbox}
-          to="/kunden/anfragen"
+          to="/dashboard/kunden/anfragen"
           hint={
             stat.data
               ? `Monat: ${fmtNumber(stat.data.website.submissions.month)} · 7 T: ${fmtNumber(stat.data.website.submissions.week)}`
@@ -920,7 +920,7 @@ export default function OverviewPage() {
           loading={stat.loading}
           color={C.amber}
           icon={Inbox}
-          to="/kunden/test-anfragen"
+          to="/dashboard/kunden/test-anfragen"
           hint={
             stat.data
               ? `Monat: ${fmtNumber(stat.data.website.trialSubmissions.month)} · 7 T: ${fmtNumber(stat.data.website.trialSubmissions.week)}`
@@ -935,7 +935,7 @@ export default function OverviewPage() {
           loading={stat.loading}
           color={C.mint}
           icon={Mail}
-          to="/kunden/newsletter"
+          to="/dashboard/kunden/newsletter"
           hint={
             stat.data
               ? `Monat: ${fmtNumber(stat.data.website.newsletter.month)} · 7 T: ${fmtNumber(stat.data.website.newsletter.week)}`
@@ -950,7 +950,7 @@ export default function OverviewPage() {
           loading={stat.loading}
           color={C.purple}
           icon={KeyRound}
-          to="/kunden/keys"
+          to="/dashboard/kunden/keys"
           hint={
             stat.data?.activeKeys
               ? `Produktiv: ${fmtNumber(stat.data.activeKeys.productive)} · Test: ${fmtNumber(stat.data.activeKeys.test)}`
@@ -963,7 +963,7 @@ export default function OverviewPage() {
           loading={jobs.loading}
           color={C.rose}
           icon={Briefcase}
-          to="/intern-analytics/jobs"
+          to="/dashboard/intern-analytics/jobs"
           hint="Controlling – check = 0"
         />
       </div>
@@ -999,7 +999,7 @@ export default function OverviewPage() {
             title="Oneauto-Bilanz"
             subtitle="Letzte 12 Monate · EUR (ca.)"
             icon={TrendingUp}
-            to="/analytics/oneauto-reports"
+            to="/dashboard/analytics/oneauto-reports"
           />
           <div className="h-[280px] w-full">
             {oneauto.error ? (
@@ -1017,7 +1017,7 @@ export default function OverviewPage() {
             title="Aktive Keys: Verteilung"
             subtitle="Nur unabgelaufene Keys"
             icon={KeyRound}
-            to="/kunden/keys"
+            to="/dashboard/kunden/keys"
           />
           <div className="h-[280px] w-full">
             {stat.data?.activeKeys ? (
@@ -1040,7 +1040,7 @@ export default function OverviewPage() {
             title="Kunden-API: Requests"
             subtitle="Heute · 7 Tage · Monat"
             icon={TrendingUp}
-            to="/analytics/kunden-api"
+            to="/dashboard/analytics/kunden-api"
           />
           <div className="h-[260px] w-full">
             {!requestsReady ? (
@@ -1062,7 +1062,7 @@ export default function OverviewPage() {
             title="Anfragen vs. Newsletter"
             subtitle="Tagesvergleich (30 Tage)"
             icon={TrendingUp}
-            to="/kunden/newsletter"
+            to="/dashboard/kunden/newsletter"
           />
           <div className="h-[260px] w-full">
             {daily ? (
@@ -1078,7 +1078,7 @@ export default function OverviewPage() {
             title="Voraussichtliche Bearbeitungszeit"
             subtitle="7-Tage-Rückblick · Session-Gap 30 min · nur Zeilen mit blob4"
             icon={TimerReset}
-            to="/intern-analytics/controlling"
+            to="/dashboard/intern-analytics/controlling"
           />
           <div className="h-[180px] w-full">
             {ctrl.error ? (

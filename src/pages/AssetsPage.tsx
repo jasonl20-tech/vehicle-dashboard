@@ -2,7 +2,7 @@
  * AssetsPage — Standalone-Browser für den R2-Bucket `assets`
  * (Custom-Domain `assets.vehicleimagery.com`).
  *
- * Routes: `/databases/assets`. Sidebar-Eintrag unter "Datenbanken".
+ * Routes: `/dashboard/databases/assets`. Sidebar-Eintrag unter "Datenbanken".
  *
  * Logik liegt komplett in `components/assets/AssetBrowser.tsx`,
  * damit dieselbe UI auch im Email-Builder via `AssetPicker` genutzt

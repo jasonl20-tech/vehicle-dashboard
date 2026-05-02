@@ -375,7 +375,7 @@ export default function EmailManuellPage() {
               </select>
               {templateId && (
                 <Link
-                  to={`/emails/templates?id=${encodeURIComponent(templateId)}`}
+                  to={`/dashboard/emails/templates?id=${encodeURIComponent(templateId)}`}
                   className="ml-2 inline-flex items-center text-ink-400 hover:text-ink-700"
                   title="Template öffnen"
                 >
@@ -797,7 +797,7 @@ function SuccessPanel({
         </p>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <Link
-            to={`/emails/logs/${encodeURIComponent(job.id)}`}
+            to={`/dashboard/emails/logs/${encodeURIComponent(job.id)}`}
             className="press inline-flex items-center gap-1 rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 transition hover:bg-ink-50"
           >
             <ExternalLink className="h-3.5 w-3.5" />

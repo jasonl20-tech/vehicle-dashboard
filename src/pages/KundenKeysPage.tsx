@@ -33,7 +33,9 @@ export function KundenTestKeysPage() {
 }
 
 function basePathFor(variant: ListVariant): string {
-  return variant === "test" ? "/kunden/test-keys" : "/kunden/keys";
+  return variant === "test"
+    ? "/dashboard/kunden/test-keys"
+    : "/dashboard/kunden/keys";
 }
 
 function KundenKeysSplitView({ variant }: { variant: ListVariant }) {

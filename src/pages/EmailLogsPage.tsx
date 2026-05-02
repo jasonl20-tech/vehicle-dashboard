@@ -4,7 +4,7 @@
  * Quelle: `email_jobs` (read-only, vom externen Mail-Worker geschrieben)
  * mit Tracking-Aggregaten (Opens / Clicks pro Job) per LEFT JOIN auf
  * `email_tracking`. Klick auf eine Zeile öffnet die Detail-Seite
- * `/emails/logs/:id` mit Timeline & Charts pro Job.
+ * `/dashboard/emails/logs/:id` mit Timeline & Charts pro Job.
  */
 import {
   AlertCircle,
@@ -327,7 +327,7 @@ export default function EmailLogsPage() {
                 row={r}
                 index={idx}
                 onOpen={() =>
-                  navigate(`/emails/logs/${encodeURIComponent(r.id)}`)
+                  navigate(`/dashboard/emails/logs/${encodeURIComponent(r.id)}`)
                 }
               />
             ))}

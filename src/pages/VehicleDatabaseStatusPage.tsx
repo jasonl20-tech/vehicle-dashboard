@@ -171,7 +171,7 @@ export default function VehicleDatabaseStatusPage() {
                   <tr key={r.id} className="hover:bg-ink-50/50">
                     <td className={`${TD} font-mono tabular-nums`}>
                       <Link
-                        to={`/databases/production/${r.id}`}
+                        to={`/dashboard/databases/production/${r.id}`}
                         className="text-brand-700 hover:underline"
                       >
                         {r.id}

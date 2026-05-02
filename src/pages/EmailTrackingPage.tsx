@@ -319,7 +319,7 @@ export default function EmailTrackingPage() {
           subtitle="nach Engagement (Opens + Clicks)"
           right={
             <Link
-              to="/emails/logs"
+              to="/dashboard/emails/logs"
               className="inline-flex items-center gap-1 text-[11.5px] text-ink-500 hover:text-ink-900"
             >
               Alle Logs
@@ -716,7 +716,7 @@ function TopJobsTable({
             <tr key={j.id} className="hover:bg-ink-50/40">
               <td className="border-b border-hair px-2 py-2 align-top">
                 <Link
-                  to={`/emails/logs/${encodeURIComponent(j.id)}`}
+                  to={`/dashboard/emails/logs/${encodeURIComponent(j.id)}`}
                   className="block max-w-md truncate text-ink-800 hover:underline"
                   title={j.custom_subject ?? ""}
                 >
@@ -759,7 +759,7 @@ function TopJobsTable({
               </td>
               <td className="whitespace-nowrap border-b border-hair px-2 py-2 text-right align-top">
                 <Link
-                  to={`/emails/logs/${encodeURIComponent(j.id)}`}
+                  to={`/dashboard/emails/logs/${encodeURIComponent(j.id)}`}
                   className="inline-flex items-center gap-1 text-[11.5px] text-ink-500 hover:text-ink-900"
                   title="Im Log öffnen"
                 >
@@ -836,7 +836,7 @@ function RecentEvents({
               </td>
               <td className="border-b border-hair px-2 py-1.5 align-top">
                 <Link
-                  to={`/emails/logs/${encodeURIComponent(ev.job_id)}`}
+                  to={`/dashboard/emails/logs/${encodeURIComponent(ev.job_id)}`}
                   className="block max-w-[18rem] truncate text-ink-800 hover:underline"
                   title={ev.custom_subject ?? ev.job_id}
                 >

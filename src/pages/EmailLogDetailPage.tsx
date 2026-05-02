@@ -112,7 +112,7 @@ export default function EmailLogDetailPage() {
     () => (
       <div className="flex min-w-0 w-full flex-1 items-center justify-end gap-1.5">
         <Link
-          to="/emails/logs"
+          to="/dashboard/emails/logs"
           className="inline-flex items-center gap-1 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 py-1.5 text-[12px] text-night-200 transition hover:bg-white/[0.08] hover:text-white"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -138,7 +138,7 @@ export default function EmailLogDetailPage() {
   }, [setHeaderTrailing, headerToolbar]);
 
   if (!id) {
-    navigate("/emails/logs", { replace: true });
+    navigate("/dashboard/emails/logs", { replace: true });
     return null;
   }
 
@@ -161,7 +161,7 @@ export default function EmailLogDetailPage() {
             {job.error}
           </p>
           <Link
-            to="/emails/logs"
+            to="/dashboard/emails/logs"
             className="mt-4 inline-flex items-center gap-1 rounded-md border border-hair bg-white px-3 py-1.5 text-[12.5px] text-ink-700 hover:bg-ink-50"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
@@ -217,7 +217,7 @@ export default function EmailLogDetailPage() {
           <DT label="Template" mono>
             {j.template_id ? (
               <Link
-                to={`/emails/templates?id=${encodeURIComponent(j.template_id)}`}
+                to={`/dashboard/emails/templates?id=${encodeURIComponent(j.template_id)}`}
                 className="inline-flex items-center gap-1 text-ink-800 hover:underline"
               >
                 {j.template_id}

@@ -1861,7 +1861,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                   </p>
                 </div>
                 <Link
-                  to={`/databases/production/${row.id}`}
+                  to={`/dashboard/databases/production/${row.id}`}
                   className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-brand-600 hover:underline"
                 >
                   DB

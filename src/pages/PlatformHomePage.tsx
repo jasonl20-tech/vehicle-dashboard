@@ -82,7 +82,7 @@ const TILES: PlatformTile[] = [
   {
     title: "User Settings",
     icon: Settings,
-    to: "/settings",
+    to: "/dashboard/settings",
   },
   {
     title: "Admin Settings",

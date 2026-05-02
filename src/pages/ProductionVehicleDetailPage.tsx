@@ -69,7 +69,7 @@ export default function ProductionVehicleDetailPage() {
           description="keine gültige Eintrags-ID in der URL."
         />
         <Link
-          to="/databases/production"
+          to="/dashboard/databases/production"
           className="text-[13px] text-brand-600 hover:underline"
         >
           ← Zurück zur Übersicht
@@ -82,7 +82,7 @@ export default function ProductionVehicleDetailPage() {
     <div>
       <div className="mb-4">
         <Link
-          to="/databases/production"
+          to="/dashboard/databases/production"
           className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-600 hover:text-ink-900"
         >
           <ArrowLeft className="h-3.5 w-3.5" />

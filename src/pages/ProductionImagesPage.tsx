@@ -486,11 +486,11 @@ export default function ProductionImagesPage() {
                     key={r.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/databases/production/${r.id}`)}
+                    onClick={() => navigate(`/dashboard/databases/production/${r.id}`)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        navigate(`/databases/production/${r.id}`);
+                        navigate(`/dashboard/databases/production/${r.id}`);
                       }
                     }}
                     className="cursor-pointer hover:bg-ink-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink-400/40"
