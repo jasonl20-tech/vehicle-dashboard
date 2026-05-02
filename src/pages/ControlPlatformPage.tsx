@@ -656,17 +656,17 @@ export default function ControlPlatformPage() {
 
       {imagePreview && currentPreviewItem ?
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center p-2 sm:p-4"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black p-2 sm:p-4"
           role="presentation"
         >
           <button
             type="button"
-            className="absolute inset-0 bg-ink-950/90"
+            className="absolute inset-0 z-0 cursor-default"
             aria-label="Schließen"
             onClick={() => setImagePreview(null)}
           />
           <div
-            className="relative z-[91] flex h-[min(92dvh,92vh)] w-full max-w-[min(98vw,1720px)] flex-col gap-1.5 rounded-lg border border-ink-700 bg-ink-950 p-2 shadow-2xl sm:gap-2 sm:p-3"
+            className="relative z-10 flex h-[min(92dvh,92vh)] w-full max-w-[min(98vw,1720px)] flex-col gap-1.5 rounded-lg border border-ink-700 bg-ink-950 p-2 shadow-2xl sm:gap-2 sm:p-3"
             role="dialog"
             aria-modal="true"
             aria-labelledby="control-platform-preview-title"
@@ -769,14 +769,49 @@ export default function ControlPlatformPage() {
                 </div>
               </aside>
 
-              <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 bg-white shadow-inner">
-                <div className="flex h-full w-full items-center justify-center overflow-auto bg-white p-1 sm:p-2">
-                  <img
-                    src={currentPreviewItem.src}
-                    alt=""
-                    className="max-h-full max-w-full object-contain"
-                  />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
+                <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 bg-white shadow-inner">
+                  <div className="flex h-full w-full items-center justify-center overflow-auto bg-white p-1 sm:p-2">
+                    <img
+                      src={currentPreviewItem.src}
+                      alt=""
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
                 </div>
+
+                {viewsMode === "korrektur" ?
+                  <div
+                    className="flex shrink-0 flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center"
+                    role="toolbar"
+                    aria-label="Korrektur-Aktionen"
+                  >
+                    <button
+                      type="button"
+                      className="rounded border border-ink-600 bg-ink-800 px-2.5 py-1.5 text-left text-[11px] font-medium text-white transition hover:bg-ink-700 sm:text-center"
+                    >
+                      Richtig
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-ink-600 bg-ink-800 px-2.5 py-1.5 text-left text-[11px] font-medium text-white transition hover:bg-ink-700 sm:text-center"
+                    >
+                      Neu Generieren (Vertex)
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-ink-600 bg-ink-800 px-2.5 py-1.5 text-left text-[11px] font-medium text-white transition hover:bg-ink-700 sm:text-center"
+                    >
+                      Neu Generieren (Batch)
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border border-red-900 bg-red-950 px-2.5 py-1.5 text-left text-[11px] font-medium text-red-100 transition hover:bg-red-900 sm:text-center"
+                    >
+                      Löschen
+                    </button>
+                  </div>
+                : null}
               </div>
             </div>
 
