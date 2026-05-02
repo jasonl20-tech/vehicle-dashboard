@@ -103,6 +103,10 @@ export interface AuthEnv {
    */
   vehicledatabase?: D1Database;
   /**
+   * D1: Konfiguration (`settings`-Tabelle, u. a. `controll_buttons`). Binding `configs` → `env.configs`.
+   */
+  configs?: D1Database;
+  /**
    * Öffentliche Bild-CDN-Basis (ohne Slash am Ende), z. B. `https://bildurl.vehicleimagery.com`.
    * Optional: Pages-Variable `IMAGE_CDN_BASE`; sonst Fallback im API-Code.
    */

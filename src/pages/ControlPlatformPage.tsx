@@ -11,6 +11,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
+import {
+  CONTROL_PLATFORM_MODE_TO_SETTING,
+  CONTROLL_BUTTONS_SETTINGS_PATH,
+  DEFAULT_CONTROLL_BUTTONS_CONFIG,
+  type ControllActionStub,
+  type ControllButtonsSettingsApiResponse,
+} from "../lib/controllButtonsConfig";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   type ControllStatusRow,
@@ -121,6 +128,77 @@ function lightboxStripSortRank(slotSlug: string): number {
   const s = normalizeSlug(slotSlug);
   const idx = (LIGHTBOX_STRIP_VIEW_ORDER as readonly string[]).indexOf(s);
   return idx === -1 ? LIGHTBOX_STRIP_VIEW_ORDER.length : idx;
+}
+
+type ControllToolbarDef = {
+  configKey: string;
+  label: string;
+  stub: ControllActionStub;
+  variant: "default" | "danger";
+  /** Nur sinnvoll im Modus Korrektur (Kurztasten-Hinweis). */
+  hint?: string;
+};
+
+function controlPlatformToolbarDefs(
+  viewsMode: ControlPlatformViewsMode,
+): ControllToolbarDef[] {
+  if (viewsMode === "skalierung") {
+    return [
+      {
+        configKey: "correct",
+        label: "Richtig",
+        stub: "richtig",
+        variant: "default",
+      },
+      {
+        configKey: "regen_transparent",
+        label: "Neu Generieren ( Transparenz )",
+        stub: "regen_transparent",
+        variant: "default",
+      },
+      {
+        configKey: "regen_scaling",
+        label: "Neu Generieren ( Skalierung )",
+        stub: "regen_scaling",
+        variant: "default",
+      },
+      {
+        configKey: "delete",
+        label: "Löschen",
+        stub: "loeschen",
+        variant: "danger",
+      },
+    ];
+  }
+  return [
+    {
+      configKey: "correct",
+      label: "Richtig",
+      stub: "richtig",
+      variant: "default",
+      hint: "1 / R",
+    },
+    {
+      configKey: "regen_vertex",
+      label: "Neu Generieren ( Vertex )",
+      stub: "vertex",
+      variant: "default",
+      hint: "2 / V",
+    },
+    {
+      configKey: "regen_batch",
+      label: "Neu Generieren ( Batch )",
+      stub: "batch",
+      variant: "default",
+    },
+    {
+      configKey: "delete",
+      label: "Löschen",
+      stub: "loeschen",
+      variant: "danger",
+      hint: "4 / L",
+    },
+  ];
 }
 
 type ViewGridEntry = {
@@ -277,6 +355,39 @@ export default function ControlPlatformPage() {
   );
   const controllMode = controllModeForViewsMode(viewsMode);
 
+  const controllButtonsApi = useApi<ControllButtonsSettingsApiResponse>(
+    CONTROLL_BUTTONS_SETTINGS_PATH,
+  );
+
+  const controllButtonsResolved = useMemo(() => {
+    if (controllButtonsApi.data?.buttons) {
+      return { buttons: controllButtonsApi.data.buttons };
+    }
+    return DEFAULT_CONTROLL_BUTTONS_CONFIG;
+  }, [controllButtonsApi.data]);
+
+  const toolbarDefsVisible = useMemo(() => {
+    const modeKey = CONTROL_PLATFORM_MODE_TO_SETTING[viewsMode];
+    const flags =
+      controllButtonsResolved.buttons[modeKey] ??
+      DEFAULT_CONTROLL_BUTTONS_CONFIG.buttons[modeKey];
+    return controlPlatformToolbarDefs(viewsMode).filter(
+      (d) => flags[d.configKey] === true,
+    );
+  }, [controllButtonsResolved, viewsMode]);
+
+  const korrekturShortcutsFooter = useMemo(() => {
+    if (viewsMode !== "korrektur") return null;
+    const has = (k: string) =>
+      toolbarDefsVisible.some((d) => d.configKey === k);
+    const parts: string[] = [];
+    if (has("correct")) parts.push("1/R");
+    if (has("regen_vertex")) parts.push("2/V");
+    if (has("delete")) parts.push("4/L");
+    if (parts.length === 0) return null;
+    return parts.join(", ");
+  }, [viewsMode, toolbarDefsVisible]);
+
   const imagePreviewStripItems = useMemo(() => {
     if (!row) return [];
     type Row = {
@@ -328,15 +439,16 @@ export default function ControlPlatformPage() {
     return internal.map(({ sortRank: _r, sortIdx: _i, ...item }) => item);
   }, [row, viewGridEntries, cdnBase, imageUrlQuery, controllMode, statusMap]);
 
-  /** Platzhalter — Korrektur-Aktionen (API folgt). */
-  const onCorrectionActionStub = useCallback(
-    (_action: "richtig" | "vertex" | "batch" | "loeschen") => {},
-    [],
-  );
+  /** Platzhalter — Control-Aktionen (API folgt). */
+  const onControllActionStub = useCallback((_action: ControllActionStub) => {}, []);
 
   useEffect(() => {
     if (!imagePreview || imagePreviewStripItems.length === 0) return;
     const n = imagePreviewStripItems.length;
+    const modeKey = CONTROL_PLATFORM_MODE_TO_SETTING[viewsMode];
+    const flags =
+      controllButtonsResolved.buttons[modeKey] ??
+      DEFAULT_CONTROLL_BUTTONS_CONFIG.buttons[modeKey];
     const onKey = (e: KeyboardEvent) => {
       const t = e.target;
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) {
@@ -351,18 +463,21 @@ export default function ControlPlatformPage() {
       if (viewsMode === "korrektur") {
         const k = e.key;
         if (k === "1" || k === "r" || k === "R") {
+          if (flags.correct !== true) return;
           e.preventDefault();
-          onCorrectionActionStub("richtig");
+          onControllActionStub("richtig");
           return;
         }
         if (k === "2" || k === "v" || k === "V") {
+          if (flags.regen_vertex !== true) return;
           e.preventDefault();
-          onCorrectionActionStub("vertex");
+          onControllActionStub("vertex");
           return;
         }
         if (k === "4" || k === "l" || k === "L") {
+          if (flags.delete !== true) return;
           e.preventDefault();
-          onCorrectionActionStub("loeschen");
+          onControllActionStub("loeschen");
           return;
         }
       }
@@ -388,8 +503,9 @@ export default function ControlPlatformPage() {
   }, [
     imagePreview,
     imagePreviewStripItems.length,
-    onCorrectionActionStub,
+    onControllActionStub,
     viewsMode,
+    controllButtonsResolved,
   ]);
 
   const previewIndexClamped =
@@ -842,62 +958,38 @@ export default function ControlPlatformPage() {
                   </div>
                 </div>
 
-                {viewsMode === "korrektur" ?
+                {toolbarDefsVisible.length > 0 ?
                   <div
                     className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch"
                     role="toolbar"
-                    aria-label="Korrektur-Aktionen"
+                    aria-label="Control-Aktionen"
                   >
-                    <button
-                      type="button"
-                      onClick={() => onCorrectionActionStub("richtig")}
-                      className="flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border border-ink-600 bg-ink-800 px-4 py-3 text-left text-white transition hover:bg-ink-700 sm:min-w-[10.5rem]"
-                    >
-                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
-                        Richtig
-                      </span>
-                      <span className="font-mono text-[11px] text-zinc-400">
-                        1 / R
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onCorrectionActionStub("vertex")}
-                      className="flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border border-ink-600 bg-ink-800 px-4 py-3 text-left text-white transition hover:bg-ink-700 sm:min-w-[10.5rem]"
-                    >
-                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
-                        Neu Generieren ( Vertex )
-                      </span>
-                      <span className="font-mono text-[11px] text-zinc-400">
-                        2 / V
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      disabled
-                      aria-disabled="true"
-                      title="Derzeit deaktiviert"
-                      className="flex min-h-[3.75rem] flex-1 cursor-not-allowed flex-col items-start justify-center gap-0.5 rounded-lg border border-ink-800 bg-ink-950 px-4 py-3 text-left text-zinc-500 opacity-60 sm:min-w-[10.5rem]"
-                    >
-                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
-                        Neu Generieren ( Batch )
-                      </span>
-                      <span className="font-mono text-[11px] text-zinc-500">
-                        deaktiviert
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onCorrectionActionStub("loeschen")}
-                      className="flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border border-red-800 bg-red-950 px-4 py-3 text-left text-red-100 transition hover:bg-red-900 sm:min-w-[10.5rem]"
-                    >
-                      <span className="text-[15px] font-semibold leading-tight sm:text-base">
-                        Löschen
-                      </span>
-                      <span className="font-mono text-[11px] text-red-200/80">
-                        4 / L
-                      </span>
-                    </button>
+                    {toolbarDefsVisible.map((def) => {
+                      const isDanger = def.variant === "danger";
+                      return (
+                        <button
+                          key={def.configKey}
+                          type="button"
+                          onClick={() => onControllActionStub(def.stub)}
+                          className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border px-4 py-3 text-left transition sm:min-w-[10.5rem] ${
+                            isDanger ?
+                              "border-red-800 bg-red-950 text-red-100 hover:bg-red-900"
+                            : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
+                          }`}
+                        >
+                          <span className="text-[15px] font-semibold leading-tight sm:text-base">
+                            {def.label}
+                          </span>
+                          {def.hint && viewsMode === "korrektur" ?
+                            <span
+                              className={`font-mono text-[11px] ${isDanger ? "text-red-200/80" : "text-zinc-400"}`}
+                            >
+                              {def.hint}
+                            </span>
+                          : null}
+                        </button>
+                      );
+                    })}
                   </div>
                 : null}
               </div>
@@ -905,18 +997,11 @@ export default function ControlPlatformPage() {
 
             <p className="shrink-0 text-center text-[10px] text-zinc-400">
               ESC oder außen klicken · Pfeiltasten · Kachel antippen
-              {viewsMode === "korrektur" ?
+              {korrekturShortcutsFooter ?
                 <>
                   {" "}
                   · Korrektur:{" "}
-                  <span className="font-mono">1</span>/<span className="font-mono">
-                    R
-                  </span>
-                  , <span className="font-mono">2</span>/
-                  <span className="font-mono">V</span>,{" "}
-                  <span className="font-mono">4</span>/<span className="font-mono">
-                    L
-                  </span>
+                  <span className="font-mono">{korrekturShortcutsFooter}</span>
                 </>
               : null}
             </p>
