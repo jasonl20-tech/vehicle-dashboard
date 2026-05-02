@@ -735,12 +735,18 @@ export default function ControlPlatformPage() {
       const statusRow = statusMap.get(statusKey(slot.raw, controllMode));
       const hasStatus = !!statusRow;
       const checkVal = statusRow ? Number(statusRow.check) : null;
+      const statusValueRaw = statusRow?.status ?? null;
       const isApproved = checkVal === 2;
       const isInProgress = checkVal === 1;
       const isCheckPending = checkVal === 0;
-      const isTransferred = checkVal === 6;
+      // „übertragen" gilt **nur** im Skalierungs-Modus und nur,
+      // wenn `status === 'correct'` und `check === 6`.
+      const isTransferred =
+        checkVal === 6 &&
+        controllMode === "scaling" &&
+        statusValueRaw === "correct";
       const isErrored =
-        checkVal != null && checkVal >= 3 && checkVal !== 6;
+        checkVal != null && checkVal >= 3 && !isTransferred;
       const isLocked = hasStatus && !isApproved;
       const isMain = isMainViewSlug(slot.slug);
       internal.push({
@@ -757,7 +763,7 @@ export default function ControlPlatformPage() {
         isTransferred,
         isErrored,
         checkVal,
-        statusValue: statusRow?.status ?? null,
+        statusValue: statusValueRaw,
         isMain,
         hasTransparencyHint: slot.hasTransparencyHint,
         hasScalingHint: slot.hasScalingHint,
@@ -1242,9 +1248,12 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     const isApproved = checkVal === 2;
                     const isInProgress = checkVal === 1;
                     const isCheckPending = checkVal === 0;
-                    const isTransferred = checkVal === 6;
+                    const isTransferred =
+                      checkVal === 6 &&
+                      controllMode === "scaling" &&
+                      status?.status === "correct";
                     const isErrored =
-                      checkVal != null && checkVal >= 3 && checkVal !== 6;
+                      checkVal != null && checkVal >= 3 && !isTransferred;
                     return (
                       <li
                         key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}

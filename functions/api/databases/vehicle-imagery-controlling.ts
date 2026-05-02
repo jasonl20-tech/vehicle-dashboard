@@ -111,13 +111,26 @@ const STORAGE_COLUMNS_VALIASED = `
 /**
  * Aggregat-Subquery für `controll_status` – `mode` ist Pflicht-Bind.
  * Liefert pro `vehicle_id` Counts (n_done/n_errored/...) und n_total.
+ *
+ * Sonderfall „übertragen": gilt **nur** im Skalierungs-Modus (`mode = scaling`)
+ * und nur wenn `status = 'correct'` und `check = 6`. In allen anderen Modi
+ * zählt `n_transferred = 0`. Ein `check = 6` mit anderem Kontext fällt unter
+ * `n_errored` (alle `check >= 3` außer der spezifischen scaling/correct/6-Kombi).
  */
-const CONTROLL_STATUS_AGG_SUBQUERY = `(
+function controllStatusAggSubquery(statusMode: string): string {
+  const isScaling = statusMode === "scaling";
+  const transferredExpr = isScaling
+    ? `SUM(CASE WHEN "check" = 6 AND status = 'correct' THEN 1 ELSE 0 END)`
+    : `0`;
+  const erroredExpr = isScaling
+    ? `SUM(CASE WHEN "check" >= 3 AND NOT ("check" = 6 AND status = 'correct') THEN 1 ELSE 0 END)`
+    : `SUM(CASE WHEN "check" >= 3 THEN 1 ELSE 0 END)`;
+  return `(
   SELECT
     vehicle_id,
     SUM(CASE WHEN "check" = 2 THEN 1 ELSE 0 END) AS n_done,
-    SUM(CASE WHEN "check" = 6 THEN 1 ELSE 0 END) AS n_transferred,
-    SUM(CASE WHEN "check" >= 3 AND "check" != 6 THEN 1 ELSE 0 END) AS n_errored,
+    ${transferredExpr} AS n_transferred,
+    ${erroredExpr} AS n_errored,
     SUM(CASE WHEN "check" = 1 THEN 1 ELSE 0 END) AS n_in_progress,
     SUM(CASE WHEN "check" = 0 THEN 1 ELSE 0 END) AS n_pending,
     COUNT(*) AS n_total
@@ -125,6 +138,7 @@ const CONTROLL_STATUS_AGG_SUBQUERY = `(
   WHERE mode = ?
   GROUP BY vehicle_id
 ) cs`;
+}
 
 /** Detail-Lookup (ohne JOIN, ohne Counts). */
 const SELECT_LIST_BY_ID = `SELECT
@@ -394,7 +408,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 
   const whereSql = ` WHERE ${where.join(" AND ")}`;
-  const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${CONTROLL_STATUS_AGG_SUBQUERY} ON cs.vehicle_id = v.id`;
+  const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${controllStatusAggSubquery(statusMode)} ON cs.vehicle_id = v.id`;
 
   const countSql = `SELECT COUNT(*) as n ${fromJoin}${whereSql}`;
   const countRow = await db
