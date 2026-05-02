@@ -640,10 +640,20 @@ export default function ControlPlatformPage() {
     setSelectedId(null);
   }, [q, viewsMode, sort, statusFilter]);
 
+  // Beim Wechsel zwischen Fahrzeugen via Lightbox („nächstes/voriges Auto")
+  // wird der Index im imagePreview erst gesetzt, wenn die neuen Strip-Items
+  // geladen sind. Das Pending-Slot-Ref steuert, ob nach dem Vehicle-Switch
+  // an den Anfang oder ans Ende der neuen Liste gesprungen werden soll.
+  const pendingPreviewSlotRef = useRef<"first" | "last" | null>(null);
+
   useEffect(() => {
-    setImagePreview(null);
     setActionError(null);
     setLastActionToken(null);
+    // Lightbox NICHT schließen, wenn der Vehicle-Wechsel aus der Lightbox
+    // selbst kommt – dann übernimmt der Effekt unten den Index-Switch.
+    if (pendingPreviewSlotRef.current == null) {
+      setImagePreview(null);
+    }
   }, [selectedId]);
 
   const listUrl = useMemo(
@@ -890,9 +900,48 @@ export default function ControlPlatformPage() {
     firstViewsReady,
   ]);
 
+  /**
+   * Wechselt im Lightbox-Modus zum nächsten/vorigen Fahrzeug der aktuellen
+   * Liste (`rows`). Beim Wechsel wird das `imagePreview` so gesetzt, dass
+   * direkt das erste (next) bzw. letzte (prev) Bild des neuen Fahrzeugs
+   * im Großbild geöffnet wird, sobald dessen Strip-Items geladen sind.
+   *
+   * Funktioniert nur innerhalb der aktuellen Pagination-Seite; ist man
+   * an einer Page-Grenze, wird kein Wechsel durchgeführt (Rückgabewert
+   * `false`).
+   */
+  const navigateToSiblingVehicle = useCallback(
+    (direction: "next" | "prev") => {
+      if (rows.length === 0 || selectedId == null) return false;
+      const idx = rows.findIndex((r) => r.id === selectedId);
+      if (idx < 0) return false;
+      const targetIdx = direction === "next" ? idx + 1 : idx - 1;
+      if (targetIdx < 0 || targetIdx >= rows.length) return false;
+      pendingPreviewSlotRef.current =
+        direction === "next" ? "first" : "last";
+      setSelectedId(rows[targetIdx].id);
+      return true;
+    },
+    [rows, selectedId],
+  );
+
+  // Pending-Slot auflösen, sobald die Strip-Items des neuen Fahrzeugs
+  // bereitstehen. Schaltet danach das Ref zurück auf null.
+  useEffect(() => {
+    if (pendingPreviewSlotRef.current == null) return;
+    if (imagePreviewStripItems.length === 0) return;
+    const slot = pendingPreviewSlotRef.current;
+    pendingPreviewSlotRef.current = null;
+    setImagePreview({
+      index: slot === "first" ? 0 : imagePreviewStripItems.length - 1,
+    });
+  }, [imagePreviewStripItems]);
+
   /** Schreibt eine Control-Aktion in `controll_status` und lädt die Statuses neu.
    * Springt nach Erfolg zur nächsten Ansicht, die noch bearbeitbar ist
-   * (kein `controll_status`-Eintrag in `view_token + mode`).
+   * (kein `controll_status`-Eintrag in `view_token + mode`). Wenn im
+   * aktuellen Fahrzeug nichts mehr bearbeitbar ist, wird automatisch zum
+   * nächsten Fahrzeug der Liste gesprungen.
    */
   const submitControllAction = useCallback(
     async (
@@ -939,7 +988,13 @@ export default function ControlPlatformPage() {
             }
           }
         }
-        if (nextIdx != null) setImagePreview({ index: nextIdx });
+        if (nextIdx != null) {
+          setImagePreview({ index: nextIdx });
+        } else {
+          // Im aktuellen Fahrzeug ist nichts mehr bearbeitbar →
+          // direkt zum nächsten Fahrzeug der Liste springen.
+          navigateToSiblingVehicle("next");
+        }
 
         detailApi.reload();
       } catch (err) {
@@ -954,6 +1009,7 @@ export default function ControlPlatformPage() {
       controllMode,
       detailApi,
       imagePreviewStripItems,
+      navigateToSiblingVehicle,
     ],
   );
 
@@ -1047,6 +1103,13 @@ export default function ControlPlatformPage() {
 
       if (e.key === "ArrowDown" || e.key === "ArrowRight") {
         e.preventDefault();
+        if (curIdx >= n - 1) {
+          // Am Ende der Strip-Liste → versuche, ins nächste Fahrzeug
+          // zu springen. Klappt das nicht (z. B. letztes Fahrzeug auf
+          // der Seite), bleibt der Index unverändert.
+          navigateToSiblingVehicle("next");
+          return;
+        }
         setImagePreview((p) => {
           if (!p) return p;
           return { index: Math.min(p.index + 1, n - 1) };
@@ -1055,6 +1118,12 @@ export default function ControlPlatformPage() {
       }
       if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
         e.preventDefault();
+        if (curIdx <= 0) {
+          // Am Anfang der Strip-Liste → ins vorige Fahrzeug,
+          // dort an die letzte Ansicht.
+          navigateToSiblingVehicle("prev");
+          return;
+        }
         setImagePreview((p) => {
           if (!p) return p;
           return { index: Math.max(p.index - 1, 0) };
@@ -1067,6 +1136,7 @@ export default function ControlPlatformPage() {
     imagePreview,
     imagePreviewStripItems,
     submitControllAction,
+    navigateToSiblingVehicle,
     submittingAction,
     viewsMode,
     controllButtonsResolved,
