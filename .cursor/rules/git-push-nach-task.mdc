@@ -1,0 +1,14 @@
+---
+description: Nach abgeschlossenen Coding-Tasks committen und pushen
+alwaysApply: true
+---
+
+# Git nach Aufgaben
+
+Wenn eine konkrete Aufgabe im Repo erledigt ist und es sinnvolle, zusammenhängende Änderungen gibt:
+
+1. `git status` prüfen
+2. passende Dateien stagen, commit mit klarer Message (Projektstil beachten)
+3. `git push` zum Standard-Remote/Branch (sofern der Nutzer nichts anderes vorgibt)
+
+Kein Push nötig, wenn explizit nur gelesen/erklärt wurde oder der Nutzer keinen Push wünscht.
