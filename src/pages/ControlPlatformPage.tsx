@@ -313,6 +313,8 @@ function matchesShortcutKey(eventKey: string, list: string[]): boolean {
 type ViewGridEntry = {
   slotSlug: string;
   token: string | null;
+  /** Nur Skalierung: zweites Token (#skaliert_weiß), wenn beides existiert. */
+  tokenSecondary?: string | null;
   col: number;
   row: number;
 };
@@ -328,8 +330,68 @@ function normalizeSlug(x: string): string {
 
 /**
  * Feste Positionen für Standard-Ansichten; unbekannte/zusätzliche Ansichten hängen hinten an.
+ * Im Skalierungs-Modus: ein Raster-Eintrag pro Basis-Slug (skaliert + skaliert_weiß gekoppelt).
  */
-function buildViewGridEntries(tokens: string[]): ViewGridEntry[] {
+function buildViewGridEntries(
+  tokens: string[],
+  viewsMode: ControlPlatformViewsMode,
+): ViewGridEntry[] {
+  if (viewsMode === "skalierung") {
+    const pairMap = new Map<
+      string,
+      { skaliert: string | null; weiss: string | null }
+    >();
+    for (const token of tokens) {
+      if (!isScalingControlViewToken(token)) continue;
+      const slot = parseViewSlot(token);
+      const slug = normalizeSlug(slot.slug);
+      const mod = token.slice(token.indexOf("#") + 1).trim().toLowerCase();
+      let p = pairMap.get(slug);
+      if (!p) {
+        p = { skaliert: null, weiss: null };
+        pairMap.set(slug, p);
+      }
+      if (mod === "skaliert") p.skaliert = token;
+      else if (mod === "skaliert_weiß") p.weiss = token;
+    }
+
+    const fixed = FIXED_VIEW_SLOT_LAYOUT.map((slot) => {
+      const p = pairMap.get(normalizeSlug(slot.slotSlug));
+      const primary = p?.skaliert ?? p?.weiss ?? null;
+      const secondary =
+        p?.skaliert && p?.weiss ? p.weiss : null;
+      return {
+        slotSlug: slot.slotSlug,
+        token: primary,
+        tokenSecondary: secondary,
+        col: slot.col,
+        row: slot.row,
+      };
+    });
+
+    const fixedSlugSet = new Set(
+      FIXED_VIEW_SLOT_LAYOUT.map((s) => normalizeSlug(s.slotSlug)),
+    );
+    const extraSlugs = [...pairMap.keys()]
+      .filter((s) => !fixedSlugSet.has(s))
+      .sort();
+    const extras = extraSlugs.map((slug, idx) => {
+      const p = pairMap.get(slug)!;
+      const primary = p.skaliert ?? p.weiss ?? null;
+      const secondary =
+        p.skaliert && p.weiss ? p.weiss : null;
+      return {
+        slotSlug: slug,
+        token: primary,
+        tokenSecondary: secondary,
+        col: (idx % 3) + 1,
+        row: 4 + Math.floor(idx / 3),
+      };
+    });
+
+    return [...fixed, ...extras];
+  }
+
   const slotToToken = new Map<string, string>();
   const extraTokens: string[] = [];
 
@@ -604,6 +666,10 @@ export default function ControlPlatformPage() {
     status: string;
   } | null>(null);
 
+  const [scalingStripFocus, setScalingStripFocus] = useState<
+    "skaliert" | "weiss"
+  >("skaliert");
+
   // Resizable Strip in der Lightbox: Breite in px, persistent in localStorage.
   const PREVIEW_STRIP_MIN_PX = 72;
   const PREVIEW_STRIP_MAX_PX = 640;
@@ -835,8 +901,8 @@ export default function ControlPlatformPage() {
     : [];
 
   const viewGridEntries = useMemo(
-    () => buildViewGridEntries(filteredViewTokens),
-    [filteredViewTokens],
+    () => buildViewGridEntries(filteredViewTokens, viewsMode),
+    [filteredViewTokens, viewsMode],
   );
 
   const statusMap = useMemo(
@@ -925,33 +991,18 @@ export default function ControlPlatformPage() {
       key: string;
       src: string;
       title: string;
-      /** Basis-Ansicht für Preview-Map / Kurzlabels, z. B. `front`. */
       slotLabel: string;
-      /** CDN-Dateiname inkl. Modifier, z. B. `front#skaliert_weiß.png`. */
       imageFileLabel: string;
       raw: string;
-      /** Status existiert in `controll_status` für (vehicle, view_token, mode). */
       hasStatus: boolean;
-      /** `check === 2` → final freigegeben (grüner Rand, ausgegraut). */
       isApproved: boolean;
-      /** Status existiert, aber `check !== 2` → nicht mehr bearbeitbar. */
       isLocked: boolean;
-      /**
-       * Slot ist durch `first_views` blockiert (gesperrt, bis alle
-       * Pflicht-Ansichten correction.correct mit check=2 sind).
-       */
       isFirstViewsLocked: boolean;
-      /** `check === 0` → Badge „lock". */
       isCheckPending: boolean;
-      /** `check === 1` → Badge „in Bearbeitung". */
       isInProgress: boolean;
-      /** `check === 6` → Badge „übertragen". */
       isTransferred: boolean;
-      /** `check >= 3` und `check !== 6` → Badge „errored". */
       isErrored: boolean;
-      /** Roher `check`-Wert oder `null`, wenn kein Status existiert. */
       checkVal: number | null;
-      /** Roher status-Wert (z. B. `correct`, `regen_vertex`, `delete`) — falls vorhanden. */
       statusValue: string | null;
       isMain: boolean;
       hasTransparencyHint: boolean;
@@ -959,34 +1010,28 @@ export default function ControlPlatformPage() {
       hasShadowHint: boolean;
       sortRank: number;
       sortIdx: number;
+      rawSecondary: string | null;
+      srcSecondary: string | null;
+      imageFileLabelSecondary: string | null;
+      hasStatusSecondary: boolean;
+      isApprovedSecondary: boolean;
+      isLockedSecondary: boolean;
+      isCheckPendingSecondary: boolean;
+      isInProgressSecondary: boolean;
+      isTransferredSecondary: boolean;
+      isErroredSecondary: boolean;
+      checkValSecondary: number | null;
+      statusValueSecondary: string | null;
     };
-    const internal: Row[] = [];
-    for (let idx = 0; idx < viewGridEntries.length; idx++) {
-      const entry = viewGridEntries[idx];
-      if (!entry.token) continue;
-      const token = entry.token;
-      const slot = parseViewSlot(token);
-      const baseHref = buildVehicleImageUrl(
-        cdnBase,
-        row,
-        slot.raw,
-        imageUrlQuery,
-      );
-      const href = buildImageSrcWithReload(
-        baseHref,
-        row.id,
-        slot.raw,
-        controllMode,
-      );
-      const statusRow = statusMap.get(statusKey(slot.raw, controllMode));
+
+    const flagsFor = (raw: string) => {
+      const statusRow = statusMap.get(statusKey(raw, controllMode));
       const hasStatus = !!statusRow;
       const checkVal = statusRow ? Number(statusRow.check) : null;
       const statusValueRaw = statusRow?.status ?? null;
       const isApproved = checkVal === 2;
       const isInProgress = checkVal === 1;
       const isCheckPending = checkVal === 0;
-      // „übertragen" gilt **nur** im Skalierungs-Modus und nur,
-      // wenn `status === 'correct'` und `check === 6`.
       const isTransferred =
         checkVal === 6 &&
         controllMode === "scaling" &&
@@ -994,36 +1039,99 @@ export default function ControlPlatformPage() {
       const isErrored =
         checkVal != null && checkVal >= 3 && !isTransferred;
       const isLocked = hasStatus && !isApproved;
+      return {
+        hasStatus,
+        checkVal,
+        statusValue: statusValueRaw,
+        isApproved,
+        isInProgress,
+        isCheckPending,
+        isTransferred,
+        isErrored,
+        isLocked,
+      };
+    };
+
+    const internal: Row[] = [];
+    for (let idx = 0; idx < viewGridEntries.length; idx++) {
+      const entry = viewGridEntries[idx];
+      if (!entry.token) continue;
+      const primaryRaw = entry.token;
+      const secRaw = entry.tokenSecondary ?? null;
+      const slot = parseViewSlot(primaryRaw);
+      const slugLabel = normalizeSlug(entry.slotSlug);
+
+      const baseHrefP = buildVehicleImageUrl(
+        cdnBase,
+        row,
+        primaryRaw,
+        imageUrlQuery,
+      );
+      const srcP = buildImageSrcWithReload(
+        baseHrefP,
+        row.id,
+        primaryRaw,
+        controllMode,
+      );
+      const fp = flagsFor(primaryRaw);
+      const secFlags = secRaw ? flagsFor(secRaw) : null;
+      const srcS =
+        secRaw ?
+          buildImageSrcWithReload(
+            buildVehicleImageUrl(cdnBase, row, secRaw, imageUrlQuery),
+            row.id,
+            secRaw,
+            controllMode,
+          )
+        : null;
+
       const isFirstViewsLocked = isSlotBlockedByFirstViews(
         firstViewsSet,
         firstViewsReady,
-        slot.slug,
+        slugLabel,
       );
-      const isMain = isMainViewSlug(slot.slug);
-      const imageFileLabel = viewTokenImageFileName(slot.raw, row.format);
+      const isMain = isMainViewSlug(slugLabel);
+      const imageFileLabel = viewTokenImageFileName(primaryRaw, row.format);
+
       internal.push({
-        key: `${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`,
-        src: href,
-        title: `${rowTitle(row)} · ${imageFileLabel}`,
-        slotLabel: slot.slug,
+        key: `${row.id}-pair-${slugLabel}-${idx}`,
+        src: srcP,
+        title:
+          secRaw ?
+            `${rowTitle(row)} · ${entry.slotSlug} (#skaliert + #skaliert_weiß)`
+          : `${rowTitle(row)} · ${imageFileLabel}`,
+        slotLabel: slugLabel,
         imageFileLabel,
-        raw: slot.raw,
-        hasStatus,
-        isApproved,
-        isLocked,
+        raw: primaryRaw,
+        hasStatus: fp.hasStatus,
+        isApproved: fp.isApproved,
+        isLocked: fp.isLocked,
         isFirstViewsLocked,
-        isCheckPending,
-        isInProgress,
-        isTransferred,
-        isErrored,
-        checkVal,
-        statusValue: statusValueRaw,
+        isCheckPending: fp.isCheckPending,
+        isInProgress: fp.isInProgress,
+        isTransferred: fp.isTransferred,
+        isErrored: fp.isErrored,
+        checkVal: fp.checkVal,
+        statusValue: fp.statusValue,
         isMain,
         hasTransparencyHint: slot.hasTransparencyHint,
         hasScalingHint: slot.hasScalingHint,
         hasShadowHint: slot.hasShadowHint,
         sortRank: lightboxStripSortRank(entry.slotSlug),
         sortIdx: idx,
+        rawSecondary: secRaw,
+        srcSecondary: srcS,
+        imageFileLabelSecondary:
+          secRaw ? viewTokenImageFileName(secRaw, row.format) : null,
+        hasStatusSecondary: secFlags?.hasStatus ?? false,
+        isApprovedSecondary: secFlags?.isApproved ?? false,
+        isLockedSecondary: secFlags?.isLocked ?? false,
+        isCheckPendingSecondary: secFlags?.isCheckPending ?? false,
+        isInProgressSecondary: secFlags?.isInProgress ?? false,
+        isTransferredSecondary: secFlags?.isTransferred ?? false,
+        isErroredSecondary: secFlags?.isErrored ?? false,
+        checkValSecondary: secFlags?.checkVal ?? null,
+        statusValueSecondary: secFlags?.statusValue ?? null,
       });
     }
     internal.sort((a, b) =>
@@ -1130,11 +1238,29 @@ export default function ControlPlatformPage() {
         });
 
         const items = imagePreviewStripItems;
-        const isEditable = (i: number) =>
-          items[i] &&
-          items[i].raw !== ctx.rawToken &&
-          !items[i].hasStatus &&
-          !items[i].isFirstViewsLocked;
+        const curItem = items[ctx.index];
+
+        if (
+          viewsMode === "skalierung" &&
+          curItem?.rawSecondary &&
+          ctx.rawToken === curItem.raw
+        ) {
+          setScalingStripFocus("weiss");
+          detailApi.reload();
+          return;
+        }
+
+        const pairStillEditable = (it: (typeof items)[number]) => {
+          if (!it || it.isFirstViewsLocked) return false;
+          if (!it.rawSecondary) return !it.hasStatus;
+          return !it.hasStatus || !it.hasStatusSecondary;
+        };
+
+        const isEditable = (i: number) => {
+          const it = items[i];
+          if (!it || i === ctx.index || it.isFirstViewsLocked) return false;
+          return pairStillEditable(it);
+        };
         let nextIdx: number | null = null;
         for (let i = ctx.index + 1; i < items.length; i++) {
           if (isEditable(i)) {
@@ -1172,6 +1298,7 @@ export default function ControlPlatformPage() {
       detailApi,
       imagePreviewStripItems,
       navigateToSiblingVehicle,
+      viewsMode,
     ],
   );
 
@@ -1243,8 +1370,22 @@ export default function ControlPlatformPage() {
         imagePreviewStripItems.length - 1,
       );
       const cur = imagePreviewStripItems[curIdx];
+      let actRaw = cur?.raw ?? "";
+      let actSrc = cur?.src ?? "";
+      let actHasStatus = cur?.hasStatus ?? true;
+      if (
+        cur &&
+        viewsMode === "skalierung" &&
+        cur.rawSecondary &&
+        cur.srcSecondary &&
+        scalingStripFocus === "weiss"
+      ) {
+        actRaw = cur.rawSecondary;
+        actSrc = cur.srcSecondary;
+        actHasStatus = cur.hasStatusSecondary;
+      }
       const curEditable =
-        !!cur && !cur.hasStatus && !cur.isFirstViewsLocked;
+        !!cur && !actHasStatus && !cur.isFirstViewsLocked;
 
       for (const def of defs) {
         if (flags[def.configKey] !== true) continue;
@@ -1255,8 +1396,8 @@ export default function ControlPlatformPage() {
           if (submittingAction) return;
           if (!cur || !curEditable) return;
           void submitControllAction(def.stub, {
-            rawToken: cur.raw,
-            imageHref: cur.src,
+            rawToken: actRaw,
+            imageHref: actSrc,
             index: curIdx,
           });
           return;
@@ -1302,6 +1443,7 @@ export default function ControlPlatformPage() {
     submittingAction,
     viewsMode,
     controllButtonsResolved,
+    scalingStripFocus,
   ]);
 
   const previewIndexClamped =
@@ -1312,6 +1454,48 @@ export default function ControlPlatformPage() {
       )
     : 0;
   const currentPreviewItem = imagePreviewStripItems[previewIndexClamped];
+
+  const scalingActiveSide = useMemo(() => {
+    const it = currentPreviewItem;
+    if (!it) return null;
+    if (
+      viewsMode === "skalierung" &&
+      it.rawSecondary &&
+      it.srcSecondary &&
+      scalingStripFocus === "weiss"
+    ) {
+      return {
+        raw: it.rawSecondary,
+        src: it.srcSecondary,
+        hasStatus: it.hasStatusSecondary,
+        imageFileLabel: it.imageFileLabelSecondary ?? "",
+        checkVal: it.checkValSecondary,
+        statusValue: it.statusValueSecondary,
+        isErrored: it.isErroredSecondary,
+        isTransferred: it.isTransferredSecondary,
+        isApproved: it.isApprovedSecondary,
+        isCheckPending: it.isCheckPendingSecondary,
+        isInProgress: it.isInProgressSecondary,
+      };
+    }
+    return {
+      raw: it.raw,
+      src: it.src,
+      hasStatus: it.hasStatus,
+      imageFileLabel: it.imageFileLabel,
+      checkVal: it.checkVal,
+      statusValue: it.statusValue,
+      isErrored: it.isErrored,
+      isTransferred: it.isTransferred,
+      isApproved: it.isApproved,
+      isCheckPending: it.isCheckPending,
+      isInProgress: it.isInProgress,
+    };
+  }, [currentPreviewItem, viewsMode, scalingStripFocus]);
+
+  useEffect(() => {
+    setScalingStripFocus("skaliert");
+  }, [imagePreview, selectedId, previewIndexClamped]);
 
   useEffect(() => {
     if (!imagePreview) return;
@@ -1332,7 +1516,11 @@ export default function ControlPlatformPage() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col border border-hair bg-white lg:flex-row">
-      <aside className="flex max-h-[48vh] w-full min-h-0 shrink-0 flex-col border-b border-hair lg:h-full lg:max-h-none lg:w-[240px] lg:border-b-0 lg:border-r lg:border-hair">
+      <aside
+        className={`flex max-h-[48vh] w-full min-h-0 shrink-0 flex-col border-b border-hair lg:h-full lg:max-h-none lg:w-[240px] lg:border-b-0 lg:border-r lg:border-hair ${
+          viewsMode === "skalierung" && imagePreview ? "hidden" : ""
+        }`}
+      >
         <div className="shrink-0 border-b border-hair px-1.5 py-1.5">
           <label className="sr-only" htmlFor="control-platform-search">
             Einträge filtern
@@ -1737,6 +1925,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
 
                     const token = entry.token;
                     const slot = parseViewSlot(token);
+                    const secTok = entry.tokenSecondary ?? null;
                     const baseHref = buildVehicleImageUrl(
                       cdnBase,
                       row,
@@ -1753,27 +1942,74 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       statusKey(slot.raw, controllMode),
                     );
                     const checkVal = status ? Number(status.check) : null;
-                    const isApproved = checkVal === 2;
-                    const isInProgress = checkVal === 1;
-                    const isCheckPending = checkVal === 0;
-                    const isTransferred =
+                    const isApprovedP = checkVal === 2;
+                    const isInProgressP = checkVal === 1;
+                    const isCheckPendingP = checkVal === 0;
+                    const isTransferredP =
                       checkVal === 6 &&
                       controllMode === "scaling" &&
                       status?.status === "correct";
-                    const isErrored =
-                      checkVal != null && checkVal >= 3 && !isTransferred;
+                    const isErroredP =
+                      checkVal != null && checkVal >= 3 && !isTransferredP;
+
+                    const statusS =
+                      secTok ?
+                        statusMap.get(statusKey(secTok, controllMode))
+                      : undefined;
+                    const checkValS = statusS ? Number(statusS.check) : null;
+                    const isApprovedS = checkValS === 2;
+                    const isInProgressS = checkValS === 1;
+                    const isCheckPendingS = checkValS === 0;
+                    const isTransferredS =
+                      checkValS === 6 &&
+                      controllMode === "scaling" &&
+                      statusS?.status === "correct";
+                    const isErroredS =
+                      checkValS != null && checkValS >= 3 && !isTransferredS;
+
+                    const isApproved =
+                      isApprovedP && (!secTok || isApprovedS);
+                    const isInProgress = isInProgressP || isInProgressS;
+                    const isCheckPending = isCheckPendingP || isCheckPendingS;
+                    const isTransferred =
+                      isTransferredP && (!secTok || isTransferredS);
+                    const isErrored = isErroredP || isErroredS;
+
                     const isFirstViewsLocked = isSlotBlockedByFirstViews(
                       firstViewsSet,
                       firstViewsReady,
-                      slot.slug,
+                      normalizeSlug(entry.slotSlug),
                     );
                     const imageFileLabel = viewTokenImageFileName(
                       slot.raw,
                       row.format,
                     );
+                    const hrefS =
+                      secTok ?
+                        buildImageSrcWithReload(
+                          buildVehicleImageUrl(
+                            cdnBase,
+                            row,
+                            secTok,
+                            imageUrlQuery,
+                          ),
+                          row.id,
+                          secTok,
+                          controllMode,
+                        )
+                      : null;
+                    const imageFileLabelS =
+                      secTok ?
+                        viewTokenImageFileName(secTok, row.format)
+                      : null;
+                    const pairStripIndex = imagePreviewStripItems.findIndex(
+                      (it) =>
+                        normalizeSlug(it.slotLabel) ===
+                        normalizeSlug(entry.slotSlug),
+                    );
                     return (
                       <li
-                        key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}
+                        key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}${secTok ? `-${secTok}` : ""}`}
                         style={{
                           gridColumn: entry.col,
                           gridRow: entry.row,
@@ -1782,10 +2018,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         <article
                           title={
                             isFirstViewsLocked ?
-                              `${slot.raw} • gesperrt: zuerst die Pflicht-Ansichten korrigieren`
-                            : status ?
-                              `${slot.raw} • ${status.mode}/${status.status} • check ${checkVal ?? "—"}`
-                            : slot.raw
+                              `${slot.raw}${secTok ? ` · ${secTok}` : ""} • gesperrt`
+                            : `${slot.raw}${secTok ? ` · ${secTok}` : ""}`
                           }
                           className={`flex w-full flex-col bg-paper transition-colors ${
                             isFirstViewsLocked
@@ -1808,19 +2042,23 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             disabled={isFirstViewsLocked}
                             onClick={() => {
                               if (isFirstViewsLocked) return;
-                              const i = imagePreviewStripItems.findIndex(
-                                (it) => it.src === href,
-                              );
                               setImagePreview({
-                                index: i >= 0 ? i : 0,
+                                index:
+                                  pairStripIndex >= 0 ? pairStripIndex : 0,
                               });
                             }}
                             aria-label={
                               isFirstViewsLocked
-                                ? `${imageFileLabel} gesperrt – zuerst Pflicht-Ansichten korrigieren`
+                                ? `${entry.slotSlug} · Skalierung gesperrt – zuerst Pflicht-Ansichten`
+                                : secTok ?
+                                  `${entry.slotSlug}: #skaliert + #skaliert_weiß groß anzeigen`
                                 : `${imageFileLabel} groß anzeigen`
                             }
-                            className={`group relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
+                            className={`group relative flex aspect-[3/2] w-full overflow-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
+                              hrefS ?
+                                "flex-row divide-x divide-ink-300/40"
+                              : "items-center justify-center"
+                            } ${
                               viewsMode === "skalierung" ? "" : "bg-ink-50"
                             } ${
                               isFirstViewsLocked
@@ -1833,30 +2071,82 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                               : undefined
                             }
                           >
-                            <img
-                              src={href}
-                              alt={imageFileLabel}
-                              loading="lazy"
-                              decoding="async"
-                              className={`max-h-full max-w-full object-contain ${
-                                isFirstViewsLocked
-                                  ? "opacity-40 grayscale"
-                                  : isApproved
-                                  ? "opacity-30 grayscale"
-                                  : ""
-                              }`}
-                              onError={(ev) => {
-                                ev.currentTarget.classList.add("hidden");
-                                const ph =
-                                  ev.currentTarget.nextElementSibling;
-                                if (ph instanceof HTMLElement) {
-                                  ph.classList.remove("hidden");
-                                }
-                              }}
-                            />
-                            <div className="hidden grid place-items-center px-1">
-                              <ImageIcon className="h-8 w-8 text-ink-200" />
-                            </div>
+                            {hrefS ?
+                              <>
+                                <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center">
+                                  <img
+                                    src={href}
+                                    alt={imageFileLabel}
+                                    loading="lazy"
+                                    decoding="async"
+                                    className={`max-h-full max-w-full object-contain ${
+                                      isFirstViewsLocked
+                                        ? "opacity-40 grayscale"
+                                        : isApprovedP
+                                        ? "opacity-30 grayscale"
+                                        : ""
+                                    }`}
+                                    onError={(ev) => {
+                                      ev.currentTarget.classList.add(
+                                        "hidden",
+                                      );
+                                    }}
+                                  />
+                                  <span className="pointer-events-none absolute bottom-0.5 left-0.5 max-w-[calc(100%-0.25rem)] truncate font-mono text-[7px] text-ink-600">
+                                    #skaliert
+                                  </span>
+                                </div>
+                                <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center">
+                                  <img
+                                    src={hrefS}
+                                    alt={imageFileLabelS ?? ""}
+                                    loading="lazy"
+                                    decoding="async"
+                                    className={`max-h-full max-w-full object-contain ${
+                                      isFirstViewsLocked
+                                        ? "opacity-40 grayscale"
+                                        : isApprovedS
+                                        ? "opacity-30 grayscale"
+                                        : ""
+                                    }`}
+                                    onError={(ev) => {
+                                      ev.currentTarget.classList.add(
+                                        "hidden",
+                                      );
+                                    }}
+                                  />
+                                  <span className="pointer-events-none absolute bottom-0.5 left-0.5 max-w-[calc(100%-0.25rem)] truncate font-mono text-[7px] text-ink-600">
+                                    #skaliert_weiß
+                                  </span>
+                                </div>
+                              </>
+                            : <>
+                                <img
+                                  src={href}
+                                  alt={imageFileLabel}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className={`max-h-full max-w-full object-contain ${
+                                    isFirstViewsLocked
+                                      ? "opacity-40 grayscale"
+                                      : isApproved
+                                      ? "opacity-30 grayscale"
+                                      : ""
+                                  }`}
+                                  onError={(ev) => {
+                                    ev.currentTarget.classList.add("hidden");
+                                    const ph =
+                                      ev.currentTarget.nextElementSibling;
+                                    if (ph instanceof HTMLElement) {
+                                      ph.classList.remove("hidden");
+                                    }
+                                  }}
+                                />
+                                <div className="hidden grid place-items-center px-1">
+                                  <ImageIcon className="h-8 w-8 text-ink-200" />
+                                </div>
+                              </>
+                            }
                             {isFirstViewsLocked ?
                               <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/55 backdrop-blur-[1px]">
                                 <span className="inline-flex items-center gap-1 rounded bg-zinc-700/95 px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-wide text-white shadow">
@@ -1865,68 +2155,86 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 </span>
                               </span>
                             : null}
-                            <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-600">
-                              {imageFileLabel}
-                            </span>
-                            <span className="pointer-events-none absolute right-1 top-1 flex max-w-[60%] flex-wrap justify-end gap-0.5">
-                              {isErrored ?
-                                <span className="rounded bg-red-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
-                                  errored
+                            {!hrefS ?
+                              <>
+                                <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-600">
+                                  {imageFileLabel}
                                 </span>
-                              : null}
-                              {isTransferred ?
-                                <span className="rounded bg-violet-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold tracking-wide text-white">
-                                  übertragen
+                                <span className="pointer-events-none absolute right-1 top-1 flex max-w-[60%] flex-wrap justify-end gap-0.5">
+                                  {isErrored ?
+                                    <span className="rounded bg-red-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
+                                      errored
+                                    </span>
+                                  : null}
+                                  {isTransferred ?
+                                    <span className="rounded bg-violet-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold tracking-wide text-white">
+                                      übertragen
+                                    </span>
+                                  : null}
+                                  {isApproved ?
+                                    <span className="inline-flex items-center gap-0.5 rounded bg-accent-mint px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
+                                      <Check className="h-2.5 w-2.5" />
+                                      done
+                                    </span>
+                                  : null}
+                                  {isInProgress ?
+                                    <span className="rounded bg-sky-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold tracking-wide text-white">
+                                      in Bearbeitung
+                                    </span>
+                                  : null}
+                                  {isCheckPending ?
+                                    <span className="inline-flex items-center gap-0.5 rounded bg-ink-800/90 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
+                                      <Lock className="h-2.5 w-2.5" />
+                                      lock
+                                    </span>
+                                  : null}
+                                  {slot.hasTransparencyHint ?
+                                    <span className="rounded bg-ink-800/90 px-1 py-0.5 font-mono text-[8px] font-medium uppercase text-white">
+                                      trp
+                                    </span>
+                                  : null}
+                                  {slot.hasScalingHint ?
+                                    <span className="rounded bg-brand-600/95 px-1 py-0.5 font-mono text-[8px] font-medium text-white">
+                                      sk
+                                    </span>
+                                  : null}
+                                  {slot.hasShadowHint ?
+                                    <span className="rounded bg-ink-500/95 px-1 py-0.5 font-mono text-[8px] font-medium text-white">
+                                      sh
+                                    </span>
+                                  : null}
                                 </span>
-                              : null}
-                              {isApproved ?
-                                <span className="inline-flex items-center gap-0.5 rounded bg-accent-mint px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
-                                  <Check className="h-2.5 w-2.5" />
-                                  done
-                                </span>
-                              : null}
-                              {isInProgress ?
-                                <span className="rounded bg-sky-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold tracking-wide text-white">
-                                  in Bearbeitung
-                                </span>
-                              : null}
-                              {isCheckPending ?
-                                <span className="inline-flex items-center gap-0.5 rounded bg-ink-800/90 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
-                                  <Lock className="h-2.5 w-2.5" />
-                                  lock
-                                </span>
-                              : null}
-                              {slot.hasTransparencyHint ?
-                                <span className="rounded bg-ink-800/90 px-1 py-0.5 font-mono text-[8px] font-medium uppercase text-white">
-                                  trp
-                                </span>
-                              : null}
-                              {slot.hasScalingHint ?
-                                <span className="rounded bg-brand-600/95 px-1 py-0.5 font-mono text-[8px] font-medium text-white">
-                                  sk
-                                </span>
-                              : null}
-                              {slot.hasShadowHint ?
-                                <span className="rounded bg-ink-500/95 px-1 py-0.5 font-mono text-[8px] font-medium text-white">
-                                  sh
-                                </span>
-                              : null}
-                            </span>
+                              </>
+                            : null}
                           </button>
                           <div className="flex min-h-[2rem] items-center gap-1 border-t border-hair px-1 py-0.5">
                             <span className="min-w-0 flex-1 truncate font-mono text-[9px] leading-tight text-ink-500">
-                              {imageFileLabel}
+                              {hrefS && imageFileLabelS ?
+                                `${imageFileLabel} · ${imageFileLabelS}`
+                              : imageFileLabel}
                             </span>
                             <a
                               href={href}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="shrink-0 text-ink-400 transition hover:text-ink-700"
-                              aria-label="Bild in neuem Tab öffnen"
+                              aria-label="Bild #skaliert in neuem Tab"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <ExternalLink className="h-3 w-3" />
                             </a>
+                            {hrefS ?
+                              <a
+                                href={hrefS}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 text-ink-400 transition hover:text-ink-700"
+                                aria-label="Bild #skaliert_weiß in neuem Tab"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </a>
+                            : null}
                           </div>
                         </article>
                       </li>
@@ -2027,7 +2335,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     body: row?.body,
                     trim: row?.trim,
                     farbe: row?.farbe,
-                    ansicht: currentPreviewItem.raw,
+                    ansicht: scalingActiveSide?.raw ?? currentPreviewItem.raw,
                   });
                   const disabled = !q;
                   const href = q ? googleImageSearchUrl(q) : undefined;
@@ -2067,7 +2375,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                   );
                 })()}
                 <a
-                  href={currentPreviewItem.src}
+                  href={scalingActiveSide?.src ?? currentPreviewItem.src}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-0.5 rounded border border-ink-600 bg-ink-800 px-2 py-1 text-[11px] text-white transition hover:bg-ink-700"
@@ -2110,7 +2418,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             aria-selected={selected}
                             ref={selected ? activePreviewThumbRef : undefined}
                             onClick={() => setImagePreview({ index: i })}
-                            title={it.imageFileLabel}
+                            title={it.title}
                             className={`flex w-full flex-col gap-0.5 rounded border p-1 text-left transition ${
                               selected ?
                                 "border-white bg-ink-800"
@@ -2118,7 +2426,11 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             }`}
                           >
                             <span
-                              className={`relative flex aspect-[3/2] w-full items-center justify-center overflow-hidden rounded ${
+                              className={`relative flex aspect-[3/2] w-full overflow-hidden rounded ${
+                                it.srcSecondary ?
+                                  "flex-row divide-x divide-zinc-600/60"
+                                : "items-center justify-center"
+                              } ${
                                 viewsMode === "skalierung" ? "" : "bg-zinc-100"
                               }`}
                               style={
@@ -2127,39 +2439,71 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 : undefined
                               }
                             >
-                              <img
-                                src={it.src}
-                                alt=""
-                                className={`max-h-full max-w-full object-contain ${
-                                  it.isApproved ? "opacity-35 grayscale" : ""
-                                }`}
-                              />
-                              {it.isErrored ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-red-600/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
-                                  errored
-                                </span>
-                              : it.isTransferred ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-violet-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
-                                  übertragen
-                                </span>
-                              : it.isApproved ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-accent-mint px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
-                                  <Check className="h-1.5 w-1.5" />
-                                  done
-                                </span>
-                              : it.isInProgress ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-sky-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
-                                  bearb.
-                                </span>
-                              : it.isCheckPending ?
-                                <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-ink-800/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
-                                  <Lock className="h-1.5 w-1.5" />
-                                  lock
-                                </span>
-                              : null}
+                              {it.srcSecondary ?
+                                <>
+                                  <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center">
+                                    <img
+                                      src={it.src}
+                                      alt=""
+                                      className={`max-h-full max-w-full object-contain ${
+                                        it.isApproved
+                                          ? "opacity-35 grayscale"
+                                          : ""
+                                      }`}
+                                    />
+                                  </div>
+                                  <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center">
+                                    <img
+                                      src={it.srcSecondary}
+                                      alt=""
+                                      className={`max-h-full max-w-full object-contain ${
+                                        it.isApprovedSecondary
+                                          ? "opacity-35 grayscale"
+                                          : ""
+                                      }`}
+                                    />
+                                  </div>
+                                </>
+                              : <>
+                                  <img
+                                    src={it.src}
+                                    alt=""
+                                    className={`max-h-full max-w-full object-contain ${
+                                      it.isApproved
+                                        ? "opacity-35 grayscale"
+                                        : ""
+                                    }`}
+                                  />
+                                  {it.isErrored ?
+                                    <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-red-600/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                      errored
+                                    </span>
+                                  : it.isTransferred ?
+                                    <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-violet-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
+                                      übertragen
+                                    </span>
+                                  : it.isApproved ?
+                                    <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-accent-mint px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                      <Check className="h-1.5 w-1.5" />
+                                      done
+                                    </span>
+                                  : it.isInProgress ?
+                                    <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-sky-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
+                                      bearb.
+                                    </span>
+                                  : it.isCheckPending ?
+                                    <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-ink-800/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                      <Lock className="h-1.5 w-1.5" />
+                                      lock
+                                    </span>
+                                  : null}
+                                </>
+                              }
                             </span>
                             <span className="truncate px-px font-mono text-[8px] font-medium leading-none text-white sm:text-[9px]">
-                              {it.imageFileLabel}
+                              {it.srcSecondary ?
+                                `${it.slotLabel} · skaliert + weiß`
+                              : it.imageFileLabel}
                             </span>
                             <span className="flex min-h-[10px] flex-wrap gap-0.5">
                               {it.hasTransparencyHint ?
@@ -2218,11 +2562,48 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                   }
                 >
                   <div className="flex h-full w-full items-center justify-center overflow-auto bg-transparent p-1 sm:p-2">
-                    <img
-                      src={currentPreviewItem.src}
-                      alt=""
-                      className="max-h-full max-w-full object-contain"
-                    />
+                    {currentPreviewItem.srcSecondary &&
+                    viewsMode === "skalierung" ?
+                      <div className="flex h-full max-h-full w-full max-w-full flex-row gap-1 sm:gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setScalingStripFocus("skaliert")}
+                          title="Skaliert — Klick für Steuerung"
+                          className={`flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                            scalingStripFocus === "skaliert" ?
+                              "ring-2 ring-amber-400"
+                            : "ring-1 ring-white/20"
+                          }`}
+                        >
+                          <img
+                            src={currentPreviewItem.src}
+                            alt=""
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setScalingStripFocus("weiss")}
+                          title="Skaliert weiß — Klick für Steuerung"
+                          className={`flex min-h-0 min-w-0 flex-1 items-center justify-center rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                            scalingStripFocus === "weiss" ?
+                              "ring-2 ring-amber-400"
+                            : "ring-1 ring-white/20"
+                          }`}
+                        >
+                          <img
+                            src={currentPreviewItem.srcSecondary}
+                            alt=""
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </button>
+                      </div>
+                    : <img
+                        src={currentPreviewItem.src}
+                        alt=""
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    }
                   </div>
                   {previewVisible ?
                     (() => {
@@ -2239,7 +2620,9 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         >
                           <div className="flex items-center justify-between gap-1 border-b border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
                             <span className="font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-800">
-                              Preview · {currentPreviewItem.imageFileLabel}
+                              Preview ·{" "}
+                              {scalingActiveSide?.imageFileLabel ??
+                                currentPreviewItem.imageFileLabel}
                             </span>
                           </div>
                           <div className="relative flex flex-1 items-center justify-center bg-zinc-50">
@@ -2260,7 +2643,10 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                                 Fehler beim Laden
                               </span>
                             : <span className="px-2 py-3 text-center font-mono text-[10px] text-ink-500">
-                                kein Preview für „{currentPreviewItem.imageFileLabel}"
+                                kein Preview für „
+                                {scalingActiveSide?.imageFileLabel ??
+                                  currentPreviewItem.imageFileLabel}
+                                "
                               </span>}
                           </div>
                         </div>
@@ -2280,7 +2666,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         const isBusy = submittingAction === def.stub;
                         const disabled =
                           submittingAction !== null ||
-                          currentPreviewItem.hasStatus ||
+                          (scalingActiveSide?.hasStatus ?? false) ||
                           currentPreviewItem.isFirstViewsLocked;
                         return (
                           <button
@@ -2288,8 +2674,12 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                             type="button"
                             onClick={() =>
                               void submitControllAction(def.stub, {
-                                rawToken: currentPreviewItem.raw,
-                                imageHref: currentPreviewItem.src,
+                                rawToken:
+                                  scalingActiveSide?.raw ??
+                                  currentPreviewItem.raw,
+                                imageHref:
+                                  scalingActiveSide?.src ??
+                                  currentPreviewItem.src,
                                 index: previewIndexClamped,
                               })
                             }
@@ -2315,47 +2705,51 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                   : null}
 
                   <a
-                    href={currentPreviewItem.src}
+                    href={
+                      scalingActiveSide?.src ?? currentPreviewItem.src
+                    }
                     target="_blank"
                     rel="noopener noreferrer"
-                    title={currentPreviewItem.src}
+                    title={
+                      scalingActiveSide?.src ?? currentPreviewItem.src
+                    }
                     className="block min-h-0 min-w-0 max-w-full truncate font-mono text-[7px] leading-tight text-zinc-600 no-underline hover:text-zinc-500 sm:text-[8px]"
                   >
-                    {currentPreviewItem.src}
+                    {scalingActiveSide?.src ?? currentPreviewItem.src}
                   </a>
 
                   <div className="min-h-[1rem]">
                     {currentPreviewItem.isFirstViewsLocked &&
-                    !currentPreviewItem.hasStatus ?
+                    !(scalingActiveSide?.hasStatus ?? false) ?
                       <p className="inline-flex items-center gap-1 font-mono text-[10px] text-zinc-300">
                         <Lock className="h-3 w-3" />
                         gesperrt — zuerst die Pflicht-Ansichten korrigieren
                       </p>
-                    : currentPreviewItem.hasStatus ?
+                    : scalingActiveSide?.hasStatus ?
                       <p
                         className={`font-mono text-[10px] ${
-                          currentPreviewItem.isErrored
+                          scalingActiveSide.isErrored
                             ? "text-red-300"
-                            : currentPreviewItem.isTransferred
+                            : scalingActiveSide.isTransferred
                             ? "text-violet-300"
-                            : currentPreviewItem.isApproved
+                            : scalingActiveSide.isApproved
                             ? "text-emerald-300"
-                            : currentPreviewItem.isCheckPending
+                            : scalingActiveSide.isCheckPending
                             ? "text-zinc-300"
                             : "text-sky-300"
                         }`}
                       >
-                        {currentPreviewItem.isErrored
-                          ? `errored (check ${currentPreviewItem.checkVal})`
-                          : currentPreviewItem.isTransferred
+                        {scalingActiveSide.isErrored
+                          ? `errored (check ${scalingActiveSide.checkVal})`
+                          : scalingActiveSide.isTransferred
                           ? "übertragen (check 6)"
-                          : currentPreviewItem.isApproved
+                          : scalingActiveSide.isApproved
                           ? "done · freigegeben (check 2)"
-                          : currentPreviewItem.isCheckPending
+                          : scalingActiveSide.isCheckPending
                           ? "lock · wartet auf Prüfung (check 0)"
                           : "in Bearbeitung (check 1)"}
-                        {currentPreviewItem.statusValue ?
-                          <> · status: {currentPreviewItem.statusValue}</>
+                        {scalingActiveSide.statusValue ?
+                          <> · status: {scalingActiveSide.statusValue}</>
                         : null}
                       </p>
                     : actionError ?
@@ -2363,7 +2757,8 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         Fehler: {actionError}
                       </p>
                     : lastActionToken &&
-                      lastActionToken.raw === currentPreviewItem.raw ?
+                      scalingActiveSide &&
+                      lastActionToken.raw === scalingActiveSide.raw ?
                       <p className="font-mono text-[10px] text-emerald-300">
                         gespeichert: {lastActionToken.status} ·{" "}
                         {lastActionToken.raw}
