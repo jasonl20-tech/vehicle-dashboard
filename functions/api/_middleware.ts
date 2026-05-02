@@ -7,8 +7,7 @@ import {
   fetchPathsForSecurityLevel,
   normalizePathname,
   pathMatchesPfadliste,
-  pathnameIsControlPlatformBundledApi,
-  pfadlisteGrantsControlPlatform,
+  pathnameAllowedBySpaRouteApiBundle,
 } from "../_lib/routeAccess";
 
 /** Keine Session oder kein Zugriffs-Check für diese Routen erforderlich. */
@@ -77,12 +76,9 @@ export async function onRequest(context: {
     if (pathMatchesPfadliste(pathname, pfade)) {
       return next();
     }
-    // SPA-Recht `/control-platform` allein ohne passende `/api/databases/...`-Zeilen
-    // ⇒ leere Liste. Nutzer erwartet: eine Zeile wie `/control-platform/*` genügt.
-    if (
-      pathnameIsControlPlatformBundledApi(pathname) &&
-      pfadlisteGrantsControlPlatform(pfade)
-    ) {
+    // SPA unter `/dashboard/…` bzw. `/control-platform/…` ohne jede Daten-API
+    // einzeln in D1 → leere Screens. Hier: automatische Zuordnung SPA → APIs.
+    if (pathnameAllowedBySpaRouteApiBundle(pathname, pfade)) {
       return next();
     }
   } catch {

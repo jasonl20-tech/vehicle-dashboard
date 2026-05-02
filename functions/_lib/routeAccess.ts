@@ -32,11 +32,47 @@ export function pathMatchesPfadliste(
   return false;
 }
 
+/** Steht eine erlaubte SPA-Route unter `spaRoot` (inkl. exakt `/dashboard`) — ohne Glob `*` aufzublasen (der hat ohnehin schon Zugriff). */
+export function pfadlisteTouchesSpaSubtree(
+  spaRoot: string,
+  pfade: readonly string[],
+): boolean {
+  const root = normalizePathname(spaRoot).toLowerCase();
+  const asChild = `${root}/`;
+
+  for (const raw of pfade) {
+    const trimmed = typeof raw === "string" ? raw.trim() : "";
+    if (!trimmed || trimmed === "*") continue;
+
+    let baseNorm: string;
+    if (trimmed.toLowerCase().endsWith("/*")) {
+      baseNorm = normalizePathname(trimmed.slice(0, -2)).toLowerCase();
+    } else {
+      baseNorm = normalizePathname(trimmed).toLowerCase();
+    }
+
+    if (baseNorm === root || baseNorm.startsWith(asChild)) return true;
+  }
+  return false;
+}
+
+/** Trifft `pathname` einen der Präfixe (exakt oder Unterpfad)? */
+export function pathnameMatchesAnyApiPrefix(
+  pathname: string,
+  prefixes: readonly string[],
+): boolean {
+  const path = normalizePathname(pathname).toLowerCase();
+  for (const prefixRaw of prefixes) {
+    const prefix = normalizePathname(prefixRaw).toLowerCase();
+    if (path === prefix || path.startsWith(`${prefix}/`)) return true;
+  }
+  return false;
+}
+
 /**
- * API-Routen, die nur von der SPA „Control Platform" genutzt werden.
- * Ist `/control-platform` oder `/control-platform/*` (oder exakt dieser Bereich)
- * in `sicherheitsstufen` freigegeben, müssen diese Endpunkte nicht manuell
- * einzeln eingetragen werden – sonst ist die Seite leer (403 auf die Daten).
+ * API-Routen, die zur SPA „Control Platform" gehören.
+ * Bei freigegebenem `/control-platform`-Unterbaum in `sicherheitsstufen` nicht
+ * manuell ergänzen nötig.
  */
 export const CONTROL_PLATFORM_API_PATH_PREFIXES: readonly string[] = [
   "/api/databases/vehicle-imagery-controlling",
@@ -47,19 +83,84 @@ export const CONTROL_PLATFORM_API_PATH_PREFIXES: readonly string[] = [
   "/api/intern-analytics/controll-platform-action",
 ];
 
-/** Ist die Control-Platform-SPA laut Pfadliste erlaubt? */
-export function pfadlisteGrantsControlPlatform(
+/**
+ * API-Routen des Dashboard-Bereichs (`/dashboard/…`): alle im Repo vorkommenden
+ * Pages-Function-Pfade unter `functions/api/` die von Dashboard-Views genutzt
+ * werden können. Bei **mindestens einer** SPA-Zeile unter `/dashboard/…`
+ * werden diese APIs automatisch freigeschaltet (Angelegte Daten-Zeilen wie
+ * `/api/overview/*` bleiben optional und sind dann redundant).
+ *
+ * Hinweis: `/account` liegt **nicht** unter `/dashboard` und löst diese Liste
+ * daher nicht aus (MFA-APIs ohnehin ausgenommen durch die Middleware).
+ */
+export const DASHBOARD_API_PATH_PREFIXES: readonly string[] = [
+  "/api/analytics/customer-keys",
+  "/api/analytics/oneauto-reports",
+  "/api/analytics/_diag",
+  "/api/assets",
+  "/api/billing/payment-links",
+  "/api/billing/payment-link",
+  "/api/billing/payment-link-archive",
+  "/api/billing/plans",
+  "/api/billing/stripe-prices",
+  "/api/configs/active-controll-mode",
+  "/api/configs/controll-buttons",
+  "/api/configs/controll-status",
+  "/api/configs/first-views",
+  "/api/configs/generation-views",
+  "/api/configs/google-image-search",
+  "/api/configs/preview-images",
+  "/api/crm/customers",
+  "/api/customers/keys",
+  "/api/databases/vehicle-imagery",
+  "/api/databases/vehicle-imagery-status",
+  "/api/emails/jobs",
+  "/api/emails/templates",
+  "/api/emails/template-ai",
+  "/api/emails/timeline",
+  "/api/emails/tracking",
+  "/api/intern-analytics/controll-jobs",
+  "/api/intern-analytics/controll-platform-action",
+  "/api/intern-analytics/controlling",
+  "/api/intern-analytics/image-url-requests-customer-arcs",
+  "/api/intern-analytics/image-url-requests-geo",
+  "/api/intern-analytics/image-url-requests-ip-breakdown",
+  "/api/intern-analytics/diag",
+  "/api/mapping",
+  "/api/overview/stats",
+  "/api/system/blocked-vehicles",
+  "/api/system/prompts",
+  "/api/vehicle-imagery/catalog",
+  "/api/website/newsletter",
+  "/api/website/submissions",
+  "/api/website/submissions-by-country",
+  "/api/website/trial-submissions",
+];
+
+/** Intern: Kombination SPA-Wurzel + zugehörige API-Prefixe. */
+const SPA_ROUTE_API_BUNDLES: ReadonlyArray<{
+  spaRoot: "/dashboard" | "/control-platform";
+  apiPrefixes: readonly string[];
+}> = [
+  { spaRoot: "/control-platform", apiPrefixes: CONTROL_PLATFORM_API_PATH_PREFIXES },
+  { spaRoot: "/dashboard", apiPrefixes: DASHBOARD_API_PATH_PREFIXES },
+];
+
+/**
+ * Wenn die Pfadliste mindestens eine SPA-Route unter einer bekannten Wurzel
+ * freischaltet (`/dashboard/…`, `/control-platform/…`), werden die dort
+ * definierten API-Prefixes automatisch ebenfalls durchgelassen.
+ */
+export function pathnameAllowedBySpaRouteApiBundle(
+  pathname: string,
   pfade: readonly string[],
 ): boolean {
-  return pathMatchesPfadliste("/control-platform", pfade);
-}
-
-/** Trifft `pathname` (normalisierte API-URL ohne Query) einen Control-Platform-Backend-Pfad? */
-export function pathnameIsControlPlatformBundledApi(pathname: string): boolean {
   const path = normalizePathname(pathname).toLowerCase();
-  for (const prefixRaw of CONTROL_PLATFORM_API_PATH_PREFIXES) {
-    const prefix = normalizePathname(prefixRaw).toLowerCase();
-    if (path === prefix || path.startsWith(`${prefix}/`)) return true;
+  if (!path.startsWith("/api/")) return false;
+
+  for (const bundle of SPA_ROUTE_API_BUNDLES) {
+    if (!pfadlisteTouchesSpaSubtree(bundle.spaRoot, pfade)) continue;
+    if (pathnameMatchesAnyApiPrefix(pathname, bundle.apiPrefixes)) return true;
   }
   return false;
 }

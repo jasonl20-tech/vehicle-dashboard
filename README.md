@@ -89,7 +89,12 @@ Damit Index-Redirects funktionieren (z. B. `/kunden` → `/kunden/anfragen`, `/a
 
 > Hat ein User **irgendeinen** erlaubten Pfad **unterhalb** von `X` (z. B. `/X/foo` oder `/X/*`), darf er auch `X` aufrufen – aber nur als Durchgang. In Sidebar, Befehlspalette und Plattform-Kacheln werden Pfade weiterhin **direkt** ausgewertet, damit dort nichts „Leeres" auftaucht.
 
-In der API-Middleware gibt es **kein** Transit; jede `/api/...`-Route muss explizit erlaubt sein oder über ein gebündeltes Feature: ist **`/control-platform`** oder **`/control-platform/*`** freigegeben, erlauben die Datenbank-Rechte automatisch auch die zugehörigen Control-Platform-Backend-Routen (u. a. `/api/databases/vehicle-imagery-controlling`, `/api/configs/controll-buttons`, `/api/intern-analytics/controll-platform-action`; siehe `CONTROL_PLATFORM_API_PATH_PREFIXES` in `functions/_lib/routeAccess.ts`).
+In der API-Middleware gibt es **kein** Frontend-„Transit“; jede `/api/…`-Route muss direkt auf der Liste stehen oder **über ein SPA-Bundle**:
+
+- Ist **irgendeine** SPA-Route unter **`/dashboard/…`** freigegeben (z. B. `/dashboard/*`, `/dashboard/kunden/anfragen`), erhält diese Stufe automatisch Zugriff auf das **Dashboard-Datenpaket**: alle in `DASHBOARD_API_PATH_PREFIXES` in [`functions/_lib/routeAccess.ts`](functions/_lib/routeAccess.ts) eingetragenen API-Pfade (Billing, CRM, E-Mails, interne Analytics usw.).
+- Für **`/control-platform`** gilt analog nur das schmalere **`CONTROL_PLATFORM_API_PATH_PREFIXES`** dort.
+
+„Account“ liegt nicht unter `/dashboard` und löst das Dashboard-Paket **nicht** aus; MFA-Endpunkte bleiben separat ohne Pfadliste erreichbar.
 
 #### Plattform-Kachel „Dashboard"
 
@@ -103,31 +108,28 @@ Stufe 0 darf alles:
 INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES (0, '*');
 ```
 
-Stufe 2 sieht nur Kundenmanagement und benötigte APIs:
+Stufe 2 sieht nur Kundenmanagement-Unterbereich im Dashboard:
 
 ```sql
 INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
-  (2, '/dashboard/kunden/*'),
-  (2, '/api/crm/*'),
-  (2, '/api/customers/*'),
-  (2, '/api/website/submissions'),
-  (2, '/api/website/trial-submissions');
+  (2, '/dashboard/kunden/*');
 ```
 
-Stufe 3 nur eine konkrete Unterseite:
+Die Daten-API dafür gehört zum automatischen Dashboard-Bundle (`DASHBOARD_API_PATH_PREFIXES`). **Hinweis:** Technisch gilt das Paket dann für sämtliche dort gelisteten Endpunkte — auch ohne jeweilige Sidebar-URL. Für einen **minimalen** API-Zugriff nur gezielte `/api/…`-Zeilen nutzen und **keine** Dashboard-SPA unter `/dashboard/…` freigeben.
+
+Stufe 3 nur eine konkrete Dashboard-Unterseite — die zugehörigen APIs folgen aus dem Dashboard-Bundle:
 
 ```sql
 INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
-  (3, '/dashboard/kunden/anfragen'),
-  (3, '/api/website/submissions');
+  (3, '/dashboard/kunden/anfragen');
 ```
 
-Stufe 4 darf alles im Dashboard inkl. aller Unterbereiche:
+Stufe 4: volles Dashboard plus Control Platform; die passenden API-Bundles aktivieren sich jeweils automatisch:
 
 ```sql
 INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES
   (4, '/dashboard/*'),
-  (4, '/api/*');
+  (4, '/control-platform/*');
 ```
 
 Routenstruktur (Auszug):
