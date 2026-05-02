@@ -4,6 +4,7 @@ import {
   ExternalLink,
   Image as ImageIcon,
   Search,
+  Star,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -364,26 +365,26 @@ export default function ControlPlatformPage() {
                               `${slot.raw} • ${status.mode}/${status.status}`
                             : slot.raw
                           }
-                          className={`flex w-full flex-col border bg-paper transition-colors ${
+                          className={`flex w-full flex-col bg-paper transition-colors ${
                             isCorrect
-                              ? "border-accent-mint/80"
-                              : "border-hair"
+                              ? "border-2 border-accent-mint"
+                              : "border border-hair"
                           }`}
                         >
                           <a
                             href={href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className={`group relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800 ${
-                              isCorrect ? "opacity-50 grayscale" : ""
-                            }`}
+                            className="group relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-ink-50 outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ink-800"
                           >
                             <img
                               src={href}
                               alt={slot.slug}
                               loading="lazy"
                               decoding="async"
-                              className="max-h-full max-w-full object-contain"
+                              className={`max-h-full max-w-full object-contain ${
+                                isCorrect ? "opacity-30 grayscale" : ""
+                              }`}
                               onError={(ev) => {
                                 ev.currentTarget.classList.add("hidden");
                                 const ph =
@@ -397,15 +398,12 @@ export default function ControlPlatformPage() {
                               <ImageIcon className="h-8 w-8 text-ink-200" />
                             </div>
                             <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-600">
-                              {isCorrect && isMain ? (
-                                <span className="mr-0.5 text-accent-mint">★</span>
-                              ) : null}
                               {slot.slug}
                             </span>
                             <span className="pointer-events-none absolute right-1 top-1 flex max-w-[55%] flex-wrap justify-end gap-0.5">
-                              {isCorrect ?
-                                <span className="rounded bg-accent-mint px-1 py-0.5 font-mono text-[8px] font-medium uppercase text-white">
-                                  ok
+                              {isCorrect && isMain ?
+                                <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-accent-mint text-white">
+                                  <Star className="h-2.5 w-2.5 fill-white" />
                                 </span>
                               : null}
                               {slot.hasTransparencyHint ?
