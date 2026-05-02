@@ -45,6 +45,8 @@ export type VehicleImageryListParams = {
   limit: number;
   offset: number;
   active: "all" | "0" | "1";
+  /** Control Platform / views-Spalte: korrektur | transparenz | skalierung | schatten */
+  views_mode?: string;
   /** Weglassen = kein Filter (alle). */
   genehmigt?: "all" | "0" | "1";
   filter_id?: string;
@@ -68,6 +70,8 @@ export function vehicleImageryListUrl(p: VehicleImageryListParams): string {
   u.searchParams.set("offset", String(p.offset));
   if (p.q.trim()) u.searchParams.set("q", p.q.trim());
   if (p.active !== "all") u.searchParams.set("active", p.active);
+  const vm = (p.views_mode ?? "").trim().toLowerCase();
+  if (vm) u.searchParams.set("views_mode", vm);
   if (p.genehmigt && p.genehmigt !== "all") {
     u.searchParams.set("genehmigt", p.genehmigt);
   }

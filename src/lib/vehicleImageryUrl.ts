@@ -51,13 +51,23 @@ export function viewPathSlug(raw: string): string {
 export function parseViewSlot(raw: string): {
   raw: string;
   slug: string;
-  /** `true`, wenn Modifier `trp` vorkommt (z. B. Transparenz-Hinweis). */
+  /** Modifier `trp` (Transparenz). */
   hasTransparencyHint: boolean;
+  /** Modifier enthält `skaliert` (z. B. `#skaliert`, `#skaliert_weiß`). */
+  hasScalingHint: boolean;
+  /** Modifier `shadow` / Schatten-Variante. */
+  hasShadowHint: boolean;
 } {
   const t = (raw ?? "").trim();
   const i = t.indexOf("#");
   if (i === -1) {
-    return { raw: t, slug: t, hasTransparencyHint: false };
+    return {
+      raw: t,
+      slug: t,
+      hasTransparencyHint: false,
+      hasScalingHint: false,
+      hasShadowHint: false,
+    };
   }
   const slug = t.slice(0, i).trim();
   const mods = t.slice(i + 1).trim().toLowerCase();
@@ -65,5 +75,7 @@ export function parseViewSlot(raw: string): {
     raw: t,
     slug: slug || t,
     hasTransparencyHint: mods.includes("trp"),
+    hasScalingHint: mods.includes("skaliert"),
+    hasShadowHint: mods.includes("shadow"),
   };
 }

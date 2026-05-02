@@ -6,6 +6,9 @@
  *
  * GET: Query `id=` → ein Datensatz { row, cdnBase, imageUrlQuery }
  * GET: sonst Liste: q, limit, offset, active=all|1|0, genehmigt=all|1|0 (optional),
+ *      views_mode=korrektur|transparenz|skalierung|schatten (optional, filtert Feld `views`):
+ *      transparenz: enthält `#trp`, skalierung: enthält `#skaliert` (inkl. `#skaliert_weiß` usw.),
+ *      schatten: `#shadow`, korrektur: keines dieser Muster,
  *      strukturierte Filter: id, marke, modell, jahr, body, trim, farbe, resolution, format,
  *      updated_from, updated_to (YYYY-MM-DD, bezieht sich auf date(last_updated))
  * PUT: Body { id, active: 0|1 }
@@ -115,6 +118,34 @@ function likeContainsUserInput(raw: string): string | null {
 
 function isYyyyMmDd(s: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
+}
+
+/** Filter auf `vehicleimagery_public_storage.views` für die Control Platform. */
+const VIEWS_MODES = ["korrektur", "transparenz", "skalierung", "schatten"] as const;
+type ViewsMode = (typeof VIEWS_MODES)[number];
+
+function isViewsMode(s: string): s is ViewsMode {
+  return (VIEWS_MODES as readonly string[]).includes(s);
+}
+
+/** SQL-Fragment + Bindings für gültiges `views_mode`. */
+function viewsModeWhereSql(mode: ViewsMode): { clause: string; binds: string[] } {
+  const v = "lower(ifnull(views, ''))";
+
+  if (mode === "transparenz") {
+    return { clause: `${v} LIKE ?`, binds: ["%#trp%"] };
+  }
+  if (mode === "skalierung") {
+    return { clause: `${v} LIKE ?`, binds: ["%#skaliert%"] };
+  }
+  if (mode === "schatten") {
+    return { clause: `${v} LIKE ?`, binds: ["%#shadow%"] };
+  }
+  /* korrektur */
+  return {
+    clause: `(${v} NOT LIKE ? AND ${v} NOT LIKE ? AND ${v} NOT LIKE ?)`,
+    binds: ["%#trp%", "%#shadow%", "%#skaliert%"],
+  };
 }
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
@@ -250,6 +281,24 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (filterJahr) {
     where.push("jahr = ?");
     binds.push(Number(filterJahr));
+  }
+
+  const viewsModeRaw = (url.searchParams.get("views_mode") || "")
+    .trim()
+    .toLowerCase();
+  if (viewsModeRaw && !isViewsMode(viewsModeRaw)) {
+    return jsonResponse(
+      {
+        error:
+          "views_mode muss korrektur, transparenz, skalierung oder schatten sein",
+      },
+      { status: 400 },
+    );
+  }
+  if (viewsModeRaw) {
+    const ex = viewsModeWhereSql(viewsModeRaw);
+    where.push(`(${ex.clause})`);
+    binds.push(...ex.binds);
   }
 
   /* Pro Suchwort: irgendein passendes Feld; alle Wörter müssen (AND) erfüllt sein. */
