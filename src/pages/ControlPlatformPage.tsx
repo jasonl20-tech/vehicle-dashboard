@@ -352,6 +352,81 @@ export default function ControlPlatformPage() {
     status: string;
   } | null>(null);
 
+  // Resizable Strip in der Lightbox: Breite in px, persistent in localStorage.
+  const PREVIEW_STRIP_MIN_PX = 72;
+  const PREVIEW_STRIP_MAX_PX = 640;
+  const PREVIEW_STRIP_DEFAULT_PX = 144;
+  const PREVIEW_STRIP_STORAGE_KEY = "controlPlatform.preview.stripWidthPx";
+  const [previewStripWidth, setPreviewStripWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return PREVIEW_STRIP_DEFAULT_PX;
+    try {
+      const v = window.localStorage.getItem(PREVIEW_STRIP_STORAGE_KEY);
+      const n = v == null ? NaN : Number(v);
+      if (!Number.isFinite(n)) return PREVIEW_STRIP_DEFAULT_PX;
+      return Math.min(
+        PREVIEW_STRIP_MAX_PX,
+        Math.max(PREVIEW_STRIP_MIN_PX, Math.round(n)),
+      );
+    } catch {
+      return PREVIEW_STRIP_DEFAULT_PX;
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        PREVIEW_STRIP_STORAGE_KEY,
+        String(previewStripWidth),
+      );
+    } catch {
+      /* noop */
+    }
+  }, [previewStripWidth]);
+  const stripResizeStartRef = useRef<{
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const handleStripResizePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const target = e.currentTarget;
+      target.setPointerCapture(e.pointerId);
+      stripResizeStartRef.current = {
+        startX: e.clientX,
+        startWidth: previewStripWidth,
+      };
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [previewStripWidth],
+  );
+  const handleStripResizePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const start = stripResizeStartRef.current;
+      if (!start) return;
+      const dx = e.clientX - start.startX;
+      const next = Math.min(
+        PREVIEW_STRIP_MAX_PX,
+        Math.max(PREVIEW_STRIP_MIN_PX, Math.round(start.startWidth + dx)),
+      );
+      setPreviewStripWidth(next);
+    },
+    [],
+  );
+  const handleStripResizePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      stripResizeStartRef.current = null;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* noop */
+      }
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    },
+    [],
+  );
+
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
     return () => clearTimeout(t);
@@ -1047,8 +1122,11 @@ export default function ControlPlatformPage() {
               </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-row gap-2 overflow-hidden sm:gap-3">
-              <aside className="flex w-[5.75rem] shrink-0 flex-col gap-1 overflow-hidden sm:w-[6.75rem] md:w-[7.5rem]">
+            <div className="flex min-h-0 flex-1 flex-row gap-1.5 overflow-hidden sm:gap-2">
+              <aside
+                className="flex shrink-0 flex-col gap-1 overflow-hidden"
+                style={{ width: `${previewStripWidth}px` }}
+              >
                 <p className="shrink-0 text-[8px] font-medium uppercase leading-tight tracking-[0.12em] text-zinc-400 sm:text-[9px]">
                   Ansichten ({imagePreviewStripItems.length})
                 </p>
@@ -1129,6 +1207,26 @@ export default function ControlPlatformPage() {
                 </div>
               </aside>
 
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Vorschau-Spalte resizen"
+                onPointerDown={handleStripResizePointerDown}
+                onPointerMove={handleStripResizePointerMove}
+                onPointerUp={handleStripResizePointerUp}
+                onPointerCancel={handleStripResizePointerUp}
+                onDoubleClick={() =>
+                  setPreviewStripWidth(PREVIEW_STRIP_DEFAULT_PX)
+                }
+                title="Ziehen zum Verbreitern · Doppelklick = Standard"
+                className="group relative -mx-1 flex w-3 shrink-0 cursor-col-resize touch-none select-none items-center justify-center"
+              >
+                <span
+                  aria-hidden
+                  className="h-10 w-0.5 rounded bg-ink-700 transition-colors group-hover:bg-ink-400 group-active:bg-white"
+                />
+              </div>
+
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
                 <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 bg-white shadow-inner">
                   <div className="flex h-full w-full items-center justify-center overflow-auto bg-white p-1 sm:p-2">
@@ -1139,81 +1237,85 @@ export default function ControlPlatformPage() {
                     />
                   </div>
                 </div>
-
-                {toolbarDefsVisible.length > 0 ?
-                  <div className="flex shrink-0 flex-col gap-1.5">
-                    <div
-                      className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-stretch"
-                      role="toolbar"
-                      aria-label="Control-Aktionen"
-                    >
-                      {toolbarDefsVisible.map((def) => {
-                        const isBusy = submittingAction === def.stub;
-                        const disabled =
-                          submittingAction !== null ||
-                          currentPreviewItem.hasStatus;
-                        return (
-                          <button
-                            key={def.configKey}
-                            type="button"
-                            onClick={() =>
-                              void submitControllAction(def.stub, {
-                                rawToken: currentPreviewItem.raw,
-                                imageHref: currentPreviewItem.src,
-                                index: previewIndexClamped,
-                              })
-                            }
-                            disabled={disabled}
-                            aria-busy={isBusy}
-                            className={`flex min-h-[3.75rem] flex-1 flex-col items-start justify-center gap-0.5 rounded-lg border-2 px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[10.5rem] ${TOOLBAR_BUTTON_CLASSES[def.color]}`}
-                          >
-                            <span className="text-[15px] font-semibold leading-tight sm:text-base">
-                              {def.label}
-                              {isBusy ? <span className="ml-1.5 font-normal text-white/80">…</span> : null}
-                            </span>
-                            <span
-                              className={`font-mono text-[11px] ${TOOLBAR_HINT_CLASSES[def.color]}`}
-                            >
-                              {def.hint}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {currentPreviewItem.hasStatus ?
-                      <p
-                        className={`font-mono text-[10px] ${
-                          currentPreviewItem.isApproved
-                            ? "text-emerald-300"
-                            : currentPreviewItem.isCheckPending
-                            ? "text-zinc-300"
-                            : "text-sky-300"
-                        }`}
-                      >
-                        {currentPreviewItem.isApproved
-                          ? "done · freigegeben (check 2)"
-                          : currentPreviewItem.isCheckPending
-                          ? "lock · wartet auf Prüfung (check 0)"
-                          : "in Bearbeitung (check 1)"}
-                        {currentPreviewItem.statusValue ?
-                          <> · status: {currentPreviewItem.statusValue}</>
-                        : null}
-                      </p>
-                    : actionError ?
-                      <p className="font-mono text-[10px] text-red-300">
-                        Fehler: {actionError}
-                      </p>
-                    : lastActionToken &&
-                      lastActionToken.raw === currentPreviewItem.raw ?
-                      <p className="font-mono text-[10px] text-emerald-300">
-                        gespeichert: {lastActionToken.status} ·{" "}
-                        {lastActionToken.raw}
-                      </p>
-                    : null}
-                  </div>
-                : null}
               </div>
             </div>
+
+            {toolbarDefsVisible.length > 0 ?
+              <div className="flex shrink-0 flex-col gap-1">
+                <div
+                  className="flex h-[4.25rem] shrink-0 flex-row items-stretch gap-2 overflow-x-auto"
+                  role="toolbar"
+                  aria-label="Control-Aktionen"
+                >
+                  {toolbarDefsVisible.map((def) => {
+                    const isBusy = submittingAction === def.stub;
+                    const disabled =
+                      submittingAction !== null ||
+                      currentPreviewItem.hasStatus;
+                    return (
+                      <button
+                        key={def.configKey}
+                        type="button"
+                        onClick={() =>
+                          void submitControllAction(def.stub, {
+                            rawToken: currentPreviewItem.raw,
+                            imageHref: currentPreviewItem.src,
+                            index: previewIndexClamped,
+                          })
+                        }
+                        disabled={disabled}
+                        aria-busy={isBusy}
+                        className={`flex h-full w-44 shrink-0 flex-col items-start justify-center gap-0.5 rounded-lg border-2 px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${TOOLBAR_BUTTON_CLASSES[def.color]}`}
+                      >
+                        <span className="text-[15px] font-semibold leading-tight sm:text-base">
+                          {def.label}
+                          {isBusy ? (
+                            <span className="ml-1.5 font-normal text-white/80">…</span>
+                          ) : null}
+                        </span>
+                        <span
+                          className={`font-mono text-[11px] ${TOOLBAR_HINT_CLASSES[def.color]}`}
+                        >
+                          {def.hint}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="min-h-[1rem]">
+                  {currentPreviewItem.hasStatus ?
+                    <p
+                      className={`font-mono text-[10px] ${
+                        currentPreviewItem.isApproved
+                          ? "text-emerald-300"
+                          : currentPreviewItem.isCheckPending
+                          ? "text-zinc-300"
+                          : "text-sky-300"
+                      }`}
+                    >
+                      {currentPreviewItem.isApproved
+                        ? "done · freigegeben (check 2)"
+                        : currentPreviewItem.isCheckPending
+                        ? "lock · wartet auf Prüfung (check 0)"
+                        : "in Bearbeitung (check 1)"}
+                      {currentPreviewItem.statusValue ?
+                        <> · status: {currentPreviewItem.statusValue}</>
+                      : null}
+                    </p>
+                  : actionError ?
+                    <p className="font-mono text-[10px] text-red-300">
+                      Fehler: {actionError}
+                    </p>
+                  : lastActionToken &&
+                    lastActionToken.raw === currentPreviewItem.raw ?
+                    <p className="font-mono text-[10px] text-emerald-300">
+                      gespeichert: {lastActionToken.status} ·{" "}
+                      {lastActionToken.raw}
+                    </p>
+                  : null}
+                </div>
+              </div>
+            : null}
 
             <p className="shrink-0 text-center text-[10px] text-zinc-400">
               ESC oder außen klicken · Pfeiltasten · Kachel antippen
