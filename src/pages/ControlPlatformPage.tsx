@@ -1237,85 +1237,85 @@ export default function ControlPlatformPage() {
                     />
                   </div>
                 </div>
+
+                {toolbarDefsVisible.length > 0 ?
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <div
+                      className="flex h-[4.25rem] shrink-0 flex-row items-stretch gap-2"
+                      role="toolbar"
+                      aria-label="Control-Aktionen"
+                    >
+                      {toolbarDefsVisible.map((def) => {
+                        const isBusy = submittingAction === def.stub;
+                        const disabled =
+                          submittingAction !== null ||
+                          currentPreviewItem.hasStatus;
+                        return (
+                          <button
+                            key={def.configKey}
+                            type="button"
+                            onClick={() =>
+                              void submitControllAction(def.stub, {
+                                rawToken: currentPreviewItem.raw,
+                                imageHref: currentPreviewItem.src,
+                                index: previewIndexClamped,
+                              })
+                            }
+                            disabled={disabled}
+                            aria-busy={isBusy}
+                            className={`flex h-full min-w-0 flex-1 basis-0 flex-col items-start justify-center gap-0.5 rounded-lg border-2 px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${TOOLBAR_BUTTON_CLASSES[def.color]}`}
+                          >
+                            <span className="truncate text-[15px] font-semibold leading-tight sm:text-base">
+                              {def.label}
+                              {isBusy ? (
+                                <span className="ml-1.5 font-normal text-white/80">…</span>
+                              ) : null}
+                            </span>
+                            <span
+                              className={`font-mono text-[11px] ${TOOLBAR_HINT_CLASSES[def.color]}`}
+                            >
+                              {def.hint}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="min-h-[1rem]">
+                      {currentPreviewItem.hasStatus ?
+                        <p
+                          className={`font-mono text-[10px] ${
+                            currentPreviewItem.isApproved
+                              ? "text-emerald-300"
+                              : currentPreviewItem.isCheckPending
+                              ? "text-zinc-300"
+                              : "text-sky-300"
+                          }`}
+                        >
+                          {currentPreviewItem.isApproved
+                            ? "done · freigegeben (check 2)"
+                            : currentPreviewItem.isCheckPending
+                            ? "lock · wartet auf Prüfung (check 0)"
+                            : "in Bearbeitung (check 1)"}
+                          {currentPreviewItem.statusValue ?
+                            <> · status: {currentPreviewItem.statusValue}</>
+                          : null}
+                        </p>
+                      : actionError ?
+                        <p className="font-mono text-[10px] text-red-300">
+                          Fehler: {actionError}
+                        </p>
+                      : lastActionToken &&
+                        lastActionToken.raw === currentPreviewItem.raw ?
+                        <p className="font-mono text-[10px] text-emerald-300">
+                          gespeichert: {lastActionToken.status} ·{" "}
+                          {lastActionToken.raw}
+                        </p>
+                      : null}
+                    </div>
+                  </div>
+                : null}
               </div>
             </div>
-
-            {toolbarDefsVisible.length > 0 ?
-              <div className="flex shrink-0 flex-col gap-1">
-                <div
-                  className="flex h-[4.25rem] shrink-0 flex-row items-stretch gap-2 overflow-x-auto"
-                  role="toolbar"
-                  aria-label="Control-Aktionen"
-                >
-                  {toolbarDefsVisible.map((def) => {
-                    const isBusy = submittingAction === def.stub;
-                    const disabled =
-                      submittingAction !== null ||
-                      currentPreviewItem.hasStatus;
-                    return (
-                      <button
-                        key={def.configKey}
-                        type="button"
-                        onClick={() =>
-                          void submitControllAction(def.stub, {
-                            rawToken: currentPreviewItem.raw,
-                            imageHref: currentPreviewItem.src,
-                            index: previewIndexClamped,
-                          })
-                        }
-                        disabled={disabled}
-                        aria-busy={isBusy}
-                        className={`flex h-full w-44 shrink-0 flex-col items-start justify-center gap-0.5 rounded-lg border-2 px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${TOOLBAR_BUTTON_CLASSES[def.color]}`}
-                      >
-                        <span className="text-[15px] font-semibold leading-tight sm:text-base">
-                          {def.label}
-                          {isBusy ? (
-                            <span className="ml-1.5 font-normal text-white/80">…</span>
-                          ) : null}
-                        </span>
-                        <span
-                          className={`font-mono text-[11px] ${TOOLBAR_HINT_CLASSES[def.color]}`}
-                        >
-                          {def.hint}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="min-h-[1rem]">
-                  {currentPreviewItem.hasStatus ?
-                    <p
-                      className={`font-mono text-[10px] ${
-                        currentPreviewItem.isApproved
-                          ? "text-emerald-300"
-                          : currentPreviewItem.isCheckPending
-                          ? "text-zinc-300"
-                          : "text-sky-300"
-                      }`}
-                    >
-                      {currentPreviewItem.isApproved
-                        ? "done · freigegeben (check 2)"
-                        : currentPreviewItem.isCheckPending
-                        ? "lock · wartet auf Prüfung (check 0)"
-                        : "in Bearbeitung (check 1)"}
-                      {currentPreviewItem.statusValue ?
-                        <> · status: {currentPreviewItem.statusValue}</>
-                      : null}
-                    </p>
-                  : actionError ?
-                    <p className="font-mono text-[10px] text-red-300">
-                      Fehler: {actionError}
-                    </p>
-                  : lastActionToken &&
-                    lastActionToken.raw === currentPreviewItem.raw ?
-                    <p className="font-mono text-[10px] text-emerald-300">
-                      gespeichert: {lastActionToken.status} ·{" "}
-                      {lastActionToken.raw}
-                    </p>
-                  : null}
-                </div>
-              </div>
-            : null}
 
             <p className="shrink-0 text-center text-[10px] text-zinc-400">
               ESC oder außen klicken · Pfeiltasten · Kachel antippen
