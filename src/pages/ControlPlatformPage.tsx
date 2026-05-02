@@ -90,13 +90,14 @@ function tokenMatchesMode(
 
 const MAIN_VIEW_SLUGS = new Set(["front", "rear", "right", "left"]);
 const FIXED_VIEW_SLOT_LAYOUT = [
+  /* Top-Down (gespiegelt): Spalte 1 = rechte Seite, Spalte 2 = vorne/hinten, Spalte 3 = linke Seite */
   { slotSlug: "front_right", col: 1, row: 1 },
-  { slotSlug: "front", col: 1, row: 2 },
-  { slotSlug: "front_left", col: 1, row: 3 },
-  { slotSlug: "right", col: 2, row: 1 },
-  { slotSlug: "left", col: 2, row: 2 },
-  { slotSlug: "rear_right", col: 3, row: 1 },
-  { slotSlug: "rear", col: 3, row: 2 },
+  { slotSlug: "right", col: 1, row: 2 },
+  { slotSlug: "rear_right", col: 1, row: 3 },
+  { slotSlug: "front", col: 2, row: 1 },
+  { slotSlug: "rear", col: 2, row: 3 },
+  { slotSlug: "front_left", col: 3, row: 1 },
+  { slotSlug: "left", col: 3, row: 2 },
   { slotSlug: "rear_left", col: 3, row: 3 },
 ] as const;
 const FIXED_VIEW_SLOT_SET = new Set<string>(
