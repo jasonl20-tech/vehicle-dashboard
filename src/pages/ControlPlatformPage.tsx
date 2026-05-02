@@ -1079,7 +1079,7 @@ export default function ControlPlatformPage() {
 
       {imagePreview && currentPreviewItem ?
         <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black p-2 sm:p-4"
+          className="fixed inset-0 z-[90] flex items-stretch justify-stretch bg-black"
           role="presentation"
         >
           <button
@@ -1089,7 +1089,7 @@ export default function ControlPlatformPage() {
             onClick={() => setImagePreview(null)}
           />
           <div
-            className="relative z-10 flex h-[min(92dvh,92vh)] w-full max-w-[min(98vw,1720px)] flex-col gap-1.5 rounded-lg border border-ink-700 bg-ink-950 p-2 shadow-2xl sm:gap-2 sm:p-3"
+            className="relative z-10 flex h-full w-full flex-col gap-1.5 bg-ink-950 p-2 shadow-2xl sm:gap-2 sm:p-3"
             role="dialog"
             aria-modal="true"
             aria-labelledby="control-platform-preview-title"
