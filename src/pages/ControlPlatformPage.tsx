@@ -2,6 +2,8 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
   ExternalLink,
   Image as ImageIcon,
   Lock,
@@ -25,6 +27,11 @@ import {
   r2KeyFromImageUrl,
 } from "../lib/controllStatusApi";
 import { fmtNumber, useApi } from "../lib/customerApi";
+import {
+  PREVIEW_IMAGES_SETTINGS_PATH,
+  previewImageForSlug,
+  type PreviewImagesSettingsApiResponse,
+} from "../lib/previewImagesConfig";
 import {
   type ControllListSortOption,
   type ControllListStatusFilter,
@@ -673,6 +680,17 @@ export default function ControlPlatformPage() {
   const controllButtonsApi = useApi<ControllButtonsSettingsApiResponse>(
     CONTROLL_BUTTONS_SETTINGS_PATH,
   );
+
+  // Preview-Overlay: lazy geladen (erst beim ersten Klick auf den Button),
+  // dann pro Session in `previewImagesUrl` und damit im React-State gecacht.
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewImagesUrl, setPreviewImagesUrl] = useState<string | null>(
+    null,
+  );
+  const previewImagesApi = useApi<PreviewImagesSettingsApiResponse>(
+    previewImagesUrl,
+  );
+  const previewImagesMap = previewImagesApi.data?.images ?? null;
 
   const controllButtonsResolved = useMemo(() => {
     if (controllButtonsApi.data?.buttons) {
@@ -1428,6 +1446,31 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                 {currentPreviewItem.title}
               </p>
               <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!previewImagesUrl) {
+                      setPreviewImagesUrl(PREVIEW_IMAGES_SETTINGS_PATH);
+                    }
+                    setPreviewVisible((v) => !v);
+                  }}
+                  aria-pressed={previewVisible}
+                  title={
+                    previewVisible
+                      ? "Preview-Overlay ausblenden"
+                      : "Preview-Overlay einblenden"
+                  }
+                  className={`inline-flex items-center gap-0.5 rounded border px-2 py-1 text-[11px] transition ${
+                    previewVisible
+                      ? "border-emerald-500 bg-emerald-700 text-white hover:bg-emerald-600"
+                      : "border-ink-600 bg-ink-800 text-white hover:bg-ink-700"
+                  }`}
+                >
+                  {previewVisible ?
+                    <EyeOff className="h-3 w-3" />
+                  : <Eye className="h-3 w-3" />}
+                  Preview
+                </button>
                 <a
                   href={currentPreviewItem.src}
                   target="_blank"
@@ -1560,7 +1603,7 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
               </div>
 
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden">
-                <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 bg-white shadow-inner">
+                <div className="relative flex min-h-0 flex-1 overflow-hidden rounded-lg border border-zinc-400 bg-white shadow-inner">
                   <div className="flex h-full w-full items-center justify-center overflow-auto bg-white p-1 sm:p-2">
                     <img
                       src={currentPreviewItem.src}
@@ -1568,6 +1611,49 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>
+                  {previewVisible ?
+                    (() => {
+                      const previewSrc = previewImageForSlug(
+                        previewImagesMap,
+                        currentPreviewItem.slotLabel,
+                      );
+                      const isLoading =
+                        previewImagesApi.loading && !previewImagesMap;
+                      return (
+                        <div
+                          className="pointer-events-none absolute right-2 top-2 z-10 flex max-h-[40%] w-[clamp(140px,22%,320px)] flex-col overflow-hidden rounded-md border-2 border-emerald-500 bg-white/95 shadow-lg backdrop-blur-sm"
+                          aria-label="Referenz-Vorschau"
+                        >
+                          <div className="flex items-center justify-between gap-1 border-b border-emerald-200 bg-emerald-50 px-1.5 py-0.5">
+                            <span className="font-mono text-[9px] font-semibold uppercase tracking-wide text-emerald-800">
+                              Preview · {currentPreviewItem.slotLabel}
+                            </span>
+                          </div>
+                          <div className="relative flex flex-1 items-center justify-center bg-zinc-50">
+                            {isLoading ?
+                              <span className="px-2 py-3 font-mono text-[10px] text-ink-500">
+                                lädt…
+                              </span>
+                            : previewSrc ?
+                              <img
+                                src={previewSrc}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                                className="max-h-full max-w-full object-contain"
+                              />
+                            : previewImagesApi.error ?
+                              <span className="px-2 py-3 text-center font-mono text-[10px] text-red-600">
+                                Fehler beim Laden
+                              </span>
+                            : <span className="px-2 py-3 text-center font-mono text-[10px] text-ink-500">
+                                kein Preview für „{currentPreviewItem.slotLabel}"
+                              </span>}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  : null}
                 </div>
 
                 {toolbarDefsVisible.length > 0 ?
