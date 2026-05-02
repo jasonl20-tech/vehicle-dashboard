@@ -14,6 +14,7 @@ import {
   View,
   Wallet,
 } from "lucide-react";
+import { pathMatchesPfadliste } from "../../lib/routeAccess";
 
 export type NavChild = { label: string; to: string; end?: boolean };
 export type NavItem = {
@@ -154,4 +155,25 @@ export function flattenNav(items: NavItem[] = [...NAV_PRIMARY, ...NAV_FOOTER]): 
     }
   }
   return out;
+}
+
+/** Sidebar: Untereinträge bzw. Top-Level nur anzeigen, wenn Routen-Recht besteht. */
+export function filterNavByAccess(
+  items: NavItem[],
+  erlaubtePfade: readonly string[],
+): NavItem[] {
+  const next: NavItem[] = [];
+  for (const it of items) {
+    if (it.children) {
+      const children = it.children.filter((c) =>
+        pathMatchesPfadliste(c.to, erlaubtePfade),
+      );
+      if (children.length > 0) {
+        next.push({ ...it, children });
+      }
+    } else if (it.to && pathMatchesPfadliste(it.to, erlaubtePfade)) {
+      next.push(it);
+    }
+  }
+  return next;
 }

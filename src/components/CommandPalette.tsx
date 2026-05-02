@@ -8,6 +8,8 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../lib/auth";
+import { pathMatchesPfadliste } from "../lib/routeAccess";
 import { flattenNav, type FlatRoute } from "./layout/navConfig";
 
 type Props = {
@@ -17,13 +19,18 @@ type Props = {
 
 export default function CommandPalette({ open, onClose }: Props) {
   const navigate = useNavigate();
+  const { erlaubtePfade } = useAuth();
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const all = useMemo<FlatRoute[]>(() => flattenNav(), []);
+  const all = useMemo<FlatRoute[]>(() => {
+    return flattenNav().filter((r) =>
+      pathMatchesPfadliste(r.to, erlaubtePfade),
+    );
+  }, [erlaubtePfade]);
 
   const filtered = useMemo<FlatRoute[]>(() => {
     const s = q.trim().toLowerCase();

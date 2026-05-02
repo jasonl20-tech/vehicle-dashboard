@@ -1,4 +1,5 @@
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../_lib/auth";
+import { fetchPathsForSecurityLevel } from "../_lib/routeAccess";
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -8,5 +9,14 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (!user) {
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
-  return jsonResponse({ user }, { status: 200 });
+  let erlaubtePfade: string[];
+  try {
+    erlaubtePfade = await fetchPathsForSecurityLevel(env, user.sicherheitsstufe);
+  } catch {
+    return jsonResponse(
+      { error: "Berechtigungsdaten sind derzeit nicht verfügbar" },
+      { status: 503 },
+    );
+  }
+  return jsonResponse({ user, erlaubtePfade }, { status: 200 });
 };

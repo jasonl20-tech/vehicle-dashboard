@@ -11,9 +11,11 @@ import {
   Workflow,
   type LucideIcon,
 } from "lucide-react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Logo } from "../components/brand/Logo";
 import { useAuth } from "../lib/auth";
+import { pathMatchesPfadliste } from "../lib/routeAccess";
 
 type PlatformTile = {
   title: string;
@@ -72,7 +74,15 @@ const TILES: PlatformTile[] = [
 ];
 
 export default function PlatformHomePage() {
-  const { user, logout } = useAuth();
+  const { user, logout, erlaubtePfade } = useAuth();
+
+  const sichtbareTiles = useMemo(
+    () =>
+      TILES.filter(
+        (t) => !t.to || pathMatchesPfadliste(t.to, erlaubtePfade),
+      ),
+    [erlaubtePfade],
+  );
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-paper text-ink-900">
@@ -120,7 +130,7 @@ export default function PlatformHomePage() {
           className="mt-10 grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-4"
           aria-label="Plattform Bereiche"
         >
-          {TILES.map((tile) => (
+          {sichtbareTiles.map((tile) => (
             <PlatformCard key={tile.title} tile={tile} />
           ))}
         </section>

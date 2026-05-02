@@ -28,6 +28,8 @@ export type LoginResult =
 
 type AuthState = {
   user: SessionUser | null;
+  /** Pfade aus D1-Tabelle sicherheitsstufen; abgestimmt mit API-Middleware */
+  erlaubtePfade: string[];
   loading: boolean;
   refresh: () => Promise<void>;
   login: (benutzername: string, password: string) => Promise<LoginResult>;
@@ -39,19 +41,27 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [erlaubtePfade, setErlaubtePfade] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/me", { credentials: "include" });
       if (res.ok) {
-        const data: { user: SessionUser } = await res.json();
+        const data: { user: SessionUser; erlaubtePfade?: string[] } =
+          await res.json();
         setUser(data.user);
+        const p = data.erlaubtePfade;
+        setErlaubtePfade(
+          Array.isArray(p) && p.length > 0 ? p : ["*"],
+        );
       } else {
         setUser(null);
+        setErlaubtePfade([]);
       }
     } catch {
       setUser(null);
+      setErlaubtePfade([]);
     } finally {
       setLoading(false);
     }
@@ -121,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } finally {
       setUser(null);
+      setErlaubtePfade([]);
     }
   }, []);
 
@@ -130,7 +141,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, refresh, login, setupPassword, logout }}
+      value={{
+        user,
+        erlaubtePfade,
+        loading,
+        refresh,
+        login,
+        setupPassword,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>

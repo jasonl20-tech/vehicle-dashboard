@@ -10,7 +10,7 @@ Repository: [`jasonl20-tech/vehicle-dashboard`](https://github.com/jasonl20-tech
 - Editorial-/Linear-artiges UI ohne Card-/Bubble-Look
 - Dunkle Sidebar mit ⌘K-Suche und User-Profil (Profilbild, Titel, Banner, Sicherheitsstufe)
 - Login-Flow mit signierter Session (HMAC-SHA256, HttpOnly-Cookie)
-- Geschützte Routen via `<ProtectedRoute>`
+- Geschützte Routen via `<ProtectedRoute>` inkl. Sicherheitsstufen (D1-Tabelle `sicherheitsstufen`, Platzhalter `*`, Bereiche wie `/dashboard/*`)
 - Sortier-/such-/exportierbare Performance-Tabelle
 - Übersicht, Flotte, Fahrten, Fahrer, Wartung, Einstellungen
 
@@ -43,13 +43,39 @@ CREATE TABLE user (
 > Für Produktion bitte auf einen Hash (PBKDF2 / Argon2id / bcrypt) umstellen und die Funktion
 > `verifyPassword` in [`functions/_lib/auth.ts`](functions/_lib/auth.ts) entsprechend anpassen.
 
+### Tabelle `sicherheitsstufen` (Routen pro Sicherheitsstufe)
+
+In derselben D1 wie `user` (`env.user`). Für jeden erlaubten Pfad eine Zeile:
+
+```sql
+CREATE TABLE sicherheitsstufen (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  sicherheitsstufe_id INTEGER NOT NULL,
+  pfad                TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sicherheitsstufen_stufe ON sicherheitsstufen (sicherheitsstufe_id);
+```
+
+- `sicherheitsstufe_id` entspricht `user.sicherheitsstufe`.
+- `pfad`: **`*`** = alles; **`/dashboard`** = nur genau diese Route; **`/dashboard/*`** = `/dashboard` und alle Unterpfade unter `/dashboard/…`; für JSON-Endpunkte z. B. **`/api/overview/*`** (Middleware prüft die URL ohne Query-String).
+
+Ist für eine `sicherheitsstufe_id` keine Zeile hinterlegt, verhält sich die App wie mit **`*`** (voller Zugriff), bis du die ersten Einträge setzt.
+
+Beispiel „Stufe 0 darf alles“:
+
+```sql
+INSERT INTO sicherheitsstufen (sicherheitsstufe_id, pfad) VALUES (0, '*');
+```
+
+Geschützte **SPA-Routen** über [`ProtectedRoute`](src/components/auth/ProtectedRoute.tsx) und gefilterte Navigation; geschützte **API-Aufrufe** über [`functions/api/_middleware.ts`](functions/api/_middleware.ts). Ausnahmen ohne Pfadliste: **`/api/login`**, **`/api/setup-password`**, **`/api/logout`**, sowie **`GET /api/me`** (liefert u. a. `erlaubtePfade`).
+
 ### API-Routen (Pages Functions)
 
 | Methode | Pfad         | Zweck                                                 |
 |---------|--------------|--------------------------------------------------------|
 | `POST`  | `/api/login` | Body `{benutzername, password}` → setzt Session-Cookie |
 | `POST`  | `/api/logout`| Cookie löschen                                         |
-| `GET`   | `/api/me`    | Aktuellen Benutzer holen (oder `401`)                  |
+| `GET`   | `/api/me`    | `{ user, erlaubtePfade }` oder `401` / bei D1-Fehler `503` |
 | `GET`   | `/api/billing/payment-links` | (Login) Stripe Payment Links listen |
 | `POST`  | `/api/billing/payment-links` | (Login) Payment Link in Stripe anlegen, nur `{"planKey"}`; `stripe_price_id` kommt aus dem Plan-JSON im KV |
 | `POST`  | `/api/billing/payment-link`   | (Login) Metadaten am Payment Link setzen (`price_id` → KV-Key) |

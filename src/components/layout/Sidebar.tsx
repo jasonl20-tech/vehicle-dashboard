@@ -8,13 +8,14 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
 import { Logo } from "../brand/Logo";
 import {
   NAV_FOOTER,
   NAV_PRIMARY,
+  filterNavByAccess,
   type NavItem,
 } from "./navConfig";
 
@@ -33,6 +34,16 @@ export default function Sidebar({
   onToggleCollapse,
   onOpenPalette,
 }: Props) {
+  const { erlaubtePfade } = useAuth();
+  const navPrimary = useMemo(
+    () => filterNavByAccess(NAV_PRIMARY, erlaubtePfade),
+    [erlaubtePfade],
+  );
+  const navFooter = useMemo(
+    () => filterNavByAccess(NAV_FOOTER, erlaubtePfade),
+    [erlaubtePfade],
+  );
+
   return (
     <>
       {mobileOpen && (
@@ -57,13 +68,13 @@ export default function Sidebar({
           />
           <SearchBox collapsed={collapsed} onOpenPalette={onOpenPalette} />
           <Nav
-            items={NAV_PRIMARY}
+            items={navPrimary}
             onNavigate={onClose}
             collapsed={collapsed}
           />
           <div className="mt-auto" />
           <Nav
-            items={NAV_FOOTER}
+            items={navFooter}
             onNavigate={onClose}
             collapsed={collapsed}
             dense
