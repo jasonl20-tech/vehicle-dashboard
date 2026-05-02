@@ -91,10 +91,10 @@ function tokenMatchesMode(
 const MAIN_VIEW_SLUGS = new Set(["front", "rear", "right", "left"]);
 const FIXED_VIEW_SLOT_ORDER = [
   "front_left",
-  "front",
-  "front_right",
   "left",
+  "front",
   "right",
+  "front_right",
   "rear_left",
   "rear",
   "rear_right",
@@ -395,7 +395,7 @@ export default function ControlPlatformPage() {
                     "Keine Ansichten in der Datenbank."
                   : "Keine Ansichten für diesen Modus."}
                 </p>
-              : <ul className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              : <ul className="grid grid-cols-2 gap-1.5">
                   {viewGridEntries.map((entry, idx) => {
                     if (!entry.token) {
                       return (
