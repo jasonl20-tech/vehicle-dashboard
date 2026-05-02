@@ -475,6 +475,15 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     where.push(`(${statusFilterSql})`);
   }
 
+  // Im aktuellen Modus „leere" Fahrzeuge (n_views_expected = 0 UND
+  // keine Status-Einträge) werden bei jedem expliziten Filter ausgeblendet
+  // — sie tauchen nur unter „alle" (any) auf, weil dort bewusst
+  // alles zur Ansicht gehört.
+  if (statusFilterRaw !== "any") {
+    const nExp = expectedViewsExpr(statusMode);
+    where.push(`(${nExp} > 0 OR ifnull(cs.n_total, 0) > 0)`);
+  }
+
   const whereSql = ` WHERE ${where.join(" AND ")}`;
   const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${controllStatusAggSubquery(statusMode)} ON cs.vehicle_id = v.id`;
 
