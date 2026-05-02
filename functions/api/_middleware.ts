@@ -7,6 +7,8 @@ import {
   fetchPathsForSecurityLevel,
   normalizePathname,
   pathMatchesPfadliste,
+  pathnameIsControlPlatformBundledApi,
+  pfadlisteGrantsControlPlatform,
 } from "../_lib/routeAccess";
 
 /** Keine Session oder kein Zugriffs-Check für diese Routen erforderlich. */
@@ -73,6 +75,14 @@ export async function onRequest(context: {
   try {
     const pfade = await fetchPathsForSecurityLevel(env, user.sicherheitsstufe);
     if (pathMatchesPfadliste(pathname, pfade)) {
+      return next();
+    }
+    // SPA-Recht `/control-platform` allein ohne passende `/api/databases/...`-Zeilen
+    // ⇒ leere Liste. Nutzer erwartet: eine Zeile wie `/control-platform/*` genügt.
+    if (
+      pathnameIsControlPlatformBundledApi(pathname) &&
+      pfadlisteGrantsControlPlatform(pfade)
+    ) {
       return next();
     }
   } catch {

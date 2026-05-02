@@ -89,7 +89,7 @@ Damit Index-Redirects funktionieren (z. B. `/kunden` → `/kunden/anfragen`, `/a
 
 > Hat ein User **irgendeinen** erlaubten Pfad **unterhalb** von `X` (z. B. `/X/foo` oder `/X/*`), darf er auch `X` aufrufen – aber nur als Durchgang. In Sidebar, Befehlspalette und Plattform-Kacheln werden Pfade weiterhin **direkt** ausgewertet, damit dort nichts „Leeres" auftaucht.
 
-In der API-Middleware gibt es **kein** Transit; jede `/api/...`-Route muss explizit erlaubt sein.
+In der API-Middleware gibt es **kein** Transit; jede `/api/...`-Route muss explizit erlaubt sein oder über ein gebündeltes Feature: ist **`/control-platform`** oder **`/control-platform/*`** freigegeben, erlauben die Datenbank-Rechte automatisch auch die zugehörigen Control-Platform-Backend-Routen (u. a. `/api/databases/vehicle-imagery-controlling`, `/api/configs/controll-buttons`, `/api/intern-analytics/controll-platform-action`; siehe `CONTROL_PLATFORM_API_PATH_PREFIXES` in `functions/_lib/routeAccess.ts`).
 
 #### Plattform-Kachel „Dashboard"
 
