@@ -20,8 +20,9 @@ import { pathMatchesPfadliste } from "../lib/routeAccess";
 type PlatformTile = {
   title: string;
   icon: LucideIcon;
-  to?: string;
-  href?: string;
+  /** Pflicht: Pfad für Sicherheitsstufen-Filter und Routing. */
+  to: string;
+  /** Wenn gesetzt → Kachel sichtbar, aber nicht klickbar. */
   status?: string;
 };
 
@@ -34,6 +35,7 @@ const TILES: PlatformTile[] = [
   {
     title: "Content Management System",
     icon: FileText,
+    to: "/cms",
     status: "Bald verfügbar",
   },
   {
@@ -44,22 +46,23 @@ const TILES: PlatformTile[] = [
   {
     title: "Job Manager",
     icon: Briefcase,
+    to: "/job-manager",
     status: "Bald verfügbar",
   },
   {
     title: "N8N",
     icon: Workflow,
-    href: "https://n8n.vehicleimagery.com",
+    to: "/n8n",
   },
   {
     title: "Social Media Manager",
     icon: Send,
-    href: "https://publish.buffer.com/schedule?tab=approvals",
+    to: "/socialmediamanager",
   },
   {
     title: "Docusign",
     icon: FileText,
-    href: "https://app-eu.boldsign.com/dashboard",
+    to: "/docusign",
   },
   {
     title: "User Settings",
@@ -69,6 +72,7 @@ const TILES: PlatformTile[] = [
   {
     title: "Admin Settings",
     icon: Shield,
+    to: "/admin-settings",
     status: "Bald verfügbar",
   },
 ];
@@ -77,10 +81,7 @@ export default function PlatformHomePage() {
   const { user, logout, erlaubtePfade } = useAuth();
 
   const sichtbareTiles = useMemo(
-    () =>
-      TILES.filter(
-        (t) => !t.to || pathMatchesPfadliste(t.to, erlaubtePfade),
-      ),
+    () => TILES.filter((t) => pathMatchesPfadliste(t.to, erlaubtePfade)),
     [erlaubtePfade],
   );
 
@@ -141,7 +142,7 @@ export default function PlatformHomePage() {
 
 function PlatformCard({ tile }: { tile: PlatformTile }) {
   const Icon = tile.icon;
-  const isActive = Boolean(tile.to || tile.href);
+  const isActive = !tile.status;
   const content = (
     <>
       <div className="flex items-center gap-4">
@@ -174,7 +175,7 @@ function PlatformCard({ tile }: { tile: PlatformTile }) {
     </>
   );
 
-  if (tile.to) {
+  if (isActive) {
     return (
       <Link
         to={tile.to}
@@ -186,23 +187,6 @@ function PlatformCard({ tile }: { tile: PlatformTile }) {
         />
         {content}
       </Link>
-    );
-  }
-
-  if (tile.href) {
-    return (
-      <a
-        href={tile.href}
-        target="_blank"
-        rel="noreferrer"
-        className="group relative min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/75 p-5 shadow-[0_24px_70px_-45px_rgba(13,13,15,0.45)] backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-ink-200 hover:bg-white"
-      >
-        <span
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-500 via-accent-rose to-accent-mint"
-        />
-        {content}
-      </a>
     );
   }
 

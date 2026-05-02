@@ -7,6 +7,7 @@ import ControllJobsPage from "./pages/ControllJobsPage";
 import ControllingPage from "./pages/ControllingPage";
 import ControlPlatformLayout from "./components/layout/ControlPlatformLayout";
 import ControlPlatformPage from "./pages/ControlPlatformPage";
+import ExternalRedirectPage from "./pages/ExternalRedirectPage";
 import LoginPage from "./pages/LoginPage";
 import ModulePage from "./pages/ModulePage";
 import OneautoApiPage from "./pages/OneautoApiPage";
@@ -51,6 +52,24 @@ export default function App() {
         <Route element={<ControlPlatformLayout />}>
           <Route path="/control-platform" element={<ControlPlatformPage />} />
         </Route>
+        <Route
+          path="/n8n"
+          element={
+            <ExternalRedirectPage href="https://n8n.vehicleimagery.com" />
+          }
+        />
+        <Route
+          path="/socialmediamanager"
+          element={
+            <ExternalRedirectPage href="https://publish.buffer.com/schedule?tab=approvals" />
+          }
+        />
+        <Route
+          path="/docusign"
+          element={
+            <ExternalRedirectPage href="https://app-eu.boldsign.com/dashboard" />
+          }
+        />
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<OverviewPage />} />
           <Route
