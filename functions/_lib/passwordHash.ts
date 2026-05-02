@@ -21,7 +21,7 @@ const SALT_BYTES = 16;
 const PEPPER_MARKER = "\0vehicleimagery-password-v1\0";
 
 /** Mindestlänge des Pepper gleiche Philosophie wie `SESSION_SECRET` im Projekt */
-const PEPPER_MIN_LEN = 16;
+export const PEPPER_MIN_LEN = 16;
 
 /** Stabiler Vergleichwert wenn `catch` zwischen Modulgrenzen läuft */
 export const PASSWORD_SECRET_MISSING_MESSAGE = "password_secret_not_configured";
@@ -80,6 +80,65 @@ function resolvePasswordSecretPepper(env: AuthEnv): string {
       .join(", ") || "(keine oder nur Non-Strings)",
   );
   return "";
+}
+
+/**
+ * Diagnose ohne Werte: was sieht Functions wirklich in `env`?
+ * - `present`: Schlüssel existiert auf `env`.
+ * - `isString`: Wert ist `string` (Cloudflare-Secrets/Variables landen als Strings).
+ * - `length`: Länge nach `trim()` + BOM-Strip.
+ * - `relevantKeys`: alle eigenen String-Keys, deren Name auf das Schema passt
+ *   (z.B. `pass`, `pwd`, `secret`, `pepper`).
+ */
+export function diagnosePasswordSecret(env: AuthEnv): {
+  resolved: { name: string | null; length: number };
+  candidates: Array<{ name: string; present: boolean; isString: boolean; length: number }>;
+  relevantKeys: string[];
+  minRequired: number;
+} {
+  const r = env as unknown as Record<string, unknown>;
+  const probe = (name: string) => {
+    const present = Object.prototype.hasOwnProperty.call(r, name);
+    const raw = r[name];
+    const isString = typeof raw === "string";
+    const length = isString ? (raw as string).trim().replaceAll("\uFEFF", "").length : 0;
+    return { name, present, isString, length };
+  };
+
+  const candidates = ["password_secret", "PASSWORD_SECRET", "passwordSecret"].map(probe);
+
+  const relevantKeys: string[] = [];
+  for (const key of Reflect.ownKeys(r)) {
+    if (typeof key !== "string") continue;
+    const v = r[key];
+    if (typeof v !== "string") continue;
+    if (/(pass|pwd|secret|pepper)/i.test(key)) relevantKeys.push(key);
+  }
+  relevantKeys.sort();
+
+  const pepper = resolvePasswordSecretPepper(env);
+  const resolved = pepper
+    ? {
+        name:
+          (Object.prototype.hasOwnProperty.call(r, "password_secret") &&
+          typeof r.password_secret === "string"
+            ? "password_secret"
+            : null) ||
+          (Object.prototype.hasOwnProperty.call(r, "PASSWORD_SECRET") &&
+          typeof r.PASSWORD_SECRET === "string"
+            ? "PASSWORD_SECRET"
+            : null) ||
+          "(case-insensitive Treffer)",
+        length: pepper.length,
+      }
+    : { name: null, length: 0 };
+
+  return {
+    resolved,
+    candidates,
+    relevantKeys,
+    minRequired: PEPPER_MIN_LEN,
+  };
 }
 
 function timingSafeEqBytes(a: Uint8Array, b: Uint8Array): boolean {
