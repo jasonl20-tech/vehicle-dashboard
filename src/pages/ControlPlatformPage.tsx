@@ -67,6 +67,7 @@ import {
 } from "../lib/vehicleImageryPublicApi";
 import {
   buildVehicleImageUrl,
+  isScalingControlViewToken,
   parseViewSlot,
   parseViewTokens,
   viewPathSlug,
@@ -120,12 +121,14 @@ function rowSubtitle(r: {
 /**
  * Welche View-Tokens werden im aktuellen Modus als Kachel angezeigt?
  * - Korrektur: nur Tokens **ohne** `#`-Modifier (keine `#trp`/`#skaliert`/`#shadow`).
- * - Transparenz / Skalierung / Schatten: vorerst **alle** Tokens (Detail-Filter folgt später).
+ * - Skalierung: nur `#skaliert` und `#skaliert_weiß` (exakter Modifier).
+ * - Transparenz / Schatten: alle Tokens.
  */
 function tokenMatchesMode(
   token: string,
   mode: ControlPlatformViewsMode,
 ): boolean {
+  if (mode === "skalierung") return isScalingControlViewToken(token);
   if (mode !== "korrektur") return true;
   const s = parseViewSlot(token);
   return (

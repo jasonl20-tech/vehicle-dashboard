@@ -79,3 +79,15 @@ export function parseViewSlot(raw: string): {
     hasShadowHint: mods.includes("shadow"),
   };
 }
+
+/**
+ * Im Skalierungs-Modus zählen und anzeigen wir nur Views, deren Modifier
+ * nach `#` exakt `skaliert` oder `skaliert_weiß` ist (nicht z. B. `#skaliert_foo`).
+ */
+export function isScalingControlViewToken(raw: string): boolean {
+  const t = (raw ?? "").trim();
+  const i = t.indexOf("#");
+  if (i === -1) return false;
+  const mod = t.slice(i + 1).trim().toLowerCase();
+  return mod === "skaliert" || mod === "skaliert_weiß";
+}

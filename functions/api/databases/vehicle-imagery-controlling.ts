@@ -125,6 +125,16 @@ function controllStatusAggSubquery(statusMode: string): string {
   const erroredExpr = isScaling
     ? `SUM(CASE WHEN "check" >= 3 AND NOT ("check" = 6 AND status = 'correct') THEN 1 ELSE 0 END)`
     : `SUM(CASE WHEN "check" >= 3 THEN 1 ELSE 0 END)`;
+  /** Nur `view_token` mit exakt `#skaliert` / `#skaliert_weiß` (kein `#skaliert_foo`). */
+  const scalingViewFilter = isScaling
+    ? ` AND (
+        lower(view_token) GLOB '*#skaliert_weiß'
+        OR (
+          lower(view_token) GLOB '*#skaliert'
+          AND NOT lower(view_token) GLOB '*#skaliert_*'
+        )
+      )`
+    : "";
   return `(
   SELECT
     vehicle_id,
@@ -135,7 +145,7 @@ function controllStatusAggSubquery(statusMode: string): string {
     SUM(CASE WHEN "check" = 0 THEN 1 ELSE 0 END) AS n_pending,
     COUNT(*) AS n_total
   FROM controll_status
-  WHERE mode = ?
+  WHERE mode = ?${scalingViewFilter}
   GROUP BY vehicle_id
 ) cs`;
 }
@@ -248,21 +258,34 @@ const STATUS_FILTER_DEFAULT: StatusFilter = "open";
  * Approximierung über `;`-Trennzeichen in `v.views`.
  *
  * - Korrektur: nur Tokens **ohne** `#` (d. h. `gesamt - mit_#`).
- * - Sonst: alle Tokens.
+ * - Skalierung: nur Tokens mit exakt `#skaliert` bzw. `#skaliert_weiß`
+ *   (Zeilenende vor `;`, analog zum Frontend `isScalingControlViewToken`).
+ * - Sonst: alle Tokens (Anzahl Semikolon-Segmente).
  *
  * Edge-Case: leere `views`-Spalte → `0` (Fahrzeuge ohne erwartete Views
  * tauchen damit in "done"/"open" gar nicht auf).
  */
 function expectedViewsExpr(statusMode: string): string {
+  const viewsEmpty = "ifnull(v.views, '') = ''";
   const tokensTotal =
     "(length(v.views) - length(replace(v.views, ';', '')) + 1)";
   const tokensWithHash =
     "(length(v.views) - length(replace(v.views, '#', '')))";
-  const formula =
-    statusMode === "correction"
-      ? `(${tokensTotal} - ${tokensWithHash})`
-      : tokensTotal;
-  return `(CASE WHEN ifnull(v.views, '') = '' THEN 0 ELSE ${formula} END)`;
+  if (statusMode === "correction") {
+    const formula = `(${tokensTotal} - ${tokensWithHash})`;
+    return `(CASE WHEN ${viewsEmpty} THEN 0 ELSE ${formula} END)`;
+  }
+  if (statusMode === "scaling") {
+    const norm =
+      "(lower(replace(replace(ifnull(v.views, ''), char(13), ''), char(10), ';')) || ';')";
+    const needlePlain = "'#skaliert;'";
+    const needleWeiss = "'#skaliert_weiß;'";
+    const countPlain = `((length(${norm}) - length(replace(${norm}, ${needlePlain}, ''))) / length(${needlePlain}))`;
+    const countWeiss = `((length(${norm}) - length(replace(${norm}, ${needleWeiss}, ''))) / length(${needleWeiss}))`;
+    return `(CASE WHEN ${viewsEmpty} THEN 0 ELSE (${countPlain} + ${countWeiss}) END)`;
+  }
+  const formula = tokensTotal;
+  return `(CASE WHEN ${viewsEmpty} THEN 0 ELSE ${formula} END)`;
 }
 
 function buildStatusFiltersSql(
