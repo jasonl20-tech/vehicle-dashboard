@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../../lib/auth";
+import TotpQrCode from "../settings/TotpQrCode";
 
 /**
  * Globaler Sicherheits-Gate. Wird in `App` über jedem Inhalt gerendert.
@@ -182,6 +183,10 @@ function ForcedSetupModal({
             </div>
           ) : draft ? (
             <div className="mt-6 space-y-5">
+              <div className="flex flex-col items-center sm:items-start">
+                <TotpQrCode otpauthUri={draft.otpauthUri} size={192} />
+              </div>
+
               <div>
                 <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
                   otpauth-Link (kopieren oder in unterstützte Apps einfügen)

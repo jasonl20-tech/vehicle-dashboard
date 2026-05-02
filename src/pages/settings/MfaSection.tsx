@@ -8,6 +8,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
+import TotpQrCode from "../../components/settings/TotpQrCode";
 
 type Status = {
   totpEnabled: boolean;
@@ -231,6 +232,9 @@ export default function MfaSection() {
 
               {draft ?
                 <>
+                  <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:gap-8">
+                    <TotpQrCode otpauthUri={draft.otpauthUri} size={200} />
+                    <div className="min-w-0 flex-1 space-y-4">
                   <div>
                     <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
                       otpauth-Link (kopieren oder in unterstützte Apps einfuegen)
@@ -272,6 +276,8 @@ export default function MfaSection() {
                       >
                         <ClipboardCopy className="h-4 w-4" />
                       </button>
+                    </div>
+                  </div>
                     </div>
                   </div>
                   <form onSubmit={(e) => void onConfirmEnrollment(e)} className="space-y-3">
