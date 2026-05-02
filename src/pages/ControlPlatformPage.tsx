@@ -445,6 +445,30 @@ function buildStatusMap(
 }
 
 /**
+ * Korrektur-Eintrag zu einem Raster-Slot (`front`, `rear_left`, …),
+ * unabhängig davon, ob `view_token` exakt dem Slug entspricht (Normalisierung
+ * über `parseViewSlot().slug`).
+ */
+function findCorrectionStatusForSlotSlug(
+  statuses: ControllStatusRow[] | undefined,
+  slotSlug: string,
+): ControllStatusRow | undefined {
+  const n = normalizeSlug(slotSlug);
+  for (const s of statuses ?? []) {
+    if ((s.mode ?? "").toLowerCase() !== "correction") continue;
+    if (normalizeSlug(parseViewSlot(s.view_token).slug) === n) return s;
+  }
+  return undefined;
+}
+
+function isCorrectionDoneRow(row: ControllStatusRow): boolean {
+  return (
+    Number(row.check) === 2 &&
+    (row.status ?? "").trim().toLowerCase() === "correct"
+  );
+}
+
+/**
  * Aggregierter „Schwerpunkt-Status" pro Fahrzeug (für Tag/Tint).
  * Reihenfolge der Priorität (von dominant zu schwach):
  *   1. `errored` – mind. ein `check >= 3` außer 6
@@ -1806,17 +1830,28 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                     if (!entry.token) {
                       // „+"-Button: nur, wenn die Ansicht in
                       // settings.generation_views als true markiert ist.
-                      // Existiert für die Ansicht bereits ein
-                      // controll_status-Eintrag (egal in welchem Modus),
-                      // zeigen wir „in Bearbeitung" und kein Plus mehr.
+                      // Korrektur-Modus: kein Plus, sobald ein passender
+                      // `controll_status` (mode correction) existiert.
+                      // Skalierungs-Modus: Plus nur, wenn für den Slot **keine**
+                      // laufende/offene Korrektur mehr da ist — eine abgeschlossene
+                      // Korrektur (check 2 · correct) blockiert nicht (Skalierung
+                      // kann dann fehlendes #skaliert anstoßen).
                       const slug = entry.slotSlug;
                       const allowedForGen = isGenerationAllowedForSlug(
                         generationViewsConfig,
                         slug,
                       );
-                      const existingGenStatus = statusMap.get(
-                        statusKey(slug, "correction"),
+                      const existingGenStatus = findCorrectionStatusForSlotSlug(
+                        detailApi.data?.statuses,
+                        slug,
                       );
+                      const correctionDone =
+                        existingGenStatus ?
+                          isCorrectionDoneRow(existingGenStatus)
+                        : false;
+                      const genBlockedByCorrection =
+                        existingGenStatus != null &&
+                        (viewsMode !== "skalierung" || !correctionDone);
                       const isGenSubmitting =
                         generationSubmittingSlot === slug;
                       const slotBlocked = isSlotBlockedByFirstViews(
@@ -1825,9 +1860,13 @@ ${counts.total} / ${nViewsForMode} im aktuellen Modus`;
                         slug,
                       );
                       const showPlus =
-                        allowedForGen && !existingGenStatus && !slotBlocked;
+                        allowedForGen &&
+                        !genBlockedByCorrection &&
+                        !slotBlocked;
                       const showInProgress =
-                        allowedForGen && !!existingGenStatus;
+                        allowedForGen &&
+                        !!existingGenStatus &&
+                        !correctionDone;
                       const showLockedHint =
                         allowedForGen &&
                         !existingGenStatus &&
