@@ -6,6 +6,9 @@
  * Gleiche Felder wie Public-Storage, **ohne** Spalte `genehmigt`.
  *
  * GET/PUT-Verhalten entspricht `vehicle-imagery.ts`, jedoch ohne genehmigt-Parameter/Filter/Suche-Spalte.
+ *
+ * CDN-Basis für `cdnBase`: `IMAGE_CDN_CONTROLLING_BASE` oder Default
+ * `https://vehicleimagery-controlling.vehicleimagery.com` (Pfad `v1/…` wie beim Public-CDN).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -13,7 +16,8 @@ const STORAGE_TABLE = "vehicleimagery_controlling_storage";
 
 const MAX_LIMIT = 150;
 const DEFAULT_LIMIT = 40;
-const DEFAULT_CDN_BASE = "https://bildurl.vehicleimagery.com";
+const DEFAULT_CONTROLLING_CDN_BASE =
+  "https://vehicleimagery-controlling.vehicleimagery.com";
 
 function requireVehicleDb(env: AuthEnv): D1Database | Response {
   if (!env.vehicledatabase) {
@@ -77,10 +81,10 @@ export type VehicleImageryControllingRow = {
   last_updated: string | null;
 };
 
-function cdnBaseFromEnv(env: AuthEnv): string {
-  const raw = (env.IMAGE_CDN_BASE || "").trim();
+function controllingCdnBaseFromEnv(env: AuthEnv): string {
+  const raw = (env.IMAGE_CDN_CONTROLLING_BASE ?? "").trim();
   if (raw) return raw.replace(/\/$/, "");
-  return DEFAULT_CDN_BASE;
+  return DEFAULT_CONTROLLING_CDN_BASE;
 }
 
 function imageUrlQueryFromEnv(env: AuthEnv): string {
@@ -153,7 +157,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     if (!row) {
       return jsonResponse({ error: "Nicht gefunden" }, { status: 404 });
     }
-    const cdnBase = cdnBaseFromEnv(env);
+    const cdnBase = controllingCdnBaseFromEnv(env);
     const imageUrlQuery = imageUrlQueryFromEnv(env);
     return jsonResponse(
       { row, cdnBase, imageUrlQuery },
@@ -288,7 +292,7 @@ LIMIT ? OFFSET ?`;
     .bind(...binds, limit, offset)
     .all<VehicleImageryControllingRow>();
 
-  const cdnBase = cdnBaseFromEnv(env);
+  const cdnBase = controllingCdnBaseFromEnv(env);
   const imageUrlQuery = imageUrlQueryFromEnv(env);
 
   return jsonResponse(
@@ -363,7 +367,7 @@ WHERE id = ?`,
   if (!row) {
     return jsonResponse({ error: "Nicht gefunden" }, { status: 404 });
   }
-  const cdnBase = cdnBaseFromEnv(env);
+  const cdnBase = controllingCdnBaseFromEnv(env);
   const imageUrlQuery = imageUrlQueryFromEnv(env);
   return jsonResponse({ row, cdnBase, imageUrlQuery }, { status: 200 });
 };

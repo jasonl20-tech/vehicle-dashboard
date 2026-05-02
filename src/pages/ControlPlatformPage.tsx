@@ -12,6 +12,7 @@ import { useControlPlatformViewsMode } from "../lib/controlPlatformModeContext";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   VEHICLE_IMAGERY_CONTROLLING_API,
+  VEHICLE_IMAGERY_CONTROLLING_CDN_FALLBACK,
   type VehicleImageryListResponse,
   type VehicleImageryOneResponse,
   vehicleImageryListUrl,
@@ -138,7 +139,7 @@ export default function ControlPlatformPage() {
   const cdnBase = (
     detailApi.data?.cdnBase ??
     listApi.data?.cdnBase ??
-    "https://bildurl.vehicleimagery.com"
+    VEHICLE_IMAGERY_CONTROLLING_CDN_FALLBACK
   ).replace(/\/$/, "");
   const imageUrlQuery =
     detailApi.data?.imageUrlQuery ?? listApi.data?.imageUrlQuery ?? "";

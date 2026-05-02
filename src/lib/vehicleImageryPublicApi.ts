@@ -4,6 +4,10 @@ export const VEHICLE_IMAGERY_API = "/api/databases/vehicle-imagery";
 export const VEHICLE_IMAGERY_CONTROLLING_API =
   "/api/databases/vehicle-imagery-controlling";
 
+/** Wenn die API keine `cdnBase` liefert, gleicher Host wie Worker-Default. */
+export const VEHICLE_IMAGERY_CONTROLLING_CDN_FALLBACK =
+  "https://vehicleimagery-controlling.vehicleimagery.com";
+
 export const VEHICLE_IMAGERY_STATUS_API =
   "/api/databases/vehicle-imagery-status";
 

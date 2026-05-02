@@ -108,6 +108,11 @@ export interface AuthEnv {
    */
   IMAGE_CDN_BASE?: string;
   /**
+   * Controlling-Bilder (`/api/databases/vehicle-imagery-controlling`): Host für Pfade `v1/…`.
+   * Variable `IMAGE_CDN_CONTROLLING_BASE`; Fallback `https://vehicleimagery-controlling.vehicleimagery.com`.
+   */
+  IMAGE_CDN_CONTROLLING_BASE?: string;
+  /**
    * Optional: Geheimnis für signierte Bild-URLs o. ä. (Variable `image_url_secret` im Dashboard).
    * Wird nicht an den Browser ausgeliefert.
    */
