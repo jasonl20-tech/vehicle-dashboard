@@ -199,24 +199,64 @@ function isSortOption(s: string): s is SortOption {
 }
 
 /**
- * Status-Filter-Whitelist. SQL-Snippet ist hardcoded; nutzer-input wird *nur*
- * gegen die Schlüssel geprüft.
+ * Status-Filter-Whitelist (Schlüssel). SQL-Snippets werden in
+ * `buildStatusFiltersSql()` mode-abhängig zusammengebaut – nutzer-input
+ * wird *nur* gegen die Schlüssel geprüft.
  */
-const STATUS_FILTERS = {
-  any: "",
-  errored: "ifnull(cs.n_errored, 0) > 0",
-  transferred: "ifnull(cs.n_total, 0) > 0 AND cs.n_total = cs.n_transferred",
-  done:
-    "ifnull(cs.n_total, 0) > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_done, 0) > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) = cs.n_total",
-  inProgress:
-    "ifnull(cs.n_in_progress, 0) > 0 AND ifnull(cs.n_errored, 0) = 0",
-  pending:
-    "ifnull(cs.n_pending, 0) > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_in_progress, 0) = 0",
-  none: "(cs.vehicle_id IS NULL OR ifnull(cs.n_total, 0) = 0)",
-} as const;
-type StatusFilter = keyof typeof STATUS_FILTERS;
+const STATUS_FILTER_KEYS = [
+  "any",
+  "not_done",
+  "errored",
+  "transferred",
+  "done",
+  "inProgress",
+  "pending",
+  "none",
+] as const;
+type StatusFilter = (typeof STATUS_FILTER_KEYS)[number];
 function isStatusFilter(s: string): s is StatusFilter {
-  return Object.prototype.hasOwnProperty.call(STATUS_FILTERS, s);
+  return (STATUS_FILTER_KEYS as readonly string[]).includes(s);
+}
+
+/**
+ * SQL-Ausdruck für die "Anzahl erwarteter Views im aktuellen Modus".
+ * Approximierung über `;`-Trennzeichen in `v.views`.
+ *
+ * - Korrektur: nur Tokens **ohne** `#` (d. h. `gesamt - mit_#`).
+ * - Sonst: alle Tokens.
+ *
+ * Edge-Case: leere `views`-Spalte → `0` (Fahrzeuge ohne erwartete Views
+ * tauchen damit in "done"/"not_done" gar nicht auf).
+ */
+function expectedViewsExpr(statusMode: string): string {
+  const tokensTotal =
+    "(length(v.views) - length(replace(v.views, ';', '')) + 1)";
+  const tokensWithHash =
+    "(length(v.views) - length(replace(v.views, '#', '')))";
+  const formula =
+    statusMode === "correction"
+      ? `(${tokensTotal} - ${tokensWithHash})`
+      : tokensTotal;
+  return `(CASE WHEN ifnull(v.views, '') = '' THEN 0 ELSE ${formula} END)`;
+}
+
+function buildStatusFiltersSql(
+  statusMode: string,
+): Record<StatusFilter, string> {
+  const nExp = expectedViewsExpr(statusMode);
+  return {
+    any: "",
+    not_done: `(${nExp} > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) < ${nExp}) OR ifnull(cs.n_errored, 0) > 0`,
+    errored: "ifnull(cs.n_errored, 0) > 0",
+    transferred:
+      "ifnull(cs.n_total, 0) > 0 AND cs.n_total = cs.n_transferred",
+    done: `${nExp} > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) = ${nExp}`,
+    inProgress:
+      "ifnull(cs.n_in_progress, 0) > 0 AND ifnull(cs.n_errored, 0) = 0",
+    pending:
+      "ifnull(cs.n_pending, 0) > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_in_progress, 0) = 0",
+    none: "(cs.vehicle_id IS NULL OR ifnull(cs.n_total, 0) = 0)",
+  };
 }
 
 export type ControllStatusCountsForRow = {
@@ -347,12 +387,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (!isStatusFilter(statusFilterRaw)) {
     return jsonResponse(
       {
-        error: `status_filter muss einer von: ${Object.keys(STATUS_FILTERS).join(", ")} sein`,
+        error: `status_filter muss einer von: ${STATUS_FILTER_KEYS.join(", ")} sein`,
       },
       { status: 400 },
     );
   }
-  const statusFilterSql = STATUS_FILTERS[statusFilterRaw];
+  const statusFiltersSql = buildStatusFiltersSql(statusMode);
+  const statusFilterSql = statusFiltersSql[statusFilterRaw];
 
   const where: string[] = ["1=1"];
   const binds: (string | number)[] = [];

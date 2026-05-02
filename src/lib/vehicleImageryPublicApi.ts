@@ -77,6 +77,7 @@ export type ControllListSortOption =
 /** Status-Filter der Controlling-Liste (Whitelist; muss zum Server passen). */
 export const CONTROLL_LIST_STATUS_FILTERS = [
   "any",
+  "not_done",
   "errored",
   "transferred",
   "done",

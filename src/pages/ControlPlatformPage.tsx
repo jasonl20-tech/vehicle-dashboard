@@ -427,6 +427,7 @@ const SORT_LABELS: Record<ControllListSortOption, string> = {
 /** UI-Labels für Status-Filter. */
 const STATUS_FILTER_LABELS: Record<ControllListStatusFilter, string> = {
   any: "alle",
+  not_done: "noch offen",
   errored: "mit errored",
   transferred: "alles übertragen",
   done: "alles done",
@@ -452,7 +453,9 @@ function readSortFromStorage(): ControllListSortOption {
 }
 
 function readFilterFromStorage(): ControllListStatusFilter {
-  if (typeof window === "undefined") return "any";
+  // Default: "noch offen" (alle Fahrzeuge mit nicht abgeschlossenem Status).
+  const fallback: ControllListStatusFilter = "not_done";
+  if (typeof window === "undefined") return fallback;
   try {
     const v = window.localStorage.getItem(FILTER_STORAGE_KEY);
     if (
@@ -464,7 +467,7 @@ function readFilterFromStorage(): ControllListStatusFilter {
   } catch {
     /* noop */
   }
-  return "any";
+  return fallback;
 }
 
 export default function ControlPlatformPage() {
@@ -1001,7 +1004,7 @@ export default function ControlPlatformPage() {
                 )
               }
               className={`min-w-0 flex-1 border py-0.5 pl-1.5 pr-5 text-[10.5px] focus:outline-none ${
-                statusFilter === "any"
+                statusFilter === "any" || statusFilter === "not_done"
                   ? "border-hair bg-paper text-ink-700 focus:border-ink-600"
                   : "border-ink-700 bg-ink-50 text-ink-900 focus:border-ink-800"
               }`}
