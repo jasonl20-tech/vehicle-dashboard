@@ -697,14 +697,6 @@ export default function ControlPlatformPage() {
   );
   const controllMode = controllModeForViewsMode(viewsMode);
 
-  // Sind alle `first_views` für die aktuell offene Detail-Row bereits auf
-  // `correction.correct` (check=2)? Solange `false`, sind Tiles, die
-  // **nicht** zu first_views gehören, gesperrt (im Grid + in der Lightbox).
-  const firstViewsReady = useMemo(
-    () => areFirstViewsReady(firstViewsSet, detailApi.data?.statuses),
-    [firstViewsSet, detailApi.data?.statuses],
-  );
-
   const controllButtonsApi = useApi<ControllButtonsSettingsApiResponse>(
     CONTROLL_BUTTONS_SETTINGS_PATH,
   );
@@ -740,6 +732,14 @@ export default function ControlPlatformPage() {
   const firstViewsSet = useMemo(
     () => makeFirstViewsSet(firstViewsList),
     [firstViewsList],
+  );
+
+  // Sind alle `first_views` für die aktuell offene Detail-Row bereits auf
+  // `correction.correct` (check=2)? Solange `false`, sind Tiles, die
+  // **nicht** zu first_views gehören, gesperrt (im Grid + in der Lightbox).
+  const firstViewsReady = useMemo(
+    () => areFirstViewsReady(firstViewsSet, detailApi.data?.statuses),
+    [firstViewsSet, detailApi.data?.statuses],
   );
 
   const [generationSubmittingSlot, setGenerationSubmittingSlot] = useState<
