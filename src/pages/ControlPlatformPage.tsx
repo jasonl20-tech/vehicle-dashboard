@@ -401,7 +401,7 @@ export default function ControlPlatformPage() {
                     "Keine Ansichten in der Datenbank."
                   : "Keine Ansichten für diesen Modus."}
                 </p>
-              : <ul className="grid justify-center grid-cols-[repeat(3,7.5rem)] gap-2 sm:grid-cols-[repeat(3,9rem)] lg:grid-cols-[repeat(3,10rem)]">
+              : <ul className="grid grid-cols-[repeat(3,minmax(9rem,11rem))] gap-2 sm:grid-cols-[repeat(3,minmax(10rem,12rem))] lg:grid-cols-[repeat(3,minmax(12rem,14rem))]">
                   {viewGridEntries.map((entry, idx) => {
                     if (!entry.token) {
                       return (
