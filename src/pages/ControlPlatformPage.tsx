@@ -89,10 +89,59 @@ function tokenMatchesMode(
 }
 
 const MAIN_VIEW_SLUGS = new Set(["front", "rear", "right", "left"]);
+const FIXED_VIEW_SLOT_ORDER = [
+  "front_left",
+  "front",
+  "front_right",
+  "left",
+  "right",
+  "rear_left",
+  "rear",
+  "rear_right",
+] as const;
+const FIXED_VIEW_SLOT_SET = new Set<string>(FIXED_VIEW_SLOT_ORDER);
+
+type ViewGridEntry = {
+  slotSlug: string;
+  token: string | null;
+};
 
 /** Hauptansicht (front/rear/right/left, slug-Vergleich, case-insensitive). */
 function isMainViewSlug(slug: string): boolean {
   return MAIN_VIEW_SLUGS.has(slug.trim().toLowerCase());
+}
+
+function normalizeSlug(x: string): string {
+  return x.trim().toLowerCase();
+}
+
+/**
+ * Feste Positionen für Standard-Ansichten; unbekannte/zusätzliche Ansichten hängen hinten an.
+ */
+function buildViewGridEntries(tokens: string[]): ViewGridEntry[] {
+  const slotToToken = new Map<string, string>();
+  const extraTokens: string[] = [];
+
+  for (const token of tokens) {
+    const slug = normalizeSlug(viewPathSlug(token));
+    if (FIXED_VIEW_SLOT_SET.has(slug) && !slotToToken.has(slug)) {
+      slotToToken.set(slug, token);
+    } else {
+      extraTokens.push(token);
+    }
+  }
+
+  const fixed = FIXED_VIEW_SLOT_ORDER.map((slotSlug) => ({
+    slotSlug,
+    token: slotToToken.get(slotSlug) ?? null,
+  }));
+
+  const extras = extraTokens.map((token) => ({
+    slotSlug: normalizeSlug(viewPathSlug(token)),
+    token,
+  }));
+
+  return [...fixed, ...extras];
 }
 
 /** Modus-Mapping zwischen Frontend-Auswahl und `controll_status.mode`. */
@@ -182,6 +231,11 @@ export default function ControlPlatformPage() {
     row ?
       parseViewTokens(row.views).filter((t) => tokenMatchesMode(t, viewsMode))
     : [];
+
+  const viewGridEntries = useMemo(
+    () => buildViewGridEntries(filteredViewTokens),
+    [filteredViewTokens],
+  );
 
   const statusMap = useMemo(
     () => buildStatusMap(detailApi.data?.statuses),
@@ -342,7 +396,28 @@ export default function ControlPlatformPage() {
                   : "Keine Ansichten für diesen Modus."}
                 </p>
               : <ul className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {filteredViewTokens.map((token, idx) => {
+                  {viewGridEntries.map((entry, idx) => {
+                    if (!entry.token) {
+                      return (
+                        <li key={`${row.id}-slot-${entry.slotSlug}-${idx}`}>
+                          <article className="flex w-full flex-col border border-dashed border-hair bg-paper/50">
+                            <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-ink-50/40">
+                              <span className="pointer-events-none absolute left-1 top-1 max-w-[calc(100%-0.5rem)] truncate font-mono text-[9px] text-ink-400">
+                                {entry.slotSlug}
+                              </span>
+                              <ImageIcon className="h-8 w-8 text-ink-200/80" />
+                            </div>
+                            <div className="flex min-h-[2rem] items-center gap-1 border-t border-hair px-1 py-0.5">
+                              <span className="min-w-0 flex-1 truncate font-mono text-[9px] leading-tight text-ink-400">
+                                —
+                              </span>
+                            </div>
+                          </article>
+                        </li>
+                      );
+                    }
+
+                    const token = entry.token;
                     const slot = parseViewSlot(token);
                     const slug = viewPathSlug(token);
                     const href = buildVehicleImageUrl(
@@ -358,7 +433,7 @@ export default function ControlPlatformPage() {
                     const isCorrect = status?.status === "correct";
                     const isMain = isMainViewSlug(slot.slug);
                     return (
-                      <li key={`${row.id}-${idx}-${slot.raw}`}>
+                      <li key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}>
                         <article
                           title={
                             status ?
