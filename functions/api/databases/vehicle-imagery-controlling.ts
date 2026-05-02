@@ -137,6 +137,59 @@ function isViewsMode(s: string): s is ViewsMode {
   return (VIEWS_MODES as readonly string[]).includes(s);
 }
 
+/** Mapping Frontend-Modus → `controll_status.mode`. */
+const VIEWS_MODE_TO_STATUS_MODE: Record<ViewsMode, string> = {
+  korrektur: "correction",
+  transparenz: "transparency",
+  skalierung: "scaling",
+  schatten: "shadow",
+};
+
+/**
+ * Aggregat pro `vehicle_id` (für die Sidebar-Färbung).
+ * Schlüssel = vehicle_id als String, Wert = Counts pro `check`-Wert (auch String-Schlüssel).
+ *
+ * Beispiel:
+ * `{ "123": { "0": 4, "2": 3 }, "124": { "6": 8 } }`
+ */
+type StatusCountsByVehicle = Record<string, Record<string, number>>;
+
+async function loadStatusCountsForList(
+  db: D1Database,
+  vehicleIds: number[],
+  statusMode: string | null,
+): Promise<StatusCountsByVehicle> {
+  if (vehicleIds.length === 0) return {};
+  const placeholders = vehicleIds.map(() => "?").join(",");
+  const where = statusMode
+    ? `mode = ? AND vehicle_id IN (${placeholders})`
+    : `vehicle_id IN (${placeholders})`;
+  const binds: (string | number)[] = statusMode
+    ? [statusMode, ...vehicleIds]
+    : [...vehicleIds];
+  try {
+    const r = await db
+      .prepare(
+        `SELECT vehicle_id, "check" AS chk, COUNT(*) AS n
+         FROM controll_status
+         WHERE ${where}
+         GROUP BY vehicle_id, "check"`,
+      )
+      .bind(...binds)
+      .all<{ vehicle_id: number; chk: number; n: number }>();
+    const out: StatusCountsByVehicle = {};
+    for (const row of r.results ?? []) {
+      const vid = String(row.vehicle_id);
+      const chk = String(row.chk);
+      if (!out[vid]) out[vid] = {};
+      out[vid][chk] = Number(row.n);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
   env,
@@ -302,6 +355,19 @@ LIMIT ? OFFSET ?`;
   const cdnBase = controllingCdnBaseFromEnv(env);
   const imageUrlQuery = imageUrlQueryFromEnv(env);
 
+  const pageVehicleIds = (results ?? [])
+    .map((r) => Number(r.id))
+    .filter((n) => Number.isInteger(n) && n > 0);
+  const statusModeForCounts =
+    viewsModeRaw && isViewsMode(viewsModeRaw)
+      ? VIEWS_MODE_TO_STATUS_MODE[viewsModeRaw]
+      : null;
+  const statusCounts = await loadStatusCountsForList(
+    db,
+    pageVehicleIds,
+    statusModeForCounts,
+  );
+
   return jsonResponse(
     {
       rows: results ?? [],
@@ -310,6 +376,7 @@ LIMIT ? OFFSET ?`;
       limit,
       cdnBase,
       imageUrlQuery,
+      statusCounts,
     },
     { status: 200 },
   );

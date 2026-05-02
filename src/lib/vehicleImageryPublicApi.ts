@@ -32,6 +32,17 @@ export type VehicleImageryPublicRow = VehicleImageryRowLike & {
   genehmigt?: number | null;
 };
 
+/**
+ * Aggregierte `check`-Counts pro `vehicle_id` für den aktuellen `views_mode`.
+ * Wird nur von der Controlling-Liste geliefert.
+ *
+ * Beispiel: `{ "123": { "0": 4, "2": 3 }, "124": { "6": 8 } }`
+ */
+export type ControllStatusCountsByVehicle = Record<
+  string,
+  Record<string, number>
+>;
+
 export type VehicleImageryListResponse = {
   rows: VehicleImageryPublicRow[];
   total: number;
@@ -40,6 +51,8 @@ export type VehicleImageryListResponse = {
   cdnBase: string;
   /** Anhängen an jede Bild-URL: `?key=<image_url_secret>` (vom Worker). */
   imageUrlQuery: string;
+  /** Nur Controlling-Liste; Public-Liste liefert das nicht. */
+  statusCounts?: ControllStatusCountsByVehicle;
 };
 
 /** Eintrag aus `controll_status` (Controlling-Tabelle) für ein Fahrzeug. */

@@ -332,6 +332,89 @@ function buildStatusMap(
   return m;
 }
 
+/**
+ * Aggregierter Status pro Fahrzeug für die Sidebar-Färbung.
+ * Reihenfolge der Priorität (von dominant zu schwach):
+ *   1. `errored` – mind. ein `check >= 3` außer 6
+ *   2. `transferred` – alle vorhandenen Statuses sind `check === 6`
+ *   3. `done` – alle vorhandenen Statuses sind `check ∈ {2, 6}` (mind. 1 Status)
+ *   4. `inProgress` – mind. ein `check === 1`
+ *   5. `pending` – mind. ein `check === 0`
+ *   6. `none` – keine Statuses
+ */
+type SidebarAggregatedStatus =
+  | "errored"
+  | "transferred"
+  | "done"
+  | "inProgress"
+  | "pending"
+  | "none";
+
+function aggregateSidebarStatus(
+  counts: Record<string, number> | undefined,
+): SidebarAggregatedStatus {
+  if (!counts) return "none";
+  let total = 0;
+  let n0 = 0,
+    n1 = 0,
+    n2 = 0,
+    n6 = 0,
+    nErr = 0;
+  for (const [k, v] of Object.entries(counts)) {
+    const c = Number(k);
+    const n = Number(v) || 0;
+    total += n;
+    if (c === 0) n0 += n;
+    else if (c === 1) n1 += n;
+    else if (c === 2) n2 += n;
+    else if (c === 6) n6 += n;
+    else if (c >= 3) nErr += n;
+  }
+  if (total === 0) return "none";
+  if (nErr > 0) return "errored";
+  if (n6 === total) return "transferred";
+  if (n2 + n6 === total) return "done";
+  if (n1 > 0) return "inProgress";
+  if (n0 > 0) return "pending";
+  return "none";
+}
+
+const SIDEBAR_STATUS_STYLE: Record<
+  SidebarAggregatedStatus,
+  { bar: string; label: string; tint: string }
+> = {
+  errored: {
+    bar: "bg-red-500",
+    label: "errored",
+    tint: "bg-red-50/60",
+  },
+  transferred: {
+    bar: "bg-violet-500",
+    label: "übertragen",
+    tint: "bg-violet-50/60",
+  },
+  done: {
+    bar: "bg-emerald-500",
+    label: "done",
+    tint: "bg-emerald-50/60",
+  },
+  inProgress: {
+    bar: "bg-sky-500",
+    label: "in Bearb.",
+    tint: "bg-sky-50/60",
+  },
+  pending: {
+    bar: "bg-zinc-400",
+    label: "lock",
+    tint: "bg-zinc-50/60",
+  },
+  none: {
+    bar: "bg-transparent",
+    label: "",
+    tint: "",
+  },
+};
+
 export default function ControlPlatformPage() {
   const { viewsMode, liveEnabled, liveIntervalMs } =
     useControlPlatformViewsMode();
@@ -544,10 +627,18 @@ export default function ControlPlatformPage() {
       hasStatus: boolean;
       /** `check === 2` → final freigegeben (grüner Rand, ausgegraut). */
       isApproved: boolean;
-      /** Status existiert, aber `check < 2` → nicht mehr bearbeitbar. */
+      /** Status existiert, aber `check !== 2` → nicht mehr bearbeitbar. */
       isLocked: boolean;
-      /** Status existiert mit `check === 0` → Badge „check“. */
+      /** `check === 0` → Badge „lock". */
       isCheckPending: boolean;
+      /** `check === 1` → Badge „in Bearbeitung". */
+      isInProgress: boolean;
+      /** `check === 6` → Badge „übertragen". */
+      isTransferred: boolean;
+      /** `check >= 3` und `check !== 6` → Badge „errored". */
+      isErrored: boolean;
+      /** Roher `check`-Wert oder `null`, wenn kein Status existiert. */
+      checkVal: number | null;
       /** Roher status-Wert (z. B. `correct`, `regen_vertex`, `delete`) — falls vorhanden. */
       statusValue: string | null;
       isMain: boolean;
@@ -569,8 +660,12 @@ export default function ControlPlatformPage() {
       const hasStatus = !!statusRow;
       const checkVal = statusRow ? Number(statusRow.check) : null;
       const isApproved = checkVal === 2;
-      const isLocked = hasStatus && !isApproved;
+      const isInProgress = checkVal === 1;
       const isCheckPending = checkVal === 0;
+      const isTransferred = checkVal === 6;
+      const isErrored =
+        checkVal != null && checkVal >= 3 && checkVal !== 6;
+      const isLocked = hasStatus && !isApproved;
       const isMain = isMainViewSlug(slot.slug);
       internal.push({
         key: `${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`,
@@ -582,6 +677,10 @@ export default function ControlPlatformPage() {
         isApproved,
         isLocked,
         isCheckPending,
+        isInProgress,
+        isTransferred,
+        isErrored,
+        checkVal,
         statusValue: statusRow?.status ?? null,
         isMain,
         hasTransparencyHint: slot.hasTransparencyHint,
@@ -814,6 +913,15 @@ export default function ControlPlatformPage() {
           {rows.map((r) => {
             const selected = sidebarSelectedOnPage && r.id === selectedId;
             const nViews = parseViewTokens(r.views).length;
+            const counts = listApi.data?.statusCounts?.[String(r.id)];
+            const aggStatus = aggregateSidebarStatus(counts);
+            const aggStyle = SIDEBAR_STATUS_STYLE[aggStatus];
+            const totalStatuses = counts
+              ? Object.values(counts).reduce(
+                  (s, n) => s + (Number(n) || 0),
+                  0,
+                )
+              : 0;
             return (
               <li key={r.id}>
                 <button
@@ -821,10 +929,25 @@ export default function ControlPlatformPage() {
                   role="option"
                   aria-selected={selected}
                   onClick={() => setSelectedId(r.id)}
-                  className={`flex w-full items-center gap-1 border-b border-hair px-1.5 py-2 text-left text-[12px] transition-colors hover:bg-ink-50/80 ${
-                    selected ? "bg-ink-50" : ""
+                  title={
+                    aggStatus === "none"
+                      ? undefined
+                      : `Status: ${aggStyle.label}${
+                          totalStatuses
+                            ? ` · ${totalStatuses} ${
+                                totalStatuses === 1 ? "Eintrag" : "Einträge"
+                              }`
+                            : ""
+                        }`
+                  }
+                  className={`relative flex w-full items-center gap-1 border-b border-hair py-2 pl-2 pr-1.5 text-left text-[12px] transition-colors hover:bg-ink-50/80 ${
+                    selected ? "bg-ink-50" : aggStyle.tint
                   }`}
                 >
+                  <span
+                    aria-hidden
+                    className={`absolute left-0 top-0 h-full w-1 ${aggStyle.bar}`}
+                  />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium leading-tight text-ink-900">
                       {rowTitle(r)}
@@ -832,8 +955,19 @@ export default function ControlPlatformPage() {
                     <span className="mt-0.5 block truncate font-mono text-[10px] leading-tight text-ink-500">
                       #{r.id} · {rowSubtitle(r)}
                     </span>
-                    <span className="mt-0.5 text-[10px] text-ink-500">
-                      {nViews} Ansicht{nViews === 1 ? "" : "en"}
+                    <span className="mt-0.5 flex items-center gap-1 text-[10px] text-ink-500">
+                      <span>
+                        {nViews} Ansicht{nViews === 1 ? "" : "en"}
+                      </span>
+                      {aggStatus !== "none" ? (
+                        <span
+                          className={`inline-flex items-center rounded px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wide leading-none text-white ${
+                            aggStyle.bar
+                          }`}
+                        >
+                          {aggStyle.label}
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                   <ChevronRight
@@ -949,6 +1083,9 @@ export default function ControlPlatformPage() {
                     const isApproved = checkVal === 2;
                     const isInProgress = checkVal === 1;
                     const isCheckPending = checkVal === 0;
+                    const isTransferred = checkVal === 6;
+                    const isErrored =
+                      checkVal != null && checkVal >= 3 && checkVal !== 6;
                     return (
                       <li
                         key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}`}
@@ -964,7 +1101,11 @@ export default function ControlPlatformPage() {
                             : slot.raw
                           }
                           className={`flex w-full flex-col bg-paper transition-colors ${
-                            isApproved
+                            isErrored
+                              ? "border-2 border-red-400"
+                              : isTransferred
+                              ? "border-2 border-violet-400"
+                              : isApproved
                               ? "border-2 border-accent-mint"
                               : isInProgress
                               ? "border border-sky-300"
@@ -1010,6 +1151,16 @@ export default function ControlPlatformPage() {
                               {slot.slug}
                             </span>
                             <span className="pointer-events-none absolute right-1 top-1 flex max-w-[60%] flex-wrap justify-end gap-0.5">
+                              {isErrored ?
+                                <span className="rounded bg-red-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
+                                  errored
+                                </span>
+                              : null}
+                              {isTransferred ?
+                                <span className="rounded bg-violet-600/95 px-1 py-0.5 font-mono text-[8px] font-semibold tracking-wide text-white">
+                                  übertragen
+                                </span>
+                              : null}
                               {isApproved ?
                                 <span className="inline-flex items-center gap-0.5 rounded bg-accent-mint px-1 py-0.5 font-mono text-[8px] font-semibold uppercase tracking-wide text-white">
                                   <Check className="h-2.5 w-2.5" />
@@ -1161,18 +1312,24 @@ export default function ControlPlatformPage() {
                                   it.isApproved ? "opacity-35 grayscale" : ""
                                 }`}
                               />
-                              {it.isApproved ?
+                              {it.isErrored ?
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-red-600/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
+                                  errored
+                                </span>
+                              : it.isTransferred ?
+                                <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-violet-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
+                                  übertragen
+                                </span>
+                              : it.isApproved ?
                                 <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-accent-mint px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
                                   <Check className="h-1.5 w-1.5" />
                                   done
                                 </span>
-                              : null}
-                              {it.isLocked && !it.isCheckPending ?
+                              : it.isInProgress ?
                                 <span className="pointer-events-none absolute right-0.5 top-0.5 rounded bg-sky-600/95 px-0.5 py-px font-mono text-[6px] font-semibold tracking-wide leading-none text-white">
                                   bearb.
                                 </span>
-                              : null}
-                              {it.isCheckPending ?
+                              : it.isCheckPending ?
                                 <span className="pointer-events-none absolute right-0.5 top-0.5 inline-flex items-center gap-0.5 rounded bg-ink-800/95 px-0.5 py-px font-mono text-[6px] font-semibold uppercase tracking-wide leading-none text-white">
                                   <Lock className="h-1.5 w-1.5" />
                                   lock
@@ -1284,14 +1441,22 @@ export default function ControlPlatformPage() {
                       {currentPreviewItem.hasStatus ?
                         <p
                           className={`font-mono text-[10px] ${
-                            currentPreviewItem.isApproved
+                            currentPreviewItem.isErrored
+                              ? "text-red-300"
+                              : currentPreviewItem.isTransferred
+                              ? "text-violet-300"
+                              : currentPreviewItem.isApproved
                               ? "text-emerald-300"
                               : currentPreviewItem.isCheckPending
                               ? "text-zinc-300"
                               : "text-sky-300"
                           }`}
                         >
-                          {currentPreviewItem.isApproved
+                          {currentPreviewItem.isErrored
+                            ? `errored (check ${currentPreviewItem.checkVal})`
+                            : currentPreviewItem.isTransferred
+                            ? "übertragen (check 6)"
+                            : currentPreviewItem.isApproved
                             ? "done · freigegeben (check 2)"
                             : currentPreviewItem.isCheckPending
                             ? "lock · wartet auf Prüfung (check 0)"
