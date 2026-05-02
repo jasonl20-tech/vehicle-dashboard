@@ -39,12 +39,12 @@ export interface AuthEnv {
   user: D1Database;
   SESSION_SECRET?: string;
   /**
-   * Pepper für PBKDF2 (siehe `functions/_lib/passwordHash.ts`). Exakt gleicher Wert auf
-   * allen Systemen/Dashboard-Produktionen, die dieselbe D1‑`user`‑Datenbank teilen — mind. 16 Zeichen.
-   * Im Dashboard auch als **`password_secret`** anlegbar (Kleinbuchstabennamen).
+   * Pepper für PBKDF2 (`functions/_lib/passwordHash.ts`). In Cloudflare typisch als
+   * **`password_secret`** angelegt (`env.password_secret`), mind. 16 Zeichen.
+   * Optionaler Fallback: **`PASSWORD_SECRET`** für ältere Konfigurationen.
    */
-  PASSWORD_SECRET?: string;
   password_secret?: string;
+  PASSWORD_SECRET?: string;
   /** Cloudflare-Account-ID für Analytics-Engine-SQL-API */
   CF_ACCOUNT_ID?: string;
   /** API-Token mit Account.Analytics:Read */

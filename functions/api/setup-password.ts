@@ -72,11 +72,11 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   try {
     hashed = await hashPasswordForStorage(env, password);
   } catch {
-    console.error("[setup-password] PASSWORD_SECRET/password_secret fehlt oder zu kurz");
+    console.error("[setup-password] password_secret fehlt oder zu kurz (<16 Zeichen)");
     return jsonResponse(
       {
         error:
-          "Der Server kann das Passwort derzeit nicht sicher speichern. PASSWORD_SECRET (mind. 16 Zeichen) muss gesetzt sein.",
+          "Der Server kann das Passwort derzeit nicht sicher speichern. `password_secret` (mind. 16 Zeichen, env) muss gesetzt sein.",
       },
       { status: 503 },
     );

@@ -7,7 +7,7 @@
  *   (Delimiter `|` ist in Hex-Salzen/Hashes nicht enthalten.)
  *
  * Ältere Datensätze (reines Klartext-Passwort) werden beim nächsten erfolgreichen
- * Login automatisch durch einen Hash ersetzt, sobald `PASSWORD_SECRET` konfiguriert ist.
+ * Login automatisch durch einen Hash ersetzt, sobald `password_secret` (env) konfiguriert ist.
  */
 
 import type { AuthEnv } from "./auth";
@@ -24,12 +24,14 @@ const PEPPER_MARKER = "\0vehicleimagery-password-v1\0";
 const PEPPER_MIN_LEN = 16;
 
 function normalizePepper(env: Pick<AuthEnv, "PASSWORD_SECRET" | "password_secret">): string {
-  const a =
-    typeof env.PASSWORD_SECRET === "string" ? env.PASSWORD_SECRET.trim() : "";
-  const b =
+  // Primär: env.password_secret (Cloudflare-Variable). Fallback: PASSWORD_SECRET.
+  const lowercase =
     typeof env.password_secret === "string" ? env.password_secret.trim() : "";
-  const pepper = (a.length >= PEPPER_MIN_LEN ? a : "") ||
-    (b.length >= PEPPER_MIN_LEN ? b : "");
+  const uppercase =
+    typeof env.PASSWORD_SECRET === "string" ? env.PASSWORD_SECRET.trim() : "";
+  const pepper =
+    (lowercase.length >= PEPPER_MIN_LEN ? lowercase : "") ||
+    (uppercase.length >= PEPPER_MIN_LEN ? uppercase : "");
   return pepper;
 }
 
@@ -134,7 +136,7 @@ export async function hashPasswordForStorage(
 ): Promise<string> {
   const pepper = normalizePepper(env);
   if (!pepper) {
-    throw new Error("PASSWORD_SECRET_NOT_CONFIGURED");
+    throw new Error("password_secret_not_configured");
   }
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const dk = await deriveV1({
@@ -172,7 +174,7 @@ export async function verifyStoredPassword(
     const pepper = normalizePepper(env);
     if (!pepper) {
       console.warn(
-        "[password] PBKDF2-Hash vorhanden, aber PASSWORD_SECRET/password_secret fehlt.",
+        "[password] PBKDF2-Hash vorhanden, aber password_secret (mind. 16 Zeichen) fehlt.",
       );
       return { ok: false, needsLegacyRehash: false };
     }
