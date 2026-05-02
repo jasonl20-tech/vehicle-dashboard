@@ -762,6 +762,47 @@ export async function countControllingOpenByStatusMode(
 }
 
 /**
+ * Summe aller noch offenen **Einzel-Ansichten** (Korrektur): pro Fahrzeug
+ * `max(0, n_erwartet_korrektur − n_done − n_transferred)`.
+ * `expectedViewsExpr(correction)` entspricht der UI (keine Tokens mit `#`, also
+ * kein `#trp`, `#skaliert`, …).
+ */
+export async function sumRemainingCorrectionViewSlots(
+  db: D1Database,
+): Promise<number> {
+  return sumRemainingViewSlotsByStatusMode(db, "correction");
+}
+
+/**
+ * Summe aller noch offenen **Skalierungs-Kacheln** (Paar = 1): pro Fahrzeug
+ * wie in der Liste; `#skaliert` + `#skaliert_weiß` zählen gemeinsam als eine erwartete Einheit.
+ */
+export async function sumRemainingScalingPairSlots(
+  db: D1Database,
+): Promise<number> {
+  return sumRemainingViewSlotsByStatusMode(db, "scaling");
+}
+
+async function sumRemainingViewSlotsByStatusMode(
+  db: D1Database,
+  statusMode: "correction" | "scaling",
+): Promise<number> {
+  const nExp = expectedViewsExpr(statusMode);
+  const fromJoin = `FROM ${STORAGE_TABLE} v LEFT JOIN ${controllStatusAggSubquery(statusMode)} cs ON cs.vehicle_id = v.id`;
+  const remainder = `max(0, ${nExp} - ifnull(cs.n_done, 0) - ifnull(cs.n_transferred, 0))`;
+  const sql = `SELECT COALESCE(SUM(${remainder}), 0) AS n ${fromJoin}`;
+  try {
+    const row = await db
+      .prepare(sql)
+      .bind(statusMode)
+      .first<{ n: number }>();
+    return Number(row?.n ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Lädt die Status-Einträge zu einer `vehicle_id` aus `controll_status`.
  * Fängt einen "kein Tabelle"-Fehler ab und gibt dann ein leeres Array zurück.
  */

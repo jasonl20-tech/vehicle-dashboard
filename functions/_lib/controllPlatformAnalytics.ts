@@ -28,7 +28,10 @@ export function clientIpFromRequest(request: Request): string {
  * - `blob5`: Client-IP
  * - `blob6`: User-Agent; optional mit ` | ` angehängte Client-Meta
  * - `blob7`: RTT in ms (String)
- * - `double1`..`double5`: 1, offene Korrektur-Gesamtliste, 0, 0, offene Skalierungs-Gesamtliste
+ * - `double1`..`double5`: 1, offene Korrektur-Fahrzeuge, 0, 0, offene Skalierungs-Fahrzeuge
+ * - `double6`: Summe noch offener Korrektur-Ansichten (ohne #trp/#skaliert/…)
+ * - `double7`–`double8`: 0
+ * - `double9`: Summe noch offener Skalierungs-Kacheln (Paar = 1)
  */
 export function writeControllPlatformAnalyticsPoint(
   env: AuthEnv,
@@ -43,6 +46,8 @@ export function writeControllPlatformAnalyticsPoint(
     clientRttMs: number | null;
     doubleOpenCorrection: number;
     doubleOpenScaling: number;
+    doubleRemainingCorrectionViews: number;
+    doubleRemainingScalingPairs: number;
   },
 ): void {
   const ae = env.controll_analytics;
@@ -76,6 +81,10 @@ export function writeControllPlatformAnalyticsPoint(
       0,
       0,
       input.doubleOpenScaling,
+      input.doubleRemainingCorrectionViews,
+      0,
+      0,
+      input.doubleRemainingScalingPairs,
     ],
   });
 }

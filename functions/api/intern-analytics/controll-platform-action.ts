@@ -9,7 +9,11 @@ import {
   clientIpFromRequest,
   writeControllPlatformAnalyticsPoint,
 } from "../../_lib/controllPlatformAnalytics";
-import { countControllingOpenByStatusMode } from "../databases/vehicle-imagery-controlling";
+import {
+  countControllingOpenByStatusMode,
+  sumRemainingCorrectionViewSlots,
+  sumRemainingScalingPairSlots,
+} from "../databases/vehicle-imagery-controlling";
 
 type Body = {
   actionLabel?: unknown;
@@ -79,9 +83,16 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const db = requireVehicleDb(env);
   if (db instanceof Response) return db;
 
-  const [doubleOpenCorrection, doubleOpenScaling] = await Promise.all([
+  const [
+    doubleOpenCorrection,
+    doubleOpenScaling,
+    doubleRemainingCorrectionViews,
+    doubleRemainingScalingPairs,
+  ] = await Promise.all([
     countControllingOpenByStatusMode(db, "correction"),
     countControllingOpenByStatusMode(db, "scaling"),
+    sumRemainingCorrectionViewSlots(db),
+    sumRemainingScalingPairSlots(db),
   ]);
 
   const ua = request.headers.get("User-Agent") ?? "";
@@ -97,6 +108,8 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     clientRttMs,
     doubleOpenCorrection,
     doubleOpenScaling,
+    doubleRemainingCorrectionViews,
+    doubleRemainingScalingPairs,
   });
 
   return jsonResponse({ ok: true }, { status: 200 });
