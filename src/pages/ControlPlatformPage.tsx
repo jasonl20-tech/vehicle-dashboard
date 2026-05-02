@@ -2072,11 +2072,15 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         hasBaseKorrekturViewForSlot(row.views, slug);
                       const isGenSubmitting =
                         generationSubmittingSlot === slug;
-                      const slotBlocked = isSlotBlockedByFirstViews(
-                        firstViewsSet,
-                        firstViewsReady,
-                        slug,
-                      );
+                      /** Wie Bild-Kacheln in Spalte 4: kein Pflichtreihenfolge-Gate für Zusatz-Slots */
+                      const supplemental = entry.supplemental === true;
+                      const slotBlocked =
+                        !supplemental &&
+                        isSlotBlockedByFirstViews(
+                          firstViewsSet,
+                          firstViewsReady,
+                          slug,
+                        );
                       const showPlus =
                         allowedForGen &&
                         !genBlockedByCorrection &&
