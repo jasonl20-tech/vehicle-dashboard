@@ -43,6 +43,26 @@ export const ADMIN_SETTINGS_LABELS: Record<string, string> = {
   inside_views: "Inside Views",
 };
 
+/** Kurzbeschreibung unter dem Formulartitel (wie in der DB-Spalte description). */
+export const ADMIN_SETTINGS_HINTS: Record<string, string> = {
+  controll_buttons:
+    "Aktiviert die Buttons der Control Platform pro Modus (Correct, Regenerieren, Löschen, …).",
+  preview_images:
+    "Referenz-URLs pro Ansicht für die Vorschau-Lightbox in der Control Platform.",
+  active_controll_mode:
+    "Welche Modi (Korrektur, Skalierung, Schatten, Transparenz) im Modus-Dropdown erscheinen.",
+  generation_views:
+    "Welche fehlenden Ansichten per „+“ / Dashboard-Generierung angeboten werden dürfen.",
+  google_image_search:
+    "Suchvorlage für den Google-Bilder-Button; Platzhalter wie {{marke}}, {{ansicht}}.",
+  first_views:
+    "Ansichten, die zuerst als „correct“ abgeschlossen sein müssen, bevor andere freigeschaltet sind.",
+  image_ai:
+    "0 = Nano banana (Vertex), 1 = Nano banana (Kie.ai).",
+  inside_views:
+    "Inside-Ansichten: bei „correct“ wie Skalierung-Correct behandelt (siehe Control-Flow).",
+};
+
 export function sortAdminSettingRows(rows: AdminSettingRow[]): AdminSettingRow[] {
   const order = new Map(
     ADMIN_SETTINGS_DISPLAY_ORDER.map((id, i) => [id, i] as const),

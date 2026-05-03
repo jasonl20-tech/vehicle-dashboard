@@ -10,10 +10,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Logo } from "../components/brand/Logo";
 import SplitView from "../components/layout/SplitView";
+import AdminStructuredConfigEditor from "../components/admin/AdminStructuredConfigEditor";
 import { useAuth } from "../lib/auth";
 import {
+  adminInitialDraft,
+  adminSerializeForPut,
+  hasStructuredAdminEditor,
+} from "../lib/adminSettingsFormModel";
+import {
   ADMIN_SETTINGS_LABELS,
-  ADMIN_SETTINGS_URL,
   type AdminSettingRow,
   configToAdminEditorText,
   fetchAdminSettings,
@@ -30,7 +35,9 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [configText, setConfigText] = useState("");
+  /** Nur für bekannte strukturierte Keys; sonst undefined. */
+  const [structuredDraft, setStructuredDraft] = useState<unknown>(undefined);
+  const [fallbackJsonText, setFallbackJsonText] = useState("");
   const [description, setDescription] = useState("");
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
 
@@ -89,10 +96,16 @@ export default function AdminSettingsPage() {
     if (hydratedKey === selectedId) return;
     const row = rows.find((r) => r.id === selectedId);
     if (!row) return;
-    setConfigText(configToAdminEditorText(row.config));
     setDescription(row.description ?? "");
     setParseErr(null);
     setSaveErr(null);
+    if (hasStructuredAdminEditor(selectedId)) {
+      setStructuredDraft(adminInitialDraft(selectedId, row.config));
+      setFallbackJsonText("");
+    } else {
+      setFallbackJsonText(configToAdminEditorText(row.config));
+      setStructuredDraft(undefined);
+    }
     setHydratedKey(selectedId);
   }, [selectedId, rows, hydratedKey]);
 
@@ -101,11 +114,15 @@ export default function AdminSettingsPage() {
     setSaveErr(null);
     setParseErr(null);
     let parsed: unknown;
-    try {
-      parsed = JSON.parse(configText) as unknown;
-    } catch {
-      setParseErr("config ist kein gültiges JSON.");
-      return;
+    if (hasStructuredAdminEditor(selectedId)) {
+      parsed = adminSerializeForPut(selectedId, structuredDraft);
+    } else {
+      try {
+        parsed = JSON.parse(fallbackJsonText) as unknown;
+      } catch {
+        setParseErr("config ist kein gültiges JSON.");
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -122,7 +139,7 @@ export default function AdminSettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [selectedId, configText, description, reload]);
+  }, [selectedId, structuredDraft, fallbackJsonText, description, reload]);
 
   const onCreate = useCallback(async () => {
     const k = newKey.trim();
@@ -356,28 +373,50 @@ export default function AdminSettingsPage() {
                       placeholder="Kurznotiz, was dieser Eintrag steuert …"
                     />
                   </label>
-                  <label className="block">
-                    <span className="mb-1.5 block text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
-                      config (JSON)
-                    </span>
-                    <textarea
-                      value={configText}
-                      onChange={(e) => {
-                        setConfigText(e.target.value);
-                        setParseErr(null);
-                      }}
-                      spellCheck={false}
-                      className="min-h-[320px] w-full resize-y rounded-md border border-hair bg-ink-50/50 px-2.5 py-2 font-mono text-[12px] leading-relaxed text-ink-800 focus:border-ink-400 focus:outline-none"
-                    />
-                  </label>
-                  <p className="text-[12px] leading-relaxed text-ink-500">
-                    Werte müssen gültiges JSON sein (Objekt, Array, Zahl oder
-                    String). Die Control-Platform liest dieselben Keys wie unter{" "}
-                    <span className="font-mono text-ink-600">
-                      GET {ADMIN_SETTINGS_URL}
-                    </span>
-                    .
-                  </p>
+
+                  {selectedId && hasStructuredAdminEditor(selectedId) ? (
+                    hydratedKey === selectedId ? (
+                      <AdminStructuredConfigEditor
+                        settingId={selectedId}
+                        draft={structuredDraft}
+                        onDraftChange={setStructuredDraft}
+                        disabled={saving || loading}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2 py-12 text-[13px] text-ink-400">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Formular
+                        wird geladen …
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      <label className="block">
+                        <span className="mb-1.5 block text-[10.5px] font-medium uppercase tracking-[0.12em] text-ink-400">
+                          config (JSON)
+                        </span>
+                        <textarea
+                          value={fallbackJsonText}
+                          onChange={(e) => {
+                            setFallbackJsonText(e.target.value);
+                            setParseErr(null);
+                          }}
+                          spellCheck={false}
+                          className="min-h-[320px] w-full resize-y rounded-md border border-hair bg-ink-50/50 px-2.5 py-2 font-mono text-[12px] leading-relaxed text-ink-800 focus:border-ink-400 focus:outline-none"
+                        />
+                      </label>
+                      <p className="text-[12px] leading-relaxed text-ink-500">
+                        Für diesen Key gibt es kein Spezialformular — gültiges
+                        JSON verwenden. Bekannte Keys mit UI:{" "}
+                        <span className="font-mono text-ink-600">
+                          controll_buttons, preview_images,
+                          active_controll_mode, generation_views,
+                          google_image_search, first_views, image_ai,
+                          inside_views
+                        </span>
+                        .
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
