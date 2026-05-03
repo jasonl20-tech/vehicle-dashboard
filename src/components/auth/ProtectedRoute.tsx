@@ -1,5 +1,9 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
+import {
+  DEVELOPER_HUB_PATH,
+  mayAccessDeveloperHub,
+} from "../../lib/developerOverviewLinks";
 import { normalizePathname, pathMatchesPfadliste } from "../../lib/routeAccess";
 
 /**
@@ -41,9 +45,13 @@ export default function ProtectedRoute({
   const pathNorm = normalizePathname(location.pathname);
   const accountAllowed =
     pathNorm === "/account" || pathNorm.startsWith("/account/");
+  const developerHubAllowed =
+    pathNorm === normalizePathname(DEVELOPER_HUB_PATH) &&
+    mayAccessDeveloperHub(erlaubtePfade);
   if (
     !SPA_ROUTE_NO_ACL.has(pathNorm) &&
     !accountAllowed &&
+    !developerHubAllowed &&
     !pathMatchesPfadliste(pathNorm, erlaubtePfade)
   ) {
     return <Navigate to="/" replace />;

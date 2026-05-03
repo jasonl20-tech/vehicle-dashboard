@@ -13,6 +13,7 @@ import BildempfangPage from "./pages/BildempfangPage";
 import ControllingPage from "./pages/ControllingPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControlPlatformPage from "./pages/ControlPlatformPage";
+import DeveloperOverviewPage from "./pages/DeveloperOverviewPage";
 import EmailLogDetailPage from "./pages/EmailLogDetailPage";
 import EmailLogsPage from "./pages/EmailLogsPage";
 import EmailManuellPage from "./pages/EmailManuellPage";
@@ -60,6 +61,7 @@ export default function App() {
           }
         >
           <Route index element={<PlatformHomePage />} />
+          <Route path="/developer" element={<DeveloperOverviewPage />} />
 
           <Route element={<ControlPlatformLayout />}>
             <Route

@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   Briefcase,
+  Code2,
   FileText,
   Gauge,
   LayoutDashboard,
@@ -19,6 +20,10 @@ import {
   NAV_PRIMARY,
   firstAllowedNavRoute,
 } from "../components/layout/navConfig";
+import {
+  DEVELOPER_HUB_PATH,
+  mayAccessDeveloperHub,
+} from "../lib/developerOverviewLinks";
 import { useAuth } from "../lib/auth";
 import { pathDirectlyAllowed } from "../lib/routeAccess";
 
@@ -37,7 +42,7 @@ type PlatformTile = {
    * Sichtbar, sobald ein Pfad daraus erlaubt ist; Klick landet auf dem ersten
    * erlaubten Pfad innerhalb dieses Bereichs.
    */
-  area?: "dashboard";
+  area?: "dashboard" | "developer";
 };
 
 const TILES: PlatformTile[] = [
@@ -46,6 +51,12 @@ const TILES: PlatformTile[] = [
     icon: LayoutDashboard,
     to: "/dashboard",
     area: "dashboard",
+  },
+  {
+    title: "Developer Übersicht",
+    icon: Code2,
+    to: DEVELOPER_HUB_PATH,
+    area: "developer",
   },
   {
     title: "Content Management System",
@@ -108,6 +119,10 @@ export default function PlatformHomePage() {
       if (t.area === "dashboard") {
         if (!dashboardEntry) return [];
         return [{ ...t, to: dashboardEntry }];
+      }
+      if (t.area === "developer") {
+        if (!mayAccessDeveloperHub(erlaubtePfade)) return [];
+        return [{ ...t, to: DEVELOPER_HUB_PATH }];
       }
       // /account ist für jeden eingeloggten User immer erreichbar (eigene
       // Top-Level-Route, keine Sicherheitsstufen-Pflicht).
