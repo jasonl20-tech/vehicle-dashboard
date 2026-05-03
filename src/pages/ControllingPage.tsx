@@ -7,6 +7,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -122,7 +123,10 @@ export default function ControllingPage() {
         <ForecastGrid rows={data?.byMode ?? []} loading={loading} />
       </Section>
 
-      <Section title="Aktivität & Fortschritt über Zeit" meta="Events, aktive Nutzer, abgearbeitete und neu hinzugekommene Bilder">
+      <Section
+        title="Aktivität, Fortschritt & Prognose über Zeit"
+        meta="Events, aktive Nutzer, bearbeitete/neu hinzugekommene Bilder sowie eine Prognoselinie für den verbleibenden Bestand pro Tag, extrapoliert mit dem aktuellen Tempo bis 0."
+      >
         <Timeline data={data} loading={loading} />
       </Section>
 
@@ -465,6 +469,20 @@ function KpiTile({
 
 // ---------- Timeline ----------
 
+type TimelineRow = {
+  t: number;
+  label: string;
+  isFuture: boolean;
+  events: number | null;
+  processed: number | null;
+  added: number | null;
+  activeUsers: number | null;
+  /** Tatsächlicher Restbestand (Vergangenheit). */
+  remaining: number | null;
+  /** Prognose-Restbestand (Zukunft + letzter Punkt der Vergangenheit für Anschluss). */
+  remainingForecast: number | null;
+};
+
 function Timeline({
   data,
   loading,
@@ -472,19 +490,117 @@ function Timeline({
   data: ControllingResponse | null;
   loading: boolean;
 }) {
-  const rows = useMemo(() => {
-    if (!data?.timeline?.length) return [];
-    return data.timeline.map((b) => ({
-      label: bucketLabel(b.bucket),
-      events: b.events,
-      processed: b.processed,
-      added: b.added,
-      activeUsers: b.activeUsers,
-    }));
+  const { rows, forecast, todayLabel } = useMemo(() => {
+    if (!data?.timeline?.length) {
+      return { rows: [] as TimelineRow[], forecast: null as null | {
+        currentOpen: number;
+        netPerHour: number;
+        processedPerHour: number;
+        addedPerHour: number;
+        etaIfNoNewHours: number | null;
+        etaIfKeepsAddingHours: number | null;
+        etaDate: Date | null;
+      }, todayLabel: null as string | null };
+    }
+
+    const tl = data.timeline;
+    const byMode = data.byMode || [];
+    const currentOpen = byMode.reduce((s, m) => s + (m.latestOpen ?? 0), 0);
+    const procPerHour = byMode.reduce(
+      (s, m) => s + (m.processedPerHour ?? 0),
+      0,
+    );
+    const addPerHour = byMode.reduce((s, m) => s + (m.addedPerHour ?? 0), 0);
+    const netPerHour = procPerHour - addPerHour;
+
+    // Bestand rückwärts aus Deltas integrieren:
+    // remaining_t = remaining_(t+1) - added_(t+1) + processed_(t+1)
+    const remainingByIdx = new Array<number>(tl.length).fill(0);
+    let cur = currentOpen;
+    for (let i = tl.length - 1; i >= 0; i--) {
+      remainingByIdx[i] = Math.max(0, cur);
+      cur = cur + tl[i].added - tl[i].processed;
+    }
+
+    const baseRows: TimelineRow[] = tl.map((b, idx) => {
+      const t = aeTimestampToDate(b.bucket).getTime();
+      return {
+        t,
+        label: bucketLabel(b.bucket),
+        isFuture: false,
+        events: b.events,
+        processed: b.processed,
+        added: b.added,
+        activeUsers: b.activeUsers,
+        remaining: remainingByIdx[idx],
+        remainingForecast: null,
+      };
+    });
+
+    const lastPast = baseRows[baseRows.length - 1];
+    const lastT = lastPast.t;
+    const todayLabel = lastPast.label;
+
+    // Anschluss: letzter Vergangenheits-Punkt bekommt forecast = remaining,
+    // damit die Prognose-Linie nahtlos an die Ist-Linie andockt.
+    lastPast.remainingForecast = lastPast.remaining;
+
+    // Forecast: 1 Punkt pro Tag in die Zukunft
+    const forecastRows: TimelineRow[] = [];
+    if (currentOpen > 0 && netPerHour > 0) {
+      let curRem = currentOpen;
+      let day = 1;
+      const maxDays = 90;
+      while (day <= maxDays) {
+        curRem = Math.max(0, currentOpen - netPerHour * 24 * day);
+        const tFut = lastT + day * 24 * 60 * 60 * 1000;
+        const lbl = new Intl.DateTimeFormat("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          timeZone: "UTC",
+        }).format(new Date(tFut));
+        forecastRows.push({
+          t: tFut,
+          label: lbl,
+          isFuture: true,
+          events: null,
+          processed: null,
+          added: null,
+          activeUsers: null,
+          remaining: null,
+          remainingForecast: curRem,
+        });
+        if (curRem === 0) break;
+        day++;
+      }
+    }
+
+    const etaIfNoNewHours =
+      procPerHour > 0 ? currentOpen / procPerHour : null;
+    const etaIfKeepsAddingHours =
+      netPerHour > 0 ? currentOpen / netPerHour : null;
+    const etaDate =
+      etaIfKeepsAddingHours != null
+        ? new Date(lastT + etaIfKeepsAddingHours * 60 * 60 * 1000)
+        : null;
+
+    return {
+      rows: [...baseRows, ...forecastRows],
+      forecast: {
+        currentOpen,
+        netPerHour,
+        processedPerHour: procPerHour,
+        addedPerHour: addPerHour,
+        etaIfNoNewHours,
+        etaIfKeepsAddingHours,
+        etaDate,
+      },
+      todayLabel,
+    };
   }, [data]);
 
   if (loading && !data) {
-    return <div className="h-[280px] animate-pulse bg-ink-100/50" />;
+    return <div className="h-[300px] animate-pulse bg-ink-100/50" />;
   }
   if (!rows.length) {
     return (
@@ -494,116 +610,233 @@ function Timeline({
     );
   }
 
+  const etaLabel = forecast?.etaDate
+    ? new Intl.DateTimeFormat("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(forecast.etaDate)
+    : null;
+
   return (
-    <div className="h-[300px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart
-          data={rows}
-          margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid
-            strokeDasharray="3 3"
-            vertical={false}
-            stroke="rgba(15,23,42,0.08)"
-          />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
-            tickLine={false}
-            axisLine={false}
-            interval="preserveStartEnd"
-            minTickGap={28}
-          />
-          <YAxis
-            yAxisId="left"
-            tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
-            tickLine={false}
-            axisLine={false}
-            allowDecimals={false}
-            width={48}
-          />
-          <YAxis
-            yAxisId="right"
-            orientation="right"
-            tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
-            tickLine={false}
-            axisLine={false}
-            allowDecimals={false}
-            width={36}
-          />
-          <Tooltip
-            content={({ active, payload, label: lbl }) => {
-              if (!active || !payload?.length) return null;
-              const p = payload[0].payload as {
-                events: number;
-                processed: number;
-                added: number;
-                activeUsers: number;
-              };
-              return (
-                <div className="rounded-md border border-hair bg-white px-3 py-2.5 text-[12px] shadow-lg">
-                  <p className="mb-1.5 font-medium text-ink-800">
-                    {String(lbl)}
-                  </p>
-                  <p className="text-ink-600">
-                    Events:{" "}
-                    <span className="font-medium text-ink-900">
-                      {fmtNumber(p.events)}
-                    </span>
-                  </p>
-                  <p className="text-ink-600">
-                    Bearbeitet:{" "}
-                    <span className="font-medium text-ink-900">
-                      {fmtNumber(p.processed)}
-                    </span>
-                  </p>
-                  <p className="text-ink-600">
-                    Neu:{" "}
-                    <span className="font-medium text-ink-900">
-                      {fmtNumber(p.added)}
-                    </span>
-                  </p>
-                  <p className="text-ink-600">
-                    Aktive Nutzer:{" "}
-                    <span className="font-medium text-ink-900">
-                      {fmtNumber(p.activeUsers)}
-                    </span>
-                  </p>
-                </div>
-              );
-            }}
-          />
-          <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="processed"
-            name="Bearbeitet"
-            stroke="#5a3df0"
-            strokeWidth={2}
-            dot={false}
-          />
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="added"
-            name="Neu hinzugefügt"
-            stroke="#ff5d8f"
-            strokeWidth={2}
-            dot={false}
-          />
-          <Line
-            yAxisId="right"
-            type="monotone"
-            dataKey="activeUsers"
-            name="Aktive Nutzer"
-            stroke="#3ecf8e"
-            strokeWidth={2}
-            dot={false}
-            strokeDasharray="3 3"
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+    <div className="space-y-3">
+      <div className="h-[340px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart
+            data={rows}
+            margin={{ top: 8, right: 64, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              stroke="rgba(15,23,42,0.08)"
+            />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+              minTickGap={28}
+            />
+            <YAxis
+              yAxisId="left"
+              tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
+              tickLine={false}
+              axisLine={false}
+              allowDecimals={false}
+              width={48}
+            />
+            <YAxis
+              yAxisId="users"
+              orientation="right"
+              tick={{ fontSize: 11, fill: "var(--color-ink-500, #64748b)" }}
+              tickLine={false}
+              axisLine={false}
+              allowDecimals={false}
+              width={32}
+            />
+            <YAxis
+              yAxisId="forecast"
+              orientation="right"
+              tick={{ fontSize: 11, fill: "#5a3df0" }}
+              tickLine={false}
+              axisLine={false}
+              allowDecimals={false}
+              width={56}
+              tickFormatter={(v: number) =>
+                v >= 1000 ? `${Math.round(v / 100) / 10}k` : `${v}`
+              }
+            />
+            {todayLabel && (
+              <ReferenceLine
+                yAxisId="forecast"
+                x={todayLabel}
+                stroke="#5a3df0"
+                strokeDasharray="2 4"
+                strokeOpacity={0.55}
+                label={{
+                  value: "heute",
+                  position: "insideTopRight",
+                  fill: "#5a3df0",
+                  fontSize: 10,
+                }}
+              />
+            )}
+            <Tooltip
+              content={({ active, payload, label: lbl }) => {
+                if (!active || !payload?.length) return null;
+                const p = payload[0].payload as TimelineRow;
+                return (
+                  <div className="rounded-md border border-hair bg-white px-3 py-2.5 text-[12px] shadow-lg">
+                    <p className="mb-1.5 font-medium text-ink-800">
+                      {String(lbl)}
+                      {p.isFuture && (
+                        <span className="ml-2 rounded bg-[#5a3df0]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#5a3df0]">
+                          Prognose
+                        </span>
+                      )}
+                    </p>
+                    {!p.isFuture && (
+                      <>
+                        <p className="text-ink-600">
+                          Events:{" "}
+                          <span className="font-medium text-ink-900">
+                            {fmtNumber(p.events)}
+                          </span>
+                        </p>
+                        <p className="text-ink-600">
+                          Bearbeitet:{" "}
+                          <span className="font-medium text-ink-900">
+                            {fmtNumber(p.processed)}
+                          </span>
+                        </p>
+                        <p className="text-ink-600">
+                          Neu:{" "}
+                          <span className="font-medium text-ink-900">
+                            {fmtNumber(p.added)}
+                          </span>
+                        </p>
+                        <p className="text-ink-600">
+                          Aktive Nutzer:{" "}
+                          <span className="font-medium text-ink-900">
+                            {fmtNumber(p.activeUsers)}
+                          </span>
+                        </p>
+                      </>
+                    )}
+                    {(p.remaining != null || p.remainingForecast != null) && (
+                      <p className="mt-1 border-t border-hair/60 pt-1 text-ink-600">
+                        Verbleibend:{" "}
+                        <span className="font-medium text-[#5a3df0]">
+                          {fmtNumber(
+                            p.isFuture ? p.remainingForecast : p.remaining,
+                          )}
+                        </span>
+                      </p>
+                    )}
+                  </div>
+                );
+              }}
+            />
+            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="processed"
+              name="Bearbeitet"
+              stroke="#5a3df0"
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+            />
+            <Line
+              yAxisId="left"
+              type="monotone"
+              dataKey="added"
+              name="Neu hinzugefügt"
+              stroke="#ff5d8f"
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+            />
+            <Line
+              yAxisId="users"
+              type="monotone"
+              dataKey="activeUsers"
+              name="Aktive Nutzer"
+              stroke="#3ecf8e"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray="3 3"
+              connectNulls={false}
+            />
+            <Line
+              yAxisId="forecast"
+              type="monotone"
+              dataKey="remaining"
+              name="Verbleibend (Ist)"
+              stroke="#5a3df0"
+              strokeWidth={2.5}
+              dot={false}
+              connectNulls={false}
+            />
+            <Line
+              yAxisId="forecast"
+              type="monotone"
+              dataKey="remainingForecast"
+              name="Prognose (pro Tag)"
+              stroke="#5a3df0"
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={{ r: 2.5, fill: "#5a3df0" }}
+              connectNulls={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      {forecast && forecast.currentOpen > 0 && (
+        <div className="rounded-md border border-hair bg-night-900/[0.02] px-4 py-2.5 text-[11.5px] text-ink-600">
+          <span className="font-medium text-ink-800">
+            Verbleibend gesamt: {fmtNumber(forecast.currentOpen)}
+          </span>
+          <span className="mx-2 text-ink-300">·</span>
+          Tempo {fmtRate(forecast.processedPerHour)}{" "}
+          <span className="text-ink-400">
+            (neu {fmtRate(forecast.addedPerHour)} · netto{" "}
+            {forecast.netPerHour > 0
+              ? `−${fmtRate(forecast.netPerHour)}`
+              : forecast.netPerHour < 0
+                ? `+${fmtRate(Math.abs(forecast.netPerHour))}`
+                : "0/h"}
+            )
+          </span>
+          <span className="mx-2 text-ink-300">·</span>
+          {forecast.netPerHour > 0 && etaLabel ? (
+            <>
+              fertig ca. <span className="font-medium text-[#5a3df0]">{etaLabel}</span>{" "}
+              <span className="text-ink-400">
+                (in {fmtHours(forecast.etaIfKeepsAddingHours)})
+              </span>
+            </>
+          ) : forecast.processedPerHour > 0 && forecast.etaIfNoNewHours != null ? (
+            <>
+              ohne Nachschub fertig in{" "}
+              <span className="font-medium text-[#5a3df0]">
+                {fmtHours(forecast.etaIfNoNewHours)}
+              </span>{" "}
+              <span className="text-ink-400">
+                (mit Nachschub: Bestand wächst aktuell)
+              </span>
+            </>
+          ) : (
+            <span className="text-ink-400">
+              Prognose nicht möglich – kein Tempo im Zeitraum erkennbar.
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
