@@ -38,6 +38,7 @@ import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
 import UserAnalyticsPage from "./pages/UserAnalyticsPage";
+import VehicleDatabaseStatusPage from "./pages/VehicleDatabaseStatusPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
