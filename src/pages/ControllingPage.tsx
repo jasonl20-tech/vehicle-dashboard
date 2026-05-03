@@ -16,14 +16,12 @@ import {
   type ControllingBlob4Mode,
   type ControllingByMode,
   type ControllingResponse,
-  type ControllingUserStats,
   controllingApiUrl,
 } from "../lib/controllingApi";
 import {
   PRESETS,
   type Range,
   aeTimestampToDate,
-  fmtDateTime,
   fmtNumber,
   fmtRelative,
   rangeFromPreset,
@@ -128,9 +126,6 @@ export default function ControllingPage() {
         <ModeBlocks rows={data?.byMode ?? []} loading={loading} />
       </Section>
 
-      <Section title="Pro Benutzer" meta="Sessions, aktive Zeit, Bilder pro Stunde">
-        <UserBlocks rows={data?.byUser ?? []} loading={loading} />
-      </Section>
     </>
   );
 }
@@ -854,238 +849,11 @@ function ModeButtonsTable({
   );
 }
 
-// ---------- User Blocks ----------
-
-function UserBlocks({
-  rows,
-  loading,
-}: {
-  rows: ControllingUserStats[];
-  loading: boolean;
-}) {
-  if (loading && rows.length === 0) {
-    return (
-      <div className="space-y-3">
-        <div className="h-[120px] animate-pulse bg-ink-100/50" />
-        <div className="h-[120px] animate-pulse bg-ink-100/50" />
-      </div>
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <p className="border border-dashed border-hair px-4 py-12 text-center text-[13px] text-ink-500">
-        Keine Benutzer im Zeitraum.
-      </p>
-    );
-  }
-  return (
-    <div className="divide-y divide-hair border-y border-hair">
-      {rows.map((u) => (
-        <UserRow key={u.user} u={u} />
-      ))}
-    </div>
-  );
-}
-
-function UserRow({ u }: { u: ControllingUserStats }) {
-  return (
-    <div className="grid gap-6 py-7 lg:grid-cols-12">
-      <div className="lg:col-span-3">
-        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
-          Benutzer
-        </p>
-        <h3 className="mt-1 font-display text-[22px] tracking-tightish text-ink-900">
-          {u.user}
-        </h3>
-        <p className="mt-2 text-[12px] text-ink-500">
-          {fmtNumber(u.eventCount)} Events · {fmtNumber(u.sessions.length)}{" "}
-          Sessions
-        </p>
-        <p className="mt-0.5 text-[12px] text-ink-500">
-          {u.firstTs ? fmtDateTime(u.firstTs) : "–"} → {u.lastTs ? fmtDateTime(u.lastTs) : "–"}
-        </p>
-        {u.primaryOs && (
-          <p
-            className="mt-1 truncate text-[11.5px] text-ink-400"
-            title={u.primaryOs}
-          >
-            OS: {u.primaryOs}
-          </p>
-        )}
-        {u.lastIp && (
-          <p className="mt-0.5 text-[11.5px] text-ink-400">IP: {u.lastIp}</p>
-        )}
-      </div>
-
-      <div className="lg:col-span-3">
-        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
-          Aktivität
-        </p>
-        <p className="mt-1 font-mono text-[13.5px] text-ink-900">
-          {fmtDuration(u.totalSessionTimeSec)} aktiv
-        </p>
-        <p className="mt-0.5 text-[12px] text-ink-500">
-          Ø Session {fmtDuration(u.avgSessionTimeSec)}
-        </p>
-        <p className="mt-1 text-[12.5px] text-ink-700">
-          bearbeitet{" "}
-          <span className="font-mono text-ink-900">
-            {fmtNumber(u.totalProcessed)}
-          </span>{" "}
-          Bilder
-        </p>
-        <p className="mt-0.5 text-[12.5px] text-ink-700">
-          Tempo{" "}
-          <span className="font-mono text-ink-900">
-            {fmtRate(u.processedPerHour)}
-          </span>{" "}
-          ·{" "}
-          <span className="font-mono text-ink-900">
-            {fmtRate(u.perActiveMinute, "/min")}
-          </span>
-        </p>
-      </div>
-
-      <div className="lg:col-span-3">
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
-          Pro Modus
-        </p>
-        {u.perMode.length === 0 ? (
-          <p className="text-[12.5px] text-ink-400">–</p>
-        ) : (
-          <table className="w-full text-left text-[12.5px]">
-            <thead className="border-b border-hair text-[10.5px] font-medium uppercase tracking-wide text-ink-400">
-              <tr>
-                <th className="py-1.5 pr-3">Modus</th>
-                <th className="py-1.5 pr-3 text-right">bearb.</th>
-                <th className="py-1.5 pr-3 text-right">Events</th>
-                <th className="py-1.5 text-right">Bilder/h</th>
-              </tr>
-            </thead>
-            <tbody>
-              {u.perMode.map((m) => (
-                <tr key={m.mode} className="border-b border-hair/70">
-                  <td className="py-1 pr-3 text-ink-800">{m.mode || "—"}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-ink-900">
-                    {fmtNumber(m.processed)}
-                  </td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-ink-700">
-                    {fmtNumber(m.events)}
-                  </td>
-                  <td className="py-1 text-right tabular-nums text-ink-700">
-                    {fmtRate(m.perHour)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="lg:col-span-3">
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
-          Top Buttons
-        </p>
-        {u.topButtons.length === 0 ? (
-          <p className="text-[12.5px] text-ink-400">–</p>
-        ) : (
-          <ul className="space-y-1 text-[12.5px]">
-            {u.topButtons.map((b) => (
-              <li
-                key={`${b.mode}|${b.button}`}
-                className="flex items-baseline justify-between gap-2"
-              >
-                <span className="min-w-0 truncate">
-                  <span className="text-ink-400">{b.mode || "—"}</span>
-                  <span className="text-ink-300"> · </span>
-                  <span className="font-mono text-[11.5px] text-ink-800">
-                    {b.button}
-                  </span>
-                </span>
-                <span className="shrink-0 tabular-nums text-ink-700">
-                  {fmtNumber(b.count)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Sessions-Tabelle (volle Breite, scrollbar) */}
-      <div className="lg:col-span-12">
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-ink-400">
-          Sessions ({fmtNumber(u.sessions.length)})
-        </p>
-        <UserSessionsTable sessions={u.sessions} />
-      </div>
-    </div>
-  );
-}
-
-function UserSessionsTable({
-  sessions,
-}: {
-  sessions: ControllingUserStats["sessions"];
-}) {
-  const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? sessions : sessions.slice(-12);
-  if (sessions.length === 0) {
-    return <p className="text-[12.5px] text-ink-400">Keine Sessions.</p>;
-  }
-  return (
-    <>
-      <table className="w-full text-left text-[12px]">
-        <thead className="border-b border-hair text-[10.5px] font-medium uppercase tracking-wide text-ink-400">
-          <tr>
-            <th className="py-1.5 pr-3">Start</th>
-            <th className="py-1.5 pr-3">Ende</th>
-            <th className="py-1.5 pr-3 text-right">Events</th>
-            <th className="py-1.5 pr-3 text-right">Aktiv</th>
-            <th className="py-1.5 pr-3 text-right">Pause davor</th>
-            <th className="py-1.5">Modi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visible.map((s, i) => (
-            <tr key={s.start + i} className="border-b border-hair/70">
-              <td className="py-1.5 pr-3 text-ink-700">
-                {fmtDateTime(s.start)}
-              </td>
-              <td className="py-1.5 pr-3 text-ink-700">
-                {fmtDateTime(s.end)}
-              </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-ink-700">
-                {fmtNumber(s.events)}
-              </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-ink-900">
-                {fmtDuration(s.durationSec)}
-              </td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-ink-500">
-                {s.gapStartSec == null
-                  ? "—"
-                  : fmtDuration(s.gapStartSec)}
-              </td>
-              <td className="py-1.5 text-ink-500">
-                {s.modes.length === 0 ? "—" : s.modes.join(", ")}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {sessions.length > 12 && (
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="mt-2 text-[11.5px] text-ink-500 hover:text-ink-800"
-        >
-          {showAll
-            ? "Weniger anzeigen"
-            : `Alle ${sessions.length} Sessions anzeigen`}
-        </button>
-      )}
-    </>
-  );
-}
+// Hinweis: Die frühere "Pro Benutzer"-Sektion (Sessions, Tempo, Top-Buttons,
+// Pro-Modus-Tabelle pro User) wurde aus dem Controlling entfernt. Die
+// vollständige User-Analyse läuft jetzt unter /user-analytics. Hier im
+// Controlling bleiben nur die Plattform-weiten Auswertungen (KPIs, Timeline,
+// Pro Modus mit Top-Nutzern).
 
 // Hilfs-Komponente: AreaChart als kleine Spark-Vorschau (zur Zeit nicht verwendet,
 // kann später in ModeRow für Bestandsverlauf eingehängt werden).

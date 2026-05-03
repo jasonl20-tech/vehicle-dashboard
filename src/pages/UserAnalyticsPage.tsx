@@ -25,6 +25,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -584,6 +585,7 @@ function DetailPane({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1500px] divide-y divide-hair">
           <DailyActivityBlock detail={detail} />
+          <TempoBlock detail={detail} />
           <KpiBlock detail={detail} />
           <ModesBlock detail={detail} />
           <ButtonsTimelineBlock detail={detail} />
@@ -993,6 +995,178 @@ function DailyActivityBlock({ detail }: { detail: DetailReport }) {
                 ))}
               </tbody>
             </table>
+          </div>
+        </>
+      )}
+    </Block>
+  );
+}
+
+// ---------- Tempo ----------
+
+type TempoUnit = "min" | "hour";
+
+function TempoBlock({ detail }: { detail: DetailReport }) {
+  const [unit, setUnit] = useState<TempoUnit>("min");
+  const days = detail.dailyActivity.filter((d) => d.activeSec > 0);
+  const hasData = days.length > 0;
+
+  const factor = unit === "min" ? 60 : 3600; // Sekunden -> Minute / Stunde
+  const unitLabel = unit === "min" ? "/min" : "/h";
+  const unitLong = unit === "min"
+    ? "Aktionen pro aktive Minute"
+    : "Aktionen pro aktive Stunde";
+
+  const data = days.map((d) => ({
+    day: d.day,
+    label: fmtDay(d.day),
+    tempo: d.activeSec > 0 ? (d.actions * factor) / d.activeSec : 0,
+    actions: d.actions,
+    activeMin: d.activeSec / 60,
+  }));
+
+  // Gesamtdurchschnitt: actions / activeSec (über den ganzen Bericht).
+  const s = detail.summary;
+  const overallAvg =
+    s.totalActiveSec > 0 ? (s.actionCount * factor) / s.totalActiveSec : 0;
+
+  // Spitze + arith. Schnitt der Tageswerte (sekundärer Hinweis)
+  const peak = data.reduce((mx, d) => (d.tempo > mx ? d.tempo : mx), 0);
+  const dayAvg =
+    data.length > 0 ? data.reduce((a, b) => a + b.tempo, 0) / data.length : 0;
+
+  return (
+    <Block
+      title="Tempo"
+      hint={`${unitLong} – pro Tag und im Durchschnitt über den ganzen Zeitraum (Linie).`}
+      right={
+        <div className="inline-flex overflow-hidden rounded-md border border-hair bg-white text-[11.5px]">
+          {(["min", "hour"] as TempoUnit[]).map((u, i) => (
+            <button
+              key={u}
+              type="button"
+              onClick={() => setUnit(u)}
+              className={`px-2.5 py-1 transition-colors ${
+                u === unit
+                  ? "bg-ink-900 text-white"
+                  : "text-ink-600 hover:bg-ink-50"
+              } ${i > 0 ? "border-l border-hair" : ""}`}
+            >
+              {u === "min" ? "pro Minute" : "pro Stunde"}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {!hasData ? (
+        <p className="text-[12.5px] text-ink-500">
+          Keine Aktivität im Zeitraum – kein Tempo berechenbar.
+        </p>
+      ) : (
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+                Durchschnitt
+              </p>
+              <p className="mt-0.5 font-display text-[26px] leading-none tracking-tightish text-ink-900">
+                {overallAvg.toFixed(unit === "min" ? 2 : 1)}
+                <span className="ml-1 text-[12px] text-ink-500">
+                  {unitLabel}
+                </span>
+              </p>
+              <p className="text-[10.5px] text-ink-500">
+                gesamt {fmtNumber(s.actionCount)} Aktionen ÷{" "}
+                {fmtDuration(s.totalActiveSec)}
+              </p>
+            </div>
+            <HighlightStat
+              label="Spitze (Tag)"
+              value={
+                <>
+                  {peak.toFixed(unit === "min" ? 2 : 1)}
+                  <span className="ml-1 text-[11px] text-ink-500">
+                    {unitLabel}
+                  </span>
+                </>
+              }
+              hint={`an ${
+                data.find((d) => d.tempo === peak)?.day ?? "—"
+              }`}
+            />
+            <HighlightStat
+              label="Ø Tageswert"
+              value={
+                <>
+                  {dayAvg.toFixed(unit === "min" ? 2 : 1)}
+                  <span className="ml-1 text-[11px] text-ink-500">
+                    {unitLabel}
+                  </span>
+                </>
+              }
+              hint={`über ${data.length} aktive Tage`}
+            />
+            <HighlightStat
+              label="Aktionen / Sekunde"
+              value={
+                s.actionsPerSec != null ? `${s.actionsPerSec.toFixed(3)} /s` : "–"
+              }
+              hint="basierend auf der echten Arbeitszeit"
+            />
+          </div>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={data}
+                margin={{ top: 8, right: 16, bottom: 8, left: 0 }}
+              >
+                <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: "#6b6b73" }}
+                  stroke="#cfcfd5"
+                />
+                <YAxis
+                  unit={` ${unitLabel}`}
+                  tick={{ fontSize: 10, fill: "#6b6b73" }}
+                  stroke="#cfcfd5"
+                />
+                <Tooltip
+                  wrapperStyle={{ fontSize: 11 }}
+                  contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
+                  formatter={(v: number, name: string) => {
+                    if (name === unitLong) {
+                      return [
+                        `${v.toFixed(unit === "min" ? 2 : 1)} ${unitLabel}`,
+                        name,
+                      ];
+                    }
+                    return [fmtNumber(v), name];
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar
+                  dataKey="tempo"
+                  name={unitLong}
+                  fill="#0d0d0f"
+                  radius={[3, 3, 0, 0]}
+                  barSize={28}
+                />
+                <ReferenceLine
+                  y={overallAvg}
+                  stroke="#dc2626"
+                  strokeDasharray="5 4"
+                  strokeWidth={1.5}
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: `Ø ${overallAvg.toFixed(unit === "min" ? 2 : 1)} ${unitLabel}`,
+                    position: "right",
+                    fontSize: 10,
+                    fill: "#dc2626",
+                  }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         </>
       )}
@@ -2100,8 +2274,24 @@ function PrintReport({
         <p className="text-[11px] leading-relaxed text-ink-700">
           Wie lange war der User pro Kalendertag (UTC) aktiv (Summe der
           Sessions). Sessions, die über Mitternacht laufen, werden anteilig auf
-          beide Tage verteilt.
+          beide Tage verteilt. „Tempo" zählt nur echte Aktionen
+          (<span className="font-mono">shortcut:*</span>) pro aktiver Minute.
         </p>
+        {(() => {
+          const overallTempoMin =
+            s.totalActiveSec > 0 ? (s.actionCount * 60) / s.totalActiveSec : 0;
+          const overallTempoHour =
+            s.totalActiveSec > 0
+              ? (s.actionCount * 3600) / s.totalActiveSec
+              : 0;
+          return (
+            <p className="mt-1 text-[11px] text-ink-700">
+              Tempo gesamt:{" "}
+              <strong>{overallTempoMin.toFixed(2)} Aktionen/min</strong> ·{" "}
+              {overallTempoHour.toFixed(1)} Aktionen/h
+            </p>
+          );
+        })()}
         {detail.dailyActivity.length === 0 ? (
           <p className="mt-2 text-[11px] text-ink-500">– keine Tagesdaten –</p>
         ) : (
@@ -2113,24 +2303,32 @@ function PrintReport({
                 <th className="py-1.5 pr-3 text-right">Sessions</th>
                 <th className="py-1.5 pr-3 text-right">Events</th>
                 <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                <th className="py-1.5 pr-3 text-right">Tempo /min</th>
                 <th className="py-1.5 pr-3 text-right">Bearbeitet</th>
                 <th className="py-1.5 pr-3 text-right">Ø Latenz</th>
               </tr>
             </thead>
             <tbody>
-              {detail.dailyActivity.slice(-31).map((d) => (
-                <tr key={d.day} className="border-b border-hair/60">
-                  <td className="py-1.5 pr-3 font-mono">{d.day}</td>
-                  <td className="py-1.5 pr-3 text-right">
-                    {fmtDuration(d.activeSec)}
-                  </td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.sessions)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.events)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.actions)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.processed)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtMs(d.avgLatencyMs)}</td>
-                </tr>
-              ))}
+              {detail.dailyActivity.slice(-31).map((d) => {
+                const tempoMin =
+                  d.activeSec > 0 ? (d.actions * 60) / d.activeSec : 0;
+                return (
+                  <tr key={d.day} className="border-b border-hair/60">
+                    <td className="py-1.5 pr-3 font-mono">{d.day}</td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtDuration(d.activeSec)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.sessions)}</td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.events)}</td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.actions)}</td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {d.activeSec > 0 ? tempoMin.toFixed(2) : "–"}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.processed)}</td>
+                    <td className="py-1.5 pr-3 text-right">{fmtMs(d.avgLatencyMs)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
