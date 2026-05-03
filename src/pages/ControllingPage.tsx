@@ -115,6 +115,13 @@ export default function ControllingPage() {
 
       <KpiGrid data={data} loading={loading} />
 
+      <Section
+        title="Verbleibend · Tempo · Prognose"
+        meta="Pro Modus: aktuell offen, Fortschritt, Geschwindigkeit (Bilder/h) und ETA wenn das Tempo so weiterläuft. Bestandswerte vor 2026-05-03 19:15:58 mit > 1000 werden ignoriert (Datenbereinigung)."
+      >
+        <ForecastGrid rows={data?.byMode ?? []} loading={loading} />
+      </Section>
+
       <Section title="Aktivität & Fortschritt über Zeit" meta="Events, aktive Nutzer, abgearbeitete und neu hinzugekommene Bilder">
         <Timeline data={data} loading={loading} />
       </Section>
@@ -602,6 +609,282 @@ function Timeline({
 }
 
 // ---------- Mode Blocks ----------
+
+// ---------- Forecast Grid (Verbleibend · Tempo · Prognose) ----------
+
+function ForecastGrid({
+  rows,
+  loading,
+}: {
+  rows: ControllingByMode[];
+  loading: boolean;
+}) {
+  if (loading && rows.length === 0) {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="h-[140px] animate-pulse bg-ink-100/50" />
+        <div className="h-[140px] animate-pulse bg-ink-100/50" />
+        <div className="h-[140px] animate-pulse bg-ink-100/50" />
+        <div className="h-[140px] animate-pulse bg-ink-100/50" />
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="border border-dashed border-hair px-4 py-12 text-center text-[13px] text-ink-500">
+        Keine Modi im Zeitraum.
+      </p>
+    );
+  }
+
+  // Aggregat über alle Modi
+  const totals = rows.reduce(
+    (acc, m) => {
+      acc.open += m.latestOpen ?? 0;
+      acc.total += m.latestTotal ?? 0;
+      acc.done += m.latestDone ?? 0;
+      acc.processedPerHour += m.processedPerHour ?? 0;
+      acc.addedPerHour += m.addedPerHour ?? 0;
+      acc.processedTotal += m.processedTotal;
+      acc.addedTotal += m.addedTotal;
+      return acc;
+    },
+    {
+      open: 0,
+      total: 0,
+      done: 0,
+      processedPerHour: 0,
+      addedPerHour: 0,
+      processedTotal: 0,
+      addedTotal: 0,
+    },
+  );
+  const totalNetPerHour = totals.processedPerHour - totals.addedPerHour;
+  const totalEtaNoNew =
+    totals.processedPerHour > 0 ? totals.open / totals.processedPerHour : null;
+  const totalEtaWithAdd =
+    totalNetPerHour > 0 ? totals.open / totalNetPerHour : null;
+  const totalProgressPct =
+    totals.total > 0 ? (totals.done / totals.total) * 100 : 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Aggregat-Zeile */}
+      <div className="rounded-lg border border-hair bg-night-900/[0.02] px-5 py-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+              Gesamt über alle Modi
+            </p>
+            <p className="mt-1 font-display text-[28px] leading-none tracking-tightish text-ink-900">
+              {fmtNumber(totals.open)}
+              <span className="ml-1 text-[12px] text-ink-500">offen</span>
+            </p>
+            <p className="mt-1 text-[12px] text-ink-500">
+              von {fmtNumber(totals.total)} insgesamt ·{" "}
+              {fmtNumber(totals.done)} fertig ({totalProgressPct.toFixed(1)} %)
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-right sm:grid-cols-4">
+            <ForecastKpi
+              label="Tempo"
+              value={fmtRate(totals.processedPerHour)}
+              hint={`netto ${fmtRate(totalNetPerHour)}`}
+              positive={totalNetPerHour > 0}
+            />
+            <ForecastKpi
+              label="Neu /h"
+              value={fmtRate(totals.addedPerHour)}
+              hint=""
+            />
+            <ForecastKpi
+              label="ETA (ohne Nachschub)"
+              value={fmtHours(totalEtaNoNew)}
+              hint=""
+            />
+            <ForecastKpi
+              label="ETA (mit Nachschub)"
+              value={
+                totalEtaWithAdd != null
+                  ? fmtHours(totalEtaWithAdd)
+                  : totalNetPerHour <= 0 && totals.open > 0
+                    ? "wird mehr"
+                    : "–"
+              }
+              hint=""
+              negative={totalNetPerHour <= 0 && totals.open > 0}
+            />
+          </div>
+        </div>
+        <div className="mt-3 h-2 w-full overflow-hidden rounded bg-ink-100">
+          <div
+            className="h-full bg-ink-900"
+            style={{ width: `${Math.min(100, totalProgressPct)}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Pro Modus */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {rows.map((m) => (
+          <ForecastCard key={m.mode} m={m} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ForecastKpi({
+  label,
+  value,
+  hint,
+  positive,
+  negative,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  positive?: boolean;
+  negative?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+        {label}
+      </p>
+      <p
+        className={`mt-0.5 font-display text-[18px] leading-tight tracking-tightish ${
+          negative
+            ? "text-accent-rose"
+            : positive
+              ? "text-accent-mint"
+              : "text-ink-900"
+        }`}
+      >
+        {value}
+      </p>
+      {hint && <p className="text-[10px] text-ink-500">{hint}</p>}
+    </div>
+  );
+}
+
+function ForecastCard({ m }: { m: ControllingByMode }) {
+  const progressPct =
+    m.latestTotal && m.latestTotal > 0
+      ? Math.min(100, ((m.latestDone ?? 0) / m.latestTotal) * 100)
+      : 0;
+  const etaText =
+    m.etaIfNoNewHours != null ? fmtHours(m.etaIfNoNewHours) : "–";
+  const etaWithAddText =
+    m.etaIfKeepsAddingHours != null
+      ? fmtHours(m.etaIfKeepsAddingHours)
+      : m.netReductionPerHour != null && m.netReductionPerHour <= 0
+        ? "wird mehr"
+        : "–";
+  const isGrowing =
+    m.netReductionPerHour != null && m.netReductionPerHour <= 0;
+
+  return (
+    <div className="rounded-lg border border-hair bg-white px-5 py-4">
+      {/* Header: Modus + Bestand */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
+            Modus
+          </p>
+          <h3 className="mt-0.5 truncate font-display text-[18px] tracking-tightish text-ink-900">
+            {m.mode || "—"}
+          </h3>
+          <p className="mt-1 text-[11px] text-ink-500">
+            {fmtNumber(m.events)} Events · {fmtNumber(m.uniqueUsers)} Nutzer
+            {m.lastTs ? ` · zuletzt ${fmtRelative(m.lastTs)}` : ""}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+            Offen
+          </p>
+          <p className="font-display text-[26px] leading-none tracking-tightish text-ink-900">
+            {m.latestOpen != null ? fmtNumber(m.latestOpen) : "–"}
+          </p>
+          <p className="text-[10px] text-ink-500">
+            von {m.latestTotal != null ? fmtNumber(m.latestTotal) : "–"}
+          </p>
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div className="mt-3">
+        <div className="flex items-baseline justify-between text-[10.5px] text-ink-500">
+          <span>
+            {fmtNumber(m.latestDone)} fertig
+          </span>
+          <span className="font-mono text-ink-700">
+            {progressPct.toFixed(1)} %
+          </span>
+        </div>
+        <div className="mt-1 h-1.5 w-full overflow-hidden rounded bg-ink-100">
+          <div
+            className="h-full bg-ink-900"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Tempo + Prognose nebeneinander */}
+      <div className="mt-4 grid grid-cols-2 gap-4 border-t border-hair/70 pt-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+            Tempo
+          </p>
+          <p className="mt-0.5 font-display text-[16px] tracking-tightish text-ink-900">
+            {fmtRate(m.processedPerHour)}
+          </p>
+          <p className="mt-0.5 text-[10.5px] text-ink-500">
+            neu {fmtRate(m.addedPerHour)} ·{" "}
+            <span
+              className={
+                isGrowing
+                  ? "text-accent-rose"
+                  : m.netReductionPerHour && m.netReductionPerHour > 0
+                    ? "text-accent-mint"
+                    : "text-ink-500"
+              }
+            >
+              netto{" "}
+              {m.netReductionPerHour != null
+                ? `${m.netReductionPerHour > 0 ? "−" : "+"}${fmtRate(Math.abs(m.netReductionPerHour))}`
+                : "–"}
+            </span>
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+            Prognose (bei diesem Tempo)
+          </p>
+          <p className="mt-0.5 font-display text-[16px] tracking-tightish text-ink-900">
+            {etaText}
+          </p>
+          <p className="mt-0.5 text-[10.5px] text-ink-500">
+            inkl. Nachschub:{" "}
+            <span
+              className={
+                isGrowing ? "text-accent-rose" : "text-ink-700"
+              }
+            >
+              {etaWithAddText}
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <p className="mt-3 text-[10px] text-ink-400">
+        {fmtNumber(m.processedTotal)} bearbeitet ·{" "}
+        {fmtNumber(m.addedTotal)} dazugekommen im Zeitraum
+      </p>
+    </div>
+  );
+}
 
 function ModeBlocks({
   rows,

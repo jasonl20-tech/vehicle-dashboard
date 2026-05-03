@@ -35,6 +35,35 @@ export const DEFAULT_DATASET = "controll_platform_logs";
 export const DEFAULT_SESSION_GAP_MS = 5 * 60 * 1000;
 export const MAX_QUERY_ROWS = 150_000;
 
+/**
+ * Vor diesem Zeitpunkt sind die double-Bestandsspalten (double2..double5)
+ * nicht zuverlässig: Werte über 1000 stammen aus einer fehlerhaften Phase
+ * und werden ignoriert. Werte ≤ 1000 vor dem Cutoff bleiben gültig, alle
+ * Werte ab dem Cutoff sind regulär.
+ *
+ * Cutoff: 2026-05-03 19:15:58 UTC.
+ */
+export const CONTROLLING_DOUBLE_CUTOFF_MS = Date.parse(
+  "2026-05-03T19:15:58Z",
+);
+const CONTROLLING_DOUBLE_MAX_BEFORE_CUTOFF = 1000;
+
+/**
+ * Liefert `true`, wenn ein double-Bestandswert (z. B. d2) zum Zeitpunkt `t`
+ * (in ms) als gültig betrachtet werden darf. Werte vor dem Cutoff, die
+ * über 1000 liegen, gelten als Müll und werden gefiltert.
+ */
+function isValidStockDouble(t: number, v: number): boolean {
+  if (!Number.isFinite(v) || v < 0) return false;
+  if (
+    t < CONTROLLING_DOUBLE_CUTOFF_MS &&
+    v > CONTROLLING_DOUBLE_MAX_BEFORE_CUTOFF
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export type ControllingBlob4Mode = "nonempty" | "hex32" | "all";
 
 /** Wert der Spalte `dataset` bzw. Tabellenname im dedicated-Mode. */
@@ -458,15 +487,26 @@ export function processControllingData(
     for (const r of mrows) {
       const t = parseTs(r.ts);
       if (!t) continue;
-      if (r.d2 >= 0 && Number.isFinite(r.d2)) openSeries.push({ t, v: r.d2 });
-      if (r.d3 >= 0 && Number.isFinite(r.d3)) totalSeries.push({ t, v: r.d3 });
+      if (isValidStockDouble(t, r.d2)) openSeries.push({ t, v: r.d2 });
+      if (isValidStockDouble(t, r.d3)) totalSeries.push({ t, v: r.d3 });
     }
     const openR = rateSeries(openSeries); // downTotal = abgearbeitet
     const totalR = rateSeries(totalSeries); // upTotal = neu dazu
 
+    // Letzter Bestand: ältere fehlerhafte (>1000) Werte überspringen,
+    // den letzten gültigen Wert nehmen.
+    let latestOpen: number | null = null;
+    let latestTotal: number | null = null;
+    for (let i = mrows.length - 1; i >= 0; i--) {
+      const r = mrows[i];
+      const t = parseTs(r.ts);
+      if (!t) continue;
+      if (latestOpen == null && isValidStockDouble(t, r.d2)) latestOpen = r.d2;
+      if (latestTotal == null && isValidStockDouble(t, r.d3))
+        latestTotal = r.d3;
+      if (latestOpen != null && latestTotal != null) break;
+    }
     const last = mrows[mrows.length - 1];
-    const latestOpen = last?.d2 ?? null;
-    const latestTotal = last?.d3 ?? null;
     const latestDone =
       latestTotal != null && latestOpen != null
         ? Math.max(0, latestTotal - latestOpen)
@@ -519,7 +559,7 @@ export function processControllingData(
       const uOpen: { t: number; v: number }[] = [];
       for (const r of urows) {
         const t = parseTs(r.ts);
-        if (t && r.d2 >= 0) uOpen.push({ t, v: r.d2 });
+        if (t && isValidStockDouble(t, r.d2)) uOpen.push({ t, v: r.d2 });
       }
       const r = rateSeries(uOpen);
       const processed = Math.round(r.downTotal);
@@ -589,7 +629,7 @@ export function processControllingData(
       const opens: { t: number; v: number }[] = [];
       for (const r of mrows) {
         const t = parseTs(r.ts);
-        if (t && r.d2 >= 0) opens.push({ t, v: r.d2 });
+        if (t && isValidStockDouble(t, r.d2)) opens.push({ t, v: r.d2 });
       }
       const r = rateSeries(opens);
       const processed = Math.round(r.downTotal);
@@ -678,15 +718,20 @@ export function processControllingData(
       b.events += 1;
       if (r.user) b.users.add(r.user);
       const last = lastByMode.get(r.mode) || { d2: null, d3: null };
-      if (last.d2 != null && r.d2 >= 0) {
+      const d2Valid = isValidStockDouble(t, r.d2);
+      const d3Valid = isValidStockDouble(t, r.d3);
+      if (last.d2 != null && d2Valid) {
         const d = last.d2 - r.d2;
         if (d > 0) b.processed += d;
       }
-      if (last.d3 != null && r.d3 >= 0) {
+      if (last.d3 != null && d3Valid) {
         const d = r.d3 - last.d3;
         if (d > 0) b.added += d;
       }
-      lastByMode.set(r.mode, { d2: r.d2, d3: r.d3 });
+      lastByMode.set(r.mode, {
+        d2: d2Valid ? r.d2 : last.d2,
+        d3: d3Valid ? r.d3 : last.d3,
+      });
     }
     for (const b of [...map.values()].sort((a, b) => a.ms - b.ms)) {
       timeline.push({
