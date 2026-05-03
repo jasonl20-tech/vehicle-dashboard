@@ -84,6 +84,7 @@ import {
 import {
   postControllPlatformAnalyticsFireAndForget,
 } from "../lib/controllPlatformAnalyticsApi";
+import { postSeedDashboardRegenStatus } from "../lib/seedDashboardRegenStatusApi";
 import {
   buildVehicleImageUrl,
   countScalingViewPairsInViews,
@@ -1301,6 +1302,15 @@ export default function ControlPlatformPage() {
   >(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
+  /** Temporär: Bulk `dashboard` · correction · regen_vertex · check 8 */
+  const [seedDashboardLoading, setSeedDashboardLoading] = useState(false);
+  const [seedDashboardMessage, setSeedDashboardMessage] = useState<
+    string | null
+  >(null);
+  const [seedDashboardError, setSeedDashboardError] = useState<string | null>(
+    null,
+  );
+
   const controllButtonsResolved = useMemo(() => {
     if (controllButtonsApi.data?.buttons) {
       return { buttons: controllButtonsApi.data.buttons };
@@ -2001,6 +2011,60 @@ export default function ControlPlatformPage() {
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
+          {viewsMode === "korrektur" ?
+            <div className="mt-2 border-t border-dashed border-amber-400/60 pt-2">
+              <button
+                type="button"
+                disabled={seedDashboardLoading || listApi.loading}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "Für alle Fahrzeuge ohne Dashboard-Token in „views“ einen Eintrag schreiben?\n\ncorrection · dashboard · regen_vertex · check 8\n\nBereits vorhandene Korrektur-Zeilen „dashboard“ werden übersprungen.",
+                    )
+                  ) {
+                    return;
+                  }
+                  setSeedDashboardLoading(true);
+                  setSeedDashboardError(null);
+                  setSeedDashboardMessage(null);
+                  void (async () => {
+                    try {
+                      const { inserted } = await postSeedDashboardRegenStatus();
+                      setSeedDashboardMessage(
+                        inserted === 0 ?
+                          "Keine neuen Einträge (alle hatten schon Dashboard oder Status)."
+                        : `${inserted} Einträge angelegt.`,
+                      );
+                      listApi.reload();
+                      detailApi.reload();
+                    } catch (e) {
+                      setSeedDashboardError(
+                        e instanceof Error ? e.message : String(e),
+                      );
+                    } finally {
+                      setSeedDashboardLoading(false);
+                    }
+                  })();
+                }}
+                className="flex w-full items-center justify-center gap-1 rounded border border-amber-600 bg-amber-50 px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:text-[10px]"
+              >
+                {seedDashboardLoading ?
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : null}
+                Dashboard-Jobs · bulk (temp)
+              </button>
+              {seedDashboardMessage ?
+                <p className="mt-1 text-[9px] leading-snug text-emerald-700">
+                  {seedDashboardMessage}
+                </p>
+              : null}
+              {seedDashboardError ?
+                <p className="mt-1 text-[9px] leading-snug text-red-600">
+                  {seedDashboardError}
+                </p>
+              : null}
+            </div>
+          : null}
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto overscroll-contain" role="listbox" aria-label="Einträge">
           {rows.map((r) => {

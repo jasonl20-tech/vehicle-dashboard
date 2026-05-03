@@ -83,6 +83,7 @@ export const CONTROL_PLATFORM_API_PATH_PREFIXES: readonly string[] = [
   "/api/configs/first-views",
   "/api/configs/inside-views",
   "/api/intern-analytics/controll-platform-action",
+  "/api/system/seed-dashboard-regen-status",
 ];
 
 /**
@@ -133,6 +134,7 @@ export const DASHBOARD_API_PATH_PREFIXES: readonly string[] = [
   "/api/overview/stats",
   "/api/system/blocked-vehicles",
   "/api/system/prompts",
+  "/api/system/seed-dashboard-regen-status",
   "/api/vehicle-imagery/catalog",
   "/api/website/newsletter",
   "/api/website/submissions",
