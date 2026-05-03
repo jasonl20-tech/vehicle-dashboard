@@ -7,7 +7,7 @@
  * — Upsert per `ON CONFLICT(id)`.
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
-import { parseSettingsConfigColumn } from "../../_lib/controllButtonsConfig";
+import { normalizeSettingsConfigForAdmin } from "../../_lib/settingsConfigColumn";
 
 const SETTING_ID_RE = /^[a-zA-Z0-9_-]{1,100}$/;
 const MAX_DESCRIPTION_LEN = 4000;
@@ -29,7 +29,7 @@ function requireConfigsDb(
 }
 
 function normalizeStoredConfig(raw: unknown): unknown {
-  return parseSettingsConfigColumn(raw ?? null);
+  return normalizeSettingsConfigForAdmin(raw ?? null);
 }
 
 type SettingsRow = {
