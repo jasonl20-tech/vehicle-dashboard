@@ -2,15 +2,15 @@ import {
   AlertCircle,
   ArrowLeft,
   ChevronRight,
+  FileDown,
   Loader2,
   LogOut,
   RefreshCw,
   Search,
-  User as UserIcon,
+  Users as UsersIcon,
 } from "lucide-react";
 import {
   useCallback,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -93,32 +93,36 @@ function bucketLabel(s: string): string {
 
 const WEEKDAYS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
+const ALL_USERS_KEY = "__all__";
+
 // ---------- Page ----------
 
 export default function UserAnalyticsPage() {
   const { user, logout } = useAuth();
   const [range, setRange] = useState<Range>(() => rangeFromPreset("30d"));
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+  // selection: entweder der konkrete user-name oder ALL_USERS_KEY
+  const [selection, setSelection] = useState<string>(ALL_USERS_KEY);
   const [selectedIp, setSelectedIp] = useState<string | null>(null);
   const [q, setQ] = useState("");
 
+  const isAggregate = selection === ALL_USERS_KEY;
   const url = useMemo(
     () =>
       userAnalyticsApiUrl(range, {
-        user: selectedUser,
+        user: isAggregate ? null : selection,
         ip: selectedIp,
+        aggregate: isAggregate,
         gapMinutes: 5,
         limit: 100_000,
       }),
-    [range, selectedUser, selectedIp],
+    [range, selection, selectedIp, isAggregate],
   );
 
   const { data, error, loading, reload } =
     useApi<UserAnalyticsResponse>(url);
 
-  // Wenn der User gewechselt wird, IP zurücksetzen.
-  const onSelectUser = useCallback((u: string) => {
-    setSelectedUser((prev) => (prev === u ? prev : u));
+  const onSelect = useCallback((key: string) => {
+    setSelection((prev) => (prev === key ? prev : key));
     setSelectedIp(null);
   }, []);
 
@@ -129,13 +133,6 @@ export default function UserAnalyticsPage() {
     return data.users.filter((u) => u.user.toLowerCase().includes(t));
   }, [data?.users, q]);
 
-  // Auto-Auswahl des ersten Users.
-  useEffect(() => {
-    if (selectedUser) return;
-    const first = data?.users?.[0]?.user ?? null;
-    if (first) setSelectedUser(first);
-  }, [data?.users, selectedUser]);
-
   const aside = (
     <Sidebar
       users={filteredUsers}
@@ -144,17 +141,23 @@ export default function UserAnalyticsPage() {
       error={error}
       query={q}
       onQuery={setQ}
-      selectedUser={selectedUser}
-      onSelectUser={onSelectUser}
+      selection={selection}
+      onSelect={onSelect}
       selectedIp={selectedIp}
       onSelectIp={setSelectedIp}
       detail={data?.detail ?? null}
     />
   );
 
+  const handlePrint = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.print();
+  }, []);
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-paper text-ink-900">
-      <header className="shrink-0 border-b border-hair bg-paper">
+      {/* On-screen Top-Bar (für Druck ausgeblendet) */}
+      <header className="shrink-0 border-b border-hair bg-paper print:hidden">
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -174,6 +177,14 @@ export default function UserAnalyticsPage() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
             <RangeSelector range={range} onRange={setRange} />
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[11px] font-medium text-ink-700 transition hover:bg-night-900/[0.04]"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">PDF Export</span>
+            </button>
             <button
               type="button"
               onClick={() => reload()}
@@ -201,7 +212,8 @@ export default function UserAnalyticsPage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden">
+      {/* Screen-Content */}
+      <div className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden print:hidden">
         <SplitView
           storageKey="ui.userAnalytics.aside"
           asideLabel="User"
@@ -213,12 +225,16 @@ export default function UserAnalyticsPage() {
             data={data}
             loading={loading}
             error={error}
-            selectedUser={selectedUser}
+            selection={selection}
             selectedIp={selectedIp}
             onSelectIp={setSelectedIp}
+            range={range}
           />
         </SplitView>
       </div>
+
+      {/* Print-only Layout (DIN A4) */}
+      <PrintReport data={data} range={range} />
     </div>
   );
 }
@@ -261,8 +277,8 @@ function Sidebar({
   error,
   query,
   onQuery,
-  selectedUser,
-  onSelectUser,
+  selection,
+  onSelect,
   selectedIp,
   onSelectIp,
   detail,
@@ -273,12 +289,13 @@ function Sidebar({
   error: string | null;
   query: string;
   onQuery: (q: string) => void;
-  selectedUser: string | null;
-  onSelectUser: (u: string) => void;
+  selection: string;
+  onSelect: (key: string) => void;
   selectedIp: string | null;
   onSelectIp: (ip: string | null) => void;
   detail: DetailReport | null;
 }) {
+  const isAllSelected = selection === ALL_USERS_KEY;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="shrink-0 border-b border-hair p-3 pr-9">
@@ -296,6 +313,50 @@ function Sidebar({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* Eintrag „Alle User" */}
+        <button
+          type="button"
+          onClick={() => onSelect(ALL_USERS_KEY)}
+          className={`flex w-full items-center gap-2 border-b border-hair px-3 py-2.5 text-left transition ${
+            isAllSelected ? "bg-ink-900/[0.06]" : "hover:bg-night-900/[0.04]"
+          }`}
+        >
+          <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink-900 text-[11px] font-semibold text-white">
+            <UsersIcon className="h-3.5 w-3.5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] font-medium text-ink-900">
+              Alle User · Gesamt
+            </p>
+            <p className="text-[10.5px] text-ink-500">
+              Aggregierter Bericht über alle Plattform-User
+            </p>
+          </div>
+          {isAllSelected && (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          )}
+        </button>
+        {isAllSelected && detail && detail.perIp.length > 0 && (
+          <ul className="border-b border-hair bg-ink-50/40 py-1">
+            <SidebarIpItem
+              ip={null}
+              count={detail.summary.eventCount}
+              active={selectedIp == null}
+              onClick={() => onSelectIp(null)}
+              label="Gesamt"
+            />
+            {detail.perIp.slice(0, 8).map((ip) => (
+              <SidebarIpItem
+                key={ip.ip}
+                ip={ip.ip}
+                count={ip.events}
+                active={selectedIp === ip.ip}
+                onClick={() => onSelectIp(ip.ip)}
+              />
+            ))}
+          </ul>
+        )}
+
         {loading && users.length === 0 ? (
           <div className="flex items-center gap-2 p-4 text-[12px] text-ink-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Lade …
@@ -310,12 +371,12 @@ function Sidebar({
         ) : (
           <ul className="divide-y divide-hair">
             {users.map((u) => {
-              const active = u.user === selectedUser;
+              const active = !isAllSelected && u.user === selection;
               return (
                 <li key={u.user}>
                   <button
                     type="button"
-                    onClick={() => onSelectUser(u.user)}
+                    onClick={() => onSelect(u.user)}
                     className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition ${
                       active ? "bg-ink-900/[0.06]" : "hover:bg-night-900/[0.04]"
                     }`}
@@ -330,7 +391,7 @@ function Sidebar({
                       <p className="truncate text-[10.5px] text-ink-500">
                         {fmtNumber(u.eventCount)} Events ·{" "}
                         {fmtNumber(u.actionCount)} Aktionen ·{" "}
-                        {fmtNumber(u.uniqueIps)} IP
+                        {fmtDuration(u.totalActiveSec)} aktiv
                       </p>
                     </div>
                     {active && (
@@ -339,45 +400,22 @@ function Sidebar({
                   </button>
                   {active && detail && detail.perIp.length > 0 && (
                     <ul className="border-t border-hair bg-ink-50/40 py-1">
-                      <li>
-                        <button
-                          type="button"
-                          onClick={() => onSelectIp(null)}
-                          className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11.5px] transition ${
-                            selectedIp == null
-                              ? "bg-ink-900/[0.05] text-ink-900"
-                              : "text-ink-600 hover:bg-night-900/[0.04]"
-                          }`}
-                        >
-                          <span className="font-medium">Gesamt</span>
-                          <span className="ml-auto text-[10.5px] text-ink-400">
-                            {fmtNumber(detail.summary.eventCount)} Events
-                          </span>
-                        </button>
-                      </li>
-                      {detail.perIp.map((ip) => {
-                        const active = selectedIp === ip.ip;
-                        return (
-                          <li key={ip.ip}>
-                            <button
-                              type="button"
-                              onClick={() => onSelectIp(ip.ip)}
-                              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11.5px] transition ${
-                                active
-                                  ? "bg-ink-900/[0.05] text-ink-900"
-                                  : "text-ink-600 hover:bg-night-900/[0.04]"
-                              }`}
-                            >
-                              <span className="truncate font-mono">
-                                {ip.ip || "(leer)"}
-                              </span>
-                              <span className="ml-auto whitespace-nowrap text-[10.5px] text-ink-400">
-                                {fmtNumber(ip.events)}
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      })}
+                      <SidebarIpItem
+                        ip={null}
+                        count={detail.summary.eventCount}
+                        active={selectedIp == null}
+                        onClick={() => onSelectIp(null)}
+                        label="Gesamt"
+                      />
+                      {detail.perIp.map((ip) => (
+                        <SidebarIpItem
+                          key={ip.ip}
+                          ip={ip.ip}
+                          count={ip.events}
+                          active={selectedIp === ip.ip}
+                          onClick={() => onSelectIp(ip.ip)}
+                        />
+                      ))}
                     </ul>
                   )}
                 </li>
@@ -390,51 +428,60 @@ function Sidebar({
   );
 }
 
-// ---------- Detail-Bereich ----------
+function SidebarIpItem({
+  ip,
+  count,
+  active,
+  onClick,
+  label,
+}: {
+  ip: string | null;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+  label?: string;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11.5px] transition ${
+          active ? "bg-ink-900/[0.05] text-ink-900" : "text-ink-600 hover:bg-night-900/[0.04]"
+        }`}
+      >
+        <span className="truncate font-mono">{label ?? ip ?? "(leer)"}</span>
+        <span className="ml-auto whitespace-nowrap text-[10.5px] text-ink-400">
+          {fmtNumber(count)}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+// ---------- Detail-Pane (Layout-Skelett) ----------
 
 function DetailPane({
   data,
   loading,
   error,
-  selectedUser,
+  selection,
   selectedIp,
   onSelectIp,
+  range,
 }: {
   data: UserAnalyticsResponse | null;
   loading: boolean;
   error: string | null;
-  selectedUser: string | null;
+  selection: string;
   selectedIp: string | null;
   onSelectIp: (ip: string | null) => void;
+  range: Range;
 }) {
-  if (!selectedUser) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
-        <div className="max-w-md text-center">
-          <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-ink-900 text-white">
-            <UserIcon className="h-5 w-5" />
-          </div>
-          <h2 className="mt-4 font-display text-[22px] tracking-tightish text-ink-900">
-            Wähle einen User links
-          </h2>
-          <p className="mt-3 text-[13px] leading-relaxed text-ink-500">
-            Datenquelle: Analytics Engine{" "}
-            <span className="font-mono text-ink-700">controll_platform_logs</span>.
-            Werte für „verbleibende Fahrzeuge" werden erst ab{" "}
-            <span className="font-mono text-ink-700">2026-05-02 19:32:50</span>{" "}
-            verwendet; die fehlerhafte Zeile am{" "}
-            <span className="font-mono text-ink-700">2026-05-03 07:36:49</span>{" "}
-            wird ignoriert.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   if (loading && !data) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center text-[13px] text-ink-400">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Lade Detaildaten …
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Lade Daten …
       </div>
     );
   }
@@ -449,14 +496,18 @@ function DetailPane({
   }
 
   const detail = data?.detail ?? null;
+
   if (!detail) {
     return (
       <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-12 text-[13px] text-ink-500">
         Keine Daten für{" "}
-        <span className="ml-1 font-mono text-ink-800">{selectedUser}</span>
+        <span className="ml-1 font-mono text-ink-800">
+          {selection === ALL_USERS_KEY ? "Alle User" : selection}
+        </span>
         {selectedIp ? (
           <>
-            {" "}/ <span className="font-mono text-ink-800">{selectedIp}</span>
+            {" / "}
+            <span className="font-mono text-ink-800">{selectedIp}</span>
           </>
         ) : null}
         {" "}im Zeitraum.
@@ -466,18 +517,24 @@ function DetailPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <DetailHeader detail={detail} onSelectIp={onSelectIp} />
+      <DetailHeader
+        detail={detail}
+        users={data?.users ?? []}
+        range={range}
+        onSelectIp={onSelectIp}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1500px] space-y-6 px-4 py-6 sm:px-6">
-          <SummaryCards detail={detail} />
-          <RemainingByModeBlock detail={detail} />
-          <TimelineBlock detail={detail} />
+        <div className="mx-auto w-full max-w-[1500px] divide-y divide-hair">
+          <KpiBlock detail={detail} />
+          <ModesBlock detail={detail} />
+          <ActivityChartBlock detail={detail} />
           <NetworkSpeedBlock detail={detail} />
-          <PerModeBlock detail={detail} />
-          <TopRowsBlock detail={detail} />
+          <SessionsBlock detail={detail} />
           <PerIpBlock detail={detail} onSelectIp={onSelectIp} />
           <DistributionBlock detail={detail} />
-          <SessionsBlock detail={detail} />
+          {/* Fahrzeug-Block kommt unten, mit eigener Suche */}
+          <VehiclesBlock detail={detail} />
+          <BreakdownsBlock detail={detail} />
         </div>
       </div>
     </div>
@@ -486,22 +543,43 @@ function DetailPane({
 
 function DetailHeader({
   detail,
+  users,
+  range,
   onSelectIp,
 }: {
   detail: DetailReport;
+  users: UserListEntry[];
+  range: Range;
   onSelectIp: (ip: string | null) => void;
 }) {
+  const isAggregate = detail.scope.aggregate;
+  const subtitle = (
+    <>
+      <span className="font-mono">{range.from}</span>
+      {" → "}
+      <span className="font-mono">{range.to}</span>
+      {detail.summary.firstTs && detail.summary.lastTs && (
+        <>
+          {" · letzte Aktivität "}
+          {fmtRelative(detail.summary.lastTs)}
+        </>
+      )}
+    </>
+  );
   return (
-    <div className="shrink-0 border-b border-hair bg-white px-4 py-3 sm:px-6">
+    <div className="shrink-0 border-b border-hair bg-white px-4 py-4 sm:px-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-ink-400">
+          <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
             User-Bericht
           </p>
-          <h2 className="mt-0.5 font-display text-[22px] tracking-tightish text-ink-900">
-            {detail.user}
+          <h2 className="mt-0.5 font-display text-[26px] tracking-tightish text-ink-900">
+            {isAggregate
+              ? `Alle User (${detail.summary.uniqueUsers} aktiv)`
+              : detail.user}
           </h2>
-          <p className="text-[11.5px] text-ink-500">
+          <p className="mt-1 text-[12px] text-ink-500">{subtitle}</p>
+          <p className="mt-0.5 text-[11.5px] text-ink-500">
             {detail.scope.ip ? (
               <>
                 eingeschränkt auf IP{" "}
@@ -516,14 +594,10 @@ function DetailHeader({
                 </button>
               </>
             ) : (
-              <>{fmtNumber(detail.summary.uniqueIps)} IP-Adressen · {fmtNumber(detail.summary.uniqueDays)} Tage aktiv</>
-            )}
-            {detail.summary.firstTs && detail.summary.lastTs && (
               <>
-                {" · "}
-                {fmtDateTime(detail.summary.firstTs)} → {fmtDateTime(detail.summary.lastTs)}
-                {" · "}
-                {fmtRelative(detail.summary.lastTs)}
+                {fmtNumber(detail.summary.uniqueIps)} IP-Adressen ·{" "}
+                {fmtNumber(detail.summary.uniqueDays)} Tage aktiv ·{" "}
+                {users.length} User in der Liste
               </>
             )}
           </p>
@@ -533,166 +607,217 @@ function DetailHeader({
   );
 }
 
-// ---------- Card-Helper ----------
+// ---------- KPI-Block (kein Kästchen-Look, Listen-Tabelle) ----------
 
-function Stat({
+function KpiRow({
   label,
   value,
   hint,
-  tone = "default",
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
-  tone?: "default" | "accent";
 }) {
   return (
-    <div
-      className={`rounded-xl border border-hair bg-white p-4 ${tone === "accent" ? "ring-1 ring-ink-900/[0.04]" : ""}`}
-    >
-      <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-        {label}
-      </p>
-      <p className="mt-1.5 font-display text-[20px] tracking-tightish text-ink-900">
+    <div className="grid grid-cols-12 items-baseline gap-2 border-b border-dashed border-hair py-2 last:border-b-0">
+      <dt className="col-span-5 text-[12px] text-ink-500 sm:col-span-4">{label}</dt>
+      <dd className="col-span-7 font-mono text-[14px] text-ink-900 sm:col-span-4">
         {value}
-      </p>
-      {hint && <p className="mt-1 text-[11px] text-ink-500">{hint}</p>}
+      </dd>
+      {hint && (
+        <dd className="col-span-12 text-[11px] text-ink-500 sm:col-span-4">
+          {hint}
+        </dd>
+      )}
     </div>
   );
 }
 
-function Section({
+function SectionHeader({
   title,
   hint,
-  children,
+  right,
 }: {
   title: string;
   hint?: string;
-  children: ReactNode;
+  right?: ReactNode;
 }) {
   return (
-    <section className="space-y-3">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h3 className="text-[14px] font-semibold tracking-tightish text-ink-900">
-            {title}
-          </h3>
-          {hint && (
-            <p className="text-[11.5px] text-ink-500">{hint}</p>
-          )}
-        </div>
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+      <div>
+        <h3 className="text-[15px] font-semibold tracking-tightish text-ink-900">
+          {title}
+        </h3>
+        {hint && <p className="text-[11.5px] text-ink-500">{hint}</p>}
       </div>
-      <div>{children}</div>
+      {right}
+    </div>
+  );
+}
+
+function Block({
+  children,
+  title,
+  hint,
+  right,
+}: {
+  children: ReactNode;
+  title: string;
+  hint?: string;
+  right?: ReactNode;
+}) {
+  return (
+    <section className="px-4 py-6 sm:px-8">
+      <SectionHeader title={title} hint={hint} right={right} />
+      {children}
     </section>
   );
 }
 
-// ---------- Blöcke ----------
-
-function SummaryCards({ detail }: { detail: DetailReport }) {
+function KpiBlock({ detail }: { detail: DetailReport }) {
   const s = detail.summary;
   return (
-    <Section title="Übersicht">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <Stat
-          label="Events"
-          value={fmtNumber(s.eventCount)}
-          hint={`davon ${fmtNumber(s.actionCount)} Aktionen (shortcut:*)`}
-        />
-        <Stat
-          label="Sessions"
-          value={fmtNumber(s.sessionCount)}
-          hint={`Ø ${fmtDuration(s.avgSessionSec)} · max. ${fmtDuration(s.longestSessionSec)}`}
-        />
-        <Stat
-          label="Aktive Zeit gesamt"
-          value={fmtDuration(s.totalActiveSec)}
-          hint={`${fmtNumber(s.uniqueDays)} Tage · ${fmtNumber(s.uniqueIps)} IPs`}
-        />
-        <Stat
-          label="Events / Sekunde"
-          value={
-            s.eventsPerSec != null
-              ? `${s.eventsPerSec.toFixed(2)} /s`
-              : "–"
-          }
-          hint={`≈ ${fmtRate(s.eventsPerMinute, "/min")} · ${fmtRate(s.eventsPerActiveHour, "/h")}`}
-          tone="accent"
-        />
-        <Stat
-          label="Aktionen / Sekunde"
-          value={
-            s.actionsPerSec != null
-              ? `${s.actionsPerSec.toFixed(2)} /s`
-              : "–"
-          }
-          hint={`≈ ${fmtRate(s.actionsPerMinute, "/min")} · ${fmtRate(s.actionsPerActiveHour, "/h")}`}
-          tone="accent"
-        />
-        <Stat
-          label="Fahrzeuge / aktive Stunde"
-          value={fmtRate(s.vehiclesPerActiveHour, "/h")}
-          hint="Summe der Rückgänge in double2..5"
-        />
-        <Stat
-          label="Erstes Event"
-          value={s.firstTs ? fmtDateTime(s.firstTs) : "–"}
-          hint={s.firstTs ? fmtRelative(s.firstTs) : undefined}
-        />
-        <Stat
-          label="Letztes Event"
-          value={s.lastTs ? fmtDateTime(s.lastTs) : "–"}
-          hint={s.lastTs ? fmtRelative(s.lastTs) : undefined}
-        />
-      </div>
-    </Section>
-  );
-}
-
-function RemainingByModeBlock({ detail }: { detail: DetailReport }) {
-  const rows = detail.remainingByMode;
-  return (
-    <Section
-      title="Verbleibende Fahrzeuge je Modus (double2..5)"
-      hint="Werte ab 2026-05-02 19:32:50; latester Stand aus den Events des Users."
+    <Block
+      title="Übersicht"
+      hint="Gesamtzahlen und Raten. Aktive Zeit = Summe aller Sessions; 24-h-Sicht = der gesamte Reportzeitraum."
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {rows.map((r) => (
-          <div
-            key={r.mode}
-            className="flex flex-col gap-1.5 rounded-xl border border-hair bg-white p-4"
-          >
-            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-ink-400">
-              {r.mode}
-            </p>
-            <p className="font-display text-[22px] tracking-tightish text-ink-900">
-              {r.latestOpen != null ? fmtNumber(r.latestOpen) : "–"}
-            </p>
-            <p className="text-[11px] text-ink-500">
-              min {r.minOpen != null ? fmtNumber(r.minOpen) : "–"} · max{" "}
-              {r.maxOpen != null ? fmtNumber(r.maxOpen) : "–"}
-            </p>
-            <p className="text-[11px] text-ink-500">
-              vom User bearbeitet: {fmtNumber(r.processed)}
-              {" · "}
-              {fmtRate(r.processedPerHour, "/h")}
-            </p>
-            {r.latestTs && (
-              <p className="text-[10.5px] text-ink-400">
-                zuletzt: {fmtDateTime(r.latestTs)}
-              </p>
-            )}
-          </div>
-        ))}
+      <div className="grid grid-cols-1 gap-x-10 gap-y-1 md:grid-cols-2">
+        <dl>
+          <KpiRow label="Events gesamt" value={fmtNumber(s.eventCount)} />
+          <KpiRow
+            label="Aktionen (shortcut:*)"
+            value={fmtNumber(s.actionCount)}
+            hint={`Quote: ${
+              s.eventCount > 0
+                ? `${((s.actionCount / s.eventCount) * 100).toFixed(1)} %`
+                : "–"
+            }`}
+          />
+          <KpiRow label="Sessions" value={fmtNumber(s.sessionCount)} />
+          <KpiRow
+            label="Aktive Zeit gesamt"
+            value={fmtDuration(s.totalActiveSec)}
+            hint={`Ø ${fmtDuration(s.avgSessionSec)} · längste ${fmtDuration(
+              s.longestSessionSec,
+            )}`}
+          />
+          <KpiRow
+            label="Reportzeitraum"
+            value={`${(s.rangeDays || 0).toFixed(2)} Tage`}
+            hint={`${fmtNumber(s.rangeSpanSec)} s im Range`}
+          />
+          <KpiRow
+            label="Aktive Tage"
+            value={fmtNumber(s.uniqueDays)}
+            hint={`davon ${fmtNumber(s.uniqueIps)} IP-Adressen${
+              detail.scope.aggregate
+                ? ` · ${fmtNumber(s.uniqueUsers)} User`
+                : ""
+            }`}
+          />
+        </dl>
+        <dl>
+          <KpiRow
+            label="Events / Sek."
+            value={
+              s.eventsPerSec != null ? `${s.eventsPerSec.toFixed(2)} /s` : "–"
+            }
+            hint={`${fmtRate(s.eventsPerMinute, "/min")} · ${fmtRate(s.eventsPerActiveHour)}`}
+          />
+          <KpiRow
+            label="Aktionen / Sek."
+            value={
+              s.actionsPerSec != null ? `${s.actionsPerSec.toFixed(2)} /s` : "–"
+            }
+            hint={`${fmtRate(s.actionsPerMinute, "/min")} · ${fmtRate(
+              s.actionsPerActiveHour,
+            )}`}
+          />
+          <KpiRow
+            label="Bearbeitete Fahrzeuge"
+            value={fmtNumber(s.processedTotal)}
+            hint="Summe aus Rückgang von double2..5 (ab 2026-05-02 19:32:50)"
+          />
+          <KpiRow
+            label="Ø Fahrzeuge / aktive h"
+            value={fmtRate(s.vehiclesPerActiveHour)}
+            hint="basierend auf der echten Arbeitszeit"
+          />
+          <KpiRow
+            label="Ø Fahrzeuge / Kalendertag"
+            value={fmtRate(s.vehiclesPerCalendarDay, "/Tag")}
+            hint={`24-h-Sicht über den ganzen Zeitraum · ${fmtRate(
+              s.vehiclesPerCalendarHour,
+            )}`}
+          />
+          <KpiRow
+            label="Erstes / letztes Event"
+            value={
+              s.firstTs && s.lastTs
+                ? `${fmtDateTime(s.firstTs)} → ${fmtDateTime(s.lastTs)}`
+                : "–"
+            }
+          />
+        </dl>
       </div>
-    </Section>
+    </Block>
   );
 }
 
-function TimelineBlock({ detail }: { detail: DetailReport }) {
-  if (!detail.timeline.length) {
-    return null;
-  }
+// ---------- Modus-Bestände ----------
+
+function ModesBlock({ detail }: { detail: DetailReport }) {
+  return (
+    <Block
+      title="Verbleibende Fahrzeuge je Modus"
+      hint="Werte aus double2..5 ab 2026-05-02 19:32:50."
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12.5px]">
+          <thead>
+            <tr className="border-b border-hair text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
+              <th className="py-2 pr-4 text-left font-medium">Modus</th>
+              <th className="py-2 pr-4 text-right font-medium">Aktuell offen</th>
+              <th className="py-2 pr-4 text-right font-medium">min</th>
+              <th className="py-2 pr-4 text-right font-medium">max</th>
+              <th className="py-2 pr-4 text-right font-medium">Bearbeitet</th>
+              <th className="py-2 pr-4 text-right font-medium">/h</th>
+              <th className="py-2 pr-4 text-right font-medium">zuletzt</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-hair/70">
+            {detail.remainingByMode.map((r) => (
+              <tr key={r.mode}>
+                <td className="py-2 pr-4 font-medium text-ink-900">{r.mode}</td>
+                <td className="py-2 pr-4 text-right font-mono">
+                  {r.latestOpen != null ? fmtNumber(r.latestOpen) : "–"}
+                </td>
+                <td className="py-2 pr-4 text-right text-ink-600">
+                  {r.minOpen != null ? fmtNumber(r.minOpen) : "–"}
+                </td>
+                <td className="py-2 pr-4 text-right text-ink-600">
+                  {r.maxOpen != null ? fmtNumber(r.maxOpen) : "–"}
+                </td>
+                <td className="py-2 pr-4 text-right">{fmtNumber(r.processed)}</td>
+                <td className="py-2 pr-4 text-right text-ink-600">
+                  {fmtRate(r.processedPerHour)}
+                </td>
+                <td className="py-2 pr-4 text-right text-ink-500">
+                  {r.latestTs ? fmtDateTime(r.latestTs) : "–"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Block>
+  );
+}
+
+// ---------- Activity-Chart (Events × Latenz) ----------
+
+function ActivityChartBlock({ detail }: { detail: DetailReport }) {
+  if (!detail.timeline.length) return null;
   const data = detail.timeline.map((p) => ({
     ts: p.bucket,
     label: bucketLabel(p.bucket),
@@ -702,98 +827,97 @@ function TimelineBlock({ detail }: { detail: DetailReport }) {
     latency: p.avgLatencyMs,
   }));
   return (
-    <Section
-      title="Zeitverlauf"
-      hint="Events / Aktionen / bearbeitete Fahrzeuge (Ø-Latenz als Linie)"
+    <Block
+      title="Aktivität · Events × Internetgeschwindigkeit"
+      hint="Pro Zeit-Bucket: Anzahl Events / Aktionen / bearbeitete Fahrzeuge (Balken) und Ø Latenz (Linie)."
     >
-      <div className="rounded-xl border border-hair bg-white p-3">
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
-              <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 10, fill: "#6b6b73" }}
-                stroke="#cfcfd5"
-              />
-              <YAxis
-                yAxisId="L"
-                tick={{ fontSize: 10, fill: "#6b6b73" }}
-                stroke="#cfcfd5"
-              />
-              <YAxis
-                yAxisId="R"
-                orientation="right"
-                tick={{ fontSize: 10, fill: "#6b6b73" }}
-                stroke="#cfcfd5"
-              />
-              <Tooltip
-                wrapperStyle={{ fontSize: 11 }}
-                contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="L" dataKey="events" name="Events" fill="#6e6e7a" radius={[2, 2, 0, 0]} />
-              <Bar yAxisId="L" dataKey="actions" name="Aktionen" fill="#0d0d0f" radius={[2, 2, 0, 0]} />
-              <Bar yAxisId="L" dataKey="processed" name="Bearbeitet" fill="#9aa2ac" radius={[2, 2, 0, 0]} />
-              <Line
-                yAxisId="R"
-                type="monotone"
-                dataKey="latency"
-                name="Ø Latenz (ms)"
-                stroke="#dc7a3b"
-                strokeWidth={1.5}
-                dot={false}
-                connectNulls
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="h-80 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
+            <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
+            <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#6b6b73" }} stroke="#cfcfd5" />
+            <YAxis
+              yAxisId="L"
+              tick={{ fontSize: 10, fill: "#6b6b73" }}
+              stroke="#cfcfd5"
+            />
+            <YAxis
+              yAxisId="R"
+              orientation="right"
+              unit=" ms"
+              tick={{ fontSize: 10, fill: "#6b6b73" }}
+              stroke="#cfcfd5"
+            />
+            <Tooltip
+              wrapperStyle={{ fontSize: 11 }}
+              contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar yAxisId="L" dataKey="events" name="Events" fill="#9aa2ac" radius={[2, 2, 0, 0]} />
+            <Bar yAxisId="L" dataKey="actions" name="Aktionen" fill="#0d0d0f" radius={[2, 2, 0, 0]} />
+            <Bar yAxisId="L" dataKey="processed" name="Bearbeitet" fill="#6e6e7a" radius={[2, 2, 0, 0]} />
+            <Line
+              yAxisId="R"
+              type="monotone"
+              dataKey="latency"
+              name="Ø Latenz (ms)"
+              stroke="#dc7a3b"
+              strokeWidth={1.5}
+              dot={false}
+              connectNulls
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
-    </Section>
+    </Block>
   );
 }
+
+// ---------- Internetgeschwindigkeit ----------
 
 function NetworkSpeedBlock({ detail }: { detail: DetailReport }) {
   const n = detail.network;
   const points = detail.latencyPoints;
-  const scatter = useMemo(() => {
-    return points.map((p) => {
-      const ms = aeTimestampToDate(p.ts).getTime();
-      return { x: ms, y: p.ms, ts: p.ts };
-    });
-  }, [points]);
+  const scatter = useMemo(
+    () =>
+      points.map((p) => ({
+        x: aeTimestampToDate(p.ts).getTime(),
+        y: p.ms,
+        ts: p.ts,
+      })),
+    [points],
+  );
 
-  // „Fahrzeug : Internetgeschwindigkeit"-Diagramm
   const vehicles = detail.vehicleLatency;
   const vehicleData = vehicles.map((v) => ({
     label: v.label,
     avg: v.avgLatencyMs ?? 0,
-    min: v.minLatencyMs ?? 0,
     max: v.maxLatencyMs ?? 0,
     count: v.actions,
   }));
 
   return (
-    <Section
-      title="Internetgeschwindigkeit (Latenz, blob7)"
-      hint="Latenz pro Aktion in ms, plus Fahrzeug-Aggregation."
+    <Block
+      title="Internetgeschwindigkeit (Latenz)"
+      hint="Quelle: blob7. Werte pro Aktion und aggregiert über Fahrzeuge."
     >
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Samples" value={fmtNumber(n.samples)} />
-        <Stat label="Ø" value={fmtMs(n.avgMs)} />
-        <Stat label="min" value={fmtMs(n.minMs)} />
-        <Stat label="max" value={fmtMs(n.maxMs)} />
-        <Stat label="p50" value={fmtMs(n.p50Ms)} />
-        <Stat label="p95" value={fmtMs(n.p95Ms)} hint={`p99 ${fmtMs(n.p99Ms)}`} />
-      </div>
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-hair bg-white p-3">
-          <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <dl className="lg:col-span-4">
+          <KpiRow label="Samples" value={fmtNumber(n.samples)} />
+          <KpiRow label="Ø" value={fmtMs(n.avgMs)} />
+          <KpiRow label="min" value={fmtMs(n.minMs)} />
+          <KpiRow label="max" value={fmtMs(n.maxMs)} />
+          <KpiRow label="p50" value={fmtMs(n.p50Ms)} />
+          <KpiRow label="p95" value={fmtMs(n.p95Ms)} />
+          <KpiRow label="p99" value={fmtMs(n.p99Ms)} />
+        </dl>
+        <div className="lg:col-span-8">
+          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
             Latenz-Verlauf
           </p>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
+              <ScatterChart margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
                 <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
                 <XAxis
                   dataKey="x"
@@ -836,187 +960,99 @@ function NetworkSpeedBlock({ detail }: { detail: DetailReport }) {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="rounded-xl border border-hair bg-white p-3">
-          <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+      </div>
+
+      {vehicleData.length > 0 && (
+        <div className="mt-6">
+          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
             Fahrzeug : Internetgeschwindigkeit
           </p>
-          {vehicleData.length === 0 ? (
-            <p className="px-2 py-12 text-center text-[12px] text-ink-400">
-              Keine Latenz-Samples mit Fahrzeug-Bezug vorhanden.
-            </p>
-          ) : (
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={vehicleData}
-                  margin={{ top: 8, right: 8, bottom: 8, left: 0 }}
-                  layout="vertical"
-                >
-                  <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
-                  <XAxis
-                    type="number"
-                    unit=" ms"
-                    tick={{ fontSize: 10, fill: "#6b6b73" }}
-                    stroke="#cfcfd5"
-                  />
-                  <YAxis
-                    dataKey="label"
-                    type="category"
-                    width={150}
-                    tick={{ fontSize: 10, fill: "#6b6b73" }}
-                    stroke="#cfcfd5"
-                  />
-                  <Tooltip
-                    wrapperStyle={{ fontSize: 11 }}
-                    contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
-                    formatter={(v: number, n: string) => [`${Math.round(v)} ms`, n]}
-                    labelFormatter={(l) => String(l)}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="avg" name="Ø ms" fill="#0d0d0f" radius={[0, 2, 2, 0]} />
-                  <Bar dataKey="max" name="max ms" fill="#dc7a3b" radius={[0, 2, 2, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={vehicleData}
+                margin={{ top: 4, right: 8, bottom: 4, left: 0 }}
+                layout="vertical"
+              >
+                <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
+                <XAxis
+                  type="number"
+                  unit=" ms"
+                  tick={{ fontSize: 10, fill: "#6b6b73" }}
+                  stroke="#cfcfd5"
+                />
+                <YAxis
+                  dataKey="label"
+                  type="category"
+                  width={170}
+                  tick={{ fontSize: 10, fill: "#6b6b73" }}
+                  stroke="#cfcfd5"
+                />
+                <Tooltip
+                  wrapperStyle={{ fontSize: 11 }}
+                  contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
+                  formatter={(v: number, n: string) => [`${Math.round(v)} ms`, n]}
+                  labelFormatter={(l) => String(l)}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="avg" name="Ø ms" fill="#0d0d0f" radius={[0, 2, 2, 0]} />
+                <Bar dataKey="max" name="max ms" fill="#dc7a3b" radius={[0, 2, 2, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
-    </Section>
+      )}
+    </Block>
   );
 }
 
-function PerModeBlock({ detail }: { detail: DetailReport }) {
-  if (!detail.perMode.length) return null;
+// ---------- Sessions ----------
+
+function SessionsBlock({ detail }: { detail: DetailReport }) {
+  if (!detail.sessions.length) return null;
+  const sessions = detail.sessions.slice(-30).reverse();
   return (
-    <Section title="Modus-Aufschlüsselung" hint="Aktivität pro blob3 (Korrektur, Skalierung, …)">
-      <div className="overflow-x-auto rounded-xl border border-hair bg-white">
+    <Block
+      title={`Sessions (zuletzt ${sessions.length} von ${detail.sessions.length})`}
+      hint="5-Minuten-Lücken trennen Sessions."
+    >
+      <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
-          <thead className="bg-ink-50 text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Modus</th>
-              <th className="px-3 py-2 text-right font-medium">Events</th>
-              <th className="px-3 py-2 text-right font-medium">Aktionen</th>
-              <th className="px-3 py-2 text-right font-medium">Sessions</th>
-              <th className="px-3 py-2 text-right font-medium">Aktiv</th>
-              <th className="px-3 py-2 text-right font-medium">Aktionen / h</th>
+          <thead>
+            <tr className="border-b border-hair text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
+              <th className="py-2 pr-4 text-left font-medium">Start</th>
+              <th className="py-2 pr-4 text-left font-medium">Ende</th>
+              <th className="py-2 pr-4 text-right font-medium">Dauer</th>
+              <th className="py-2 pr-4 text-right font-medium">Events</th>
+              <th className="py-2 pr-4 text-right font-medium">Aktionen</th>
+              <th className="py-2 pr-4 text-left font-medium">Modi</th>
+              <th className="py-2 pr-4 text-left font-medium">IPs</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-hair">
-            {detail.perMode.map((m) => (
-              <tr key={m.mode}>
-                <td className="px-3 py-2 font-medium text-ink-900">{m.mode || "(leer)"}</td>
-                <td className="px-3 py-2 text-right">{fmtNumber(m.events)}</td>
-                <td className="px-3 py-2 text-right">{fmtNumber(m.actions)}</td>
-                <td className="px-3 py-2 text-right">{fmtNumber(m.sessions)}</td>
-                <td className="px-3 py-2 text-right text-ink-600">{fmtDuration(m.activeSec)}</td>
-                <td className="px-3 py-2 text-right">{fmtRate(m.actionsPerHour, "/h")}</td>
+          <tbody className="divide-y divide-hair/70">
+            {sessions.map((s, idx) => (
+              <tr key={`${s.start}|${idx}`}>
+                <td className="py-2 pr-4 text-ink-700">{fmtDateTime(s.start)}</td>
+                <td className="py-2 pr-4 text-ink-700">{fmtDateTime(s.end)}</td>
+                <td className="py-2 pr-4 text-right">{fmtDuration(s.durationSec)}</td>
+                <td className="py-2 pr-4 text-right">{fmtNumber(s.events)}</td>
+                <td className="py-2 pr-4 text-right">{fmtNumber(s.actions)}</td>
+                <td className="py-2 pr-4 truncate text-ink-600" title={s.modes.join(", ")}>
+                  {s.modes.join(", ") || "–"}
+                </td>
+                <td className="py-2 pr-4 truncate font-mono text-ink-600" title={s.ips.join(", ")}>
+                  {s.ips.join(", ") || "–"}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </Section>
+    </Block>
   );
 }
 
-function TopRowsBlock({ detail }: { detail: DetailReport }) {
-  return (
-    <Section title="Tops" hint="Häufigste Aktionen, Modi, Fahrzeuge, Marken, Modelle, Ansichten.">
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
-        <TopList
-          title="Aktionen (shortcut:*)"
-          items={detail.topActions.map((a) => ({
-            key: a.button,
-            value: a.count,
-            label: a.button,
-          }))}
-        />
-        <TopList
-          title="Modi"
-          items={detail.topModes.map((m) => ({
-            key: m.mode,
-            value: m.count,
-            label: m.mode || "(leer)",
-          }))}
-        />
-        <TopList
-          title="Fahrzeuge"
-          items={detail.topVehicles.map((v, idx) => ({
-            key: `${v.label}|${idx}`,
-            value: v.count,
-            label: v.label || `${v.brand} ${v.model}`,
-          }))}
-        />
-        <TopList
-          title="Marken"
-          items={detail.topBrands.map((b) => ({
-            key: b.brand,
-            value: b.count,
-            label: b.brand,
-          }))}
-        />
-        <TopList
-          title="Modelle"
-          items={detail.topModels.map((m, i) => ({
-            key: `${m.brand}|${m.model}|${i}`,
-            value: m.count,
-            label: `${m.brand} ${m.model}`,
-          }))}
-        />
-        <TopList
-          title="Ansichten"
-          items={detail.topViews.map((v) => ({
-            key: v.view,
-            value: v.count,
-            label: v.view,
-          }))}
-        />
-      </div>
-    </Section>
-  );
-}
-
-function TopList({
-  title,
-  items,
-}: {
-  title: string;
-  items: Array<{ key: string; value: number; label: string }>;
-}) {
-  const max = items.reduce((m, x) => Math.max(m, x.value), 0) || 1;
-  return (
-    <div className="rounded-xl border border-hair bg-white p-3">
-      <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
-        {title}
-      </p>
-      {items.length === 0 ? (
-        <p className="px-1 py-3 text-[12px] text-ink-400">– keine –</p>
-      ) : (
-        <ul className="space-y-1">
-          {items.map((it) => {
-            const pct = (it.value / max) * 100;
-            return (
-              <li key={it.key} className="text-[11.5px]">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-ink-700" title={it.label}>
-                    {it.label}
-                  </span>
-                  <span className="shrink-0 text-ink-500">{fmtNumber(it.value)}</span>
-                </div>
-                <div className="mt-0.5 h-1 w-full overflow-hidden rounded bg-ink-100">
-                  <div
-                    className="h-full bg-ink-900"
-                    style={{ width: `${Math.max(2, pct)}%` }}
-                  />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
-  );
-}
+// ---------- Per-IP ----------
 
 function PerIpBlock({
   detail,
@@ -1027,27 +1063,27 @@ function PerIpBlock({
 }) {
   if (!detail.perIp.length) return null;
   return (
-    <Section
+    <Block
       title="IP-Adressen"
       hint="Klick auf IP, um den Bericht auf diese IP einzuschränken."
     >
-      <div className="overflow-x-auto rounded-xl border border-hair bg-white">
+      <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
-          <thead className="bg-ink-50 text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">IP</th>
-              <th className="px-3 py-2 text-right font-medium">Events</th>
-              <th className="px-3 py-2 text-right font-medium">Aktionen</th>
-              <th className="px-3 py-2 text-right font-medium">Aktiv</th>
-              <th className="px-3 py-2 text-right font-medium">Ø Latenz</th>
-              <th className="px-3 py-2 text-left font-medium">Erstes</th>
-              <th className="px-3 py-2 text-left font-medium">Letztes</th>
+          <thead>
+            <tr className="border-b border-hair text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
+              <th className="py-2 pr-4 text-left font-medium">IP</th>
+              <th className="py-2 pr-4 text-right font-medium">Events</th>
+              <th className="py-2 pr-4 text-right font-medium">Aktionen</th>
+              <th className="py-2 pr-4 text-right font-medium">Aktiv</th>
+              <th className="py-2 pr-4 text-right font-medium">Ø Latenz</th>
+              <th className="py-2 pr-4 text-left font-medium">Erstes</th>
+              <th className="py-2 pr-4 text-left font-medium">Letztes</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-hair">
+          <tbody className="divide-y divide-hair/70">
             {detail.perIp.map((ip) => (
               <tr key={ip.ip}>
-                <td className="px-3 py-2 font-mono text-ink-900">
+                <td className="py-2 pr-4 font-mono text-ink-900">
                   <button
                     type="button"
                     onClick={() => onSelectIp(ip.ip)}
@@ -1056,14 +1092,16 @@ function PerIpBlock({
                     {ip.ip || "(leer)"}
                   </button>
                 </td>
-                <td className="px-3 py-2 text-right">{fmtNumber(ip.events)}</td>
-                <td className="px-3 py-2 text-right">{fmtNumber(ip.actions)}</td>
-                <td className="px-3 py-2 text-right text-ink-600">{fmtDuration(ip.activeSec)}</td>
-                <td className="px-3 py-2 text-right">{fmtMs(ip.avgLatencyMs)}</td>
-                <td className="px-3 py-2 text-ink-600">
+                <td className="py-2 pr-4 text-right">{fmtNumber(ip.events)}</td>
+                <td className="py-2 pr-4 text-right">{fmtNumber(ip.actions)}</td>
+                <td className="py-2 pr-4 text-right text-ink-600">
+                  {fmtDuration(ip.activeSec)}
+                </td>
+                <td className="py-2 pr-4 text-right">{fmtMs(ip.avgLatencyMs)}</td>
+                <td className="py-2 pr-4 text-ink-600">
                   {ip.firstTs ? fmtDateTime(ip.firstTs) : "–"}
                 </td>
-                <td className="px-3 py-2 text-ink-600">
+                <td className="py-2 pr-4 text-ink-600">
                   {ip.lastTs ? fmtDateTime(ip.lastTs) : "–"}
                 </td>
               </tr>
@@ -1071,9 +1109,11 @@ function PerIpBlock({
           </tbody>
         </table>
       </div>
-    </Section>
+    </Block>
   );
 }
+
+// ---------- Verteilungen ----------
 
 function DistributionBlock({ detail }: { detail: DetailReport }) {
   const hourData = detail.perHourOfDay.map((h) => ({
@@ -1087,10 +1127,10 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
     actions: w.actions,
   }));
   return (
-    <Section title="Verteilungen" hint="Stunde des Tages (UTC) und Wochentag.">
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-hair bg-white p-3">
-          <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+    <Block title="Verteilungen" hint="Stunde des Tages (UTC) und Wochentag.">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div>
+          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
             Stunde (UTC)
           </p>
           <div className="h-56 w-full">
@@ -1110,8 +1150,8 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="rounded-xl border border-hair bg-white p-3">
-          <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+        <div>
+          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
             Wochentag
           </p>
           <div className="h-56 w-full">
@@ -1132,51 +1172,597 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
           </div>
         </div>
       </div>
-    </Section>
+    </Block>
   );
 }
 
-function SessionsBlock({ detail }: { detail: DetailReport }) {
-  if (!detail.sessions.length) return null;
-  // Bei vielen Sessions kürzen.
-  const sessions = detail.sessions.slice(-30).reverse();
+// ---------- Vehicle-Suche unten ----------
+
+function VehiclesBlock({ detail }: { detail: DetailReport }) {
+  const [vq, setVq] = useState("");
+  const filtered = useMemo(() => {
+    const t = vq.trim().toLowerCase();
+    if (!t) return detail.vehicles;
+    return detail.vehicles.filter((v) => {
+      const haystack = [v.brand, v.model, v.year, v.body, v.trim, v.color]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(t);
+    });
+  }, [vq, detail.vehicles]);
+  const visible = filtered.slice(0, 50);
+
   return (
-    <Section
-      title={`Sessions (zuletzt ${sessions.length} von ${detail.sessions.length})`}
-      hint="5-Minuten-Lücken trennen Sessions."
+    <Block
+      title={`Fahrzeuge (${detail.vehicles.length})`}
+      hint={'Welche Fahrzeuge wurden bearbeitet — und von welchen Usern. Suche z. B. „Audi", „Tesla", „2024".'}
+      right={
+        <div className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+          <input
+            value={vq}
+            onChange={(e) => setVq(e.target.value)}
+            placeholder="Fahrzeug suchen …"
+            className="w-full rounded-md border border-hair bg-white py-1.5 pl-8 pr-2 text-[12.5px] text-ink-800 placeholder:text-ink-400 focus:border-ink-400 focus:outline-none"
+          />
+        </div>
+      }
     >
-      <div className="overflow-x-auto rounded-xl border border-hair bg-white">
-        <table className="w-full text-[12.5px]">
-          <thead className="bg-ink-50 text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Start</th>
-              <th className="px-3 py-2 text-left font-medium">Ende</th>
-              <th className="px-3 py-2 text-right font-medium">Dauer</th>
-              <th className="px-3 py-2 text-right font-medium">Events</th>
-              <th className="px-3 py-2 text-right font-medium">Aktionen</th>
-              <th className="px-3 py-2 text-left font-medium">Modi</th>
-              <th className="px-3 py-2 text-left font-medium">IPs</th>
+      {detail.vehicles.length === 0 ? (
+        <p className="text-[12.5px] text-ink-500">Keine Fahrzeuge im Zeitraum.</p>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr className="border-b border-hair text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
+                  <th className="py-2 pr-4 text-left font-medium">Fahrzeug</th>
+                  <th className="py-2 pr-4 text-left font-medium">Body / Trim / Farbe</th>
+                  <th className="py-2 pr-4 text-right font-medium">Events</th>
+                  <th className="py-2 pr-4 text-right font-medium">Aktionen</th>
+                  <th className="py-2 pr-4 text-left font-medium">Letzte Aktion</th>
+                  <th className="py-2 pr-4 text-left font-medium">User</th>
+                  <th className="py-2 pr-4 text-left font-medium">Ansichten</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hair/70">
+                {visible.map((v, idx) => (
+                  <tr key={`${v.label}|${idx}`}>
+                    <td className="py-2 pr-4 font-medium text-ink-900">
+                      {v.label || `${v.brand} ${v.model}`}
+                    </td>
+                    <td className="py-2 pr-4 text-ink-600">
+                      {[v.body, v.trim, v.color].filter(Boolean).join(" / ") || "–"}
+                    </td>
+                    <td className="py-2 pr-4 text-right">{fmtNumber(v.events)}</td>
+                    <td className="py-2 pr-4 text-right">{fmtNumber(v.actions)}</td>
+                    <td className="py-2 pr-4 text-ink-600">
+                      {v.lastTs ? fmtDateTime(v.lastTs) : "–"}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <ul className="flex flex-wrap gap-1">
+                        {v.users.slice(0, 4).map((u) => (
+                          <li
+                            key={u.user}
+                            className="rounded border border-hair bg-white px-1.5 py-0.5 text-[10.5px] text-ink-700"
+                          >
+                            {u.user}
+                            <span className="ml-1 text-ink-400">
+                              {fmtNumber(u.events)}
+                            </span>
+                          </li>
+                        ))}
+                        {v.users.length > 4 && (
+                          <li className="text-[10.5px] text-ink-400">
+                            +{v.users.length - 4} weitere
+                          </li>
+                        )}
+                      </ul>
+                    </td>
+                    <td className="py-2 pr-4">
+                      <ul className="flex flex-wrap gap-1">
+                        {v.views.slice(0, 6).map((vw) => (
+                          <li
+                            key={vw.view}
+                            className="rounded bg-ink-50 px-1.5 py-0.5 font-mono text-[10.5px] text-ink-700"
+                          >
+                            {vw.view}
+                            <span className="ml-1 text-ink-400">{fmtNumber(vw.count)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {filtered.length > visible.length && (
+            <p className="mt-2 text-[11px] text-ink-500">
+              Zeige {visible.length} von {filtered.length} Treffern. Schränke die Suche
+              ein, um weitere zu sehen.
+            </p>
+          )}
+        </>
+      )}
+    </Block>
+  );
+}
+
+// ---------- Top-Aufschlüsselungen ----------
+
+function BreakdownsBlock({ detail }: { detail: DetailReport }) {
+  return (
+    <Block
+      title="Aufschlüsselungen"
+      hint="Häufigste Aktionen, Modi, Marken, Modelle und Ansichten im Zeitraum."
+    >
+      <div className="grid grid-cols-1 gap-x-12 gap-y-8 md:grid-cols-2 xl:grid-cols-3">
+        <RankList
+          title="Aktionen (shortcut:*)"
+          items={detail.topActions.map((a) => ({ key: a.button, label: a.button, value: a.count }))}
+        />
+        <RankList
+          title="Modi"
+          items={detail.topModes.map((m) => ({ key: m.mode, label: m.mode || "(leer)", value: m.count }))}
+        />
+        <RankList
+          title="Marken"
+          items={detail.topBrands.map((b) => ({ key: b.brand, label: b.brand, value: b.count }))}
+        />
+        <RankList
+          title="Modelle"
+          items={detail.topModels.map((m, i) => ({
+            key: `${m.brand}|${m.model}|${i}`,
+            label: `${m.brand} ${m.model}`,
+            value: m.count,
+          }))}
+        />
+        <RankList
+          title="Ansichten"
+          items={detail.topViews.map((v) => ({ key: v.view, label: v.view, value: v.count }))}
+        />
+        <RankList
+          title="Per-Modus (Aktivität)"
+          items={detail.perMode.map((m) => ({
+            key: m.mode,
+            label: `${m.mode || "(leer)"} · ${fmtNumber(m.actions)} Aktionen`,
+            value: m.events,
+          }))}
+        />
+      </div>
+    </Block>
+  );
+}
+
+function RankList({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ key: string; label: string; value: number }>;
+}) {
+  const max = items.reduce((m, x) => Math.max(m, x.value), 0) || 1;
+  return (
+    <div>
+      <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">{title}</p>
+      {items.length === 0 ? (
+        <p className="text-[12px] text-ink-400">– keine –</p>
+      ) : (
+        <ol className="space-y-1.5">
+          {items.map((it, idx) => {
+            const pct = (it.value / max) * 100;
+            return (
+              <li key={it.key} className="grid grid-cols-12 items-center gap-3 text-[12px]">
+                <span className="col-span-1 text-right font-mono text-ink-400">{idx + 1}</span>
+                <span className="col-span-7 truncate font-mono text-ink-800" title={it.label}>
+                  {it.label}
+                </span>
+                <span className="col-span-2 text-right text-ink-600">
+                  {fmtNumber(it.value)}
+                </span>
+                <span className="col-span-2 h-1 overflow-hidden rounded bg-ink-100">
+                  <span className="block h-full bg-ink-900" style={{ width: `${Math.max(2, pct)}%` }} />
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+// ---------- DIN-A4 Print-Layout ----------
+
+function PrintReport({
+  data,
+  range,
+}: {
+  data: UserAnalyticsResponse | null;
+  range: Range;
+}) {
+  const detail = data?.detail ?? null;
+  const generatedAt = useMemo(
+    () =>
+      new Intl.DateTimeFormat("de-DE", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date()),
+    [data?.detail],
+  );
+  if (!detail) return null;
+  const s = detail.summary;
+
+  return (
+    <div className="hidden print:block">
+      <style>{`
+        @page { size: A4 portrait; margin: 18mm 16mm 22mm 16mm; }
+        @media print {
+          html, body { background: white; color: #0d0d0f; }
+          .pdf-page { page-break-after: always; }
+          .pdf-page:last-child { page-break-after: auto; }
+          .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+          thead { display: table-header-group; }
+          tr, td, th { break-inside: avoid; page-break-inside: avoid; }
+        }
+      `}</style>
+
+      <PrintPage
+        pageNumber={1}
+        totalPages={3}
+        generatedAt={generatedAt}
+        userLabel={
+          detail.scope.aggregate
+            ? `Alle User (${s.uniqueUsers} aktiv)`
+            : detail.user
+        }
+      >
+        <h1 className="font-display text-[28px] tracking-tightish">User Analytics Report</h1>
+        <p className="mt-1 text-[12px] text-ink-700">
+          Auswertung der Plattform-Aktivität anhand der Cloudflare Analytics
+          Engine (<span className="font-mono">controll_platform_logs</span>).
+          Zeitraum:{" "}
+          <span className="font-mono">{range.from}</span> →{" "}
+          <span className="font-mono">{range.to}</span>.
+        </p>
+
+        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+          1. Übersicht
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          „Aktive Zeit" misst die echte Arbeitszeit des Users (Sessions mit
+          5-Minuten-Pausen-Schwelle). Die <em>Kalendertag-Sicht</em> verteilt
+          die bearbeiteten Fahrzeuge gleichmäßig über den ganzen Reportzeitraum.
+        </p>
+        <table className="mt-2 w-full border-collapse text-[11px]">
+          <tbody>
+            <PrintRow label="Events gesamt" value={fmtNumber(s.eventCount)} />
+            <PrintRow
+              label="Aktionen (shortcut:*)"
+              value={`${fmtNumber(s.actionCount)} (${
+                s.eventCount > 0
+                  ? `${((s.actionCount / s.eventCount) * 100).toFixed(1)} %`
+                  : "–"
+              })`}
+            />
+            <PrintRow label="Sessions" value={fmtNumber(s.sessionCount)} />
+            <PrintRow label="Aktive Zeit gesamt" value={fmtDuration(s.totalActiveSec)} />
+            <PrintRow label="Ø Sessiondauer" value={fmtDuration(s.avgSessionSec)} />
+            <PrintRow label="Längste Session" value={fmtDuration(s.longestSessionSec)} />
+            <PrintRow
+              label="Reportzeitraum"
+              value={`${(s.rangeDays || 0).toFixed(2)} Tage · ${fmtNumber(s.rangeSpanSec)} s`}
+            />
+            <PrintRow
+              label="Aktive Tage / IPs"
+              value={`${fmtNumber(s.uniqueDays)} Tage · ${fmtNumber(s.uniqueIps)} IPs${
+                detail.scope.aggregate ? ` · ${fmtNumber(s.uniqueUsers)} User` : ""
+              }`}
+            />
+            <PrintRow
+              label="Events / Sek."
+              value={s.eventsPerSec != null ? `${s.eventsPerSec.toFixed(2)} /s` : "–"}
+            />
+            <PrintRow
+              label="Aktionen / Sek."
+              value={s.actionsPerSec != null ? `${s.actionsPerSec.toFixed(2)} /s` : "–"}
+            />
+            <PrintRow
+              label="Bearbeitete Fahrzeuge"
+              value={fmtNumber(s.processedTotal)}
+            />
+            <PrintRow
+              label="Ø Fahrzeuge / aktive h"
+              value={fmtRate(s.vehiclesPerActiveHour)}
+            />
+            <PrintRow
+              label="Ø Fahrzeuge / Kalendertag"
+              value={fmtRate(s.vehiclesPerCalendarDay, "/Tag")}
+            />
+            <PrintRow
+              label="Erstes / letztes Event"
+              value={
+                s.firstTs && s.lastTs
+                  ? `${fmtDateTime(s.firstTs)} → ${fmtDateTime(s.lastTs)}`
+                  : "–"
+              }
+            />
+          </tbody>
+        </table>
+
+        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+          2. Verbleibende Fahrzeuge je Modus
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Werte aus <span className="font-mono">double2..5</span> ab{" "}
+          <span className="font-mono">2026-05-02 19:32:50</span>. „Bearbeitet"
+          ist die Summe der Rückgänge des Bestands über die Eventreihen.
+        </p>
+        <table className="mt-2 w-full border-collapse text-[11px]">
+          <thead>
+            <tr className="border-b border-hair text-left">
+              <th className="py-1.5 pr-3">Modus</th>
+              <th className="py-1.5 pr-3 text-right">Aktuell offen</th>
+              <th className="py-1.5 pr-3 text-right">min</th>
+              <th className="py-1.5 pr-3 text-right">max</th>
+              <th className="py-1.5 pr-3 text-right">Bearbeitet</th>
+              <th className="py-1.5 pr-3 text-right">/h</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-hair">
-            {sessions.map((s, idx) => (
-              <tr key={`${s.start}|${idx}`}>
-                <td className="px-3 py-2 text-ink-700">{fmtDateTime(s.start)}</td>
-                <td className="px-3 py-2 text-ink-700">{fmtDateTime(s.end)}</td>
-                <td className="px-3 py-2 text-right">{fmtDuration(s.durationSec)}</td>
-                <td className="px-3 py-2 text-right">{fmtNumber(s.events)}</td>
-                <td className="px-3 py-2 text-right">{fmtNumber(s.actions)}</td>
-                <td className="px-3 py-2 truncate text-ink-600" title={s.modes.join(", ")}>
-                  {s.modes.join(", ") || "–"}
+          <tbody>
+            {detail.remainingByMode.map((r) => (
+              <tr key={r.mode} className="border-b border-hair/60">
+                <td className="py-1.5 pr-3">{r.mode}</td>
+                <td className="py-1.5 pr-3 text-right font-mono">
+                  {r.latestOpen != null ? fmtNumber(r.latestOpen) : "–"}
                 </td>
-                <td className="px-3 py-2 truncate font-mono text-ink-600" title={s.ips.join(", ")}>
-                  {s.ips.join(", ") || "–"}
+                <td className="py-1.5 pr-3 text-right">
+                  {r.minOpen != null ? fmtNumber(r.minOpen) : "–"}
                 </td>
+                <td className="py-1.5 pr-3 text-right">
+                  {r.maxOpen != null ? fmtNumber(r.maxOpen) : "–"}
+                </td>
+                <td className="py-1.5 pr-3 text-right">{fmtNumber(r.processed)}</td>
+                <td className="py-1.5 pr-3 text-right">{fmtRate(r.processedPerHour)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-    </Section>
+
+        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+          3. Internetgeschwindigkeit
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Latenz pro Aktion (<span className="font-mono">blob7</span>) als ms.
+          Werte sind in UTC erfasst.
+        </p>
+        <table className="mt-2 w-full border-collapse text-[11px]">
+          <tbody>
+            <PrintRow label="Samples" value={fmtNumber(detail.network.samples)} />
+            <PrintRow label="Ø" value={fmtMs(detail.network.avgMs)} />
+            <PrintRow label="min / max" value={`${fmtMs(detail.network.minMs)} – ${fmtMs(detail.network.maxMs)}`} />
+            <PrintRow label="p50 / p95 / p99" value={`${fmtMs(detail.network.p50Ms)} · ${fmtMs(detail.network.p95Ms)} · ${fmtMs(detail.network.p99Ms)}`} />
+          </tbody>
+        </table>
+      </PrintPage>
+
+      <PrintPage
+        pageNumber={2}
+        totalPages={3}
+        generatedAt={generatedAt}
+        userLabel={
+          detail.scope.aggregate
+            ? `Alle User (${s.uniqueUsers} aktiv)`
+            : detail.user
+        }
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
+          4. IP-Adressen
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Aufschlüsselung der Aktivität pro IP. Bei{" "}
+          <em>Alle User</em> werden alle Plattform-User gemeinsam betrachtet.
+        </p>
+        {detail.perIp.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine IP-Daten –</p>
+        ) : (
+          <table className="mt-2 w-full border-collapse text-[11px]">
+            <thead>
+              <tr className="border-b border-hair text-left">
+                <th className="py-1.5 pr-3">IP</th>
+                <th className="py-1.5 pr-3 text-right">Events</th>
+                <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                <th className="py-1.5 pr-3 text-right">Aktiv</th>
+                <th className="py-1.5 pr-3 text-right">Ø Latenz</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.perIp.slice(0, 30).map((ip) => (
+                <tr key={ip.ip} className="border-b border-hair/60">
+                  <td className="py-1.5 pr-3 font-mono">{ip.ip || "(leer)"}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(ip.events)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(ip.actions)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtDuration(ip.activeSec)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtMs(ip.avgLatencyMs)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+          5. Aufschlüsselungen
+        </h2>
+        <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-4">
+          <PrintRankList title="Aktionen (shortcut:*)" items={detail.topActions.map((a) => ({ label: a.button, value: a.count }))} />
+          <PrintRankList title="Modi" items={detail.topModes.map((m) => ({ label: m.mode || "(leer)", value: m.count }))} />
+          <PrintRankList title="Marken" items={detail.topBrands.map((b) => ({ label: b.brand, value: b.count }))} />
+          <PrintRankList title="Modelle" items={detail.topModels.map((m) => ({ label: `${m.brand} ${m.model}`, value: m.count }))} />
+          <PrintRankList title="Ansichten" items={detail.topViews.map((v) => ({ label: v.view, value: v.count }))} />
+          <PrintRankList
+            title="Per-Modus (Events / Aktionen)"
+            items={detail.perMode.map((m) => ({
+              label: `${m.mode || "(leer)"}`,
+              value: m.events,
+              extra: ` · ${fmtNumber(m.actions)} Aktionen`,
+            }))}
+          />
+        </div>
+      </PrintPage>
+
+      <PrintPage
+        pageNumber={3}
+        totalPages={3}
+        generatedAt={generatedAt}
+        userLabel={
+          detail.scope.aggregate
+            ? `Alle User (${s.uniqueUsers} aktiv)`
+            : detail.user
+        }
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
+          6. Fahrzeuge ({detail.vehicles.length})
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Bearbeitete Fahrzeuge im Zeitraum mit Anzahl Events / Aktionen sowie
+          den Usern, die das jeweilige Fahrzeug bearbeitet haben.
+        </p>
+        {detail.vehicles.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine Fahrzeug-Daten –</p>
+        ) : (
+          <table className="mt-2 w-full border-collapse text-[10.5px]">
+            <thead>
+              <tr className="border-b border-hair text-left">
+                <th className="py-1.5 pr-3">Fahrzeug</th>
+                <th className="py-1.5 pr-3 text-right">Events</th>
+                <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                <th className="py-1.5 pr-3">User</th>
+                <th className="py-1.5 pr-3">Ansichten</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.vehicles.slice(0, 80).map((v, idx) => (
+                <tr key={`${v.label}|${idx}`} className="border-b border-hair/60 align-top">
+                  <td className="py-1.5 pr-3 font-medium">
+                    {v.label || `${v.brand} ${v.model}`}
+                    {v.body || v.trim || v.color ? (
+                      <span className="block text-[9.5px] font-normal text-ink-500">
+                        {[v.body, v.trim, v.color].filter(Boolean).join(" / ")}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(v.events)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(v.actions)}</td>
+                  <td className="py-1.5 pr-3">
+                    {v.users.slice(0, 4).map((u) => `${u.user} (${u.events})`).join(", ")}
+                    {v.users.length > 4 ? ` …` : ""}
+                  </td>
+                  <td className="py-1.5 pr-3 font-mono text-[9.5px]">
+                    {v.views
+                      .slice(0, 6)
+                      .map((vw) => `${vw.view}(${vw.count})`)
+                      .join(" ")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {detail.vehicles.length > 80 && (
+          <p className="mt-2 text-[10px] text-ink-500">
+            Es werden die 80 aktivsten Fahrzeuge gedruckt. Weitere Fahrzeuge sind
+            im Online-Bericht über die Suche zugänglich.
+          </p>
+        )}
+      </PrintPage>
+    </div>
+  );
+}
+
+function PrintPage({
+  pageNumber,
+  totalPages,
+  generatedAt,
+  userLabel,
+  children,
+}: {
+  pageNumber: number;
+  totalPages: number;
+  generatedAt: string;
+  userLabel: string;
+  children: ReactNode;
+}) {
+  return (
+    <article className="pdf-page relative px-0 py-0 text-ink-900">
+      <header className="mb-6 flex items-end justify-between border-b border-ink-900/30 pb-3">
+        <div className="flex items-center gap-3">
+          <Logo className="h-5 w-auto text-ink-900" />
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-ink-500">
+              User Analytics Report
+            </p>
+            <p className="font-display text-[16px] tracking-tightish text-ink-900">
+              {userLabel}
+            </p>
+          </div>
+        </div>
+        <p className="text-right text-[10px] text-ink-500">
+          erstellt {generatedAt}
+          <br />
+          vehicleimagery.com · Plattform Reporting
+        </p>
+      </header>
+
+      <main className="space-y-2">{children}</main>
+
+      <footer className="absolute inset-x-0 bottom-[-12mm] flex items-center justify-between border-t border-hair pt-2 text-[10px] text-ink-500">
+        <span>
+          User Analytics — {userLabel}
+        </span>
+        <span>
+          Seite {pageNumber} von {totalPages}
+        </span>
+      </footer>
+    </article>
+  );
+}
+
+function PrintRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <tr className="border-b border-hair/60">
+      <td className="w-2/5 py-1.5 pr-3 text-ink-600">{label}</td>
+      <td className="py-1.5 pr-3 font-mono text-ink-900">{value}</td>
+    </tr>
+  );
+}
+
+function PrintRankList({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ label: string; value: number; extra?: string }>;
+}) {
+  return (
+    <div>
+      <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-ink-500">{title}</p>
+      {items.length === 0 ? (
+        <p className="text-[10.5px] text-ink-500">– keine –</p>
+      ) : (
+        <ol className="space-y-0.5">
+          {items.slice(0, 10).map((it, i) => (
+            <li key={i} className="flex items-baseline justify-between gap-2 text-[10.5px]">
+              <span className="truncate">
+                <span className="mr-2 font-mono text-ink-400">{i + 1}.</span>
+                {it.label}
+                {it.extra && <span className="text-ink-500">{it.extra}</span>}
+              </span>
+              <span className="font-mono text-ink-700">{fmtNumber(it.value)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }

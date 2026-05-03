@@ -48,6 +48,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const to = (url.searchParams.get("to") || def.to).trim();
   const userParam = (url.searchParams.get("user") || "").trim();
   const ipParam = (url.searchParams.get("ip") || "").trim();
+  const aggParamRaw = (url.searchParams.get("aggregate") || "").trim().toLowerCase();
+  const aggregate =
+    aggParamRaw === "1" || aggParamRaw === "true" || aggParamRaw === "yes";
   const gapMinutes = Math.min(
     120,
     Math.max(1, Number(url.searchParams.get("gapMinutes") || 5)),
@@ -79,6 +82,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: pBinding.error }, { status: 400 });
   }
 
+  // Bei Detail-Abfragen mit User-Filter zwei Reads (Liste + Detail).
+  // Bei Aggregat-Modus reicht ein Read, weil Liste UND Detail aus denselben Rows kommen.
   if (userParam) {
     const listPlan = buildUserAnalyticsFetchPlan(env, from, to, {
       limit,
@@ -109,7 +114,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         binding: plan.binding,
       });
       listRows = res.data;
-      detailRows = [];
+      detailRows = aggregate ? res.data : [];
     } catch (e) {
       const err = e as AeSqlError;
       return jsonResponse(
@@ -123,9 +128,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     }
   }
 
-  const gapMs = userParam
-    ? gapMinutes * 60 * 1000
-    : USER_ANALYTICS_DEFAULT_GAP_MS;
+  const gapMs =
+    userParam || aggregate
+      ? gapMinutes * 60 * 1000
+      : USER_ANALYTICS_DEFAULT_GAP_MS;
 
   // Liste aus listRows; Detail aus detailRows.
   const listProcessed = processUserAnalytics(listRows, {
@@ -145,6 +151,17 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       gapMs,
       user: userParam,
       ip: ipParam || null,
+      likelyTruncated: detailRows.length >= limit,
+    });
+    detail = detailProcessed.detail;
+  } else if (aggregate) {
+    const detailProcessed = processUserAnalytics(detailRows, {
+      fromIso: from,
+      toIso: to,
+      gapMs,
+      user: null,
+      ip: ipParam || null,
+      aggregate: true,
       likelyTruncated: detailRows.length >= limit,
     });
     detail = detailProcessed.detail;

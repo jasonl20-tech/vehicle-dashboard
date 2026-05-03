@@ -438,7 +438,7 @@ export type ModeRemainingSummary = {
 
 export type DetailReport = {
   user: string;
-  scope: { ip: string | null };
+  scope: { ip: string | null; aggregate: boolean };
   summary: {
     eventCount: number;
     actionCount: number;
@@ -449,15 +449,26 @@ export type DetailReport = {
     firstTs: string | null;
     lastTs: string | null;
     uniqueIps: number;
+    uniqueUsers: number;
     uniqueDays: number;
+    /** Anzahl Kalendertage im Reportzeitraum (von..bis). */
+    rangeDays: number;
+    /** Anzahl Sekunden im Reportzeitraum. */
+    rangeSpanSec: number;
     eventsPerSec: number | null;
     eventsPerMinute: number | null;
     actionsPerSec: number | null;
     actionsPerMinute: number | null;
     actionsPerActiveHour: number | null;
     eventsPerActiveHour: number | null;
-    /** Bearbeitete Fahrzeuge pro aktive Stunde (Summe Modus-Differenzen). */
+    /** Bearbeitete Fahrzeuge insgesamt im Zeitraum (Summe der Rückgänge in double2..5). */
+    processedTotal: number;
+    /** Bearbeitete Fahrzeuge pro aktive Stunde des Users (= echte Arbeitsleistung). */
     vehiclesPerActiveHour: number | null;
+    /** Bearbeitete Fahrzeuge pro Kalendertag (= 24h-Sicht über den ganzen Zeitraum). */
+    vehiclesPerCalendarDay: number | null;
+    /** Bearbeitete Fahrzeuge pro Stunde, gemessen über den ganzen 24h-Zeitraum. */
+    vehiclesPerCalendarHour: number | null;
   };
   network: {
     samples: number;
@@ -522,6 +533,24 @@ export type DetailReport = {
     minLatencyMs: number | null;
     maxLatencyMs: number | null;
   }>;
+  /** Komplette Fahrzeug-Liste inkl. User-Aufteilung (max 500), für Vehicle-Suche. */
+  vehicles: Array<{
+    label: string;
+    brand: string;
+    model: string;
+    year: string;
+    body: string;
+    trim: string;
+    color: string;
+    events: number;
+    actions: number;
+    /** Letzte Aktion. */
+    lastTs: string | null;
+    /** Welche User haben dieses Fahrzeug bearbeitet. */
+    users: Array<{ user: string; events: number; actions: number }>;
+    /** Welche Ansichten (front, rear, …) wurden zu diesem Fahrzeug aufgerufen. */
+    views: Array<{ view: string; count: number }>;
+  }>;
 };
 
 // ---------- Übersichts-Liste (alle User) ----------
@@ -534,6 +563,10 @@ export type UserListEntry = {
   lastTs: string | null;
   uniqueIps: number;
   primaryOs: string | null;
+  totalActiveSec: number;
+  avgLatencyMs: number | null;
+  /** Bearbeitete Fahrzeuge im Zeitraum (Summe Rückgänge double2..5 ab valid-from). */
+  processedTotal: number;
 };
 
 // ---------- Hauptfunktion ----------
@@ -625,6 +658,7 @@ export function processUserAnalytics(
     gapMs: number;
     user?: string | null;
     ip?: string | null;
+    aggregate?: boolean;
     likelyTruncated?: boolean;
   },
 ): ProcessedUserAnalytics {
@@ -645,11 +679,21 @@ export function processUserAnalytics(
     const ipSet = new Set<string>();
     const osCounts = new Map<string, number>();
     let actions = 0;
+    let latSum = 0;
+    let latN = 0;
     for (const r of urows) {
       if (r.ip) ipSet.add(r.ip);
       if (r.ua) osCounts.set(r.ua, (osCounts.get(r.ua) || 0) + 1);
       if (r.isAction) actions += 1;
+      if (r.latencyMs != null) {
+        latSum += r.latencyMs;
+        latN += 1;
+      }
     }
+    const sess = buildSessions(urows, options.gapMs);
+    const tSec = activeTimeSec(sess);
+    const remByMode = computeRemainingByMode(urows);
+    const processedTotal = remByMode.reduce((s, m) => s + m.processed, 0);
     users.push({
       user,
       eventCount: urows.length,
@@ -659,18 +703,28 @@ export function processUserAnalytics(
       uniqueIps: ipSet.size,
       primaryOs:
         [...osCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
+      totalActiveSec: tSec,
+      avgLatencyMs: latN > 0 ? latSum / latN : null,
+      processedTotal,
     });
   }
   users.sort((a, b) => b.eventCount - a.eventCount || a.user.localeCompare(b.user));
 
-  // ---- Detail nur wenn user gesetzt ----
+  // ---- Detail (pro User ODER aggregat über alle) ----
   let detail: DetailReport | null = null;
   const wantUser = (options.user || "").trim();
+  const aggregate = !!options.aggregate && !wantUser;
+
   if (wantUser) {
     const urows = (userMap.get(wantUser) ?? []).filter(
       (r) => !options.ip || r.ip === options.ip,
     );
-    detail = buildDetail(urows, wantUser, options);
+    detail = buildDetail(urows, wantUser, options, false);
+  } else if (aggregate) {
+    const urows = options.ip
+      ? allRows.filter((r) => r.ip === options.ip)
+      : allRows;
+    detail = buildDetail(urows, "(Alle User)", options, true);
   }
 
   return {
@@ -689,6 +743,7 @@ function buildDetail(
   urows: UserAnalyticsRow[],
   user: string,
   options: { fromIso: string; toIso: string; gapMs: number; ip?: string | null },
+  aggregate: boolean,
 ): DetailReport {
   const ipScope = options.ip || null;
   const sessions = buildSessions(urows, options.gapMs);
@@ -698,6 +753,7 @@ function buildDetail(
   const longest = sessions.reduce((m, s) => Math.max(m, s.durationSec), 0);
 
   const ipSet = new Set<string>();
+  const userSet = new Set<string>();
   const dayKeys = new Set<string>();
   let actionCount = 0;
   const latencies: number[] = [];
@@ -707,6 +763,24 @@ function buildDetail(
   const brandCounts = new Map<string, number>();
   const brandModelCounts = new Map<string, { brand: string; model: string; count: number }>();
   const vehicleCounts = new Map<string, { label: string; brand: string; model: string; year: string; count: number }>();
+  const vehicleAll = new Map<
+    string,
+    {
+      label: string;
+      brand: string;
+      model: string;
+      year: string;
+      body: string;
+      trim: string;
+      color: string;
+      events: number;
+      actions: number;
+      lastTs: string | null;
+      lastTsMs: number;
+      users: Map<string, { events: number; actions: number }>;
+      views: Map<string, number>;
+    }
+  >();
   const viewCounts = new Map<string, number>();
   const uaCounts = new Map<string, number>();
   const perIpMap = new Map<string, {
@@ -731,6 +805,7 @@ function buildDetail(
 
   for (const r of urows) {
     if (r.ip) ipSet.add(r.ip);
+    if (r.user) userSet.add(r.user);
     if (r.ts) dayKeys.add(r.ts.slice(0, 10));
     if (r.isAction) actionCount += 1;
 
@@ -777,6 +852,36 @@ function buildDetail(
         };
         cur.count += 1;
         vehicleCounts.set(vehicleKey, cur);
+
+        const all = vehicleAll.get(vehicleKey) || {
+          label,
+          brand: v.brand,
+          model: v.model,
+          year: v.year,
+          body: v.body,
+          trim: v.trim,
+          color: v.color,
+          events: 0,
+          actions: 0,
+          lastTs: null as string | null,
+          lastTsMs: 0,
+          users: new Map<string, { events: number; actions: number }>(),
+          views: new Map<string, number>(),
+        };
+        all.events += 1;
+        if (r.isAction) all.actions += 1;
+        if (r.tsMs > all.lastTsMs) {
+          all.lastTsMs = r.tsMs;
+          all.lastTs = r.ts;
+        }
+        if (r.user) {
+          const u = all.users.get(r.user) || { events: 0, actions: 0 };
+          u.events += 1;
+          if (r.isAction) u.actions += 1;
+          all.users.set(r.user, u);
+        }
+        if (v.view) all.views.set(v.view, (all.views.get(v.view) || 0) + 1);
+        vehicleAll.set(vehicleKey, all);
       }
       if (v.view) viewCounts.set(v.view, (viewCounts.get(v.view) || 0) + 1);
     }
@@ -995,9 +1100,54 @@ function buildDetail(
   }
   vehicleLatencyArr.sort((a, b) => b.actions - a.actions);
 
+  // Range-bezogene KPIs (Kalendertag-Sicht)
+  const rangeFromMs = parseTs(options.fromIso);
+  const rangeToMs = parseTs(options.toIso);
+  const rangeSpanSec =
+    rangeFromMs && rangeToMs && rangeToMs > rangeFromMs
+      ? Math.round((rangeToMs - rangeFromMs) / 1000)
+      : 0;
+  const rangeDays = rangeSpanSec > 0 ? rangeSpanSec / 86_400 : 0;
+  const vehiclesPerCalendarDay =
+    rangeDays > 0 ? totalProcessed / rangeDays : null;
+  const vehiclesPerCalendarHour =
+    rangeSpanSec > 0 ? (totalProcessed / rangeSpanSec) * 3600 : null;
+
+  // Vollständige Vehicle-Liste (bis 500), für Vehicle-Suche
+  const vehiclesList: DetailReport["vehicles"] = [];
+  for (const v of vehicleAll.values()) {
+    const usersArr = [...v.users.entries()]
+      .map(([user, info]) => ({ user, events: info.events, actions: info.actions }))
+      .sort((a, b) => b.actions - a.actions || b.events - a.events);
+    const viewsArr = [...v.views.entries()]
+      .map(([view, count]) => ({ view, count }))
+      .sort((a, b) => b.count - a.count);
+    vehiclesList.push({
+      label: v.label,
+      brand: v.brand,
+      model: v.model,
+      year: v.year,
+      body: v.body,
+      trim: v.trim,
+      color: v.color,
+      events: v.events,
+      actions: v.actions,
+      lastTs: v.lastTs,
+      users: usersArr,
+      views: viewsArr,
+    });
+  }
+  vehiclesList.sort(
+    (a, b) =>
+      b.actions - a.actions ||
+      b.events - a.events ||
+      a.label.localeCompare(b.label),
+  );
+  const vehiclesTrimmed = vehiclesList.slice(0, 500);
+
   return {
     user,
-    scope: { ip: ipScope },
+    scope: { ip: ipScope, aggregate },
     summary: {
       eventCount: urows.length,
       actionCount,
@@ -1008,14 +1158,20 @@ function buildDetail(
       firstTs: urows[0]?.ts ?? null,
       lastTs: urows[urows.length - 1]?.ts ?? null,
       uniqueIps: ipSet.size,
+      uniqueUsers: userSet.size,
       uniqueDays: dayKeys.size,
+      rangeDays,
+      rangeSpanSec,
       eventsPerSec,
       eventsPerMinute,
       actionsPerSec,
       actionsPerMinute,
       actionsPerActiveHour,
       eventsPerActiveHour,
+      processedTotal: totalProcessed,
       vehiclesPerActiveHour,
+      vehiclesPerCalendarDay,
+      vehiclesPerCalendarHour,
     },
     network,
     perMode,
@@ -1031,9 +1187,10 @@ function buildDetail(
     perHourOfDay: hourCounts.map((c, h) => ({ hour: h, ...c })),
     perWeekday: weekdayCounts.map((c, wd) => ({ weekday: wd, ...c })),
     timeline,
-    latencyPoints: latencyPoints.slice(-2000), // schützen vor zu viel Daten
+    latencyPoints: latencyPoints.slice(-2000),
     sessions,
     vehicleLatency: vehicleLatencyArr.slice(0, 20),
+    vehicles: vehiclesTrimmed,
   };
 }
 
