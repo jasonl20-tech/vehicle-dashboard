@@ -1,15 +1,12 @@
-import { ArrowRight, Code2, Search } from "lucide-react";
+import { Code2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Logo } from "../components/brand/Logo";
-import { useAuth } from "../lib/auth";
 import {
   API_CATALOG,
   API_CATALOG_GENERATED_AT,
   type ApiCatalogEntry,
 } from "../lib/apiCatalog.generated";
-import { DEVELOPER_OVERVIEW_LINKS } from "../lib/developerOverviewLinks";
-import { pathDirectlyAllowed } from "../lib/routeAccess";
 
 function apiGroupKey(path: string): string {
   const parts = path.split("/").filter(Boolean);
@@ -56,16 +53,7 @@ function MethodBadges({ methods }: { methods: readonly string[] }) {
 }
 
 export default function DeveloperOverviewPage() {
-  const { erlaubtePfade } = useAuth();
   const [query, setQuery] = useState("");
-
-  const links = useMemo(
-    () =>
-      DEVELOPER_OVERVIEW_LINKS.filter((l) =>
-        pathDirectlyAllowed(l.to, erlaubtePfade),
-      ),
-    [erlaubtePfade],
-  );
 
   const filteredCatalog = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -121,7 +109,7 @@ export default function DeveloperOverviewPage() {
                 Developer Übersicht
               </h1>
               <p className="mt-0.5 text-[13px] text-ink-500">
-                API-Endpunkte der Plattform und Schnellzugriff ins Dashboard.
+                API-Endpunkte der Plattform.
               </p>
             </div>
           </div>
@@ -213,37 +201,6 @@ export default function DeveloperOverviewPage() {
               Keine Einträge für diese Suche.
             </p>
           ) : null}
-        </section>
-
-        <section aria-labelledby="quick-heading">
-          <h2
-            id="quick-heading"
-            className="mb-3 text-[15px] font-semibold tracking-tight text-ink-900"
-          >
-            Dashboard · Schnellzugriff
-          </h2>
-          {links.length > 0 ? (
-            <ul className="divide-y divide-hair rounded-xl border border-hair bg-white/80 shadow-sm backdrop-blur">
-              {links.map(({ label, to }) => (
-                <li key={to}>
-                  <Link
-                    to={to}
-                    className="press group flex items-center justify-between gap-3 px-4 py-3 text-[13px] text-ink-700 transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-night-900/[0.03] hover:text-ink-900"
-                  >
-                    <span className="min-w-0 truncate">{label}</span>
-                    <ArrowRight
-                      className="h-3.5 w-3.5 shrink-0 text-ink-400 transition-transform group-hover:translate-x-0.5"
-                      aria-hidden
-                    />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="rounded-xl border border-hair bg-white/60 px-4 py-6 text-center text-[13px] text-ink-500">
-              Für dein Konto sind keine Dashboard-Kurzlinks freigeschaltet.
-            </p>
-          )}
         </section>
       </main>
     </div>
