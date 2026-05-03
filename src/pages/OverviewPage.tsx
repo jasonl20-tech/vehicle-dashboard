@@ -3,6 +3,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   Briefcase,
+  Code2,
   Inbox,
   KeyRound,
   Mail,
@@ -49,11 +50,13 @@ import {
   type OneautoReportsResponse,
   type OverviewRow,
 } from "../lib/customerApi";
+import { useAuth } from "../lib/auth";
 import {
   OVERVIEW_STATS_URL,
   type OverviewDailyPoint,
   type OverviewStatsResponse,
 } from "../lib/overviewStatsApi";
+import { pathDirectlyAllowed } from "../lib/routeAccess";
 
 // ────────────────────────────────────────────────────────────────────────
 // Farb-Token & Util
@@ -769,6 +772,21 @@ function EmptyChart({ label }: { label: string }) {
   );
 }
 
+/** Schnellzugriffe für die Developer-Übersicht (gefiltert nach `erlaubtePfade`). */
+const DEVELOPER_OVERVIEW_LINKS: readonly { label: string; to: string }[] = [
+  { label: "Produktions-Datenbank", to: "/dashboard/databases/production" },
+  { label: "Produktions-Images", to: "/dashboard/databases/production-images" },
+  { label: "Datenbank-Status", to: "/dashboard/databases/status" },
+  { label: "Assets", to: "/dashboard/databases/assets" },
+  { label: "Prompts", to: "/dashboard/systeme/prompts" },
+  { label: "Blockierte Fahrzeuge", to: "/dashboard/systeme/blockierte-fahrzeuge" },
+  { label: "Mapping", to: "/dashboard/systeme/mapping" },
+  { label: "Kunden API", to: "/dashboard/analytics/kunden-api" },
+  { label: "Oneauto API", to: "/dashboard/analytics/oneauto-api" },
+  { label: "Skalierungs-Worker (Logs)", to: "/dashboard/logs/skalierungs-worker" },
+  { label: "Generierungs-Worker (Logs)", to: "/dashboard/logs/generierungs-worker" },
+];
+
 // ────────────────────────────────────────────────────────────────────────
 // Page
 // ────────────────────────────────────────────────────────────────────────
@@ -776,6 +794,14 @@ function EmptyChart({ label }: { label: string }) {
 type JobsResp = { total: number };
 
 export default function OverviewPage() {
+  const { erlaubtePfade } = useAuth();
+  const developerLinks = useMemo(
+    () =>
+      DEVELOPER_OVERVIEW_LINKS.filter((l) =>
+        pathDirectlyAllowed(l.to, erlaubtePfade),
+      ),
+    [erlaubtePfade],
+  );
   const api = useMemo(() => makeApiUrls("customers"), []);
   const [reqUrls] = useState(() => ({
     day: api.overview(rangeTodayUtc()),
@@ -1093,6 +1119,32 @@ export default function OverviewPage() {
             )}
           </div>
         </Block>
+
+        {developerLinks.length > 0 ? (
+          <Block className="lg:col-span-12 lg:border-t lg:border-hair lg:pt-10">
+            <SectionHeader
+              title="Developer Übersicht"
+              subtitle="Schnellzugriff auf Datenbanken, Systeme, APIs und Worker-Logs"
+              icon={Code2}
+            />
+            <ul className="divide-y divide-hair border-y border-hair">
+              {developerLinks.map(({ label, to }) => (
+                <li key={to}>
+                  <Link
+                    to={to}
+                    className="press group flex items-center justify-between gap-3 py-2.5 text-[12.5px] text-ink-700 transition-colors hover:text-ink-900"
+                  >
+                    <span className="min-w-0 truncate">{label}</span>
+                    <ArrowRight
+                      className="h-3 w-3 shrink-0 text-ink-400 transition-transform group-hover:translate-x-0.5"
+                      aria-hidden
+                    />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </Block>
+        ) : null}
       </div>
     </>
   );
