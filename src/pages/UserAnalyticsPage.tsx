@@ -766,12 +766,14 @@ function SectionHeader({
   right?: ReactNode;
 }) {
   return (
-    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-      <div>
-        <h3 className="text-[15px] font-semibold tracking-tightish text-ink-900">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+      <div className="max-w-3xl">
+        <h3 className="text-[16px] font-semibold tracking-tightish text-ink-900">
           {title}
         </h3>
-        {hint && <p className="text-[11.5px] text-ink-500">{hint}</p>}
+        {hint && (
+          <p className="mt-1 text-[12px] leading-relaxed text-ink-500">{hint}</p>
+        )}
       </div>
       {right}
     </div>
@@ -790,10 +792,23 @@ function Block({
   right?: ReactNode;
 }) {
   return (
-    <section className="px-4 py-6 sm:px-8">
+    <section className="px-4 py-10 sm:px-8 sm:py-12">
       <SectionHeader title={title} hint={hint} right={right} />
       {children}
     </section>
+  );
+}
+
+function SubHeading({ children, hint }: { children: ReactNode; hint?: string }) {
+  return (
+    <div className="mt-10 mb-4 max-w-3xl">
+      <h4 className="text-[12.5px] font-semibold uppercase tracking-[0.14em] text-ink-700">
+        {children}
+      </h4>
+      {hint && (
+        <p className="mt-1 text-[11.5px] leading-relaxed text-ink-500">{hint}</p>
+      )}
+    </div>
   );
 }
 
@@ -852,7 +867,7 @@ function DailyActivityBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title="Aktivität pro Tag"
-      hint="Wie lange war der User insgesamt pro Tag aktiv (Summe aller Sessions, UTC-Tagesgrenzen)."
+      hint="Wie viele Stunden war der User pro Tag wirklich aktiv (Summe aller Sessions, UTC-Tagesgrenzen). Den Zeitraum kannst du über die beiden Datumsfelder rechts einschränken."
       right={
         hasData ? (
           <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-600">
@@ -1035,10 +1050,23 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
   const dayAvg =
     data.length > 0 ? data.reduce((a, b) => a + b.tempo, 0) / data.length : 0;
 
+  // Tempo pro Modus aus perMode (verwendet activeSec & actions je Modus,
+  // basierend auf den Sessions im jeweiligen Modus)
+  const perModeTempo = detail.perMode
+    .filter((m) => m.activeSec > 0 && m.actions > 0)
+    .map((m) => ({
+      mode: m.mode || "(leer)",
+      tempo: (m.actions * factor) / m.activeSec,
+      activeSec: m.activeSec,
+      actions: m.actions,
+      events: m.events,
+    }))
+    .sort((a, b) => b.tempo - a.tempo);
+
   return (
     <Block
       title="Tempo"
-      hint={`${unitLong} – pro Tag und im Durchschnitt über den ganzen Zeitraum (Linie).`}
+      hint={`${unitLong} – pro Tag, pro Modus und im Durchschnitt über den ganzen Zeitraum (rote gestrichelte Linie). Tempo zählt nur echte Aktionen (shortcut:*) und teilt sie durch die echte aktive Zeit.`}
       right={
         <div className="inline-flex overflow-hidden rounded-md border border-hair bg-white text-[11.5px]">
           {(["min", "hour"] as TempoUnit[]).map((u, i) => (
@@ -1064,7 +1092,10 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
         </p>
       ) : (
         <>
-          <div className="mb-3 grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-4">
+          <SubHeading hint="Schneller Überblick über die Geschwindigkeit, mit der der User wirklich gearbeitet hat – im gesamten Zeitraum, an den besten Tagen und im Durchschnitt.">
+            Kennzahlen
+          </SubHeading>
+          <div className="mb-6 grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
             <div>
               <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
                 Durchschnitt
@@ -1114,6 +1145,9 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
               hint="basierend auf der echten Arbeitszeit"
             />
           </div>
+          <SubHeading hint="Jede Säule zeigt das Tempo eines Tages. Die rote gestrichelte Linie ist der Durchschnitt über den gesamten Zeitraum.">
+            Pro Tag
+          </SubHeading>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
@@ -1168,6 +1202,129 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+
+          <SubHeading hint="Tempo aufgeteilt nach Modus (Korrektur, Skalierung, …). Aktive Zeit wird pro Modus aus den jeweiligen Sessions berechnet, sodass Wechsel zwischen Modi sauber abgebildet werden.">
+            Pro Modus
+          </SubHeading>
+          {perModeTempo.length === 0 ? (
+            <p className="text-[12.5px] text-ink-500">
+              Keine Aktionen mit messbarer aktiver Zeit pro Modus.
+            </p>
+          ) : (
+            <>
+              <div className="h-60 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={perModeTempo}
+                    margin={{ top: 8, right: 16, bottom: 8, left: 0 }}
+                  >
+                    <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="mode"
+                      tick={{ fontSize: 11, fill: "#6b6b73" }}
+                      stroke="#cfcfd5"
+                    />
+                    <YAxis
+                      unit={` ${unitLabel}`}
+                      tick={{ fontSize: 10, fill: "#6b6b73" }}
+                      stroke="#cfcfd5"
+                    />
+                    <Tooltip
+                      wrapperStyle={{ fontSize: 11 }}
+                      contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
+                      formatter={(v: number, name: string) => {
+                        if (name === "Tempo")
+                          return [
+                            `${(v as number).toFixed(unit === "min" ? 2 : 1)} ${unitLabel}`,
+                            name,
+                          ];
+                        return [fmtNumber(v as number), name];
+                      }}
+                    />
+                    <Bar
+                      dataKey="tempo"
+                      name="Tempo"
+                      fill="#1f6feb"
+                      radius={[3, 3, 0, 0]}
+                      barSize={36}
+                    />
+                    <ReferenceLine
+                      y={overallAvg}
+                      stroke="#dc2626"
+                      strokeDasharray="5 4"
+                      strokeWidth={1.5}
+                      ifOverflow="extendDomain"
+                      label={{
+                        value: `Ø ${overallAvg.toFixed(unit === "min" ? 2 : 1)} ${unitLabel}`,
+                        position: "right",
+                        fontSize: 10,
+                        fill: "#dc2626",
+                      }}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr className="border-b border-hair text-[10.5px] uppercase tracking-[0.12em] text-ink-500">
+                      <th className="py-2 pr-3 text-left font-medium">Modus</th>
+                      <th className="py-2 pr-3 text-right font-medium">
+                        Tempo {unitLabel}
+                      </th>
+                      <th className="py-2 pr-3 text-right font-medium">
+                        Aktionen
+                      </th>
+                      <th className="py-2 pr-3 text-right font-medium">
+                        Events
+                      </th>
+                      <th className="py-2 pr-3 text-right font-medium">
+                        Aktive Zeit
+                      </th>
+                      <th className="py-2 pr-3 text-right font-medium">
+                        vs. Ø
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-hair/70">
+                    {perModeTempo.map((m) => {
+                      const diff =
+                        overallAvg > 0
+                          ? ((m.tempo - overallAvg) / overallAvg) * 100
+                          : 0;
+                      return (
+                        <tr key={m.mode}>
+                          <td className="py-2 pr-3 font-medium text-ink-900">
+                            {m.mode}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {m.tempo.toFixed(unit === "min" ? 2 : 1)}
+                          </td>
+                          <td className="py-2 pr-3 text-right">
+                            {fmtNumber(m.actions)}
+                          </td>
+                          <td className="py-2 pr-3 text-right text-ink-500">
+                            {fmtNumber(m.events)}
+                          </td>
+                          <td className="py-2 pr-3 text-right text-ink-500">
+                            {fmtDuration(m.activeSec)}
+                          </td>
+                          <td
+                            className={`py-2 pr-3 text-right font-mono ${
+                              diff >= 0 ? "text-emerald-700" : "text-red-700"
+                            }`}
+                          >
+                            {diff >= 0 ? "+" : ""}
+                            {diff.toFixed(0)} %
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </Block>
@@ -1226,7 +1383,7 @@ function ButtonsTimelineBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title="Aktionen über Zeit"
-      hint="Welche Buttons wurden gedrückt — und wie schnell war die Verbindung dabei (Linie auf rechter Achse)."
+      hint="Welche Buttons wurden gedrückt – pro Zeit-Bucket gruppiert. Eine Fläche pro Top-Button. Die schwarze gestrichelte Linie zeigt die Ø Latenz (rechte Achse), damit du sehen kannst, ob langsamere Phasen mit weniger Aktionen zusammenfallen."
     >
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -1316,7 +1473,9 @@ function KpiBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title="Übersicht"
-      hint="Gesamtzahlen und Raten. Aktive Zeit = Summe aller Sessions; 24-h-Sicht = der gesamte Reportzeitraum."
+      hint={
+        'Alle wichtigen Kennzahlen auf einen Blick. „Aktive Zeit" = Summe aller Sessions (echte Arbeitszeit). „24-h-Sicht" = der gesamte Reportzeitraum, also auch Pausen und Nächte. „Restdauer" rechnet die aktuell offenen Fahrzeuge mit der gemessenen Rate hoch.'
+      }
     >
       <div className="grid grid-cols-1 gap-x-10 gap-y-1 md:grid-cols-2">
         <dl>
@@ -1426,7 +1585,9 @@ function ModesBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title="Verbleibende Fahrzeuge je Modus"
-      hint="Werte aus double2..5 ab 2026-05-02 19:32:50."
+      hint={
+        'Wie viele Fahrzeuge sind aktuell pro Modus noch offen (double2..5, ab 2026-05-02 19:32:50). „Bearbeitet" ist die Summe aller Rückgänge im Bestand, „/h" die durchschnittliche Bearbeitungsrate, „Restdauer" = aktuell offen ÷ Rate.'
+      }
     >
       <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
@@ -1489,7 +1650,7 @@ function ActivityChartBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title="Aktivität · Events × Internetgeschwindigkeit"
-      hint="Pro Zeit-Bucket: Anzahl Events / Aktionen / bearbeitete Fahrzeuge (Balken) und Ø Latenz (Linie)."
+      hint="Pro Zeit-Bucket: Events, Aktionen und bearbeitete Fahrzeuge als Balken (linke Achse). Die schwarze Linie zeigt zusätzlich die Ø Latenz in Millisekunden (rechte Achse) – so siehst du auf einen Blick, wann die Verbindung am schnellsten war."
     >
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
@@ -1559,9 +1720,12 @@ function NetworkSpeedBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title="Internetgeschwindigkeit (Latenz)"
-      hint="Quelle: blob7. Werte pro Aktion und aggregiert über Fahrzeuge."
+      hint="Latenz pro Aktion in Millisekunden (Quelle: blob7). Oben die Statistik-Kennzahlen, dann die Verteilung über die Zeit (Streudiagramm) und unten die schlechtesten/häufigsten Fahrzeuge nach Latenz."
     >
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <SubHeading hint="Statistische Kennzahlen aller gemessenen Latenzen. p95 z. B. heißt: 95 % aller Aktionen waren schneller als dieser Wert.">
+        Kennzahlen
+      </SubHeading>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         <dl className="lg:col-span-4">
           <KpiRow label="Samples" value={fmtNumber(n.samples)} />
           <KpiRow label="Ø" value={fmtMs(n.avgMs)} />
@@ -1572,8 +1736,8 @@ function NetworkSpeedBlock({ detail }: { detail: DetailReport }) {
           <KpiRow label="p99" value={fmtMs(n.p99Ms)} />
         </dl>
         <div className="lg:col-span-8">
-          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
-            Latenz-Verlauf
+          <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+            Latenz-Verlauf · jeder Punkt = eine einzelne Aktion
           </p>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -1623,10 +1787,10 @@ function NetworkSpeedBlock({ detail }: { detail: DetailReport }) {
       </div>
 
       {vehicleData.length > 0 && (
-        <div className="mt-6">
-          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
-            Fahrzeug : Internetgeschwindigkeit
-          </p>
+        <>
+          <SubHeading hint="Top-Fahrzeuge mit dem höchsten Latenz-Mittelwert. Hilft, einzelne Renderings zu identifizieren, die regelmäßig langsam laden.">
+            Fahrzeug · Internetgeschwindigkeit
+          </SubHeading>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -1660,7 +1824,7 @@ function NetworkSpeedBlock({ detail }: { detail: DetailReport }) {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </>
       )}
     </Block>
   );
@@ -1674,7 +1838,7 @@ function SessionsBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title={`Sessions (zuletzt ${sessions.length} von ${detail.sessions.length})`}
-      hint="5-Minuten-Lücken trennen Sessions."
+      hint="Eine Session ist ein Block zusammenhängender Aktivität. Eine Pause von ≥ 5 Minuten beendet die laufende Session und startet eine neue."
     >
       <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
@@ -1725,7 +1889,7 @@ function PerIpBlock({
   return (
     <Block
       title="IP-Adressen"
-      hint="Klick auf IP, um den Bericht auf diese IP einzuschränken."
+      hint="Aufschlüsselung nach IP. Klick auf eine IP, um den ganzen Bericht auf diese IP einzuschränken – nützlich, um Office vs. Home oder mobile Sessions zu vergleichen."
     >
       <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
@@ -1787,11 +1951,14 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
     actions: w.actions,
   }));
   return (
-    <Block title="Verteilungen" hint="Stunde des Tages (UTC) und Wochentag.">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+    <Block
+      title="Verteilungen"
+      hint="Wann arbeitet der User typischerweise? Links die Stunde des Tages (UTC, also für lokale Zeit ggf. Verschiebung beachten), rechts der Wochentag. Hilft, Arbeitsmuster zu erkennen."
+    >
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         <div>
-          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
-            Stunde (UTC)
+          <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+            Stunde (UTC) · wann am Tag
           </p>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -1811,8 +1978,8 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
           </div>
         </div>
         <div>
-          <p className="mb-1 text-[11px] uppercase tracking-[0.14em] text-ink-400">
-            Wochentag
+          <p className="mb-2 text-[11px] uppercase tracking-[0.14em] text-ink-400">
+            Wochentag · welcher Tag der Woche
           </p>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -1855,7 +2022,7 @@ function VehiclesBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title={`Fahrzeuge (${detail.vehicles.length})`}
-      hint={'Welche Fahrzeuge wurden bearbeitet — und von welchen Usern. Suche z. B. „Audi", „Tesla", „2024".'}
+      hint={'Liste der bearbeiteten Fahrzeuge inkl. der zugehörigen User, Modi und Ansichten. Über die Suche kannst du gezielt nach Marke, Modell, Baujahr o. Ä. filtern – z. B. „Audi", „Tesla", „2024".'}
       right={
         <div className="relative w-full sm:w-72">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
@@ -1955,7 +2122,7 @@ function BreakdownsBlock({ detail }: { detail: DetailReport }) {
   return (
     <Block
       title="Aufschlüsselungen"
-      hint="Häufigste Aktionen, Modi, Marken, Modelle und Ansichten im Zeitraum."
+      hint="Top-Listen über den ganzen Berichtszeitraum: häufigste Aktionen, Modi, Marken, Modelle und Ansichten – jeweils mit Mini-Bar zur visuellen Einordnung."
     >
       <div className="grid grid-cols-1 gap-x-12 gap-y-8 md:grid-cols-2 xl:grid-cols-3">
         <RankList
@@ -2334,7 +2501,58 @@ function PrintReport({
         )}
 
         <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          5. Aktionen über Zeit
+          5. Tempo pro Modus
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Aktionen pro aktiver Minute und Stunde, je Modus. Aktive Zeit wird
+          pro Modus aus den jeweiligen Sessions berechnet.
+        </p>
+        {detail.perMode.filter((m) => m.activeSec > 0 && m.actions > 0)
+          .length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">
+            – keine Modus-Daten mit messbarer Aktivität –
+          </p>
+        ) : (
+          <table className="mt-2 w-full border-collapse text-[10.5px]">
+            <thead>
+              <tr className="border-b border-hair text-left">
+                <th className="py-1.5 pr-3">Modus</th>
+                <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                <th className="py-1.5 pr-3 text-right">Aktive Zeit</th>
+                <th className="py-1.5 pr-3 text-right">Tempo /min</th>
+                <th className="py-1.5 pr-3 text-right">Tempo /h</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.perMode
+                .filter((m) => m.activeSec > 0 && m.actions > 0)
+                .map((m) => {
+                  const tMin = (m.actions * 60) / m.activeSec;
+                  const tHour = (m.actions * 3600) / m.activeSec;
+                  return (
+                    <tr key={m.mode} className="border-b border-hair/60">
+                      <td className="py-1.5 pr-3">{m.mode || "(leer)"}</td>
+                      <td className="py-1.5 pr-3 text-right">
+                        {fmtNumber(m.actions)}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right">
+                        {fmtDuration(m.activeSec)}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right">
+                        {tMin.toFixed(2)}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right">
+                        {tHour.toFixed(1)}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        )}
+
+        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+          6. Aktionen über Zeit
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           Häufigkeit der wichtigsten Aktionen (Top {detail.topButtonNames.length})
@@ -2384,7 +2602,7 @@ function PrintReport({
         }
       >
         <h2 className="text-[14px] font-semibold tracking-tightish">
-          6. IP-Adressen
+          7. IP-Adressen
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           Aufschlüsselung der Aktivität pro IP. Bei{" "}
@@ -2418,7 +2636,7 @@ function PrintReport({
         )}
 
         <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          7. Aufschlüsselungen
+          8. Aufschlüsselungen
         </h2>
         <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-4">
           <PrintRankList title="Aktionen (shortcut:*)" items={detail.topActions.map((a) => ({ label: a.button, value: a.count }))} />
@@ -2449,7 +2667,7 @@ function PrintReport({
         }
       >
         <h2 className="text-[14px] font-semibold tracking-tightish">
-          8. Fahrzeuge ({detail.vehicles.length})
+          9. Fahrzeuge ({detail.vehicles.length})
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           Bearbeitete Fahrzeuge im Zeitraum mit Anzahl Events / Aktionen sowie
