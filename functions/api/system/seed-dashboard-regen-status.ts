@@ -13,6 +13,9 @@
  * Gibt es trotz fehlenden Dashboard in `views` schon einen Eintrag unter
  * `UNIQUE(vehicle_id, view_token, mode)`, lässt `INSERT OR IGNORE` den
  * Insert aus (Zeile wird nicht überschrieben).
+ *
+ * JSON-Antwort: `eligibleVehicleCount` (Fahrzeuge ohne dashboard in `views`),
+ * `inserted` (neu angelegte Kontroll-Zeilen).
  */
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
@@ -43,21 +46,32 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   '; ',
   ';'
 ), ' ;', ';')`;
-  const sql = `
+  const whereNoDashboardInViews = `NOT (
+  (${wrappedExpr}) LIKE '%;dashboard;%'
+  OR (${wrappedExpr}) LIKE '%;dashboard#%'
+)`;
+
+  const countSql = `
+SELECT COUNT(*) AS n
+FROM ${STORAGE_TABLE} v
+WHERE ${whereNoDashboardInViews}
+`;
+
+  const insertSql = `
 INSERT OR IGNORE INTO controll_status (vehicle_id, view_token, mode, status, key, updated_at, "check")
 SELECT v.id, 'dashboard', 'correction', 'regen_vertex', NULL, datetime('now'), 8
 FROM ${STORAGE_TABLE} v
-WHERE NOT (
-  (${wrappedExpr}) LIKE '%;dashboard;%'
-  OR (${wrappedExpr}) LIKE '%;dashboard#%'
-)
+WHERE ${whereNoDashboardInViews}
 `;
 
   try {
-    const r = await db.prepare(sql).run();
+    const countRow = await db.prepare(countSql).first<{ n: number }>();
+    const eligibleVehicleCount = Number(countRow?.n ?? 0) || 0;
+
+    const r = await db.prepare(insertSql).run();
     const inserted =
       typeof r.meta?.changes === "number" ? r.meta.changes : 0;
-    return jsonResponse({ inserted }, { status: 200 });
+    return jsonResponse({ inserted, eligibleVehicleCount }, { status: 200 });
   } catch (err) {
     return jsonResponse(
       {

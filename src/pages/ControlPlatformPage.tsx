@@ -2029,11 +2029,16 @@ export default function ControlPlatformPage() {
                   setSeedDashboardMessage(null);
                   void (async () => {
                     try {
-                      const { inserted } = await postSeedDashboardRegenStatus();
+                      const { inserted, eligibleVehicleCount } =
+                        await postSeedDashboardRegenStatus();
                       setSeedDashboardMessage(
-                        inserted === 0 ?
-                          "Keine neuen Zeilen: entweder steht überall schon dashboard in „views“, oder dieselbe Kontroll-Zeile existierte bereits."
-                        : `${inserted} Einträge angelegt.`,
+                        eligibleVehicleCount === 0 ?
+                          "0 Fahrzeuge betroffen: Überall ist bereits dashboard in „views“."
+                        : inserted === eligibleVehicleCount ?
+                          `${eligibleVehicleCount} Fahrzeug(e) ohne dashboard in „views“. ${inserted} neue Kontroll-Zeile(n) angelegt.`
+                        : inserted === 0 ?
+                          `${eligibleVehicleCount} Fahrzeug(e) ohne dashboard in „views“. 0 neu — Korrektur-Zeile „dashboard“ existierte bereits für jedes dieser Fahrzeuge.`
+                        : `${eligibleVehicleCount} Fahrzeug(e) ohne dashboard in „views“. ${inserted} neue Zeile(n), ${eligibleVehicleCount - inserted} hatte(n) bereits dieselbe Kontroll-Zeile (ungeändert).`,
                       );
                       listApi.reload();
                       detailApi.reload();

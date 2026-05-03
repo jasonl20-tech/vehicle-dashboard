@@ -7,7 +7,10 @@ export const SEED_DASHBOARD_REGEN_STATUS_PATH =
   "/api/system/seed-dashboard-regen-status";
 
 export type SeedDashboardRegenStatusResponse = {
+  /** Neu eingefügte Zeilen (`INSERT OR IGNORE`). */
   inserted: number;
+  /** Fahrzeuge ohne Dashboard-Token in `views` (Zielgruppe dieser Aktion). */
+  eligibleVehicleCount: number;
 };
 
 export async function postSeedDashboardRegenStatus(): Promise<SeedDashboardRegenStatusResponse> {
