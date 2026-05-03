@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "generate:api-catalog": "node scripts/generate-api-catalog.mjs",
+    "build": "npm run generate:api-catalog && tsc -b && vite build",
     "preview": "vite preview",
     "typecheck:functions": "tsc --noEmit -p functions/tsconfig.json"
   },
