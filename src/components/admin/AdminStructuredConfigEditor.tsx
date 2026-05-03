@@ -14,8 +14,8 @@ import {
   type ActiveControllModeConfig,
   type ControllButtonsConfig,
   type ControllButtonsModeKey,
-} from "../lib/adminSettingsFormModel";
-import { ADMIN_SETTINGS_HINTS } from "../lib/adminSettingsApi";
+} from "../../lib/adminSettingsFormModel";
+import { ADMIN_SETTINGS_HINTS } from "../../lib/adminSettingsApi";
 
 const MODES: readonly ControllButtonsModeKey[] = [
   "correction",
@@ -93,7 +93,7 @@ function ControllButtonsForm({
               {ADMIN_ACTIVE_MODE_LABELS[mode]}
             </legend>
             <div className="mt-3 space-y-2">
-              {controllButtonKeysForMode(mode, value).map((key) => (
+              {controllButtonKeysForMode(mode, value).map((key: string) => (
                 <ToggleRow
                   key={key}
                   label={
@@ -171,7 +171,7 @@ function PreviewImagesForm({
     <div className="space-y-4">
       <FieldHint settingId="preview_images" />
       <div className="space-y-3">
-        {slugs.map((slug) => (
+        {slugs.map((slug: string) => (
           <label key={slug} className="block">
             <span className="mb-1 flex items-center justify-between gap-2">
               <span className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-ink-400">
@@ -254,7 +254,7 @@ function GenerationViewsForm({
     <div className="space-y-4">
       <FieldHint settingId="generation_views" />
       <div className="space-y-2">
-        {slugs.map((slug) => (
+        {slugs.map((slug: string) => (
           <div
             key={slug}
             className="flex items-stretch gap-2 rounded-md border border-hair bg-white/80"
@@ -380,7 +380,7 @@ function ViewsSlugListForm({
     <div className="space-y-4">
       <FieldHint settingId={settingId} />
       <ul className="flex flex-wrap gap-2">
-        {items.map((slug) => (
+        {items.map((slug: string) => (
           <li
             key={slug}
             className="inline-flex items-center gap-1 rounded-full border border-hair bg-white px-2.5 py-1 text-[12px] text-ink-800"
