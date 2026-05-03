@@ -1,13 +1,14 @@
 Favicon-Assets (öffentlich unter /favicon/…)
 
-Aktiv:
-  favicon.svg — Haupt-Icon (vector), in index.html verlinkt.
+Aktiv (in index.html):
+  vehicleimagery.com-favicon-2.ico — Haupt-Favicon
 
-Optional hier ablegen und in index.html ergänzen:
-  favicon.ico        — kombiniert 16×16 / 32×32 (ältere Browser / Lesezeichen)
-  favicon-16x16.png
-  favicon-32x32.png
-  apple-touch-icon.png — 180×180 für iOS „Zum Home-Bildschirm“
-  android-chrome-192x192.png / 512×512 — falls ihr eine Web-App-Manifest-Datei nutzt
+Weiter im Ordner (derzeit nicht in index.html verlinkt):
+  favicon.svg — Vektor-Variante, optional zusätzlich verknüpfbar
 
-Hinweis: PNG/ICO erst verlinken, wenn die Dateien wirklich im Ordner liegen (sonst 404).
+Optional später ergänzen und in index.html eintragen:
+  favicon-16x16.png / favicon-32x32.png
+  apple-touch-icon.png — 180×180 für iOS
+  android-chrome-192x192.png / 512×512 — mit Web-App-Manifest
+
+Hinweis: Neue Formate erst verlinken, wenn die Dateien existieren (sonst 404).
