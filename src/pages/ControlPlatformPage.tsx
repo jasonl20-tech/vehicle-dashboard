@@ -84,7 +84,11 @@ import {
 import {
   postControllPlatformAnalyticsFireAndForget,
 } from "../lib/controllPlatformAnalyticsApi";
-import { postSeedDashboardRegenStatus } from "../lib/seedDashboardRegenStatusApi";
+import {
+  getSeedMissingViewRegenPreview,
+  postSeedMissingViewRegenStatus,
+  type SeedMissingViewSlug,
+} from "../lib/seedMissingViewRegenStatusApi";
 import {
   buildVehicleImageUrl,
   countScalingViewPairsInViews,
@@ -104,6 +108,33 @@ const SCALING_MODE_VEHICLE_BACKDROP_STYLE: CSSProperties = {
 };
 
 const PAGE_SIZE = 50;
+
+const MISSING_VIEW_REGEN_ROWS: readonly [SeedMissingViewSlug, string][] = [
+  ["dashboard", "Dashboard"],
+  ["center_console", "Center console"],
+];
+
+function seedMissingResultMessage(
+  slug: SeedMissingViewSlug,
+  inserted: number,
+  eligibleVehicleCount: number,
+): string {
+  const slugLabel =
+    MISSING_VIEW_REGEN_ROWS.find(([s]) => s === slug)?.[1] ?? slug;
+
+  const head = `${slugLabel}: `;
+
+  if (eligibleVehicleCount === 0) {
+    return `${head}0 Fahrzeuge betroffen (überall schon „${slug}“ in „views“).`;
+  }
+  if (inserted === eligibleVehicleCount) {
+    return `${head}${eligibleVehicleCount} Fahrzeug(e) ohne „${slug}“ in „views“. ${inserted} neue Kontroll-Zeile(n).`;
+  }
+  if (inserted === 0) {
+    return `${head}${eligibleVehicleCount} Fahrzeug(e) ohne „${slug}“ in „views“. 0 neu — Korrektur-Zeile existierte bereits pro Fahrzeug.`;
+  }
+  return `${head}${eligibleVehicleCount} Fahrzeug(e) ohne „${slug}“. ${inserted} neu, ${eligibleVehicleCount - inserted} bereits Zeile vorhanden.`;
+}
 
 function fmtWhen(s: string | null | undefined): string {
   if (!s?.trim()) return "—";
@@ -1302,14 +1333,59 @@ export default function ControlPlatformPage() {
   >(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
-  /** Temporär: Bulk `dashboard` · correction · regen_vertex · check 8 */
-  const [seedDashboardLoading, setSeedDashboardLoading] = useState(false);
-  const [seedDashboardMessage, setSeedDashboardMessage] = useState<
+  /** Temporär: Bulk jobs für fehlende Slugs in `views` (+ GET-Vorschau). */
+  const [missingViewEligible, setMissingViewEligible] = useState<{
+    dashboard: number | null;
+    center_console: number | null;
+  }>({ dashboard: null, center_console: null });
+  const [missingViewEligibleLoading, setMissingViewEligibleLoading] =
+    useState(false);
+  const [missingViewEligibleError, setMissingViewEligibleError] = useState<
     string | null
   >(null);
-  const [seedDashboardError, setSeedDashboardError] = useState<string | null>(
-    null,
-  );
+  const [seedMissingViewSubmitting, setSeedMissingViewSubmitting] = useState<
+    SeedMissingViewSlug | null
+  >(null);
+  const [seedMissingViewMessage, setSeedMissingViewMessage] = useState<
+    string | null
+  >(null);
+  const [seedMissingViewError, setSeedMissingViewError] = useState<
+    string | null
+  >(null);
+
+  const loadMissingViewPreview = useCallback(async () => {
+    if (viewsMode !== "korrektur") return;
+    setMissingViewEligibleLoading(true);
+    setMissingViewEligibleError(null);
+    try {
+      const [d, c] = await Promise.all([
+        getSeedMissingViewRegenPreview("dashboard"),
+        getSeedMissingViewRegenPreview("center_console"),
+      ]);
+      setMissingViewEligible({
+        dashboard: d.eligibleVehicleCount,
+        center_console: c.eligibleVehicleCount,
+      });
+    } catch (e) {
+      setMissingViewEligibleError(
+        e instanceof Error ? e.message : String(e),
+      );
+      setMissingViewEligible({ dashboard: null, center_console: null });
+    } finally {
+      setMissingViewEligibleLoading(false);
+    }
+  }, [viewsMode]);
+
+  useEffect(() => {
+    if (viewsMode !== "korrektur") {
+      setMissingViewEligible({ dashboard: null, center_console: null });
+      setMissingViewEligibleError(null);
+      setSeedMissingViewMessage(null);
+      setSeedMissingViewError(null);
+      return;
+    }
+    void loadMissingViewPreview();
+  }, [viewsMode, loadMissingViewPreview]);
 
   const controllButtonsResolved = useMemo(() => {
     if (controllButtonsApi.data?.buttons) {
@@ -2012,60 +2088,105 @@ export default function ControlPlatformPage() {
             </button>
           </div>
           {viewsMode === "korrektur" ?
-            <div className="mt-2 border-t border-dashed border-amber-400/60 pt-2">
-              <button
-                type="button"
-                disabled={seedDashboardLoading || listApi.loading}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      "Für alle Fahrzeuge, in „views“ noch ohne Dashboard-Ansicht, einen Eintrag anlegen?\n\ncorrection · dashboard · regen_vertex · check 8\n\nAuswahl nur über das Feld „views“ (welche schon einen dashboard-Token listen, werden nicht angefasst).\nSchon bestehende identische Kontroll-Zeilen (gleiches Fahrzeug + dashboard + correction) bleiben unverändert.",
-                    )
-                  ) {
-                    return;
-                  }
-                  setSeedDashboardLoading(true);
-                  setSeedDashboardError(null);
-                  setSeedDashboardMessage(null);
-                  void (async () => {
-                    try {
-                      const { inserted, eligibleVehicleCount } =
-                        await postSeedDashboardRegenStatus();
-                      setSeedDashboardMessage(
-                        eligibleVehicleCount === 0 ?
-                          "0 Fahrzeuge betroffen: Überall ist bereits dashboard in „views“."
-                        : inserted === eligibleVehicleCount ?
-                          `${eligibleVehicleCount} Fahrzeug(e) ohne dashboard in „views“. ${inserted} neue Kontroll-Zeile(n) angelegt.`
-                        : inserted === 0 ?
-                          `${eligibleVehicleCount} Fahrzeug(e) ohne dashboard in „views“. 0 neu — Korrektur-Zeile „dashboard“ existierte bereits für jedes dieser Fahrzeuge.`
-                        : `${eligibleVehicleCount} Fahrzeug(e) ohne dashboard in „views“. ${inserted} neue Zeile(n), ${eligibleVehicleCount - inserted} hatte(n) bereits dieselbe Kontroll-Zeile (ungeändert).`,
-                      );
-                      listApi.reload();
-                      detailApi.reload();
-                    } catch (e) {
-                      setSeedDashboardError(
-                        e instanceof Error ? e.message : String(e),
-                      );
-                    } finally {
-                      setSeedDashboardLoading(false);
-                    }
-                  })();
-                }}
-                className="flex w-full items-center justify-center gap-1 rounded border border-amber-600 bg-amber-50 px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:text-[10px]"
-              >
-                {seedDashboardLoading ?
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : null}
-                Dashboard-Jobs · bulk (temp)
-              </button>
-              {seedDashboardMessage ?
-                <p className="mt-1 text-[9px] leading-snug text-emerald-700">
-                  {seedDashboardMessage}
+            <div className="mt-2 space-y-2 border-t border-dashed border-amber-400/60 pt-2">
+              <div className="flex items-start justify-between gap-1">
+                <p className="text-[9px] leading-snug text-amber-950/90">
+                  Ohne Ansicht laut Feld „views“ · correction · regen_vertex ·
+                  check 8 · Duplikate INSERT OR IGNORE
+                </p>
+                <button
+                  type="button"
+                  disabled={missingViewEligibleLoading || listApi.loading}
+                  onClick={() => void loadMissingViewPreview()}
+                  className="shrink-0 font-mono text-[9px] text-amber-800 underline underline-offset-2 hover:text-amber-950 disabled:no-underline disabled:opacity-40"
+                >
+                  Neu zählen
+                </button>
+              </div>
+              {missingViewEligibleError ?
+                <p className="text-[9px] text-red-600">
+                  {missingViewEligibleError}
                 </p>
               : null}
-              {seedDashboardError ?
-                <p className="mt-1 text-[9px] leading-snug text-red-600">
-                  {seedDashboardError}
+              {MISSING_VIEW_REGEN_ROWS.map(([slug, label]) => {
+                const nEligible = missingViewEligible[slug];
+                const slugBusy = seedMissingViewSubmitting === slug;
+                const anyBusy = seedMissingViewSubmitting != null;
+                return (
+                  <div
+                    key={slug}
+                    className="rounded border border-amber-500/50 bg-amber-50 px-2 py-1.5"
+                  >
+                    <p className="mb-1 font-mono text-[10px] font-semibold text-amber-950">
+                      {label}{" "}
+                      <span className="font-normal opacity-70">({slug})</span>
+                    </p>
+                    <p className="mb-1.5 tabular-nums font-mono text-[9px] text-amber-900">
+                      {missingViewEligibleLoading ?
+                        "Betroffene Fahrzeuge werden gezählt…"
+                      : nEligible === null ?
+                        "—"
+                      : `${fmtNumber(nEligible)} Fahrzeug(e) ohne „${slug}" in „views“`}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={
+                        anyBusy ||
+                        listApi.loading ||
+                        missingViewEligibleLoading
+                      }
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `${label} („${slug}“): Für alle diese Fahrzeuge Kontroll-Zeilen anlegen?\n\ncorrection · ${slug} · regen_vertex · check 8\n\nKriterium nur „views“. Bereits bestehende identische Korrektur-Zeilen bleiben unverändert.`,
+                          )
+                        ) {
+                          return;
+                        }
+                        setSeedMissingViewSubmitting(slug);
+                        setSeedMissingViewError(null);
+                        setSeedMissingViewMessage(null);
+                        void (async () => {
+                          try {
+                            const { inserted, eligibleVehicleCount } =
+                              await postSeedMissingViewRegenStatus(slug);
+                            setSeedMissingViewMessage(
+                              seedMissingResultMessage(
+                                slug,
+                                inserted,
+                                eligibleVehicleCount,
+                              ),
+                            );
+                            listApi.reload();
+                            detailApi.reload();
+                            await loadMissingViewPreview();
+                          } catch (e) {
+                            setSeedMissingViewError(
+                              e instanceof Error ? e.message : String(e),
+                            );
+                          } finally {
+                            setSeedMissingViewSubmitting(null);
+                          }
+                        })();
+                      }}
+                      className="flex w-full items-center justify-center gap-1 rounded border border-amber-600 bg-amber-100/90 px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-950 transition hover:bg-amber-200/90 disabled:cursor-not-allowed disabled:opacity-50 sm:text-[10px]"
+                    >
+                      {slugBusy ?
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : null}
+                      {label} · bulk
+                    </button>
+                  </div>
+                );
+              })}
+              {seedMissingViewMessage ?
+                <p className="text-[9px] leading-snug text-emerald-700">
+                  {seedMissingViewMessage}
+                </p>
+              : null}
+              {seedMissingViewError ?
+                <p className="text-[9px] leading-snug text-red-600">
+                  {seedMissingViewError}
                 </p>
               : null}
             </div>
