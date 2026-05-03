@@ -6,6 +6,8 @@
 import type { ControllButtonsConfig, ControllButtonsModeKey } from "./controllButtonsConfig";
 import { DEFAULT_CONTROLL_BUTTONS_CONFIG } from "./controllButtonsConfig";
 
+export type { ControllButtonsConfig, ControllButtonsModeKey } from "./controllButtonsConfig";
+
 export const ADMIN_STRUCTURED_SETTING_IDS = new Set<string>([
   "controll_buttons",
   "preview_images",

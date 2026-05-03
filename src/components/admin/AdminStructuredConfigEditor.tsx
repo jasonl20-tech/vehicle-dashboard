@@ -22,7 +22,7 @@ const MODES: readonly ControllButtonsModeKey[] = [
   "scaling",
   "shadow",
   "transparency",
-] as const;
+];
 
 function FieldHint({ settingId }: { settingId: string }) {
   const text = ADMIN_SETTINGS_HINTS[settingId];
