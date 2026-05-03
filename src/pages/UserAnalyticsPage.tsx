@@ -1154,6 +1154,12 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
                 data={data}
                 margin={{ top: 8, right: 16, bottom: 8, left: 0 }}
               >
+                <defs>
+                  <linearGradient id="tempo-day" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0d0d0f" stopOpacity={0.45} />
+                    <stop offset="100%" stopColor="#0d0d0f" stopOpacity={0.04} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
                 <XAxis
                   dataKey="label"
@@ -1179,12 +1185,13 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar
+                <Area
+                  type="monotone"
                   dataKey="tempo"
                   name={unitLong}
-                  fill="#0d0d0f"
-                  radius={[3, 3, 0, 0]}
-                  barSize={28}
+                  stroke="#0d0d0f"
+                  strokeWidth={1.75}
+                  fill="url(#tempo-day)"
                 />
                 <ReferenceLine
                   y={overallAvg}
@@ -1214,10 +1221,16 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
             <>
               <div className="h-60 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
+                  <ComposedChart
                     data={perModeTempo}
                     margin={{ top: 8, right: 16, bottom: 8, left: 0 }}
                   >
+                    <defs>
+                      <linearGradient id="tempo-mode" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#1f6feb" stopOpacity={0.5} />
+                        <stop offset="100%" stopColor="#1f6feb" stopOpacity={0.04} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
                     <XAxis
                       dataKey="mode"
@@ -1241,12 +1254,13 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
                         return [fmtNumber(v as number), name];
                       }}
                     />
-                    <Bar
+                    <Area
+                      type="monotone"
                       dataKey="tempo"
                       name="Tempo"
-                      fill="#1f6feb"
-                      radius={[3, 3, 0, 0]}
-                      barSize={36}
+                      stroke="#1f6feb"
+                      strokeWidth={1.75}
+                      fill="url(#tempo-mode)"
                     />
                     <ReferenceLine
                       y={overallAvg}
@@ -1261,7 +1275,7 @@ function TempoBlock({ detail }: { detail: DetailReport }) {
                         fill: "#dc2626",
                       }}
                     />
-                  </BarChart>
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
               <div className="mt-5 overflow-x-auto">
@@ -1655,6 +1669,20 @@ function ActivityChartBlock({ detail }: { detail: DetailReport }) {
       <div className="h-80 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
+            <defs>
+              <linearGradient id="act-events" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#9aa2ac" stopOpacity={0.5} />
+                <stop offset="100%" stopColor="#9aa2ac" stopOpacity={0.04} />
+              </linearGradient>
+              <linearGradient id="act-actions" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#0d0d0f" stopOpacity={0.5} />
+                <stop offset="100%" stopColor="#0d0d0f" stopOpacity={0.04} />
+              </linearGradient>
+              <linearGradient id="act-proc" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#1f6feb" stopOpacity={0.45} />
+                <stop offset="100%" stopColor="#1f6feb" stopOpacity={0.04} />
+              </linearGradient>
+            </defs>
             <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
             <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#6b6b73" }} stroke="#cfcfd5" />
             <YAxis
@@ -1674,9 +1702,33 @@ function ActivityChartBlock({ detail }: { detail: DetailReport }) {
               contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar yAxisId="L" dataKey="events" name="Events" fill="#9aa2ac" radius={[2, 2, 0, 0]} />
-            <Bar yAxisId="L" dataKey="actions" name="Aktionen" fill="#0d0d0f" radius={[2, 2, 0, 0]} />
-            <Bar yAxisId="L" dataKey="processed" name="Bearbeitet" fill="#6e6e7a" radius={[2, 2, 0, 0]} />
+            <Area
+              yAxisId="L"
+              type="monotone"
+              dataKey="events"
+              name="Events"
+              stroke="#9aa2ac"
+              strokeWidth={1.5}
+              fill="url(#act-events)"
+            />
+            <Area
+              yAxisId="L"
+              type="monotone"
+              dataKey="actions"
+              name="Aktionen"
+              stroke="#0d0d0f"
+              strokeWidth={1.5}
+              fill="url(#act-actions)"
+            />
+            <Area
+              yAxisId="L"
+              type="monotone"
+              dataKey="processed"
+              name="Bearbeitet"
+              stroke="#1f6feb"
+              strokeWidth={1.5}
+              fill="url(#act-proc)"
+            />
             <Line
               yAxisId="R"
               type="monotone"
@@ -1962,7 +2014,17 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
           </p>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hourData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+              <AreaChart data={hourData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+                <defs>
+                  <linearGradient id="dist-h-events" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#9aa2ac" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#9aa2ac" stopOpacity={0.04} />
+                  </linearGradient>
+                  <linearGradient id="dist-h-actions" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0d0d0f" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#0d0d0f" stopOpacity={0.04} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#6b6b73" }} stroke="#cfcfd5" />
                 <YAxis tick={{ fontSize: 10, fill: "#6b6b73" }} stroke="#cfcfd5" />
@@ -1971,9 +2033,23 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
                   contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="events" name="Events" fill="#9aa2ac" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="actions" name="Aktionen" fill="#0d0d0f" radius={[2, 2, 0, 0]} />
-              </BarChart>
+                <Area
+                  type="monotone"
+                  dataKey="events"
+                  name="Events"
+                  stroke="#9aa2ac"
+                  strokeWidth={1.5}
+                  fill="url(#dist-h-events)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="actions"
+                  name="Aktionen"
+                  stroke="#0d0d0f"
+                  strokeWidth={1.5}
+                  fill="url(#dist-h-actions)"
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -1983,7 +2059,17 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
           </p>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={wdData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+              <AreaChart data={wdData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+                <defs>
+                  <linearGradient id="dist-wd-events" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#9aa2ac" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#9aa2ac" stopOpacity={0.04} />
+                  </linearGradient>
+                  <linearGradient id="dist-wd-actions" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0d0d0f" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="#0d0d0f" stopOpacity={0.04} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
                 <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#6b6b73" }} stroke="#cfcfd5" />
                 <YAxis tick={{ fontSize: 10, fill: "#6b6b73" }} stroke="#cfcfd5" />
@@ -1992,9 +2078,23 @@ function DistributionBlock({ detail }: { detail: DetailReport }) {
                   contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="events" name="Events" fill="#9aa2ac" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="actions" name="Aktionen" fill="#0d0d0f" radius={[2, 2, 0, 0]} />
-              </BarChart>
+                <Area
+                  type="monotone"
+                  dataKey="events"
+                  name="Events"
+                  stroke="#9aa2ac"
+                  strokeWidth={1.5}
+                  fill="url(#dist-wd-events)"
+                />
+                <Area
+                  type="monotone"
+                  dataKey="actions"
+                  name="Aktionen"
+                  stroke="#0d0d0f"
+                  strokeWidth={1.5}
+                  fill="url(#dist-wd-actions)"
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -2202,6 +2302,147 @@ function RankList({
 
 // ---------- DIN-A4 Print-Layout ----------
 
+// Feste Chart-Breite in px für DIN-A4 Druck (~178mm Inhaltsbreite bei 96dpi).
+// Höhe pro Chart wählen wir je Aufruf passend.
+const PRINT_CHART_W = 670;
+
+// Recharts in einem hidden-Container braucht feste Größen, weil es sonst
+// nicht layouted wird und am Ende SVG mit width/height 0 produziert.
+function PrintAreaChart({
+  data,
+  series,
+  height = 170,
+  yUnit,
+  xKey = "label",
+  referenceY,
+  referenceLabel,
+}: {
+  data: Array<Record<string, number | string | null>>;
+  series: Array<{ key: string; name: string; color: string; gradientId: string }>;
+  height?: number;
+  yUnit?: string;
+  xKey?: string;
+  referenceY?: number;
+  referenceLabel?: string;
+}) {
+  return (
+    <div className="avoid-break" style={{ width: PRINT_CHART_W, height }}>
+      <ComposedChart
+        width={PRINT_CHART_W}
+        height={height}
+        data={data}
+        margin={{ top: 4, right: 16, bottom: 4, left: 0 }}
+      >
+        <defs>
+          {series.map((s) => (
+            <linearGradient
+              key={s.gradientId}
+              id={s.gradientId}
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="1"
+            >
+              <stop offset="0%" stopColor={s.color} stopOpacity={0.45} />
+              <stop offset="100%" stopColor={s.color} stopOpacity={0.04} />
+            </linearGradient>
+          ))}
+        </defs>
+        <CartesianGrid stroke="#e3e3e6" strokeDasharray="3 3" />
+        <XAxis
+          dataKey={xKey}
+          tick={{ fontSize: 8, fill: "#6b6b73" }}
+          stroke="#cfcfd5"
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          unit={yUnit ? ` ${yUnit}` : ""}
+          tick={{ fontSize: 8, fill: "#6b6b73" }}
+          stroke="#cfcfd5"
+          width={40}
+        />
+        <Legend wrapperStyle={{ fontSize: 9 }} />
+        {series.map((s) => (
+          <Area
+            key={s.key}
+            type="monotone"
+            dataKey={s.key}
+            name={s.name}
+            stroke={s.color}
+            strokeWidth={1.4}
+            fill={`url(#${s.gradientId})`}
+            isAnimationActive={false}
+          />
+        ))}
+        {referenceY != null && (
+          <ReferenceLine
+            y={referenceY}
+            stroke="#dc2626"
+            strokeDasharray="5 4"
+            strokeWidth={1.25}
+            label={
+              referenceLabel
+                ? {
+                    value: referenceLabel,
+                    position: "right",
+                    fontSize: 8,
+                    fill: "#dc2626",
+                  }
+                : undefined
+            }
+          />
+        )}
+      </ComposedChart>
+    </div>
+  );
+}
+
+function PrintScatterChart({
+  data,
+  height = 170,
+}: {
+  data: Array<{ x: number; y: number }>;
+  height?: number;
+}) {
+  return (
+    <div className="avoid-break" style={{ width: PRINT_CHART_W, height }}>
+      <ScatterChart
+        width={PRINT_CHART_W}
+        height={height}
+        margin={{ top: 4, right: 16, bottom: 4, left: 0 }}
+      >
+        <CartesianGrid stroke="#e3e3e6" strokeDasharray="3 3" />
+        <XAxis
+          dataKey="x"
+          type="number"
+          domain={["dataMin", "dataMax"]}
+          tickFormatter={(t) =>
+            new Intl.DateTimeFormat("de-DE", {
+              day: "2-digit",
+              month: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+              timeZone: "UTC",
+            }).format(new Date(t))
+          }
+          tick={{ fontSize: 8, fill: "#6b6b73" }}
+          stroke="#cfcfd5"
+        />
+        <YAxis
+          dataKey="y"
+          type="number"
+          unit=" ms"
+          tick={{ fontSize: 8, fill: "#6b6b73" }}
+          stroke="#cfcfd5"
+          width={42}
+        />
+        <ZAxis range={[8, 9]} />
+        <Scatter data={data} fill="#0d0d0f" isAnimationActive={false} />
+      </ScatterChart>
+    </div>
+  );
+}
+
 function PrintReport({
   data,
   range,
@@ -2221,6 +2462,88 @@ function PrintReport({
   if (!detail) return null;
   const s = detail.summary;
 
+  // ----------- Daten für Charts auf den PDF-Seiten -----------
+  const overallTempoMin =
+    s.totalActiveSec > 0 ? (s.actionCount * 60) / s.totalActiveSec : 0;
+  const overallTempoHour =
+    s.totalActiveSec > 0 ? (s.actionCount * 3600) / s.totalActiveSec : 0;
+
+  const dailyChartData = detail.dailyActivity.map((d) => ({
+    label: fmtDay(d.day),
+    activeHours: +(d.activeSec / 3600).toFixed(2),
+    tempoMin:
+      d.activeSec > 0 ? +((d.actions * 60) / d.activeSec).toFixed(2) : 0,
+  }));
+
+  const tempoModeData = detail.perMode
+    .filter((m) => m.activeSec > 0 && m.actions > 0)
+    .map((m) => ({
+      label: m.mode || "(leer)",
+      tempo: +((m.actions * 60) / m.activeSec).toFixed(2),
+    }))
+    .sort((a, b) => b.tempo - a.tempo);
+
+  const buttonsChartData = detail.buttonsTimeline.map((b) => {
+    const row: Record<string, number | string | null> = {
+      label: bucketLabel(b.bucket),
+    };
+    for (const name of detail.topButtonNames) {
+      row[name] = b.counts[name] ?? 0;
+    }
+    return row;
+  });
+  const buttonsSeries = detail.topButtonNames.map((name, idx) => ({
+    key: name,
+    name,
+    color: BUTTON_COLORS[idx % BUTTON_COLORS.length],
+    gradientId: `pdf-btn-${idx}`,
+  }));
+
+  const activityChartData = detail.timeline.map((p) => ({
+    label: bucketLabel(p.bucket),
+    events: p.events,
+    actions: p.actions,
+    processed: p.processed,
+  }));
+
+  const scatterData = detail.latencyPoints.map((p) => ({
+    x: aeTimestampToDate(p.ts).getTime(),
+    y: p.ms,
+  }));
+
+  // Verteilungs-Daten aus DistributionBlock-Logik nachbilden
+  const hourMap = new Map<number, { events: number; actions: number }>();
+  const wdMap = new Map<number, { events: number; actions: number }>();
+  for (const t of detail.timeline) {
+    const d = aeTimestampToDate(t.bucket);
+    const h = d.getUTCHours();
+    const wd = d.getUTCDay();
+    const hAcc = hourMap.get(h) || { events: 0, actions: 0 };
+    hAcc.events += t.events;
+    hAcc.actions += t.actions;
+    hourMap.set(h, hAcc);
+    const wdAcc = wdMap.get(wd) || { events: 0, actions: 0 };
+    wdAcc.events += t.events;
+    wdAcc.actions += t.actions;
+    wdMap.set(wd, wdAcc);
+  }
+  const hourPdfData = Array.from({ length: 24 }, (_, h) => ({
+    label: `${String(h).padStart(2, "0")}h`,
+    events: hourMap.get(h)?.events ?? 0,
+    actions: hourMap.get(h)?.actions ?? 0,
+  }));
+  const wdNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const wdPdfData = Array.from({ length: 7 }, (_, i) => ({
+    label: wdNames[i],
+    events: wdMap.get(i)?.events ?? 0,
+    actions: wdMap.get(i)?.actions ?? 0,
+  }));
+
+  const TOTAL_PAGES = 8;
+  const userLabel = detail.scope.aggregate
+    ? `Alle User (${s.uniqueUsers} aktiv)`
+    : detail.user;
+
   return (
     <div className="hidden print:block">
       <style>{`
@@ -2235,18 +2558,17 @@ function PrintReport({
         }
       `}</style>
 
+      {/* SEITE 1 — Cover & Hero */}
       <PrintPage
         pageNumber={1}
-        totalPages={4}
+        totalPages={TOTAL_PAGES}
         generatedAt={generatedAt}
         userAgent={s.primaryUserAgent}
-        userLabel={
-          detail.scope.aggregate
-            ? `Alle User (${s.uniqueUsers} aktiv)`
-            : detail.user
-        }
+        userLabel={userLabel}
       >
-        <h1 className="font-display text-[28px] tracking-tightish">User Analytics Report</h1>
+        <h1 className="font-display text-[28px] tracking-tightish">
+          User Analytics Report
+        </h1>
         <p className="mt-1 text-[12px] text-ink-700">
           Auswertung der Plattform-Aktivität anhand der Cloudflare Analytics
           Engine (<span className="font-mono">controll_platform_logs</span>).
@@ -2254,49 +2576,63 @@ function PrintReport({
           <span className="font-mono">{range.from}</span> →{" "}
           <span className="font-mono">{range.to}</span>.
         </p>
+
         <div className="mt-3 grid grid-cols-3 gap-3 rounded border border-hair px-3 py-2">
-          <div>
-            <p className="text-[9px] uppercase tracking-[0.16em] text-ink-500">
-              Aktive Zeit
-            </p>
-            <p className="font-display text-[16px] leading-tight">
-              {(s.totalActiveSec / 3600).toFixed(1)} h
-            </p>
-            <p className="text-[9px] text-ink-500">
-              {fmtDuration(s.totalActiveSec)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[9px] uppercase tracking-[0.16em] text-ink-500">
-              Offen aktuell
-            </p>
-            <p className="font-display text-[16px] leading-tight">
-              {s.totalRemaining != null ? fmtNumber(s.totalRemaining) : "–"}
-            </p>
-            <p className="text-[9px] text-ink-500">Fahrzeuge in allen Modi</p>
-          </div>
-          <div>
-            <p className="text-[9px] uppercase tracking-[0.16em] text-ink-500">
-              Restdauer
-            </p>
-            <p className="font-display text-[16px] leading-tight">
-              {fmtHours(s.etaHoursActive)}
-            </p>
-            <p className="text-[9px] text-ink-500">
-              24-h-Sicht: {fmtHours(s.etaHoursCalendar)}
-            </p>
-          </div>
+          <PdfHero
+            label="Aktive Zeit"
+            value={`${(s.totalActiveSec / 3600).toFixed(1)} h`}
+            sub={fmtDuration(s.totalActiveSec)}
+          />
+          <PdfHero
+            label="Offen aktuell"
+            value={
+              s.totalRemaining != null ? fmtNumber(s.totalRemaining) : "–"
+            }
+            sub="Fahrzeuge in allen Modi"
+          />
+          <PdfHero
+            label="Restdauer"
+            value={fmtHours(s.etaHoursActive)}
+            sub={`24-h-Sicht: ${fmtHours(s.etaHoursCalendar)}`}
+          />
         </div>
 
-        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          1. Übersicht
+        <h2 className="mt-5 text-[14px] font-semibold tracking-tightish">
+          1. Aktivität pro Tag
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Wie viele Stunden war der User pro Kalendertag (UTC) aktiv. Sessions,
+          die über Mitternacht laufen, werden anteilig auf beide Tage verteilt.
+        </p>
+        {dailyChartData.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine Tagesdaten –</p>
+        ) : (
+          <PrintAreaChart
+            data={dailyChartData}
+            yUnit="h"
+            height={150}
+            series={[
+              {
+                key: "activeHours",
+                name: "Aktive Zeit (h)",
+                color: "#0d0d0f",
+                gradientId: "pdf-active",
+              },
+            ]}
+          />
+        )}
+
+        <h2 className="mt-4 text-[14px] font-semibold tracking-tightish">
+          2. Übersicht
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           „Aktive Zeit" misst die echte Arbeitszeit des Users (Sessions mit
           5-Minuten-Pausen-Schwelle). Die <em>Kalendertag-Sicht</em> verteilt
           die bearbeiteten Fahrzeuge gleichmäßig über den ganzen Reportzeitraum.
+          „Restdauer" rechnet die aktuell offenen Fahrzeuge mit der gemessenen
+          Rate des Users hoch.
         </p>
-        <table className="mt-2 w-full border-collapse text-[11px]">
+        <table className="mt-2 w-full border-collapse text-[10.5px]">
           <tbody>
             <PrintRow label="Events gesamt" value={fmtNumber(s.eventCount)} />
             <PrintRow
@@ -2308,9 +2644,14 @@ function PrintReport({
               })`}
             />
             <PrintRow label="Sessions" value={fmtNumber(s.sessionCount)} />
-            <PrintRow label="Aktive Zeit gesamt" value={fmtDuration(s.totalActiveSec)} />
-            <PrintRow label="Ø Sessiondauer" value={fmtDuration(s.avgSessionSec)} />
-            <PrintRow label="Längste Session" value={fmtDuration(s.longestSessionSec)} />
+            <PrintRow
+              label="Aktive Zeit gesamt"
+              value={fmtDuration(s.totalActiveSec)}
+            />
+            <PrintRow
+              label="Ø / längste Session"
+              value={`${fmtDuration(s.avgSessionSec)} · ${fmtDuration(s.longestSessionSec)}`}
+            />
             <PrintRow
               label="Reportzeitraum"
               value={`${(s.rangeDays || 0).toFixed(2)} Tage · ${fmtNumber(s.rangeSpanSec)} s`}
@@ -2318,16 +2659,14 @@ function PrintReport({
             <PrintRow
               label="Aktive Tage / IPs"
               value={`${fmtNumber(s.uniqueDays)} Tage · ${fmtNumber(s.uniqueIps)} IPs${
-                detail.scope.aggregate ? ` · ${fmtNumber(s.uniqueUsers)} User` : ""
+                detail.scope.aggregate
+                  ? ` · ${fmtNumber(s.uniqueUsers)} User`
+                  : ""
               }`}
             />
             <PrintRow
-              label="Events / Sek."
-              value={s.eventsPerSec != null ? `${s.eventsPerSec.toFixed(2)} /s` : "–"}
-            />
-            <PrintRow
-              label="Aktionen / Sek."
-              value={s.actionsPerSec != null ? `${s.actionsPerSec.toFixed(2)} /s` : "–"}
+              label="Tempo gesamt"
+              value={`${overallTempoMin.toFixed(2)} Aktionen/min · ${overallTempoHour.toFixed(1)} /h`}
             />
             <PrintRow
               label="Bearbeitete Fahrzeuge"
@@ -2343,7 +2682,9 @@ function PrintReport({
             />
             <PrintRow
               label="Aktuell offen (alle Modi)"
-              value={s.totalRemaining != null ? fmtNumber(s.totalRemaining) : "–"}
+              value={
+                s.totalRemaining != null ? fmtNumber(s.totalRemaining) : "–"
+              }
             />
             <PrintRow
               label="Restdauer (echte Arbeitszeit)"
@@ -2363,9 +2704,18 @@ function PrintReport({
             />
           </tbody>
         </table>
+      </PrintPage>
 
-        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          2. Verbleibende Fahrzeuge je Modus
+      {/* SEITE 2 — Verbleibend & Tagestabelle */}
+      <PrintPage
+        pageNumber={2}
+        totalPages={TOTAL_PAGES}
+        generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
+        userLabel={userLabel}
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
+          3. Verbleibende Fahrzeuge je Modus
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           Werte aus <span className="font-mono">double2..5</span> ab{" "}
@@ -2399,66 +2749,29 @@ function PrintReport({
                 <td className="py-1.5 pr-3 text-right">
                   {r.maxOpen != null ? fmtNumber(r.maxOpen) : "–"}
                 </td>
-                <td className="py-1.5 pr-3 text-right">{fmtNumber(r.processed)}</td>
-                <td className="py-1.5 pr-3 text-right">{fmtRate(r.processedPerHour)}</td>
-                <td className="py-1.5 pr-3 text-right">{fmtHours(r.etaHours)}</td>
+                <td className="py-1.5 pr-3 text-right">
+                  {fmtNumber(r.processed)}
+                </td>
+                <td className="py-1.5 pr-3 text-right">
+                  {fmtRate(r.processedPerHour)}
+                </td>
+                <td className="py-1.5 pr-3 text-right">
+                  {fmtHours(r.etaHours)}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
 
         <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          3. Internetgeschwindigkeit
+          4. Aktivität pro Tag · Detail
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
-          Latenz pro Aktion (<span className="font-mono">blob7</span>) als ms.
-          Werte sind in UTC erfasst.
+          Tabellarische Aufstellung der täglichen Werte (zuletzt 31 Tage).
+          „Tempo /min" zählt nur echte Aktionen (
+          <span className="font-mono">shortcut:*</span>) pro aktiver Minute des
+          Tages.
         </p>
-        <table className="mt-2 w-full border-collapse text-[11px]">
-          <tbody>
-            <PrintRow label="Samples" value={fmtNumber(detail.network.samples)} />
-            <PrintRow label="Ø" value={fmtMs(detail.network.avgMs)} />
-            <PrintRow label="min / max" value={`${fmtMs(detail.network.minMs)} – ${fmtMs(detail.network.maxMs)}`} />
-            <PrintRow label="p50 / p95 / p99" value={`${fmtMs(detail.network.p50Ms)} · ${fmtMs(detail.network.p95Ms)} · ${fmtMs(detail.network.p99Ms)}`} />
-          </tbody>
-        </table>
-      </PrintPage>
-
-      <PrintPage
-        pageNumber={2}
-        totalPages={4}
-        generatedAt={generatedAt}
-        userAgent={s.primaryUserAgent}
-        userLabel={
-          detail.scope.aggregate
-            ? `Alle User (${s.uniqueUsers} aktiv)`
-            : detail.user
-        }
-      >
-        <h2 className="text-[14px] font-semibold tracking-tightish">
-          4. Aktivität pro Tag
-        </h2>
-        <p className="text-[11px] leading-relaxed text-ink-700">
-          Wie lange war der User pro Kalendertag (UTC) aktiv (Summe der
-          Sessions). Sessions, die über Mitternacht laufen, werden anteilig auf
-          beide Tage verteilt. „Tempo" zählt nur echte Aktionen
-          (<span className="font-mono">shortcut:*</span>) pro aktiver Minute.
-        </p>
-        {(() => {
-          const overallTempoMin =
-            s.totalActiveSec > 0 ? (s.actionCount * 60) / s.totalActiveSec : 0;
-          const overallTempoHour =
-            s.totalActiveSec > 0
-              ? (s.actionCount * 3600) / s.totalActiveSec
-              : 0;
-          return (
-            <p className="mt-1 text-[11px] text-ink-700">
-              Tempo gesamt:{" "}
-              <strong>{overallTempoMin.toFixed(2)} Aktionen/min</strong> ·{" "}
-              {overallTempoHour.toFixed(1)} Aktionen/h
-            </p>
-          );
-        })()}
         {detail.dailyActivity.length === 0 ? (
           <p className="mt-2 text-[11px] text-ink-500">– keine Tagesdaten –</p>
         ) : (
@@ -2485,128 +2798,449 @@ function PrintReport({
                     <td className="py-1.5 pr-3 text-right">
                       {fmtDuration(d.activeSec)}
                     </td>
-                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.sessions)}</td>
-                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.events)}</td>
-                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.actions)}</td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(d.sessions)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(d.events)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(d.actions)}
+                    </td>
                     <td className="py-1.5 pr-3 text-right">
                       {d.activeSec > 0 ? tempoMin.toFixed(2) : "–"}
                     </td>
-                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.processed)}</td>
-                    <td className="py-1.5 pr-3 text-right">{fmtMs(d.avgLatencyMs)}</td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(d.processed)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtMs(d.avgLatencyMs)}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         )}
+      </PrintPage>
 
-        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          5. Tempo pro Modus
+      {/* SEITE 3 — Tempo */}
+      <PrintPage
+        pageNumber={3}
+        totalPages={TOTAL_PAGES}
+        generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
+        userLabel={userLabel}
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
+          5. Tempo
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
-          Aktionen pro aktiver Minute und Stunde, je Modus. Aktive Zeit wird
-          pro Modus aus den jeweiligen Sessions berechnet.
+          Aktionen pro aktiver Minute. Die rote gestrichelte Linie zeigt den
+          Gesamtdurchschnitt über den ganzen Reportzeitraum.
         </p>
-        {detail.perMode.filter((m) => m.activeSec > 0 && m.actions > 0)
-          .length === 0 ? (
+        <p className="mt-1 text-[11px] text-ink-700">
+          Tempo gesamt:{" "}
+          <strong>{overallTempoMin.toFixed(2)} Aktionen/min</strong> ·{" "}
+          {overallTempoHour.toFixed(1)} Aktionen/h
+        </p>
+
+        <h3 className="mt-3 text-[12px] font-semibold tracking-tightish">
+          Pro Tag
+        </h3>
+        {dailyChartData.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine Daten –</p>
+        ) : (
+          <PrintAreaChart
+            data={dailyChartData}
+            yUnit="/min"
+            height={170}
+            referenceY={overallTempoMin}
+            referenceLabel={`Ø ${overallTempoMin.toFixed(2)} /min`}
+            series={[
+              {
+                key: "tempoMin",
+                name: "Tempo (Aktionen/min)",
+                color: "#0d0d0f",
+                gradientId: "pdf-tempo-day",
+              },
+            ]}
+          />
+        )}
+
+        <h3 className="mt-4 text-[12px] font-semibold tracking-tightish">
+          Pro Modus
+        </h3>
+        {tempoModeData.length === 0 ? (
           <p className="mt-2 text-[11px] text-ink-500">
             – keine Modus-Daten mit messbarer Aktivität –
           </p>
         ) : (
-          <table className="mt-2 w-full border-collapse text-[10.5px]">
-            <thead>
-              <tr className="border-b border-hair text-left">
-                <th className="py-1.5 pr-3">Modus</th>
-                <th className="py-1.5 pr-3 text-right">Aktionen</th>
-                <th className="py-1.5 pr-3 text-right">Aktive Zeit</th>
-                <th className="py-1.5 pr-3 text-right">Tempo /min</th>
-                <th className="py-1.5 pr-3 text-right">Tempo /h</th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.perMode
-                .filter((m) => m.activeSec > 0 && m.actions > 0)
-                .map((m) => {
-                  const tMin = (m.actions * 60) / m.activeSec;
-                  const tHour = (m.actions * 3600) / m.activeSec;
-                  return (
-                    <tr key={m.mode} className="border-b border-hair/60">
-                      <td className="py-1.5 pr-3">{m.mode || "(leer)"}</td>
-                      <td className="py-1.5 pr-3 text-right">
-                        {fmtNumber(m.actions)}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right">
-                        {fmtDuration(m.activeSec)}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right">
-                        {tMin.toFixed(2)}
-                      </td>
-                      <td className="py-1.5 pr-3 text-right">
-                        {tHour.toFixed(1)}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+          <>
+            <PrintAreaChart
+              data={tempoModeData}
+              yUnit="/min"
+              height={150}
+              referenceY={overallTempoMin}
+              referenceLabel={`Ø ${overallTempoMin.toFixed(2)} /min`}
+              series={[
+                {
+                  key: "tempo",
+                  name: "Tempo (Aktionen/min)",
+                  color: "#1f6feb",
+                  gradientId: "pdf-tempo-mode",
+                },
+              ]}
+            />
+            <table className="mt-3 w-full border-collapse text-[10.5px]">
+              <thead>
+                <tr className="border-b border-hair text-left">
+                  <th className="py-1.5 pr-3">Modus</th>
+                  <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                  <th className="py-1.5 pr-3 text-right">Aktive Zeit</th>
+                  <th className="py-1.5 pr-3 text-right">Tempo /min</th>
+                  <th className="py-1.5 pr-3 text-right">Tempo /h</th>
+                  <th className="py-1.5 pr-3 text-right">vs. Ø</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.perMode
+                  .filter((m) => m.activeSec > 0 && m.actions > 0)
+                  .map((m) => {
+                    const tMin = (m.actions * 60) / m.activeSec;
+                    const tHour = (m.actions * 3600) / m.activeSec;
+                    const diff =
+                      overallTempoMin > 0
+                        ? ((tMin - overallTempoMin) / overallTempoMin) * 100
+                        : 0;
+                    return (
+                      <tr key={m.mode} className="border-b border-hair/60">
+                        <td className="py-1.5 pr-3">{m.mode || "(leer)"}</td>
+                        <td className="py-1.5 pr-3 text-right">
+                          {fmtNumber(m.actions)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right">
+                          {fmtDuration(m.activeSec)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right">
+                          {tMin.toFixed(2)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right">
+                          {tHour.toFixed(1)}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right">
+                          {diff >= 0 ? "+" : ""}
+                          {diff.toFixed(0)} %
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </>
         )}
+      </PrintPage>
 
-        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+      {/* SEITE 4 — Aktionen über Zeit */}
+      <PrintPage
+        pageNumber={4}
+        totalPages={TOTAL_PAGES}
+        generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
+        userLabel={userLabel}
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
           6. Aktionen über Zeit
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
-          Häufigkeit der wichtigsten Aktionen (Top {detail.topButtonNames.length})
-          pro Zeit-Bucket sowie die durchschnittliche Latenz.
+          Welche Buttons wurden gedrückt – pro Zeit-Bucket. Eine Fläche pro
+          Top-Button (Top {detail.topButtonNames.length}). Die Latenz pro Bucket
+          steht in der Tabelle.
         </p>
-        {detail.buttonsTimeline.length === 0 ? (
-          <p className="mt-2 text-[11px] text-ink-500">– keine Aktionsverläufe –</p>
+
+        {buttonsChartData.length === 0 || buttonsSeries.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">
+            – keine Aktionsverläufe –
+          </p>
         ) : (
-          <table className="mt-2 w-full border-collapse text-[10.5px]">
+          <>
+            <PrintAreaChart
+              data={buttonsChartData}
+              series={buttonsSeries}
+              height={210}
+            />
+            <h3 className="mt-3 text-[12px] font-semibold tracking-tightish">
+              Detail-Tabelle (zuletzt 25 Buckets)
+            </h3>
+            <table className="mt-2 w-full border-collapse text-[9.5px]">
+              <thead>
+                <tr className="border-b border-hair text-left">
+                  <th className="py-1.5 pr-3">Zeit-Bucket</th>
+                  {detail.topButtonNames.map((b) => (
+                    <th key={b} className="py-1.5 pr-3 text-right">
+                      {b}
+                    </th>
+                  ))}
+                  <th className="py-1.5 pr-3 text-right">Ø Latenz</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.buttonsTimeline.slice(-25).map((b) => (
+                  <tr key={b.bucket} className="border-b border-hair/60">
+                    <td className="py-1.5 pr-3 font-mono">{b.bucket}</td>
+                    {detail.topButtonNames.map((name) => (
+                      <td key={name} className="py-1.5 pr-3 text-right">
+                        {fmtNumber(b.counts[name] ?? 0)}
+                      </td>
+                    ))}
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtMs(b.avgLatencyMs)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </PrintPage>
+
+      {/* SEITE 5 — Aktivitätsverlauf + Internet */}
+      <PrintPage
+        pageNumber={5}
+        totalPages={TOTAL_PAGES}
+        generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
+        userLabel={userLabel}
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
+          7. Aktivität · Events / Aktionen / Bearbeitet
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Pro Zeit-Bucket: Events (grau), echte Aktionen (schwarz) und
+          bearbeitete Fahrzeuge (blau).
+        </p>
+        {activityChartData.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine Verlaufsdaten –</p>
+        ) : (
+          <PrintAreaChart
+            data={activityChartData}
+            height={170}
+            series={[
+              {
+                key: "events",
+                name: "Events",
+                color: "#9aa2ac",
+                gradientId: "pdf-act-evt",
+              },
+              {
+                key: "actions",
+                name: "Aktionen",
+                color: "#0d0d0f",
+                gradientId: "pdf-act-act",
+              },
+              {
+                key: "processed",
+                name: "Bearbeitet",
+                color: "#1f6feb",
+                gradientId: "pdf-act-proc",
+              },
+            ]}
+          />
+        )}
+
+        <h2 className="mt-5 text-[14px] font-semibold tracking-tightish">
+          8. Internetgeschwindigkeit
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Latenz pro Aktion (<span className="font-mono">blob7</span>) als ms.
+          „p95" heißt: 95 % aller Aktionen waren schneller.
+        </p>
+        <table className="mt-2 w-full border-collapse text-[11px]">
+          <tbody>
+            <PrintRow
+              label="Samples"
+              value={fmtNumber(detail.network.samples)}
+            />
+            <PrintRow label="Ø" value={fmtMs(detail.network.avgMs)} />
+            <PrintRow
+              label="min / max"
+              value={`${fmtMs(detail.network.minMs)} – ${fmtMs(detail.network.maxMs)}`}
+            />
+            <PrintRow
+              label="p50 / p95 / p99"
+              value={`${fmtMs(detail.network.p50Ms)} · ${fmtMs(detail.network.p95Ms)} · ${fmtMs(detail.network.p99Ms)}`}
+            />
+          </tbody>
+        </table>
+        {scatterData.length > 0 && (
+          <>
+            <h3 className="mt-3 text-[12px] font-semibold tracking-tightish">
+              Latenz-Verlauf · jeder Punkt = eine Aktion
+            </h3>
+            <PrintScatterChart data={scatterData} height={150} />
+          </>
+        )}
+        {detail.vehicleLatency.length > 0 && (
+          <>
+            <h3 className="mt-3 text-[12px] font-semibold tracking-tightish">
+              Top-Fahrzeuge nach Latenz
+            </h3>
+            <table className="mt-2 w-full border-collapse text-[10px]">
+              <thead>
+                <tr className="border-b border-hair text-left">
+                  <th className="py-1.5 pr-3">Fahrzeug</th>
+                  <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                  <th className="py-1.5 pr-3 text-right">Ø ms</th>
+                  <th className="py-1.5 pr-3 text-right">max ms</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.vehicleLatency.slice(0, 12).map((v, i) => (
+                  <tr key={i} className="border-b border-hair/60">
+                    <td className="py-1.5 pr-3">{v.label}</td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(v.actions)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtMs(v.avgLatencyMs)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtMs(v.maxLatencyMs)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </PrintPage>
+
+      {/* SEITE 6 — Verteilungen */}
+      <PrintPage
+        pageNumber={6}
+        totalPages={TOTAL_PAGES}
+        generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
+        userLabel={userLabel}
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
+          9. Verteilungen
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Wann arbeitet der User typischerweise? Oben die Stunde des Tages
+          (UTC), unten der Wochentag.
+        </p>
+
+        <h3 className="mt-3 text-[12px] font-semibold tracking-tightish">
+          Stunde des Tages (UTC)
+        </h3>
+        <PrintAreaChart
+          data={hourPdfData}
+          height={150}
+          series={[
+            {
+              key: "events",
+              name: "Events",
+              color: "#9aa2ac",
+              gradientId: "pdf-h-evt",
+            },
+            {
+              key: "actions",
+              name: "Aktionen",
+              color: "#0d0d0f",
+              gradientId: "pdf-h-act",
+            },
+          ]}
+        />
+
+        <h3 className="mt-4 text-[12px] font-semibold tracking-tightish">
+          Wochentag
+        </h3>
+        <PrintAreaChart
+          data={wdPdfData}
+          height={150}
+          series={[
+            {
+              key: "events",
+              name: "Events",
+              color: "#9aa2ac",
+              gradientId: "pdf-wd-evt",
+            },
+            {
+              key: "actions",
+              name: "Aktionen",
+              color: "#0d0d0f",
+              gradientId: "pdf-wd-act",
+            },
+          ]}
+        />
+
+        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+          10. Sessions (zuletzt 12)
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Eine Session ist ein Block zusammenhängender Aktivität. Eine Pause
+          von ≥ 5 Minuten beendet die laufende Session.
+        </p>
+        {detail.sessions.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine Sessions –</p>
+        ) : (
+          <table className="mt-2 w-full border-collapse text-[10px]">
             <thead>
               <tr className="border-b border-hair text-left">
-                <th className="py-1.5 pr-3">Zeit-Bucket</th>
-                {detail.topButtonNames.map((b) => (
-                  <th key={b} className="py-1.5 pr-3 text-right">
-                    {b}
-                  </th>
-                ))}
-                <th className="py-1.5 pr-3 text-right">Ø Latenz</th>
+                <th className="py-1.5 pr-3">Start</th>
+                <th className="py-1.5 pr-3">Ende</th>
+                <th className="py-1.5 pr-3 text-right">Events</th>
+                <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                <th className="py-1.5 pr-3 text-right">Aktiv</th>
+                <th className="py-1.5 pr-3">Modi</th>
               </tr>
             </thead>
             <tbody>
-              {detail.buttonsTimeline.slice(-25).map((b) => (
-                <tr key={b.bucket} className="border-b border-hair/60">
-                  <td className="py-1.5 pr-3 font-mono">{b.bucket}</td>
-                  {detail.topButtonNames.map((name) => (
-                    <td key={name} className="py-1.5 pr-3 text-right">
-                      {fmtNumber(b.counts[name] ?? 0)}
+              {detail.sessions
+                .slice(-12)
+                .reverse()
+                .map((sess, i) => (
+                  <tr key={i} className="border-b border-hair/60">
+                    <td className="py-1.5 pr-3 font-mono">
+                      {fmtDateTime(sess.start)}
                     </td>
-                  ))}
-                  <td className="py-1.5 pr-3 text-right">{fmtMs(b.avgLatencyMs)}</td>
-                </tr>
-              ))}
+                    <td className="py-1.5 pr-3 font-mono">
+                      {fmtDateTime(sess.end)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(sess.events)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(sess.actions)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtDuration(sess.durationSec)}
+                    </td>
+                    <td className="py-1.5 pr-3">
+                      {sess.modes.join(", ") || "–"}
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
         )}
       </PrintPage>
 
+      {/* SEITE 7 — IPs + Aufschlüsselungen */}
       <PrintPage
-        pageNumber={3}
-        totalPages={4}
+        pageNumber={7}
+        totalPages={TOTAL_PAGES}
         generatedAt={generatedAt}
         userAgent={s.primaryUserAgent}
-        userLabel={
-          detail.scope.aggregate
-            ? `Alle User (${s.uniqueUsers} aktiv)`
-            : detail.user
-        }
+        userLabel={userLabel}
       >
         <h2 className="text-[14px] font-semibold tracking-tightish">
-          7. IP-Adressen
+          11. IP-Adressen
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
-          Aufschlüsselung der Aktivität pro IP. Bei{" "}
-          <em>Alle User</em> werden alle Plattform-User gemeinsam betrachtet.
+          Aufschlüsselung der Aktivität pro IP. Bei <em>Alle User</em> werden
+          alle Plattform-User gemeinsam betrachtet.
         </p>
         {detail.perIp.length === 0 ? (
           <p className="mt-2 text-[11px] text-ink-500">– keine IP-Daten –</p>
@@ -2625,10 +3259,18 @@ function PrintReport({
               {detail.perIp.slice(0, 30).map((ip) => (
                 <tr key={ip.ip} className="border-b border-hair/60">
                   <td className="py-1.5 pr-3 font-mono">{ip.ip || "(leer)"}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(ip.events)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(ip.actions)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtDuration(ip.activeSec)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtMs(ip.avgLatencyMs)}</td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {fmtNumber(ip.events)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {fmtNumber(ip.actions)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {fmtDuration(ip.activeSec)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {fmtMs(ip.avgLatencyMs)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2636,14 +3278,47 @@ function PrintReport({
         )}
 
         <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          8. Aufschlüsselungen
+          12. Aufschlüsselungen
         </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Top-Listen über den ganzen Berichtszeitraum.
+        </p>
         <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-4">
-          <PrintRankList title="Aktionen (shortcut:*)" items={detail.topActions.map((a) => ({ label: a.button, value: a.count }))} />
-          <PrintRankList title="Modi" items={detail.topModes.map((m) => ({ label: m.mode || "(leer)", value: m.count }))} />
-          <PrintRankList title="Marken" items={detail.topBrands.map((b) => ({ label: b.brand, value: b.count }))} />
-          <PrintRankList title="Modelle" items={detail.topModels.map((m) => ({ label: `${m.brand} ${m.model}`, value: m.count }))} />
-          <PrintRankList title="Ansichten" items={detail.topViews.map((v) => ({ label: v.view, value: v.count }))} />
+          <PrintRankList
+            title="Aktionen (shortcut:*)"
+            items={detail.topActions.map((a) => ({
+              label: a.button,
+              value: a.count,
+            }))}
+          />
+          <PrintRankList
+            title="Modi"
+            items={detail.topModes.map((m) => ({
+              label: m.mode || "(leer)",
+              value: m.count,
+            }))}
+          />
+          <PrintRankList
+            title="Marken"
+            items={detail.topBrands.map((b) => ({
+              label: b.brand,
+              value: b.count,
+            }))}
+          />
+          <PrintRankList
+            title="Modelle"
+            items={detail.topModels.map((m) => ({
+              label: `${m.brand} ${m.model}`,
+              value: m.count,
+            }))}
+          />
+          <PrintRankList
+            title="Ansichten"
+            items={detail.topViews.map((v) => ({
+              label: v.view,
+              value: v.count,
+            }))}
+          />
           <PrintRankList
             title="Per-Modus (Events / Aktionen)"
             items={detail.perMode.map((m) => ({
@@ -2655,26 +3330,25 @@ function PrintReport({
         </div>
       </PrintPage>
 
+      {/* SEITE 8 — Fahrzeuge */}
       <PrintPage
-        pageNumber={4}
-        totalPages={4}
+        pageNumber={8}
+        totalPages={TOTAL_PAGES}
         generatedAt={generatedAt}
         userAgent={s.primaryUserAgent}
-        userLabel={
-          detail.scope.aggregate
-            ? `Alle User (${s.uniqueUsers} aktiv)`
-            : detail.user
-        }
+        userLabel={userLabel}
       >
         <h2 className="text-[14px] font-semibold tracking-tightish">
-          9. Fahrzeuge ({detail.vehicles.length})
+          13. Fahrzeuge ({detail.vehicles.length})
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           Bearbeitete Fahrzeuge im Zeitraum mit Anzahl Events / Aktionen sowie
           den Usern, die das jeweilige Fahrzeug bearbeitet haben.
         </p>
         {detail.vehicles.length === 0 ? (
-          <p className="mt-2 text-[11px] text-ink-500">– keine Fahrzeug-Daten –</p>
+          <p className="mt-2 text-[11px] text-ink-500">
+            – keine Fahrzeug-Daten –
+          </p>
         ) : (
           <table className="mt-2 w-full border-collapse text-[10.5px]">
             <thead>
@@ -2688,7 +3362,10 @@ function PrintReport({
             </thead>
             <tbody>
               {detail.vehicles.slice(0, 80).map((v, idx) => (
-                <tr key={`${v.label}|${idx}`} className="border-b border-hair/60 align-top">
+                <tr
+                  key={`${v.label}|${idx}`}
+                  className="border-b border-hair/60 align-top"
+                >
                   <td className="py-1.5 pr-3 font-medium">
                     {v.label || `${v.brand} ${v.model}`}
                     {v.body || v.trim || v.color ? (
@@ -2697,10 +3374,17 @@ function PrintReport({
                       </span>
                     ) : null}
                   </td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(v.events)}</td>
-                  <td className="py-1.5 pr-3 text-right">{fmtNumber(v.actions)}</td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {fmtNumber(v.events)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {fmtNumber(v.actions)}
+                  </td>
                   <td className="py-1.5 pr-3">
-                    {v.users.slice(0, 4).map((u) => `${u.user} (${u.events})`).join(", ")}
+                    {v.users
+                      .slice(0, 4)
+                      .map((u) => `${u.user} (${u.events})`)
+                      .join(", ")}
                     {v.users.length > 4 ? ` …` : ""}
                   </td>
                   <td className="py-1.5 pr-3 font-mono text-[9.5px]">
@@ -2716,11 +3400,31 @@ function PrintReport({
         )}
         {detail.vehicles.length > 80 && (
           <p className="mt-2 text-[10px] text-ink-500">
-            Es werden die 80 aktivsten Fahrzeuge gedruckt. Weitere Fahrzeuge sind
-            im Online-Bericht über die Suche zugänglich.
+            Es werden die 80 aktivsten Fahrzeuge gedruckt. Weitere Fahrzeuge
+            sind im Online-Bericht über die Suche zugänglich.
           </p>
         )}
       </PrintPage>
+    </div>
+  );
+}
+
+function PdfHero({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[9px] uppercase tracking-[0.16em] text-ink-500">
+        {label}
+      </p>
+      <p className="font-display text-[16px] leading-tight">{value}</p>
+      {sub && <p className="text-[9px] text-ink-500">{sub}</p>}
     </div>
   );
 }
