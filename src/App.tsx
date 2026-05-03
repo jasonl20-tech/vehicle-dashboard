@@ -37,7 +37,7 @@ import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
-import VehicleDatabaseStatusPage from "./pages/VehicleDatabaseStatusPage";
+import UserAnalyticsPage from "./pages/UserAnalyticsPage";
 import ZahlungenPlaenePage from "./pages/ZahlungenPlaenePage";
 import ZahlungenZahlungslinksPage from "./pages/ZahlungenZahlungslinksPage";
 
@@ -100,6 +100,8 @@ export default function App() {
           </Route>
 
           <Route path="/admin-settings" element={<AdminSettingsPage />} />
+
+          <Route path="/user-analytics" element={<UserAnalyticsPage />} />
 
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<OverviewPage />} />

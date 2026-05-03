@@ -4,6 +4,7 @@ import {
   Code2,
   FileText,
   Gauge,
+  LineChart,
   LayoutDashboard,
   LogOut,
   Send,
@@ -99,6 +100,11 @@ const TILES: PlatformTile[] = [
     title: "Admin Settings",
     icon: Shield,
     to: "/admin-settings",
+  },
+  {
+    title: "User Analytics",
+    icon: LineChart,
+    to: "/user-analytics",
   },
 ];
 
