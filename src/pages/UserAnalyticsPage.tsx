@@ -17,6 +17,8 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -74,6 +76,62 @@ function fmtMs(ms: number | null | undefined): string {
   if (ms < 1) return `${ms.toFixed(2)} ms`;
   if (ms < 1000) return `${Math.round(ms)} ms`;
   return `${(ms / 1000).toFixed(2)} s`;
+}
+
+function fmtHours(h: number | null | undefined): string {
+  if (h == null || !Number.isFinite(h)) return "–";
+  if (h <= 0) return "0";
+  if (h < 1 / 60) return `${Math.round(h * 3600)} s`;
+  if (h < 1) return `${Math.round(h * 60)} min`;
+  if (h < 24) return `${h.toFixed(1)} h`;
+  if (h < 24 * 14) return `${(h / 24).toFixed(1)} Tage`;
+  if (h < 24 * 30 * 6) return `${(h / 24 / 7).toFixed(1)} Wochen`;
+  return `${(h / 24 / 30).toFixed(1)} Monate`;
+}
+
+function fmtDay(s: string): string {
+  // s ist YYYY-MM-DD
+  try {
+    const d = new Date(`${s}T00:00:00Z`);
+    return new Intl.DateTimeFormat("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: "UTC",
+    }).format(d);
+  } catch {
+    return s;
+  }
+}
+
+function shortenUserAgent(ua: string | null | undefined): string {
+  if (!ua) return "–";
+  // Heuristisch: Browser + OS extrahieren
+  const browserMatch =
+    /(Edg|OPR|Chrome|Firefox|Version|Safari|MSIE|Trident)\/([\d.]+)/i.exec(ua);
+  const osMatch =
+    /(Windows NT [\d.]+|Mac OS X [\d_.]+|iPhone OS [\d_]+|Android [\d.]+|Linux)/i.exec(
+      ua,
+    );
+  let browser: string | null = null;
+  if (browserMatch) {
+    const name =
+      browserMatch[1] === "Edg"
+        ? "Edge"
+        : browserMatch[1] === "OPR"
+          ? "Opera"
+          : browserMatch[1] === "Version"
+            ? "Safari"
+            : browserMatch[1];
+    browser = `${name} ${browserMatch[2].split(".")[0]}`;
+  }
+  let os: string | null = null;
+  if (osMatch) {
+    os = osMatch[1].replace(/_/g, ".").replace("Mac OS X", "macOS");
+  }
+  if (browser && os) return `${browser} · ${os}`;
+  if (browser) return browser;
+  if (os) return os;
+  return ua.length > 80 ? `${ua.slice(0, 77)}…` : ua;
 }
 
 function bucketLabel(s: string): string {
@@ -525,14 +583,15 @@ function DetailPane({
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1500px] divide-y divide-hair">
+          <DailyActivityBlock detail={detail} />
           <KpiBlock detail={detail} />
           <ModesBlock detail={detail} />
+          <ButtonsTimelineBlock detail={detail} />
           <ActivityChartBlock detail={detail} />
           <NetworkSpeedBlock detail={detail} />
           <SessionsBlock detail={detail} />
           <PerIpBlock detail={detail} onSelectIp={onSelectIp} />
           <DistributionBlock detail={detail} />
-          {/* Fahrzeug-Block kommt unten, mit eigener Suche */}
           <VehiclesBlock detail={detail} />
           <BreakdownsBlock detail={detail} />
         </div>
@@ -553,32 +612,41 @@ function DetailHeader({
   onSelectIp: (ip: string | null) => void;
 }) {
   const isAggregate = detail.scope.aggregate;
+  const s = detail.summary;
   const subtitle = (
     <>
       <span className="font-mono">{range.from}</span>
       {" → "}
       <span className="font-mono">{range.to}</span>
-      {detail.summary.firstTs && detail.summary.lastTs && (
+      {s.firstTs && s.lastTs && (
         <>
           {" · letzte Aktivität "}
-          {fmtRelative(detail.summary.lastTs)}
+          {fmtRelative(s.lastTs)}
         </>
       )}
     </>
   );
   return (
     <div className="shrink-0 border-b border-hair bg-white px-4 py-4 sm:px-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="min-w-0 flex-1">
           <p className="text-[10.5px] font-medium uppercase tracking-[0.16em] text-ink-400">
             User-Bericht
           </p>
           <h2 className="mt-0.5 font-display text-[26px] tracking-tightish text-ink-900">
             {isAggregate
-              ? `Alle User (${detail.summary.uniqueUsers} aktiv)`
+              ? `Alle User (${s.uniqueUsers} aktiv)`
               : detail.user}
           </h2>
-          <p className="mt-1 text-[12px] text-ink-500">{subtitle}</p>
+          {s.primaryUserAgent && (
+            <p
+              className="mt-0.5 truncate font-mono text-[11.5px] text-ink-500"
+              title={s.primaryUserAgent}
+            >
+              {shortenUserAgent(s.primaryUserAgent)}
+            </p>
+          )}
+          <p className="mt-1.5 text-[12px] text-ink-500">{subtitle}</p>
           <p className="mt-0.5 text-[11.5px] text-ink-500">
             {detail.scope.ip ? (
               <>
@@ -595,13 +663,66 @@ function DetailHeader({
               </>
             ) : (
               <>
-                {fmtNumber(detail.summary.uniqueIps)} IP-Adressen ·{" "}
-                {fmtNumber(detail.summary.uniqueDays)} Tage aktiv ·{" "}
+                {fmtNumber(s.uniqueIps)} IP-Adressen ·{" "}
+                {fmtNumber(s.uniqueDays)} Tage aktiv ·{" "}
                 {users.length} User in der Liste
               </>
             )}
           </p>
         </div>
+        <HeaderHighlight
+          totalActiveSec={s.totalActiveSec}
+          totalRemaining={s.totalRemaining}
+          etaHoursActive={s.etaHoursActive}
+          etaHoursCalendar={s.etaHoursCalendar}
+        />
+      </div>
+    </div>
+  );
+}
+
+function HeaderHighlight({
+  totalActiveSec,
+  totalRemaining,
+  etaHoursActive,
+  etaHoursCalendar,
+}: {
+  totalActiveSec: number;
+  totalRemaining: number | null;
+  etaHoursActive: number | null;
+  etaHoursCalendar: number | null;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-x-8 gap-y-1 text-right">
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+          Aktive Zeit
+        </p>
+        <p className="mt-0.5 font-display text-[22px] leading-none tracking-tightish text-ink-900">
+          {(totalActiveSec / 3600).toFixed(1)}
+          <span className="ml-1 text-[12px] text-ink-500">h</span>
+        </p>
+        <p className="text-[10px] text-ink-500">{fmtDuration(totalActiveSec)}</p>
+      </div>
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+          Offen aktuell
+        </p>
+        <p className="mt-0.5 font-display text-[22px] leading-none tracking-tightish text-ink-900">
+          {totalRemaining != null ? fmtNumber(totalRemaining) : "–"}
+        </p>
+        <p className="text-[10px] text-ink-500">Fahrzeuge in allen Modi</p>
+      </div>
+      <div>
+        <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+          Restdauer
+        </p>
+        <p className="mt-0.5 font-display text-[22px] leading-none tracking-tightish text-ink-900">
+          {fmtHours(etaHoursActive)}
+        </p>
+        <p className="text-[10px] text-ink-500">
+          24-h-Sicht: {fmtHours(etaHoursCalendar)}
+        </p>
       </div>
     </div>
   );
@@ -671,6 +792,348 @@ function Block({
       <SectionHeader title={title} hint={hint} right={right} />
       {children}
     </section>
+  );
+}
+
+// ---------- Daily Activity (Top-Block, eigenständiger Datums-Filter) ----------
+
+function DailyActivityBlock({ detail }: { detail: DetailReport }) {
+  const days = detail.dailyActivity;
+  const hasData = days.length > 0;
+  const minDay = hasData ? days[0].day : "";
+  const maxDay = hasData ? days[days.length - 1].day : "";
+
+  const [from, setFrom] = useState<string>(minDay);
+  const [to, setTo] = useState<string>(maxDay);
+
+  // Initial-Range setzen, sobald Daten geladen sind
+  if (hasData && !from && !to) {
+    // setState im Render — wir vermeiden das, indem wir Defaults nur einmal setzen
+  }
+  // Fallback zur Anzeige, wenn from/to leer
+  const fromEff = from || minDay;
+  const toEff = to || maxDay;
+
+  const filtered = useMemo(() => {
+    if (!hasData) return [];
+    return days.filter((d) => d.day >= fromEff && d.day <= toEff);
+  }, [days, fromEff, toEff, hasData]);
+
+  const data = filtered.map((d) => ({
+    day: d.day,
+    label: fmtDay(d.day),
+    activeMin: d.activeSec / 60,
+    activeHours: d.activeSec / 3600,
+    sessions: d.sessions,
+    events: d.events,
+    actions: d.actions,
+    processed: d.processed,
+  }));
+
+  // Aggregate für KPI-Zeile
+  const totals = useMemo(() => {
+    return filtered.reduce(
+      (acc, d) => {
+        acc.activeSec += d.activeSec;
+        acc.events += d.events;
+        acc.actions += d.actions;
+        acc.processed += d.processed;
+        acc.sessions += d.sessions;
+        return acc;
+      },
+      { activeSec: 0, events: 0, actions: 0, processed: 0, sessions: 0 },
+    );
+  }, [filtered]);
+  const avgPerDay =
+    filtered.length > 0 ? totals.activeSec / filtered.length / 3600 : 0;
+
+  return (
+    <Block
+      title="Aktivität pro Tag"
+      hint="Wie lange war der User insgesamt pro Tag aktiv (Summe aller Sessions, UTC-Tagesgrenzen)."
+      right={
+        hasData ? (
+          <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-ink-600">
+            <label className="inline-flex items-center gap-1">
+              <span className="text-ink-500">von</span>
+              <input
+                type="date"
+                value={fromEff}
+                min={minDay}
+                max={toEff}
+                onChange={(e) => setFrom(e.target.value)}
+                className="rounded-md border border-hair bg-white px-2 py-1 text-[11.5px] text-ink-800 focus:border-ink-400 focus:outline-none"
+              />
+            </label>
+            <label className="inline-flex items-center gap-1">
+              <span className="text-ink-500">bis</span>
+              <input
+                type="date"
+                value={toEff}
+                min={fromEff}
+                max={maxDay}
+                onChange={(e) => setTo(e.target.value)}
+                className="rounded-md border border-hair bg-white px-2 py-1 text-[11.5px] text-ink-800 focus:border-ink-400 focus:outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setFrom(minDay);
+                setTo(maxDay);
+              }}
+              className="rounded-md border border-hair bg-white px-2 py-1 text-[11px] text-ink-600 hover:bg-night-900/[0.04]"
+            >
+              Reset
+            </button>
+          </div>
+        ) : null
+      }
+    >
+      {!hasData ? (
+        <p className="text-[12.5px] text-ink-500">Keine Tagesdaten im Zeitraum.</p>
+      ) : (
+        <>
+          <div className="mb-3 grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-5">
+            <HighlightStat
+              label="Tage angezeigt"
+              value={fmtNumber(filtered.length)}
+            />
+            <HighlightStat
+              label="Aktive Zeit"
+              value={fmtDuration(totals.activeSec)}
+              hint={`Ø ${avgPerDay.toFixed(1)} h / Tag`}
+            />
+            <HighlightStat
+              label="Sessions"
+              value={fmtNumber(totals.sessions)}
+            />
+            <HighlightStat
+              label="Aktionen"
+              value={fmtNumber(totals.actions)}
+            />
+            <HighlightStat
+              label="Bearbeitet"
+              value={fmtNumber(totals.processed)}
+            />
+          </div>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+                <defs>
+                  <linearGradient id="ua-active" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0d0d0f" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#0d0d0f" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: "#6b6b73" }}
+                  stroke="#cfcfd5"
+                />
+                <YAxis
+                  unit=" h"
+                  tick={{ fontSize: 10, fill: "#6b6b73" }}
+                  stroke="#cfcfd5"
+                />
+                <Tooltip
+                  wrapperStyle={{ fontSize: 11 }}
+                  contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
+                  formatter={(v: number, name: string) => {
+                    if (name === "Aktive Zeit (h)")
+                      return [`${v.toFixed(2)} h`, name];
+                    return [fmtNumber(v), name];
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Area
+                  type="monotone"
+                  dataKey="activeHours"
+                  name="Aktive Zeit (h)"
+                  stroke="#0d0d0f"
+                  strokeWidth={1.5}
+                  fill="url(#ua-active)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Mini-Tabelle */}
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-hair text-[10px] uppercase tracking-[0.12em] text-ink-500">
+                  <th className="py-1.5 pr-3 text-left font-medium">Tag</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Aktive Zeit</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Sessions</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Events</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Aktionen</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Bearbeitet</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">Ø Latenz</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hair/70">
+                {filtered.map((d) => (
+                  <tr key={d.day}>
+                    <td className="py-1.5 pr-3 font-mono text-ink-700">{d.day}</td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtDuration(d.activeSec)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">
+                      {fmtNumber(d.sessions)}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.events)}</td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.actions)}</td>
+                    <td className="py-1.5 pr-3 text-right">{fmtNumber(d.processed)}</td>
+                    <td className="py-1.5 pr-3 text-right text-ink-500">
+                      {fmtMs(d.avgLatencyMs)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Block>
+  );
+}
+
+function HighlightStat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.14em] text-ink-400">
+        {label}
+      </p>
+      <p className="mt-0.5 font-display text-[18px] leading-tight tracking-tightish text-ink-900">
+        {value}
+      </p>
+      {hint && <p className="text-[10.5px] text-ink-500">{hint}</p>}
+    </div>
+  );
+}
+
+// ---------- Buttons-Timeline ----------
+
+const BUTTON_COLORS = [
+  "#1f6feb",
+  "#dc7a3b",
+  "#10b981",
+  "#a855f7",
+  "#ef4444",
+  "#0ea5e9",
+];
+
+function ButtonsTimelineBlock({ detail }: { detail: DetailReport }) {
+  if (!detail.buttonsTimeline.length || detail.topButtonNames.length === 0) {
+    return null;
+  }
+  const data = detail.buttonsTimeline.map((b) => {
+    const row: Record<string, number | string | null> = {
+      bucket: b.bucket,
+      label: bucketLabel(b.bucket),
+      latency: b.avgLatencyMs ?? null,
+    };
+    for (const name of detail.topButtonNames) {
+      row[name] = b.counts[name] ?? 0;
+    }
+    return row;
+  });
+
+  return (
+    <Block
+      title="Aktionen über Zeit"
+      hint="Welche Buttons wurden gedrückt — und wie schnell war die Verbindung dabei (Linie auf rechter Achse)."
+    >
+      <div className="h-80 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart
+            data={data}
+            margin={{ top: 8, right: 12, bottom: 8, left: 0 }}
+          >
+            <defs>
+              {detail.topButtonNames.map((name, idx) => (
+                <linearGradient
+                  key={name}
+                  id={`btn-${idx}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={BUTTON_COLORS[idx % BUTTON_COLORS.length]}
+                    stopOpacity={0.45}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={BUTTON_COLORS[idx % BUTTON_COLORS.length]}
+                    stopOpacity={0.04}
+                  />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid stroke="#eaeaec" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: "#6b6b73" }}
+              stroke="#cfcfd5"
+            />
+            <YAxis
+              yAxisId="L"
+              tick={{ fontSize: 10, fill: "#6b6b73" }}
+              stroke="#cfcfd5"
+            />
+            <YAxis
+              yAxisId="R"
+              orientation="right"
+              unit=" ms"
+              tick={{ fontSize: 10, fill: "#6b6b73" }}
+              stroke="#cfcfd5"
+            />
+            <Tooltip
+              wrapperStyle={{ fontSize: 11 }}
+              contentStyle={{ borderRadius: 6, border: "1px solid #eaeaec" }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {detail.topButtonNames.map((name, idx) => (
+              <Area
+                key={name}
+                yAxisId="L"
+                type="monotone"
+                dataKey={name}
+                name={name}
+                stroke={BUTTON_COLORS[idx % BUTTON_COLORS.length]}
+                strokeWidth={1.5}
+                fill={`url(#btn-${idx})`}
+                stackId={undefined}
+              />
+            ))}
+            <Line
+              yAxisId="R"
+              type="monotone"
+              dataKey="latency"
+              name="Ø Latenz (ms)"
+              stroke="#0d0d0f"
+              strokeWidth={1.25}
+              strokeDasharray="4 3"
+              dot={false}
+              connectNulls
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </Block>
   );
 }
 
@@ -751,6 +1214,25 @@ function KpiBlock({ detail }: { detail: DetailReport }) {
             )}`}
           />
           <KpiRow
+            label="Aktuell offen (alle Modi)"
+            value={s.totalRemaining != null ? fmtNumber(s.totalRemaining) : "–"}
+            hint="Summe der zuletzt gemessenen verbleibenden Fahrzeuge"
+          />
+          <KpiRow
+            label="Restdauer (echte Arbeitszeit)"
+            value={fmtHours(s.etaHoursActive)}
+            hint={`offen ÷ Ø Fahrzeuge / aktive h${
+              s.etaHoursActive != null && s.etaHoursActive > 0
+                ? ` ≈ ${(s.etaHoursActive / 24).toFixed(1)} Arbeitstage à 24 h`
+                : ""
+            }`}
+          />
+          <KpiRow
+            label="Restdauer (24-h-Sicht)"
+            value={fmtHours(s.etaHoursCalendar)}
+            hint="offen ÷ Ø Fahrzeuge / Kalenderstunde"
+          />
+          <KpiRow
             label="Erstes / letztes Event"
             value={
               s.firstTs && s.lastTs
@@ -782,6 +1264,7 @@ function ModesBlock({ detail }: { detail: DetailReport }) {
               <th className="py-2 pr-4 text-right font-medium">max</th>
               <th className="py-2 pr-4 text-right font-medium">Bearbeitet</th>
               <th className="py-2 pr-4 text-right font-medium">/h</th>
+              <th className="py-2 pr-4 text-right font-medium">Restdauer</th>
               <th className="py-2 pr-4 text-right font-medium">zuletzt</th>
             </tr>
           </thead>
@@ -801,6 +1284,9 @@ function ModesBlock({ detail }: { detail: DetailReport }) {
                 <td className="py-2 pr-4 text-right">{fmtNumber(r.processed)}</td>
                 <td className="py-2 pr-4 text-right text-ink-600">
                   {fmtRate(r.processedPerHour)}
+                </td>
+                <td className="py-2 pr-4 text-right">
+                  {fmtHours(r.etaHours)}
                 </td>
                 <td className="py-2 pr-4 text-right text-ink-500">
                   {r.latestTs ? fmtDateTime(r.latestTs) : "–"}
@@ -1410,8 +1896,9 @@ function PrintReport({
 
       <PrintPage
         pageNumber={1}
-        totalPages={3}
+        totalPages={4}
         generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
         userLabel={
           detail.scope.aggregate
             ? `Alle User (${s.uniqueUsers} aktiv)`
@@ -1426,6 +1913,39 @@ function PrintReport({
           <span className="font-mono">{range.from}</span> →{" "}
           <span className="font-mono">{range.to}</span>.
         </p>
+        <div className="mt-3 grid grid-cols-3 gap-3 rounded border border-hair px-3 py-2">
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.16em] text-ink-500">
+              Aktive Zeit
+            </p>
+            <p className="font-display text-[16px] leading-tight">
+              {(s.totalActiveSec / 3600).toFixed(1)} h
+            </p>
+            <p className="text-[9px] text-ink-500">
+              {fmtDuration(s.totalActiveSec)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.16em] text-ink-500">
+              Offen aktuell
+            </p>
+            <p className="font-display text-[16px] leading-tight">
+              {s.totalRemaining != null ? fmtNumber(s.totalRemaining) : "–"}
+            </p>
+            <p className="text-[9px] text-ink-500">Fahrzeuge in allen Modi</p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-[0.16em] text-ink-500">
+              Restdauer
+            </p>
+            <p className="font-display text-[16px] leading-tight">
+              {fmtHours(s.etaHoursActive)}
+            </p>
+            <p className="text-[9px] text-ink-500">
+              24-h-Sicht: {fmtHours(s.etaHoursCalendar)}
+            </p>
+          </div>
+        </div>
 
         <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
           1. Übersicht
@@ -1481,6 +2001,18 @@ function PrintReport({
               value={fmtRate(s.vehiclesPerCalendarDay, "/Tag")}
             />
             <PrintRow
+              label="Aktuell offen (alle Modi)"
+              value={s.totalRemaining != null ? fmtNumber(s.totalRemaining) : "–"}
+            />
+            <PrintRow
+              label="Restdauer (echte Arbeitszeit)"
+              value={fmtHours(s.etaHoursActive)}
+            />
+            <PrintRow
+              label="Restdauer (24-h-Sicht)"
+              value={fmtHours(s.etaHoursCalendar)}
+            />
+            <PrintRow
               label="Erstes / letztes Event"
               value={
                 s.firstTs && s.lastTs
@@ -1498,6 +2030,8 @@ function PrintReport({
           Werte aus <span className="font-mono">double2..5</span> ab{" "}
           <span className="font-mono">2026-05-02 19:32:50</span>. „Bearbeitet"
           ist die Summe der Rückgänge des Bestands über die Eventreihen.
+          „Restdauer" rechnet aktuell offene Fahrzeuge mit der gemessenen Rate
+          des Users hoch.
         </p>
         <table className="mt-2 w-full border-collapse text-[11px]">
           <thead>
@@ -1508,6 +2042,7 @@ function PrintReport({
               <th className="py-1.5 pr-3 text-right">max</th>
               <th className="py-1.5 pr-3 text-right">Bearbeitet</th>
               <th className="py-1.5 pr-3 text-right">/h</th>
+              <th className="py-1.5 pr-3 text-right">Restdauer</th>
             </tr>
           </thead>
           <tbody>
@@ -1525,6 +2060,7 @@ function PrintReport({
                 </td>
                 <td className="py-1.5 pr-3 text-right">{fmtNumber(r.processed)}</td>
                 <td className="py-1.5 pr-3 text-right">{fmtRate(r.processedPerHour)}</td>
+                <td className="py-1.5 pr-3 text-right">{fmtHours(r.etaHours)}</td>
               </tr>
             ))}
           </tbody>
@@ -1549,8 +2085,9 @@ function PrintReport({
 
       <PrintPage
         pageNumber={2}
-        totalPages={3}
+        totalPages={4}
         generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
         userLabel={
           detail.scope.aggregate
             ? `Alle User (${s.uniqueUsers} aktiv)`
@@ -1558,7 +2095,98 @@ function PrintReport({
         }
       >
         <h2 className="text-[14px] font-semibold tracking-tightish">
-          4. IP-Adressen
+          4. Aktivität pro Tag
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Wie lange war der User pro Kalendertag (UTC) aktiv (Summe der
+          Sessions). Sessions, die über Mitternacht laufen, werden anteilig auf
+          beide Tage verteilt.
+        </p>
+        {detail.dailyActivity.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine Tagesdaten –</p>
+        ) : (
+          <table className="mt-2 w-full border-collapse text-[10.5px]">
+            <thead>
+              <tr className="border-b border-hair text-left">
+                <th className="py-1.5 pr-3">Tag</th>
+                <th className="py-1.5 pr-3 text-right">Aktive Zeit</th>
+                <th className="py-1.5 pr-3 text-right">Sessions</th>
+                <th className="py-1.5 pr-3 text-right">Events</th>
+                <th className="py-1.5 pr-3 text-right">Aktionen</th>
+                <th className="py-1.5 pr-3 text-right">Bearbeitet</th>
+                <th className="py-1.5 pr-3 text-right">Ø Latenz</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.dailyActivity.slice(-31).map((d) => (
+                <tr key={d.day} className="border-b border-hair/60">
+                  <td className="py-1.5 pr-3 font-mono">{d.day}</td>
+                  <td className="py-1.5 pr-3 text-right">
+                    {fmtDuration(d.activeSec)}
+                  </td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.sessions)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.events)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.actions)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtNumber(d.processed)}</td>
+                  <td className="py-1.5 pr-3 text-right">{fmtMs(d.avgLatencyMs)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
+          5. Aktionen über Zeit
+        </h2>
+        <p className="text-[11px] leading-relaxed text-ink-700">
+          Häufigkeit der wichtigsten Aktionen (Top {detail.topButtonNames.length})
+          pro Zeit-Bucket sowie die durchschnittliche Latenz.
+        </p>
+        {detail.buttonsTimeline.length === 0 ? (
+          <p className="mt-2 text-[11px] text-ink-500">– keine Aktionsverläufe –</p>
+        ) : (
+          <table className="mt-2 w-full border-collapse text-[10.5px]">
+            <thead>
+              <tr className="border-b border-hair text-left">
+                <th className="py-1.5 pr-3">Zeit-Bucket</th>
+                {detail.topButtonNames.map((b) => (
+                  <th key={b} className="py-1.5 pr-3 text-right">
+                    {b}
+                  </th>
+                ))}
+                <th className="py-1.5 pr-3 text-right">Ø Latenz</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.buttonsTimeline.slice(-25).map((b) => (
+                <tr key={b.bucket} className="border-b border-hair/60">
+                  <td className="py-1.5 pr-3 font-mono">{b.bucket}</td>
+                  {detail.topButtonNames.map((name) => (
+                    <td key={name} className="py-1.5 pr-3 text-right">
+                      {fmtNumber(b.counts[name] ?? 0)}
+                    </td>
+                  ))}
+                  <td className="py-1.5 pr-3 text-right">{fmtMs(b.avgLatencyMs)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </PrintPage>
+
+      <PrintPage
+        pageNumber={3}
+        totalPages={4}
+        generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
+        userLabel={
+          detail.scope.aggregate
+            ? `Alle User (${s.uniqueUsers} aktiv)`
+            : detail.user
+        }
+      >
+        <h2 className="text-[14px] font-semibold tracking-tightish">
+          6. IP-Adressen
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           Aufschlüsselung der Aktivität pro IP. Bei{" "}
@@ -1592,7 +2220,7 @@ function PrintReport({
         )}
 
         <h2 className="mt-6 text-[14px] font-semibold tracking-tightish">
-          5. Aufschlüsselungen
+          7. Aufschlüsselungen
         </h2>
         <div className="mt-2 grid grid-cols-2 gap-x-8 gap-y-4">
           <PrintRankList title="Aktionen (shortcut:*)" items={detail.topActions.map((a) => ({ label: a.button, value: a.count }))} />
@@ -1612,9 +2240,10 @@ function PrintReport({
       </PrintPage>
 
       <PrintPage
-        pageNumber={3}
-        totalPages={3}
+        pageNumber={4}
+        totalPages={4}
         generatedAt={generatedAt}
+        userAgent={s.primaryUserAgent}
         userLabel={
           detail.scope.aggregate
             ? `Alle User (${s.uniqueUsers} aktiv)`
@@ -1622,7 +2251,7 @@ function PrintReport({
         }
       >
         <h2 className="text-[14px] font-semibold tracking-tightish">
-          6. Fahrzeuge ({detail.vehicles.length})
+          8. Fahrzeuge ({detail.vehicles.length})
         </h2>
         <p className="text-[11px] leading-relaxed text-ink-700">
           Bearbeitete Fahrzeuge im Zeitraum mit Anzahl Events / Aktionen sowie
@@ -1685,12 +2314,14 @@ function PrintPage({
   totalPages,
   generatedAt,
   userLabel,
+  userAgent,
   children,
 }: {
   pageNumber: number;
   totalPages: number;
   generatedAt: string;
   userLabel: string;
+  userAgent?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -1705,6 +2336,11 @@ function PrintPage({
             <p className="font-display text-[16px] tracking-tightish text-ink-900">
               {userLabel}
             </p>
+            {userAgent && (
+              <p className="font-mono text-[9.5px] text-ink-500">
+                {shortenUserAgent(userAgent)}
+              </p>
+            )}
           </div>
         </div>
         <p className="text-right text-[10px] text-ink-500">

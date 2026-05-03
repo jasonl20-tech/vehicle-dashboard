@@ -32,6 +32,7 @@ export type RemainingByMode = {
   processed: number;
   added: number;
   processedPerHour: number | null;
+  etaHours: number | null;
 };
 
 export type DetailReport = {
@@ -61,6 +62,10 @@ export type DetailReport = {
     vehiclesPerActiveHour: number | null;
     vehiclesPerCalendarDay: number | null;
     vehiclesPerCalendarHour: number | null;
+    totalRemaining: number | null;
+    etaHoursActive: number | null;
+    etaHoursCalendar: number | null;
+    primaryUserAgent: string | null;
   };
   network: {
     samples: number;
@@ -111,6 +116,23 @@ export type DetailReport = {
     actions: number;
     processed: number;
     avgLatencyMs: number | null;
+  }>;
+  dailyActivity: Array<{
+    day: string;
+    dayMs: number;
+    activeSec: number;
+    sessions: number;
+    events: number;
+    actions: number;
+    processed: number;
+    avgLatencyMs: number | null;
+  }>;
+  topButtonNames: string[];
+  buttonsTimeline: Array<{
+    bucket: string;
+    bucketMs: number;
+    avgLatencyMs: number | null;
+    counts: Record<string, number>;
   }>;
   latencyPoints: Array<{ ts: string; ms: number }>;
   sessions: AnalyticsSession[];

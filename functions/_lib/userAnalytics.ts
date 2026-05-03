@@ -434,6 +434,9 @@ export type ModeRemainingSummary = {
   added: number;
   /** /Stunde, normalisiert auf aktive Zeit des Users. */
   processedPerHour: number | null;
+  /** Geschätzte Stunden, bis der aktuelle Bestand abgearbeitet wäre
+   *  (latestOpen / processedPerHour). null wenn keine Schätzung möglich. */
+  etaHours: number | null;
 };
 
 export type DetailReport = {
@@ -469,6 +472,16 @@ export type DetailReport = {
     vehiclesPerCalendarDay: number | null;
     /** Bearbeitete Fahrzeuge pro Stunde, gemessen über den ganzen 24h-Zeitraum. */
     vehiclesPerCalendarHour: number | null;
+    /** Aktuell offen (Summe der `latestOpen` über alle Modi). */
+    totalRemaining: number | null;
+    /** ETA in Stunden, wie lange der User mit seiner Rate (vehiclesPerActiveHour)
+     *  benötigen würde, um die aktuell offenen Fahrzeuge abzuarbeiten. */
+    etaHoursActive: number | null;
+    /** ETA in Stunden, wenn der User in 24h-Sicht arbeiten würde
+     *  (vehiclesPerCalendarHour). */
+    etaHoursCalendar: number | null;
+    /** Häufigster User-Agent / OS aus blob6, gekürzt. */
+    primaryUserAgent: string | null;
   };
   network: {
     samples: number;
@@ -520,6 +533,28 @@ export type DetailReport = {
     actions: number;
     processed: number;
     avgLatencyMs: number | null;
+  }>;
+  /** Aktivität pro Kalendertag (UTC). */
+  dailyActivity: Array<{
+    day: string;
+    /** UTC-Mitternacht in ms (für Datums-Filter). */
+    dayMs: number;
+    activeSec: number;
+    sessions: number;
+    events: number;
+    actions: number;
+    processed: number;
+    avgLatencyMs: number | null;
+  }>;
+  /** Top-N Button-Namen (in Reihenfolge der Häufigkeit). */
+  topButtonNames: string[];
+  /** Pro Bucket: Counts je Top-Button + Ø Latenz. */
+  buttonsTimeline: Array<{
+    bucket: string;
+    bucketMs: number;
+    avgLatencyMs: number | null;
+    /** Map button -> count (nur Top-Buttons enthalten). */
+    counts: Record<string, number>;
   }>;
   /** Latenz pro Aktion (Scatter / Verlauf): zeitstempel + ms. */
   latencyPoints: Array<{ ts: string; ms: number }>;
@@ -615,6 +650,7 @@ function computeRemainingByMode(
         processed: 0,
         added: 0,
         processedPerHour: null,
+        etaHours: null,
       });
       continue;
     }
@@ -636,15 +672,24 @@ function computeRemainingByMode(
       1,
       (points[points.length - 1].t - points[0].t) / 1000,
     );
+    const latestOpen = points[points.length - 1].v;
+    const processedPerHour = spanSec > 0 ? (processed / spanSec) * 3600 : null;
+    const etaHours =
+      latestOpen === 0
+        ? 0
+        : processedPerHour && processedPerHour > 0
+          ? latestOpen / processedPerHour
+          : null;
     out.push({
       mode: slot.label,
-      latestOpen: points[points.length - 1].v,
+      latestOpen,
       latestTs: fmtIso(points[points.length - 1].t),
       minOpen: Number.isFinite(mn) ? mn : null,
       maxOpen: Number.isFinite(mx) ? mx : null,
       processed: Math.round(processed),
       added: Math.round(added),
-      processedPerHour: spanSec > 0 ? (processed / spanSec) * 3600 : null,
+      processedPerHour,
+      etaHours,
     });
   }
   return out;
@@ -1113,6 +1158,201 @@ function buildDetail(
   const vehiclesPerCalendarHour =
     rangeSpanSec > 0 ? (totalProcessed / rangeSpanSec) * 3600 : null;
 
+  // ETA-Berechnung: aktuell offene Fahrzeuge / User-Rate
+  const totalRemaining = remainingByMode.reduce(
+    (s, m) => s + (m.latestOpen ?? 0),
+    0,
+  );
+  const hasAnyOpen = remainingByMode.some((m) => m.latestOpen != null);
+  const etaHoursActive =
+    !hasAnyOpen
+      ? null
+      : totalRemaining === 0
+        ? 0
+        : vehiclesPerActiveHour && vehiclesPerActiveHour > 0
+          ? totalRemaining / vehiclesPerActiveHour
+          : null;
+  const etaHoursCalendar =
+    !hasAnyOpen
+      ? null
+      : totalRemaining === 0
+        ? 0
+        : vehiclesPerCalendarHour && vehiclesPerCalendarHour > 0
+          ? totalRemaining / vehiclesPerCalendarHour
+          : null;
+  const primaryUserAgent =
+    [...uaCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  // Aktivität pro Tag (UTC, basierend auf Sessions)
+  type DayAcc = {
+    day: string;
+    dayMs: number;
+    activeSec: number;
+    sessions: number;
+    events: number;
+    actions: number;
+    processed: number;
+    latSum: number;
+    latN: number;
+  };
+  const dayMap = new Map<string, DayAcc>();
+  const dayKeyOf = (ms: number) => {
+    const d = new Date(ms);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  };
+  const dayStartMsOf = (key: string) => Date.parse(`${key}T00:00:00Z`);
+  // Sessions können sich über Tagesgrenzen hinweg erstrecken — wir teilen sie an UTC-Mitternacht.
+  for (const sess of sessions) {
+    const sStart = parseTs(sess.start);
+    const sEnd = parseTs(sess.end);
+    if (sEnd <= sStart) {
+      const key = dayKeyOf(sStart);
+      const acc = dayMap.get(key) || {
+        day: key,
+        dayMs: dayStartMsOf(key),
+        activeSec: 0,
+        sessions: 0,
+        events: 0,
+        actions: 0,
+        processed: 0,
+        latSum: 0,
+        latN: 0,
+      };
+      acc.sessions += 1;
+      dayMap.set(key, acc);
+      continue;
+    }
+    let cursor = sStart;
+    while (cursor < sEnd) {
+      const key = dayKeyOf(cursor);
+      const dayStart = dayStartMsOf(key);
+      const dayEnd = dayStart + 86_400_000;
+      const segmentEnd = Math.min(dayEnd, sEnd);
+      const acc = dayMap.get(key) || {
+        day: key,
+        dayMs: dayStart,
+        activeSec: 0,
+        sessions: 0,
+        events: 0,
+        actions: 0,
+        processed: 0,
+        latSum: 0,
+        latN: 0,
+      };
+      acc.activeSec += (segmentEnd - cursor) / 1000;
+      // Session zählt im Tag, an dem sie beginnt
+      if (cursor === sStart) acc.sessions += 1;
+      dayMap.set(key, acc);
+      cursor = segmentEnd;
+    }
+  }
+  // Events pro Tag (Counts) – auch Tage zählen, an denen es nur Events ohne längere Session gab.
+  const validFromMsForDaily = parseTs(VALID_DOUBLE_FROM_TS);
+  type LastDailyDouble = {
+    d2: number | null;
+    d3: number | null;
+    d4: number | null;
+    d5: number | null;
+  };
+  let lastDailyDouble: LastDailyDouble = { d2: null, d3: null, d4: null, d5: null };
+  for (const r of urows) {
+    const key = dayKeyOf(r.tsMs);
+    const acc = dayMap.get(key) || {
+      day: key,
+      dayMs: dayStartMsOf(key),
+      activeSec: 0,
+      sessions: 0,
+      events: 0,
+      actions: 0,
+      processed: 0,
+      latSum: 0,
+      latN: 0,
+    };
+    acc.events += 1;
+    if (r.isAction) acc.actions += 1;
+    if (r.latencyMs != null) {
+      acc.latSum += r.latencyMs;
+      acc.latN += 1;
+    }
+    if (r.tsMs >= validFromMsForDaily) {
+      const cur = { d2: r.d2, d3: r.d3, d4: r.d4, d5: r.d5 };
+      for (const k of ["d2", "d3", "d4", "d5"] as const) {
+        const prev = lastDailyDouble[k];
+        const now = cur[k];
+        if (prev != null && now != null && Number.isFinite(now) && now >= 0) {
+          const diff = prev - now;
+          if (diff > 0) acc.processed += diff;
+        }
+      }
+      lastDailyDouble = cur;
+    }
+    dayMap.set(key, acc);
+  }
+  const dailyActivity: DetailReport["dailyActivity"] = [...dayMap.values()]
+    .sort((a, b) => a.dayMs - b.dayMs)
+    .map((a) => ({
+      day: a.day,
+      dayMs: a.dayMs,
+      activeSec: Math.round(a.activeSec),
+      sessions: a.sessions,
+      events: a.events,
+      actions: a.actions,
+      processed: Math.round(a.processed),
+      avgLatencyMs: a.latN > 0 ? a.latSum / a.latN : null,
+    }));
+
+  // Buttons-Timeline (Top-6 Buttons + Latenz)
+  const topButtonNames = [...buttonCounts.entries()]
+    .filter(([, c]) => c > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name]) => name);
+  const buttonsTimeline: DetailReport["buttonsTimeline"] = [];
+  if (urows.length > 0 && topButtonNames.length > 0) {
+    const t0Btn = urows[0].tsMs;
+    const t1Btn = urows[urows.length - 1].tsMs;
+    const span = Math.max(60_000, t1Btn - t0Btn);
+    const bucketMsBtn = pickBucketMs(span);
+    type B = {
+      ms: number;
+      counts: Record<string, number>;
+      latSum: number;
+      latN: number;
+    };
+    const map = new Map<number, B>();
+    for (const r of urows) {
+      if (!r.actionButton || !topButtonNames.includes(r.actionButton)) {
+        // Latenz zählt aber trotzdem (auch ohne Action), um Zusammenhang zu zeigen
+      }
+      const ms = Math.floor(r.tsMs / bucketMsBtn) * bucketMsBtn;
+      let b = map.get(ms);
+      if (!b) {
+        b = {
+          ms,
+          counts: Object.fromEntries(topButtonNames.map((n) => [n, 0])),
+          latSum: 0,
+          latN: 0,
+        };
+        map.set(ms, b);
+      }
+      if (r.actionButton && topButtonNames.includes(r.actionButton)) {
+        b.counts[r.actionButton] = (b.counts[r.actionButton] || 0) + 1;
+      }
+      if (r.latencyMs != null) {
+        b.latSum += r.latencyMs;
+        b.latN += 1;
+      }
+    }
+    for (const b of [...map.values()].sort((a, b) => a.ms - b.ms)) {
+      buttonsTimeline.push({
+        bucket: fmtIso(b.ms),
+        bucketMs: b.ms,
+        avgLatencyMs: b.latN > 0 ? b.latSum / b.latN : null,
+        counts: b.counts,
+      });
+    }
+  }
+
   // Vollständige Vehicle-Liste (bis 500), für Vehicle-Suche
   const vehiclesList: DetailReport["vehicles"] = [];
   for (const v of vehicleAll.values()) {
@@ -1172,6 +1412,10 @@ function buildDetail(
       vehiclesPerActiveHour,
       vehiclesPerCalendarDay,
       vehiclesPerCalendarHour,
+      totalRemaining: hasAnyOpen ? totalRemaining : null,
+      etaHoursActive,
+      etaHoursCalendar,
+      primaryUserAgent,
     },
     network,
     perMode,
@@ -1187,6 +1431,9 @@ function buildDetail(
     perHourOfDay: hourCounts.map((c, h) => ({ hour: h, ...c })),
     perWeekday: weekdayCounts.map((c, wd) => ({ weekday: wd, ...c })),
     timeline,
+    dailyActivity,
+    topButtonNames,
+    buttonsTimeline,
     latencyPoints: latencyPoints.slice(-2000),
     sessions,
     vehicleLatency: vehicleLatencyArr.slice(0, 20),
