@@ -43,14 +43,18 @@ WHERE ${sqlWhereVehicleLacksSlugInViews(slug)}
 `;
 }
 
-export function sqlInsertOrIgnoreMissingViewRegen(
+/** Zeilen für Bulk-INSERT mit pro-Fahrzeug berechnetem R2-`key`. */
+export function sqlSelectEligibleRowsForMissingView(
   storageTable: string,
   slug: SeedMissingViewSlug,
 ): string {
   return `
-INSERT OR IGNORE INTO controll_status (vehicle_id, view_token, mode, status, key, updated_at, "check")
-SELECT v.id, '${slug}', 'correction', 'regen_vertex', NULL, datetime('now'), 8
+SELECT v.id, v.format, v.resolution, v.marke, v.modell, v.jahr, v.body, v.trim, v.farbe
 FROM ${storageTable} v
 WHERE ${sqlWhereVehicleLacksSlugInViews(slug)}
 `;
 }
+
+/** Einzelzeile; slug kommt gebunden (kein String-Interpolation im SQL). */
+export const INSERT_OR_IGNORE_MISSING_VIEW_REGEN_ONE = `INSERT OR IGNORE INTO controll_status (vehicle_id, view_token, mode, status, key, updated_at, "check")
+VALUES (?, ?, 'correction', 'regen_vertex', ?, datetime('now'), 8)`;

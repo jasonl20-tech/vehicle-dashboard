@@ -7,11 +7,13 @@
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 import {
+  INSERT_OR_IGNORE_MISSING_VIEW_REGEN_ONE,
   parseSeedMissingViewSlug,
   sqlCountEligibleMissingView,
-  sqlInsertOrIgnoreMissingViewRegen,
+  sqlSelectEligibleRowsForMissingView,
   STORAGE_TABLE_SEED_MISSING_VIEW,
 } from "../../_lib/seedMissingViewRegenStatus";
+import { controllingStorageR2KeyFromViewToken } from "../../_lib/vehicleImageryR2Key";
 
 async function runEligibleCount(
   db: D1Database,
@@ -23,6 +25,22 @@ async function runEligibleCount(
   const row = await db.prepare(sql).first<{ n: number }>();
   return Number(row?.n ?? 0) || 0;
 }
+
+/** Wie Frontend `VehicleImageryRowLike` für R2-Pfad. */
+type EligibleVehicleRow = {
+  id: number;
+  format: string | null;
+  resolution: string | null;
+  marke: string | null;
+  modell: string | null;
+  jahr: number | null;
+  body: string | null;
+  trim: string | null;
+  farbe: string | null;
+};
+
+/** D1: empfohlene Obergrenze pro `batch`-Aufruf. */
+const MISSING_VIEW_SEED_BATCH = 100;
 
 async function requireAuthAndDb(
   env: AuthEnv,
@@ -113,16 +131,33 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     );
   }
 
-  const insertSql = sqlInsertOrIgnoreMissingViewRegen(
-    STORAGE_TABLE_SEED_MISSING_VIEW,
-    slug,
-  );
-
   try {
-    const eligibleVehicleCount = await runEligibleCount(gate.db, slug);
-    const r = await gate.db.prepare(insertSql).run();
-    const inserted =
-      typeof r.meta?.changes === "number" ? r.meta.changes : 0;
+    const selectSql = sqlSelectEligibleRowsForMissingView(
+      STORAGE_TABLE_SEED_MISSING_VIEW,
+      slug,
+    );
+    const listed = await gate.db
+      .prepare(selectSql)
+      .all<EligibleVehicleRow>();
+    const rows = listed.results ?? [];
+    const eligibleVehicleCount = rows.length;
+
+    let inserted = 0;
+    for (let i = 0; i < rows.length; i += MISSING_VIEW_SEED_BATCH) {
+      const slice = rows.slice(i, i + MISSING_VIEW_SEED_BATCH);
+      const stmts = slice.map((row) => {
+        const key = controllingStorageR2KeyFromViewToken(row, slug);
+        return gate.db
+          .prepare(INSERT_OR_IGNORE_MISSING_VIEW_REGEN_ONE)
+          .bind(row.id, slug, key);
+      });
+      const batchRes = await gate.db.batch(stmts);
+      for (const r of batchRes) {
+        inserted +=
+          typeof r.meta?.changes === "number" ? r.meta.changes : 0;
+      }
+    }
+
     return jsonResponse(
       { slug, inserted, eligibleVehicleCount },
       { status: 200 },
