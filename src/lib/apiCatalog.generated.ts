@@ -15,9 +15,10 @@ export type ApiCatalogEntry = {
   description: string;
 };
 
-export const API_CATALOG_GENERATED_AT = "2026-05-03T11:06:58.331Z" as const;
+export const API_CATALOG_GENERATED_AT = "2026-05-03T11:20:06.979Z" as const;
 
 export const API_CATALOG: readonly ApiCatalogEntry[] = [
+  { path: "/api/admin/settings", methods: ["GET", "PUT"], source: "functions/api/admin/settings.ts", description: "Admin: listet alle Zeilen der Tabelle `settings` im D1-Binding `configs` (GET) bzw. upsert einer Zeile mit id, config (JSON), optional description (PUT). Zugriff nur mit freigegebenem `/admin-settings` in der Sicherheitsstufe." },
   { path: "/api/analytics/_diag", methods: ["GET"], source: "functions/api/analytics/_diag.ts", description: "Diagnose für alle genutzten Analytics-Quellen (primär + optional Konto 2). GET /api/analytics/_diag Nur für eingeloggte Benutzer." },
   { path: "/api/analytics/customer-keys", methods: ["GET"], source: "functions/api/analytics/customer-keys.ts", description: "Analytics-Auswertungen zur Kunden-API über Analytics Engine: Parameter kind (z. B. overview, Zeitreihen, Top-Listen, key-detail) und mode customers/oneauto, plus Zeitraum- und Key-Filter." },
   { path: "/api/analytics/oneauto-reports", methods: ["GET"], source: "functions/api/analytics/oneauto-reports.ts", description: "Monatliche Abrechnung für den Oneauto-Key. GET /api/analytics/oneauto-reports?months=12 Liefert pro Monat (UTC, beginnend am 1.) die Anzahl der echten Bild-Views (blob5 ist View-Name, kein list_… und kein check_views), den GBP-Betrag (views * 0.02) und den EUR-Gegenwert anhand des Monatsend-Wechselkurses von frankfurter.app (ECB-Daten). Wenn der Wechselkurs nicht abrufbar ist, wird `eur` auf `null` gesetzt und der Grund mitgeschickt – der Monat wird trotzdem angezeigt. Holt einen GBP→EUR-Wechselkurs zu einem Datum." },

@@ -47,6 +47,8 @@ const MANUAL_DESCRIPTIONS = {
     "Deaktiviert TOTP nach Passwortprüfung (nicht erlaubt, wenn das Konto 2FA verpflichtend hat).",
   "functions/api/analytics/customer-keys.ts":
     "Analytics-Auswertungen zur Kunden-API über Analytics Engine: Parameter kind (z. B. overview, Zeitreihen, Top-Listen, key-detail) und mode customers/oneauto, plus Zeitraum- und Key-Filter.",
+  "functions/api/admin/settings.ts":
+    "Admin: listet alle Zeilen der Tabelle `settings` im D1-Binding `configs` (GET) bzw. upsert einer Zeile mit id, config (JSON), optional description (PUT). Zugriff nur mit freigegebenem `/admin-settings` in der Sicherheitsstufe.",
 };
 
 function walkTsFiles(dir, relBase = "") {

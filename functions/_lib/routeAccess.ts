@@ -142,18 +142,31 @@ export const DASHBOARD_API_PATH_PREFIXES: readonly string[] = [
   "/api/website/trial-submissions",
 ];
 
+/**
+ * Admin-Oberfläche (`/admin-settings`): `settings`-Tabelle im D1 `configs`.
+ * Aktiv, sobald `/admin-settings` oder `/admin-settings/*` in `sicherheitsstufen`
+ * freigegeben ist (analog zu den anderen SPA-Wurzeln).
+ */
+export const ADMIN_SETTINGS_API_PATH_PREFIXES: readonly string[] = [
+  "/api/admin/settings",
+];
+
 /** Intern: Kombination SPA-Wurzel + zugehörige API-Prefixe. */
 const SPA_ROUTE_API_BUNDLES: ReadonlyArray<{
-  spaRoot: "/dashboard" | "/control-platform";
+  spaRoot: "/dashboard" | "/control-platform" | "/admin-settings";
   apiPrefixes: readonly string[];
 }> = [
   { spaRoot: "/control-platform", apiPrefixes: CONTROL_PLATFORM_API_PATH_PREFIXES },
   { spaRoot: "/dashboard", apiPrefixes: DASHBOARD_API_PATH_PREFIXES },
+  {
+    spaRoot: "/admin-settings",
+    apiPrefixes: ADMIN_SETTINGS_API_PATH_PREFIXES,
+  },
 ];
 
 /**
  * Wenn die Pfadliste mindestens eine SPA-Route unter einer bekannten Wurzel
- * freischaltet (`/dashboard/…`, `/control-platform/…`), werden die dort
+ * freischaltet (`/dashboard/…`, `/control-platform/…`, `/admin-settings`), werden die dort
  * definierten API-Prefixes automatisch ebenfalls durchgelassen.
  */
 export function pathnameAllowedBySpaRouteApiBundle(

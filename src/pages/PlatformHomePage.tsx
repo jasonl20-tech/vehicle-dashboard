@@ -99,7 +99,6 @@ const TILES: PlatformTile[] = [
     title: "Admin Settings",
     icon: Shield,
     to: "/admin-settings",
-    status: "Bald verfügbar",
   },
 ];
 

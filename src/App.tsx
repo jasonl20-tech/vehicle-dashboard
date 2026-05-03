@@ -5,6 +5,7 @@ import AccountLayout from "./components/layout/AccountLayout";
 import ControlPlatformLayout from "./components/layout/ControlPlatformLayout";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AccountPage from "./pages/AccountPage";
+import AdminSettingsPage from "./pages/AdminSettingsPage";
 import AnfragenKartePage from "./pages/AnfragenKartePage";
 import AnfragenPage from "./pages/AnfragenPage";
 import AssetsPage from "./pages/AssetsPage";
@@ -97,6 +98,8 @@ export default function App() {
           <Route path="/account" element={<AccountLayout />}>
             <Route index element={<AccountPage />} />
           </Route>
+
+          <Route path="/admin-settings" element={<AdminSettingsPage />} />
 
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<OverviewPage />} />
