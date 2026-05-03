@@ -6,9 +6,13 @@
  * `view_token = dashboard`, `mode = correction`, `status = regen_vertex`,
  * `key = null`, `"check" = 8`.
  *
- * Übersprungen werden Zeilen mit bestehendem `correction/dashboard`-Eintrag
- * sowie Fahrzeuge, deren `views`-Liste bereits einen passenden Dashboard-Token
- * enthält (Slug `dashboard` als Semikolon-Token, mit optionalem `#…`).
+ * Kriterium **nur** `views`: Fahrzeuge, deren `views`-Liste bereits einen
+ * Dashboard-Token hat (Slug `dashboard` als Semikolon-Token, optional `#…`),
+ * fallen aus dem SELECT komplett raus — unabhängig von `controll_status`.
+ *
+ * Gibt es trotz fehlenden Dashboard in `views` schon einen Eintrag unter
+ * `UNIQUE(vehicle_id, view_token, mode)`, lässt `INSERT OR IGNORE` den
+ * Insert aus (Zeile wird nicht überschrieben).
  */
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
@@ -40,18 +44,12 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   ';'
 ), ' ;', ';')`;
   const sql = `
-INSERT INTO controll_status (vehicle_id, view_token, mode, status, key, updated_at, "check")
+INSERT OR IGNORE INTO controll_status (vehicle_id, view_token, mode, status, key, updated_at, "check")
 SELECT v.id, 'dashboard', 'correction', 'regen_vertex', NULL, datetime('now'), 8
 FROM ${STORAGE_TABLE} v
 WHERE NOT (
   (${wrappedExpr}) LIKE '%;dashboard;%'
   OR (${wrappedExpr}) LIKE '%;dashboard#%'
-)
-AND NOT EXISTS (
-  SELECT 1 FROM controll_status cs
-  WHERE cs.vehicle_id = v.id
-    AND LOWER(cs.view_token) = 'dashboard'
-    AND LOWER(cs.mode) = 'correction'
 )
 `;
 

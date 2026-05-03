@@ -2019,7 +2019,7 @@ export default function ControlPlatformPage() {
                 onClick={() => {
                   if (
                     !window.confirm(
-                      "Für alle Fahrzeuge ohne Dashboard-Token in „views“ einen Eintrag schreiben?\n\ncorrection · dashboard · regen_vertex · check 8\n\nBereits vorhandene Korrektur-Zeilen „dashboard“ werden übersprungen.",
+                      "Für alle Fahrzeuge, in „views“ noch ohne Dashboard-Ansicht, einen Eintrag anlegen?\n\ncorrection · dashboard · regen_vertex · check 8\n\nAuswahl nur über das Feld „views“ (welche schon einen dashboard-Token listen, werden nicht angefasst).\nSchon bestehende identische Kontroll-Zeilen (gleiches Fahrzeug + dashboard + correction) bleiben unverändert.",
                     )
                   ) {
                     return;
@@ -2032,7 +2032,7 @@ export default function ControlPlatformPage() {
                       const { inserted } = await postSeedDashboardRegenStatus();
                       setSeedDashboardMessage(
                         inserted === 0 ?
-                          "Keine neuen Einträge (alle hatten schon Dashboard oder Status)."
+                          "Keine neuen Zeilen: entweder steht überall schon dashboard in „views“, oder dieselbe Kontroll-Zeile existierte bereits."
                         : `${inserted} Einträge angelegt.`,
                       );
                       listApi.reload();
