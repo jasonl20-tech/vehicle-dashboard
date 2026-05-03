@@ -66,7 +66,7 @@ export default function SplitView({
 
   return (
     <div
-      className={`flex min-h-0 flex-1 flex-col md:flex-row ${className ?? ""}`}
+      className={`flex min-h-0 flex-1 basis-0 flex-col overflow-hidden md:flex-row ${className ?? ""}`}
     >
       {collapsed ? (
         <button
@@ -84,11 +84,11 @@ export default function SplitView({
         </button>
       ) : (
         <aside
-          className={`flex w-full shrink-0 flex-col border-b border-hair bg-white md:border-b-0 md:border-r ${asideWidthClass}`}
+          className={`flex max-h-[min(52vh,26rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden border-b border-hair bg-white md:h-full md:max-h-none md:self-stretch md:border-b-0 md:border-r ${asideWidthClass}`}
         >
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {/* Inhaltsbereich der Sidebar */}
-            <div className="relative flex min-h-0 flex-1 flex-col">
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               {/* Collapse-Knopf — ganz oben rechts in der Sidebar.
                   Gibt es nur auf Desktop (md:). */}
               <button
@@ -107,7 +107,7 @@ export default function SplitView({
         </aside>
       )}
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {children}
       </section>
     </div>

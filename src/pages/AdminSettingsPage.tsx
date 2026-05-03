@@ -265,7 +265,7 @@ export default function AdminSettingsPage() {
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper text-ink-900">
+    <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-paper text-ink-900">
       <header className="shrink-0 border-b border-hair bg-paper">
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
@@ -310,7 +310,7 @@ export default function AdminSettingsPage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 basis-0 flex-col overflow-hidden">
         <SplitView
           storageKey="ui.adminSettings.aside"
           asideLabel="Settings"
