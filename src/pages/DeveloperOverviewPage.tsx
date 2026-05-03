@@ -59,7 +59,8 @@ export default function DeveloperOverviewPage() {
     const q = query.trim().toLowerCase();
     if (!q) return [...API_CATALOG];
     return API_CATALOG.filter((e) => {
-      const hay = `${e.path} ${e.source} ${e.methods.join(" ")}`.toLowerCase();
+      const hay =
+        `${e.path} ${e.source} ${e.methods.join(" ")} ${e.description}`.toLowerCase();
       return hay.includes(q);
     });
   }, [query]);
@@ -82,7 +83,7 @@ export default function DeveloperOverviewPage() {
         className="pointer-events-none absolute inset-0 bg-grid-fade opacity-60"
       />
 
-      <header className="relative z-10 mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6 sm:px-8">
+      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6 sm:px-8">
         <Link
           to="/"
           className="inline-flex items-center gap-3 text-ink-900"
@@ -98,7 +99,7 @@ export default function DeveloperOverviewPage() {
         </Link>
       </header>
 
-      <main className="relative z-10 mx-auto w-full max-w-5xl px-6 pb-16 sm:px-8">
+      <main className="relative z-10 mx-auto w-full max-w-6xl px-6 pb-16 sm:px-8">
         <div className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-ink-900 text-white">
@@ -160,11 +161,12 @@ export default function DeveloperOverviewPage() {
                   /api/{group}
                 </h3>
                 <div className="overflow-x-auto rounded-xl border border-hair bg-white/80 shadow-sm backdrop-blur">
-                  <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
+                  <table className="w-full min-w-[900px] border-collapse text-left text-[12.5px]">
                     <thead>
                       <tr className="border-b border-hair bg-night-900/[0.03] text-[11px] font-medium uppercase tracking-wide text-ink-500">
                         <th className="px-3 py-2.5 font-medium">Methoden</th>
                         <th className="px-3 py-2.5 font-medium">Pfad</th>
+                        <th className="px-3 py-2.5 font-medium">Beschreibung</th>
                         <th className="px-3 py-2.5 font-medium">Quelle</th>
                       </tr>
                     </thead>
@@ -181,6 +183,9 @@ export default function DeveloperOverviewPage() {
                             <code className="break-all font-mono text-[12px] text-ink-900">
                               {e.path}
                             </code>
+                          </td>
+                          <td className="max-w-md align-top px-3 py-2.5 text-[12px] leading-snug text-ink-600">
+                            {e.description}
                           </td>
                           <td className="align-top px-3 py-2.5 text-ink-500">
                             <code className="break-all font-mono text-[11px]">
