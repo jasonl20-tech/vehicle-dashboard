@@ -8,6 +8,12 @@ export const CMS_ROOT = "/cms" as const;
  */
 export const CMS_ASSETS_FOLDER = "cms" as const;
 
+/** Medien-Detail (Metadaten + große Vorschau): `/cms/media/asset?key=…` */
+export function cmsMediaAssetEditUrl(r2Key: string): string {
+  const q = new URLSearchParams({ key: r2Key });
+  return `${CMS_ROOT}/media/asset?${q.toString()}`;
+}
+
 /**
  * CMS ist für Nutzer mit Dashboard-Zugriff nutzbar (analog sichtbar wie
  * Content-Bereiche in der Konsole), zusätzlich bei expliziter `/cms`-Zeile.

@@ -4,6 +4,7 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  Pencil,
   Plus,
   Search,
   SlidersHorizontal,
@@ -18,7 +19,7 @@ import {
   updateAsset,
   type Asset,
 } from "../../lib/assetsApi";
-import { CMS_ASSETS_FOLDER, CMS_ROOT } from "../../lib/cmsAccess";
+import { CMS_ASSETS_FOLDER, cmsMediaAssetEditUrl } from "../../lib/cmsAccess";
 
 /** ISO- oder AE-Timestamp → „vor X Tagen“ ( Asset-API liefert ISO). */
 function safeFmtRelative(iso: string | null | undefined): string {
@@ -264,6 +265,12 @@ export default function CmsMediaPage() {
             </button>
           ))}
         </div>
+        <p className="mt-3 text-[12px] text-[#5f6368]">
+          <strong className="font-medium text-[#3c4043]">Tipp:</strong> Auf{" "}
+          <strong>Vorschau</strong>, <strong>Dateiname</strong> oder{" "}
+          <strong>Bearbeiten</strong> klicken — dort siehst du das Bild groß und
+          kannst Titel, Alt-Text und Beschreibung pflegen.
+        </p>
       </div>
 
       <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 lg:mx-8">
@@ -350,7 +357,11 @@ export default function CmsMediaPage() {
                       </td>
                       <td className="max-w-[min(28rem,40vw)] px-3 py-2.5 align-middle">
                         <div className="flex min-w-0 items-center gap-3">
-                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-[#e8eaed] bg-[#f4f5f7]">
+                          <Link
+                            to={cmsMediaAssetEditUrl(a.id)}
+                            className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-[#e8eaed] bg-[#f4f5f7] outline-none ring-[#0366d6] hover:opacity-95 focus-visible:ring-2"
+                            title="Medium öffnen"
+                          >
                             {isImageAsset(a) ? (
                               <img
                                 src={a.url}
@@ -362,11 +373,11 @@ export default function CmsMediaPage() {
                                 <FileText className="h-5 w-5" />
                               </div>
                             )}
-                          </div>
+                          </Link>
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-1.5">
                               <Link
-                                to={`${CMS_ROOT}/media/${a.id}`}
+                                to={cmsMediaAssetEditUrl(a.id)}
                                 className="truncate font-medium text-[#0366d6] hover:underline"
                               >
                                 {displayName(a)}
@@ -384,6 +395,13 @@ export default function CmsMediaPage() {
                             <p className="truncate font-mono text-[11px] text-[#80868b]">
                               {a.key}
                             </p>
+                            <Link
+                              to={cmsMediaAssetEditUrl(a.id)}
+                              className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#0366d6] hover:underline"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              Bearbeiten · große Vorschau
+                            </Link>
                           </div>
                         </div>
                       </td>

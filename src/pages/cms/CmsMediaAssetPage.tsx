@@ -1,6 +1,6 @@
 import { ArrowLeft, ExternalLink, FileText, Loader2, Save } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getAsset,
   isImage as isImageAsset,
@@ -35,13 +35,13 @@ function safeFmtRelative(iso: string | null | undefined): string {
 }
 
 /**
- * Asset-Detail — Titel, Beschreibung, Alt-Text, Status bearbeiten.
- * Route: `/cms/media/{r2-key…}` (Splat nach `media/`).
+ * Asset-Detail — große Bildvorschau („Content“) und Metadaten rechts.
+ * Route: `/cms/media/asset?key={encodeURIComponent(r2Key)}`
  */
 export default function CmsMediaAssetPage() {
   const navigate = useNavigate();
-  const { "*": splat } = useParams();
-  const assetKey = (splat ?? "").replace(/^\/+/, "");
+  const [searchParams] = useSearchParams();
+  const assetKey = (searchParams.get("key") ?? "").trim();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -54,7 +54,10 @@ export default function CmsMediaAssetPage() {
   const [cmsStatus, setCmsStatus] = useState<"draft" | "published">("draft");
 
   const load = useCallback(async () => {
-    if (!assetKey) return;
+    if (!assetKey) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -137,53 +140,100 @@ export default function CmsMediaAssetPage() {
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 text-[13px] font-medium text-[#5f6368] hover:bg-[#f8f9fa]"
           >
             <ArrowLeft className="h-4 w-4" />
-            Medien
+            Zur Medienliste
           </Link>
         </div>
       </div>
 
-      <div className="mx-4 mt-6 flex flex-col gap-6 lg:mx-8 lg:flex-row lg:items-start">
-        <div className="min-w-0 flex-1 rounded-xl border border-[#e8eaed] bg-white p-5 shadow-sm">
-          {loading ? (
-            <div className="flex items-center justify-center gap-2 py-24 text-[#5f6368]">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              Laden …
-            </div>
-          ) : error && !asset ? (
-            <div className="space-y-3 py-8">
-              <p className="text-[14px] text-rose-700">{error}</p>
-              <Link
-                to={`${CMS_ROOT}/media`}
-                className="inline-block text-[13px] font-medium text-[#0366d6] hover:underline"
-              >
-                Zurück zur Medienliste
-              </Link>
-            </div>
-          ) : asset ? (
-            <>
-              <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#f1f3f4] pb-4">
-                <div className="min-w-0">
-                  <h1 className="font-display text-[22px] font-semibold tracking-tight text-[#1a1a1a]">
-                    {displayName(asset)}
-                  </h1>
-                  <p className="mt-1 font-mono text-[12px] text-[#80868b] break-all">
-                    {asset.key}
-                  </p>
+      <div className="mx-auto mt-6 w-full max-w-[1400px] px-4 lg:mt-8 lg:px-8">
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 rounded-xl border border-[#e8eaed] bg-white py-32 text-[#5f6368]">
+            <Loader2 className="h-6 w-6 animate-spin" />
+            Laden …
+          </div>
+        ) : error && !asset ? (
+          <div className="space-y-3 rounded-xl border border-[#e8eaed] bg-white p-8">
+            <p className="text-[14px] text-rose-700">{error}</p>
+            <Link
+              to={`${CMS_ROOT}/media`}
+              className="inline-block text-[13px] font-medium text-[#0366d6] hover:underline"
+            >
+              Zurück zur Medienliste
+            </Link>
+          </div>
+        ) : asset ? (
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-stretch">
+            {/* Haupt-„Content“: große Vorschau */}
+            <section className="flex min-h-[380px] flex-1 flex-col rounded-2xl border border-[#e8eaed] bg-white shadow-sm lg:min-h-[min(88vh,920px)]">
+              <div className="flex flex-1 flex-col items-center justify-center bg-[#f4f5f7] p-6 sm:p-10">
+                {isImageAsset(asset) ? (
+                  <img
+                    src={asset.url}
+                    alt={altText || displayName(asset)}
+                    className="max-h-[min(82vh,860px)] w-full max-w-full object-contain shadow-sm"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-4 py-16 text-[#80868b]">
+                    <FileText className="h-20 w-20 opacity-70" />
+                    <p className="text-[14px]">Keine Bildvorschau für diesen Dateityp</p>
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-[#e8eaed] bg-white px-5 py-4">
+                <p className="text-center font-mono text-[11px] leading-relaxed text-[#80868b] break-all">
+                  {asset.key}
+                </p>
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+                  <a
+                    href={asset.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 text-[13px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Original öffnen
+                  </a>
                 </div>
-                <a
-                  href={asset.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 text-[13px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Öffentliche URL
-                </a>
+              </div>
+            </section>
+
+            {/* Seitenleiste: Metadaten */}
+            <aside className="w-full shrink-0 rounded-2xl border border-[#e8eaed] bg-white p-5 shadow-sm lg:w-[min(100%,430px)] lg:p-6">
+              <div className="border-b border-[#f1f3f4] pb-4">
+                <h1 className="font-display text-xl font-semibold tracking-tight text-[#1a1a1a]">
+                  {displayName(asset)}
+                </h1>
+                <p className="mt-2 text-[13px] text-[#5f6368]">
+                  Metadaten für dieses Medium. Änderungen gelten für Einbindungen im CMS.
+                </p>
               </div>
 
               {error ? (
                 <p className="mt-4 text-[13px] text-rose-700">{error}</p>
               ) : null}
+
+              <dl className="mt-5 space-y-3 border-b border-[#f1f3f4] pb-5 text-[13px]">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-[#80868b]">Abmessungen</dt>
+                  <dd className="text-right text-[#3c4043]">
+                    {asset.width != null && asset.height != null
+                      ? `${asset.width} × ${asset.height} px`
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-[#80868b]">Aktualisiert</dt>
+                  <dd className="text-right text-[#3c4043]">
+                    {safeFmtRelative(asset.updated_at ?? asset.uploaded_at)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-[#80868b]">Hochgeladen von</dt>
+                  <dd className="max-w-[55%] truncate text-right text-[#3c4043]">
+                    {asset.uploaded_by_name ?? "—"}
+                  </dd>
+                </div>
+              </dl>
 
               <div className="mt-6 space-y-5">
                 <label className="block">
@@ -210,7 +260,7 @@ export default function CmsMediaAssetPage() {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     maxLength={50000}
-                    rows={5}
+                    rows={4}
                     className="w-full resize-y rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[14px] text-[#1a1a1a] outline-none focus:border-[#0366d6]"
                     placeholder="Interne oder öffentliche Beschreibung"
                   />
@@ -244,7 +294,7 @@ export default function CmsMediaAssetPage() {
                     onChange={(e) =>
                       setCmsStatus(e.target.value as "draft" | "published")
                     }
-                    className={`h-11 w-full max-w-md rounded-lg border px-3 text-[14px] font-semibold outline-none ${
+                    className={`h-11 w-full rounded-lg border px-3 text-[14px] font-semibold outline-none ${
                       cmsStatus === "published"
                         ? "border-emerald-200 bg-emerald-50 text-emerald-900"
                         : "border-amber-200 bg-amber-50 text-amber-950"
@@ -274,50 +324,7 @@ export default function CmsMediaAssetPage() {
                   <span className="text-[12px] text-[#80868b]">Keine Änderungen</span>
                 ) : null}
               </div>
-            </>
-          ) : null}
-        </div>
-
-        {asset && !loading ? (
-          <div className="w-full shrink-0 rounded-xl border border-[#e8eaed] bg-white p-5 shadow-sm lg:w-[320px]">
-            <h2 className="text-[12px] font-semibold uppercase tracking-wide text-[#80868b]">
-              Datei
-            </h2>
-            <div className="mt-3 overflow-hidden rounded-lg border border-[#e8eaed] bg-[#f4f5f7]">
-              {isImageAsset(asset) ? (
-                <img
-                  src={asset.url}
-                  alt={altText || displayName(asset)}
-                  className="max-h-[240px] w-full object-contain"
-                />
-              ) : (
-                <div className="flex h-40 items-center justify-center text-[#80868b]">
-                  <FileText className="h-12 w-12" />
-                </div>
-              )}
-            </div>
-            <dl className="mt-4 space-y-2 text-[13px]">
-              <div className="flex justify-between gap-2">
-                <dt className="text-[#80868b]">Abmessungen</dt>
-                <dd className="text-right text-[#3c4043]">
-                  {asset.width != null && asset.height != null
-                    ? `${asset.width} × ${asset.height} px`
-                    : "—"}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-[#80868b]">Aktualisiert</dt>
-                <dd className="text-right text-[#3c4043]">
-                  {safeFmtRelative(asset.updated_at ?? asset.uploaded_at)}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-[#80868b]">Hochgeladen von</dt>
-                <dd className="max-w-[60%] truncate text-right text-[#3c4043]">
-                  {asset.uploaded_by_name ?? "—"}
-                </dd>
-              </div>
-            </dl>
+            </aside>
           </div>
         ) : null}
       </div>

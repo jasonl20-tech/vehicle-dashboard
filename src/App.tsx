@@ -20,6 +20,7 @@ import CmsEntriesPage from "./pages/cms/CmsEntriesPage";
 import CmsLocalesPage from "./pages/cms/CmsLocalesPage";
 import CmsMediaAssetPage from "./pages/cms/CmsMediaAssetPage";
 import CmsMediaPage from "./pages/cms/CmsMediaPage";
+import CmsMediaSplatRedirect from "./pages/cms/CmsMediaSplatRedirect";
 import CmsScheduledPage from "./pages/cms/CmsScheduledPage";
 import CmsSettingsPage from "./pages/cms/CmsSettingsPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
@@ -92,7 +93,8 @@ export default function App() {
             <Route path="models" element={<CmsContentModelsPage />} />
             <Route path="media" element={<Outlet />}>
               <Route index element={<CmsMediaPage />} />
-              <Route path="*" element={<CmsMediaAssetPage />} />
+              <Route path="asset" element={<CmsMediaAssetPage />} />
+              <Route path="*" element={<CmsMediaSplatRedirect />} />
             </Route>
             <Route path="locales" element={<CmsLocalesPage />} />
             <Route path="settings" element={<CmsSettingsPage />} />
