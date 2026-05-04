@@ -1,4 +1,7 @@
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronDown,
   Filter,
   Pencil,
@@ -33,12 +36,77 @@ function fmtEntryDate(iso: string): string {
   }
 }
 
+function fmtScheduleSubline(
+  iso: string | null | undefined,
+  statusRaw: string,
+): string | null {
+  if (!iso?.trim()) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  const fmt = fmtEntryDate(iso);
+  if (t > Date.now()) {
+    if (statusRaw === "published") return `Veröffentlichung geplant: ${fmt}`;
+    return `Öffentlich ab: ${fmt}`;
+  }
+  return `Termin: ${fmt}`;
+}
+
+type SortKey = "name" | "type" | "updated" | "lastBy" | "status";
+
+function SortColHead({
+  label,
+  sortKey,
+  activeKey,
+  dir,
+  onSort,
+  className = "",
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  dir: "asc" | "desc";
+  onSort: (k: SortKey) => void;
+  className?: string;
+}) {
+  const active = activeKey === sortKey;
+  return (
+    <th
+      scope="col"
+      className={className}
+      aria-sort={
+        active ? (dir === "asc" ? "ascending" : "descending") : "none"
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="inline-flex min-h-9 w-full min-w-0 items-center gap-1 rounded-md px-1 py-1 text-left font-semibold text-inherit transition hover:bg-black/[0.04] hover:text-ink-800"
+      >
+        <span>{label}</span>
+        {active ? (
+          dir === "asc" ? (
+            <ArrowUp className="h-3.5 w-3.5 shrink-0 text-[#1a73e8]" aria-hidden />
+          ) : (
+            <ArrowDown className="h-3.5 w-3.5 shrink-0 text-[#1a73e8]" aria-hidden />
+          )
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-ink-300" aria-hidden />
+        )}
+      </button>
+    </th>
+  );
+}
+
 export default function CmsEntriesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const modelFromUrl = (searchParams.get("content_model_id") || "").trim();
   const qFromUrl = (searchParams.get("q") || "").trim();
   const isZuletztView = searchParams.get("view") === "zuletzt";
 
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
+    key: "updated",
+    dir: "desc",
+  });
   const [qInput, setQInput] = useState(() => searchParams.get("q") || "");
   const [viewOpen, setViewOpen] = useState(false);
   const viewRef = useRef<HTMLDivElement>(null);
@@ -64,6 +132,14 @@ export default function CmsEntriesPage() {
     }, 350);
     return () => clearTimeout(h);
   }, [qInput, setSearchParams]);
+
+  const onSortColumn = useCallback((key: SortKey) => {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "updated" ? "desc" : "asc" },
+    );
+  }, []);
 
   useEffect(() => {
     function close(e: MouseEvent) {
@@ -139,6 +215,7 @@ export default function CmsEntriesPage() {
         payload = null;
       }
       const title = extractContentTitle(payload);
+      const statusRaw = r.status.trim().toLowerCase();
       return {
         id: r.id,
         title,
@@ -150,11 +227,48 @@ export default function CmsEntriesPage() {
         updatedAt: r.updated_at,
         updatedLabel: fmtEntryDate(r.updated_at),
         lastBy: r.last_updated_by?.trim() || "—",
+        lastUpdaterProfilbild: r.last_updater_profilbild ?? null,
+        scheduledPublishAt: r.scheduled_publish_at,
+        scheduleSubline: fmtScheduleSubline(r.scheduled_publish_at, statusRaw),
         state: statusLabelDe(r.status),
-        statusRaw: r.status.trim().toLowerCase(),
+        statusRaw,
       };
     });
   }, [contents.data?.rows, modelKeyById]);
+
+  const sortedRows = useMemo(() => {
+    const { key, dir } = sort;
+    const mult = dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      let v = 0;
+      switch (key) {
+        case "name":
+          v = a.listLabel.localeCompare(b.listLabel, "de", {
+            sensitivity: "base",
+          });
+          break;
+        case "type":
+          v = a.type.localeCompare(b.type, "de", { sensitivity: "base" });
+          break;
+        case "updated":
+          v = a.updatedAt.localeCompare(b.updatedAt);
+          break;
+        case "lastBy":
+          v = a.lastBy.localeCompare(b.lastBy, "de", { sensitivity: "base" });
+          break;
+        case "status": {
+          const sa = `${a.statusRaw}\n${a.scheduledPublishAt ?? ""}`;
+          const sb = `${b.statusRaw}\n${b.scheduledPublishAt ?? ""}`;
+          v = sa.localeCompare(sb, "de");
+          break;
+        }
+        default:
+          return 0;
+      }
+      if (v !== 0) return v * mult;
+      return a.id.localeCompare(b.id);
+    });
+  }, [rows, sort]);
 
   const loading = models.loading || contents.loading;
   const errMsg = useMemo(() => {
@@ -318,20 +432,53 @@ export default function CmsEntriesPage() {
                 <th className="w-10 px-3 py-3" aria-label="Auswahl">
                   <span className="sr-only">Auswahl</span>
                 </th>
-                <th className="px-3 py-3">Name</th>
-                <th className="hidden w-[7rem] px-3 py-3 text-right sm:table-cell">
+                <SortColHead
+                  label="Name"
+                  sortKey="name"
+                  activeKey={sort.key}
+                  dir={sort.dir}
+                  onSort={onSortColumn}
+                  className="px-3 py-3 normal-case"
+                />
+                <th className="hidden w-[7rem] px-3 py-3 text-right sm:table-cell normal-case">
                   Aktion
                 </th>
-                <th className="hidden px-3 py-3 sm:table-cell">Content-Typ</th>
-                <th className="hidden px-3 py-3 md:table-cell">Aktualisiert</th>
-                <th className="hidden px-3 py-3 lg:table-cell">
-                  Zuletzt von
-                </th>
-                <th className="px-3 py-3">Status</th>
+                <SortColHead
+                  label="Content-Typ"
+                  sortKey="type"
+                  activeKey={sort.key}
+                  dir={sort.dir}
+                  onSort={onSortColumn}
+                  className="hidden px-3 py-3 normal-case sm:table-cell"
+                />
+                <SortColHead
+                  label="Aktualisiert"
+                  sortKey="updated"
+                  activeKey={sort.key}
+                  dir={sort.dir}
+                  onSort={onSortColumn}
+                  className="hidden px-3 py-3 normal-case md:table-cell"
+                />
+                <SortColHead
+                  label="Zuletzt von"
+                  sortKey="lastBy"
+                  activeKey={sort.key}
+                  dir={sort.dir}
+                  onSort={onSortColumn}
+                  className="hidden px-3 py-3 normal-case lg:table-cell"
+                />
+                <SortColHead
+                  label="Status"
+                  sortKey="status"
+                  activeKey={sort.key}
+                  dir={sort.dir}
+                  onSort={onSortColumn}
+                  className="px-3 py-3 normal-case"
+                />
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f1f3f4]">
-              {rows.map((r) => (
+              {sortedRows.map((r) => (
                 <tr key={r.id} className="transition hover:bg-[#f8f9fa]/80">
                   <td className="px-3 py-3 align-middle">
                     <input
@@ -375,12 +522,20 @@ export default function CmsEntriesPage() {
                     <time dateTime={r.updatedAt}>{r.updatedLabel}</time>
                   </td>
                   <td className="hidden px-3 py-3 align-middle text-ink-600 lg:table-cell">
-                    <span className="inline-flex items-center gap-2">
-                      <span
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-[11px] font-semibold text-[#1967d2]"
-                        aria-hidden
-                      >
-                        {(r.lastBy === "—" ? "?" : r.lastBy).slice(0, 1).toUpperCase()}
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
+                      <span className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full bg-[#e8eaed] ring-1 ring-[#dadce0]">
+                        {r.lastUpdaterProfilbild ? (
+                          <img
+                            src={r.lastUpdaterProfilbild}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center bg-[#e8f0fe] text-[10px] font-semibold text-[#1967d2]">
+                            {(r.lastBy === "—" ? "?" : r.lastBy).slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
                       </span>
                       <span className="truncate max-w-[140px]" title={r.lastBy}>
                         {r.lastBy}
@@ -388,17 +543,26 @@ export default function CmsEntriesPage() {
                     </span>
                   </td>
                   <td className="px-3 py-3 align-middle">
-                    <span
-                      className={
-                        r.statusRaw === "published"
-                          ? "inline-flex rounded-full bg-[#e6f4ea] px-2.5 py-0.5 text-[11.5px] font-medium text-[#137333]"
-                          : r.statusRaw === "archived"
-                            ? "inline-flex rounded-full bg-ink-100 px-2.5 py-0.5 text-[11.5px] font-medium text-ink-600"
-                            : "inline-flex rounded-full bg-[#fef7e0] px-2.5 py-0.5 text-[11.5px] font-medium text-[#b06000]"
-                      }
-                    >
-                      {r.state}
-                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <span
+                        className={
+                          r.statusRaw === "published"
+                            ? "inline-flex w-fit rounded-full bg-[#e6f4ea] px-2.5 py-0.5 text-[11.5px] font-medium text-[#137333]"
+                            : r.statusRaw === "archived"
+                              ? "inline-flex w-fit rounded-full bg-ink-100 px-2.5 py-0.5 text-[11.5px] font-medium text-ink-600"
+                              : r.statusRaw === "scheduled"
+                                ? "inline-flex w-fit rounded-full bg-[#e8f0fe] px-2.5 py-0.5 text-[11.5px] font-medium text-[#1967d2]"
+                                : "inline-flex w-fit rounded-full bg-[#fef7e0] px-2.5 py-0.5 text-[11.5px] font-medium text-[#b06000]"
+                        }
+                      >
+                        {r.state}
+                      </span>
+                      {r.scheduleSubline ? (
+                        <span className="text-[10.5px] leading-snug text-ink-500">
+                          {r.scheduleSubline}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -6,6 +6,8 @@
  *        { id?, content_model_id, payload_json, status?, locale?, scheduled_publish_at? }
  *
  * `last_updated_by` setzt die API aus der Session (Benutzername, sonst User-ID).
+ *
+ * Antwort-Zeilen können `last_updater_profilbild` enthalten (Lookup in `user`, D1 `env.user`).
  */
 import {
   getCurrentUser,
@@ -30,6 +32,51 @@ type ContentRow = {
   last_updated_by: string | null;
   scheduled_publish_at: string | null;
 };
+
+type ContentRowOut = ContentRow & {
+  last_updater_profilbild: string | null;
+};
+
+const USERNAME_LOOKUP_CHUNK = 64;
+
+async function rowsWithUpdaterAvatars(
+  env: AuthEnv,
+  rows: ContentRow[],
+): Promise<ContentRowOut[]> {
+  if (rows.length === 0) return [];
+  const names = new Set<string>();
+  for (const r of rows) {
+    const n = r.last_updated_by?.trim();
+    if (n) names.add(n);
+  }
+  const map = new Map<string, string | null>();
+  const list = [...names];
+  for (let i = 0; i < list.length; i += USERNAME_LOOKUP_CHUNK) {
+    const part = list.slice(i, i + USERNAME_LOOKUP_CHUNK);
+    if (part.length === 0) continue;
+    const placeholders = part.map(() => "?").join(",");
+    try {
+      const { results } = await env.user
+        .prepare(
+          `SELECT benutzername, profilbild FROM user WHERE benutzername IN (${placeholders})`,
+        )
+        .bind(...part)
+        .all<{ benutzername: string; profilbild: string | null }>();
+      for (const u of results ?? []) {
+        map.set(u.benutzername, u.profilbild);
+      }
+    } catch {
+      /* Avatar optional */
+    }
+  }
+  return rows.map((r) => {
+    const key = r.last_updated_by?.trim();
+    return {
+      ...r,
+      last_updater_profilbild: key ? (map.get(key) ?? null) : null,
+    };
+  });
+}
 
 function tableHint(e: unknown): string | null {
   const msg = (e as Error)?.message || String(e);
@@ -195,8 +242,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       .bind(...binds, limit, offset)
       .all<ContentRow>();
 
+    const enriched = await rowsWithUpdaterAvatars(env, results ?? []);
+
     return jsonResponse({
-      rows: results ?? [],
+      rows: enriched,
       total,
       limit,
       offset,

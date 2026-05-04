@@ -29,6 +29,8 @@ export type CmsContentRow = {
   updated_at: string;
   last_updated_by: string | null;
   scheduled_publish_at: string | null;
+  /** Profilbild-URL aus `user.profilbild` (GET-Liste, optional). */
+  last_updater_profilbild?: string | null;
 };
 
 export type CmsContentsListResponse = {
