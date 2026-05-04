@@ -1,7 +1,8 @@
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AddFieldModal from "./AddFieldModal";
+import RichTextFieldModal from "./RichTextFieldModal";
 import { CMS_CONTENT_MODELS_API } from "../../lib/cmsApi";
 import { CMS_ROOT } from "../../lib/cmsAccess";
 import type {
@@ -13,6 +14,7 @@ import {
   CMS_FIELD_ID_RE,
   CMS_MODEL_KEY_RE,
   defaultFieldIdForType,
+  defaultRichTextFieldConfig,
   FIELD_TYPE_LABELS,
   serializeContentModelSchema,
 } from "../../lib/cmsSchemaTypes";
@@ -40,6 +42,7 @@ export default function ContentModelEditorForm({
   const [description, setDescription] = useState(initialDescription);
   const [schema, setSchema] = useState<CmsContentModelSchema>(initialSchema);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [richModalIndex, setRichModalIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -99,12 +102,19 @@ export default function ContentModelEditorForm({
     setSchema((s) => {
       const idx = s.fields.length;
       const id = defaultFieldIdForType(type, idx);
-      const field: CmsFieldDefinition = {
+      const base = {
         id,
         name: FIELD_TYPE_LABELS[type],
         type,
         required: false,
       };
+      const field: CmsFieldDefinition =
+        type === "RichText"
+          ? { ...base, richText: defaultRichTextFieldConfig() }
+          : base;
+      if (type === "RichText") {
+        setTimeout(() => setRichModalIndex(idx), 0);
+      }
       return { ...s, fields: [...s.fields, field] };
     });
   }
@@ -270,7 +280,41 @@ export default function ContentModelEditorForm({
             </p>
           ) : (
             <ul className="space-y-4">
-              {schema.fields.map((f, i) => (
+              {schema.fields.map((f, i) =>
+                f.type === "RichText" ? (
+                  <li
+                    key={`${f.id}-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium text-ink-900">{f.name}</span>
+                      <code className="ml-2 text-[12px] text-ink-500">
+                        {f.id}
+                      </code>
+                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
+                        {FIELD_TYPE_LABELS.RichText}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRichModalIndex(i)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        Konfigurieren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeField(i)}
+                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
+                        aria-label="Feld entfernen"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                ) : (
                 <li
                   key={`${f.id}-${i}`}
                   className="rounded-lg border border-hair bg-ink-50/30 p-4"
@@ -357,7 +401,7 @@ export default function ContentModelEditorForm({
                     />
                   </div>
 
-                  {(f.type === "Text" || f.type === "RichText") && (
+                  {(f.type === "Text") && (
                     <div className="grid gap-3 border-t border-hair pt-3 sm:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-[11px] font-medium text-ink-600">
@@ -491,7 +535,8 @@ export default function ContentModelEditorForm({
                     </p>
                   )}
                 </li>
-              ))}
+                ),
+              )}
             </ul>
           )}
 
@@ -527,6 +572,20 @@ export default function ContentModelEditorForm({
         onClose={() => setAddModalOpen(false)}
         onPick={addField}
       />
+
+      {richModalIndex !== null &&
+        schema.fields[richModalIndex]?.type === "RichText" && (
+          <RichTextFieldModal
+            open
+            field={schema.fields[richModalIndex]!}
+            onClose={() => setRichModalIndex(null)}
+            onApply={(next) => {
+              updateField(richModalIndex, next);
+              setRichModalIndex(null);
+            }}
+            otherModelKeys={linkTargets}
+          />
+        )}
     </div>
   );
 }
