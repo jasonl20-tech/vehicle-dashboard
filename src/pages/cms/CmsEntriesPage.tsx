@@ -1,37 +1,63 @@
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
-
-const MOCK = [
-  {
-    id: "demo-landing",
-    title: "Willkommen",
-    type: "Landing Page",
-    locale: "de-DE",
-    updated: "—",
-    state: "Entwurf",
-  },
-  {
-    id: "demo-article",
-    title: "Erster Artikel",
-    type: "Blog Post",
-    locale: "de-DE",
-    updated: "—",
-    state: "Entwurf",
-  },
-];
+import {
+  CMS_CONTENT_MODELS_API,
+  CMS_CONTENTS_API,
+  extractContentTitle,
+  type CmsContentsListResponse,
+  type CmsContentModelsListResponse,
+  statusLabelDe,
+} from "../../lib/cmsApi";
+import {
+  fmtRelative,
+  useApi,
+} from "../../lib/customerApi";
 
 export default function CmsEntriesPage() {
   const [q, setQ] = useState("");
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return MOCK;
-    return MOCK.filter(
-      (r) =>
-        r.title.toLowerCase().includes(s) ||
-        r.type.toLowerCase().includes(s) ||
-        r.id.toLowerCase().includes(s),
-    );
+
+  const modelsUrl = `${CMS_CONTENT_MODELS_API}?limit=500`;
+  const models = useApi<CmsContentModelsListResponse>(modelsUrl);
+
+  const contentsUrl = useMemo(() => {
+    const p = new URLSearchParams({ limit: "200" });
+    const term = q.trim();
+    if (term) p.set("q", term);
+    return `${CMS_CONTENTS_API}?${p}`;
   }, [q]);
+
+  const contents = useApi<CmsContentsListResponse>(contentsUrl);
+
+  const modelKeyById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of models.data?.rows ?? []) {
+      m.set(r.id, r.key);
+    }
+    return m;
+  }, [models.data?.rows]);
+
+  const rows = useMemo(() => {
+    const list = contents.data?.rows ?? [];
+    return list.map((r) => {
+      let payload: unknown = null;
+      try {
+        payload = JSON.parse(r.payload_json) as unknown;
+      } catch {
+        payload = null;
+      }
+      return {
+        id: r.id,
+        title: extractContentTitle(payload),
+        type: modelKeyById.get(r.content_model_id) ?? r.content_model_id.slice(0, 8),
+        locale: r.locale,
+        updated: fmtRelative(r.updated_at),
+        state: statusLabelDe(r.status),
+      };
+    });
+  }, [contents.data?.rows, modelKeyById]);
+
+  const loading = models.loading || contents.loading;
+  const err = models.error ?? contents.error;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -41,8 +67,8 @@ export default function CmsEntriesPage() {
             Content
           </h1>
           <p className="mt-1 text-[13px] text-ink-500">
-            Alle Inhalte nach Content-Modell — Daten sind noch statisch, API
-            folgt.
+            Einträge aus der Website-D1 (`cms_contents`). Suche filtert über die
+            API.
           </p>
         </div>
         <button
@@ -54,6 +80,12 @@ export default function CmsEntriesPage() {
         </button>
       </header>
 
+      {err ? (
+        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 text-[13px] text-rose-900">
+          {err}
+        </p>
+      ) : null}
+
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative max-w-md flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
@@ -61,13 +93,12 @@ export default function CmsEntriesPage() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Titel, Modell oder ID suchen …"
+            placeholder="Titel, Payload oder ID suchen …"
             className="w-full rounded-lg border border-hair bg-white py-2 pl-9 pr-3 text-[13px] text-ink-800 placeholder:text-ink-400 focus:border-ink-500 focus:outline-none focus:ring-1 focus:ring-ink-500/20"
           />
         </div>
         <p className="text-[12px] text-ink-400">
-          {rows.length} {rows.length === 1 ? "Eintrag" : "Einträge"}{" "}
-          <span className="text-ink-300">(Listenansicht)</span>
+          {loading ? "Lade …" : `${rows.length} ${rows.length === 1 ? "Eintrag" : "Einträge"}`}
         </p>
       </div>
 
@@ -83,11 +114,19 @@ export default function CmsEntriesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-hair">
+            {!loading && rows.length === 0 ? (
+              <tr>
+                <td className="px-4 py-8 text-ink-500" colSpan={5}>
+                  Noch keine Einträge in der Datenbank. Lege zuerst Content-Modelle
+                  an, dann Inhalte per API oder kommendem Editor.
+                </td>
+              </tr>
+            ) : null}
             {rows.map((r) => (
               <tr
                 key={r.id}
-                className="transition hover:bg-night-900/[0.02] cursor-pointer"
-              >
+                className="cursor-pointer transition hover:bg-night-900/[0.02]"
+             >
                 <td className="px-4 py-3 font-medium text-ink-900">{r.title}</td>
                 <td className="px-4 py-3 text-ink-600">{r.type}</td>
                 <td className="hidden px-4 py-3 text-ink-500 sm:table-cell">
