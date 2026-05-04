@@ -6,6 +6,7 @@ import {
   CMS_CONTENT_MODELS_API,
   CMS_CONTENTS_API,
   extractContentTitle,
+  type CmsContentModelsListResponse,
   type CmsContentsListResponse,
 } from "../../lib/cmsApi";
 import { useApi } from "../../lib/customerApi";
