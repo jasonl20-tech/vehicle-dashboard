@@ -38,7 +38,7 @@ export default function CmsEntriesPage() {
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
-            Einträge
+            Content
           </h1>
           <p className="mt-1 text-[13px] text-ink-500">
             Alle Inhalte nach Content-Modell — Daten sind noch statisch, API
@@ -50,7 +50,7 @@ export default function CmsEntriesPage() {
           disabled
           className="inline-flex items-center justify-center rounded-lg bg-ink-900 px-4 py-2 text-[12.5px] font-medium text-white opacity-60"
         >
-          Eintrag anlegen
+          Content anlegen
         </button>
       </header>
 
@@ -66,7 +66,8 @@ export default function CmsEntriesPage() {
           />
         </div>
         <p className="text-[12px] text-ink-400">
-          {rows.length} {rows.length === 1 ? "Eintrag" : "Einträge"}
+          {rows.length} {rows.length === 1 ? "Eintrag" : "Einträge"}{" "}
+          <span className="text-ink-300">(Listenansicht)</span>
         </p>
       </div>
 

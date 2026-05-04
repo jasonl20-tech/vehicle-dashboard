@@ -4,15 +4,6 @@ import { CMS_ROOT } from "../../lib/cmsAccess";
 
 const cards = [
   {
-    title: "Einträge",
-    description:
-      "Strukturierte Inhalte nach Content-Modell bearbeiten und veröffentlichen.",
-    to: `${CMS_ROOT}/entries`,
-    icon: Box,
-    stat: "Noch keine API",
-    tone: "from-brand-500/20 to-accent-mint/15",
-  },
-  {
     title: "Content-Modelle",
     description:
       "Felder, Validierung und Beziehungen — ähnlich wie in Contentful.",
@@ -22,8 +13,17 @@ const cards = [
     tone: "from-accent-rose/15 to-brand-500/10",
   },
   {
+    title: "Content",
+    description:
+      "Strukturierte Inhalte nach Content-Modell bearbeiten und veröffentlichen.",
+    to: `${CMS_ROOT}/entries`,
+    icon: Box,
+    stat: "Noch keine API",
+    tone: "from-brand-500/20 to-accent-mint/15",
+  },
+  {
     title: "Medien",
-    description: "Assets zentral verwalten und in Einträge einbinden.",
+    description: "Assets zentral verwalten und in Content einbinden.",
     to: `${CMS_ROOT}/media`,
     icon: ImageIcon,
     stat: "Bibliothek",

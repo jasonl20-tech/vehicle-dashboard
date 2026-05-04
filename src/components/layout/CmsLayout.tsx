@@ -4,13 +4,12 @@ import {
   Globe,
   Image as ImageIcon,
   LayoutGrid,
-  Layers,
   LogOut,
   Settings,
   Sparkles,
 } from "lucide-react";
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { Logo } from "../brand/Logo";
 import { useAuth } from "../../lib/auth";
 import { CMS_ROOT } from "../../lib/cmsAccess";
@@ -33,37 +32,32 @@ export default function CmsLayout() {
         className="sticky top-0 flex h-screen w-[240px] shrink-0 flex-col border-r border-hair bg-white"
         aria-label="CMS Navigation"
       >
-        <div className="flex h-14 items-center gap-2 border-b border-hair px-4">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-ink-900 text-white">
-            <Layers className="h-4 w-4" aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-[12px] font-semibold leading-tight">
-              CMS
-            </p>
-            <p className="truncate text-[10px] text-ink-400">Vehicleimagery</p>
-          </div>
+        <div className="flex h-14 items-center border-b border-hair px-4">
+          <Link
+            to={CMS_ROOT}
+            className="inline-flex min-w-0 items-center"
+            aria-label="CMS — zur Übersicht"
+          >
+            <Logo className="h-[22px] w-auto shrink-0 text-ink-900" />
+          </Link>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-2 py-4">
-          <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-            Übersicht
-          </p>
           <NavLink to={CMS_ROOT} end className={navClass}>
             <LayoutGrid className="h-4 w-4 shrink-0 opacity-80" />
-            Start
+            Übersicht
           </NavLink>
 
           <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">
             Inhalt
           </p>
-          <NavLink to={`${CMS_ROOT}/entries`} className={navClass}>
-            <Box className="h-4 w-4 shrink-0 opacity-80" />
-            Einträge
-          </NavLink>
           <NavLink to={`${CMS_ROOT}/models`} className={navClass}>
             <Sparkles className="h-4 w-4 shrink-0 opacity-80" />
             Content-Modelle
+          </NavLink>
+          <NavLink to={`${CMS_ROOT}/entries`} className={navClass}>
+            <Box className="h-4 w-4 shrink-0 opacity-80" />
+            Content
           </NavLink>
           <NavLink to={`${CMS_ROOT}/media`} className={navClass}>
             <ImageIcon className="h-4 w-4 shrink-0 opacity-80" />
@@ -83,12 +77,11 @@ export default function CmsLayout() {
           </NavLink>
         </nav>
 
-        <div className="border-t border-hair p-3">
+        <div className="flex justify-end border-t border-hair p-3">
           <NavLink
             to="/"
-            className="mb-2 flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium text-ink-500 transition hover:bg-night-900/[0.04] hover:text-ink-800"
+            className="rounded-lg px-3 py-2 text-[12px] font-medium text-ink-500 transition hover:bg-night-900/[0.04] hover:text-ink-800"
           >
-            <Logo className="h-3.5 w-auto opacity-70" />
             Plattform
           </NavLink>
         </div>
@@ -102,7 +95,7 @@ export default function CmsLayout() {
               onClick={() => setSpaceOpen((v) => !v)}
               className="flex max-w-full items-center gap-2 rounded-lg border border-hair bg-white px-3 py-1.5 text-left text-[12.5px] font-medium text-ink-800 shadow-sm transition hover:border-ink-200"
             >
-              <span className="truncate">Space · Produktion</span>
+              <span className="truncate">Space · Produktions-Space</span>
               <ChevronDown
                 className={`h-4 w-4 shrink-0 text-ink-400 transition ${spaceOpen ? "rotate-180" : ""}`}
               />
@@ -117,7 +110,7 @@ export default function CmsLayout() {
                   className="block w-full px-3 py-2 text-left text-[12px] text-ink-900 hover:bg-ink-50"
                   onClick={() => setSpaceOpen(false)}
                 >
-                  Produktion
+                  Produktions-Space
                   <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
                     aktiv
                   </span>
@@ -125,19 +118,19 @@ export default function CmsLayout() {
                 <button
                   type="button"
                   disabled
-                  className="block w-full px-3 py-2 text-left text-[12px] text-ink-400"
+                  className="block w-full cursor-not-allowed px-3 py-2 text-left text-[12px] text-ink-400 opacity-60"
+                  title="Preview-Space folgt"
                 >
-                  Staging
-                  <span className="ml-2 text-[10px]">bald</span>
+                  Preview-Space
+                  <span className="ml-2 text-[10px] font-medium text-ink-400">
+                    demnächst
+                  </span>
                 </button>
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="hidden rounded-md border border-hair bg-ink-50/80 px-2 py-1 font-mono text-[11px] text-ink-600 sm:inline">
-              master
-            </span>
             {user && (
               <span className="hidden max-w-[10rem] truncate text-[12px] text-ink-500 sm:inline">
                 {user.titel || user.benutzername}
