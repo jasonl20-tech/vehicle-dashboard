@@ -2,7 +2,7 @@
  * CMS — ein Content-Eintrag.
  *
  *   GET    /api/cms/contents/:id
- *   PUT    /api/cms/contents/:id  { content_model_id?, payload_json?, status?, locale? }
+ *   PUT    /api/cms/contents/:id  { content_model_id?, payload_json?, status?, locale?, scheduled_publish_at? }
  *   DELETE /api/cms/contents/:id
  */
 import {
@@ -24,6 +24,7 @@ type ContentRow = {
   created_at: string;
   updated_at: string;
   last_updated_by: string | null;
+  scheduled_publish_at: string | null;
 };
 
 function paramId(params: Record<string, string | string[] | undefined>): string {
@@ -38,11 +39,26 @@ function tableHint(e: unknown): string | null {
   if (/no such table/i.test(msg)) {
     return "Migration: `d1/migrations/0013_cms_content.sql`.";
   }
+  if (/scheduled_publish_at/i.test(msg)) {
+    return "Migration: `d1/migrations/0014_cms_scheduled_publish.sql`.";
+  }
   return null;
 }
 
 function lastUpdater(user: SessionUser): string {
   return String(user.id);
+}
+
+function normalizeScheduledPublishAt(
+  raw: unknown,
+): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const t = Date.parse(s);
+  if (Number.isNaN(t)) return null;
+  return new Date(t).toISOString();
 }
 
 function normalizePayload(raw: unknown): string | Response {
@@ -86,7 +102,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     const row = await db
       .prepare(
         `SELECT id, content_model_id, payload_json, status, locale,
-                created_at, updated_at, last_updated_by
+                created_at, updated_at, last_updated_by, scheduled_publish_at
            FROM cms_contents WHERE id = ? LIMIT 1`,
       )
       .bind(id)
@@ -109,6 +125,7 @@ type PutBody = {
   payload_json?: unknown;
   status?: string;
   locale?: string;
+  scheduled_publish_at?: unknown;
 };
 
 export const onRequestPut: PagesFunction<AuthEnv> = async ({
@@ -134,7 +151,7 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
 
   const cur = await db
     .prepare(
-      `SELECT id, content_model_id, payload_json, status, locale
+      `SELECT id, content_model_id, payload_json, status, locale, scheduled_publish_at
          FROM cms_contents WHERE id = ?`,
     )
     .bind(id)
@@ -176,6 +193,16 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
     nextLocale = String(body.locale).trim().slice(0, 32) || cur.locale;
   }
 
+  let nextScheduled = cur.scheduled_publish_at;
+  if (body.scheduled_publish_at !== undefined) {
+    const s = normalizeScheduledPublishAt(body.scheduled_publish_at);
+    if (s === undefined) {
+      nextScheduled = cur.scheduled_publish_at;
+    } else {
+      nextScheduled = s;
+    }
+  }
+
   const updater = lastUpdater(user);
 
   try {
@@ -186,17 +213,26 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
            payload_json = ?,
            status = ?,
            locale = ?,
+           scheduled_publish_at = ?,
            last_updated_by = ?,
            updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
       )
-      .bind(nextModel, nextPayload, nextStatus, nextLocale, updater, id)
+      .bind(
+        nextModel,
+        nextPayload,
+        nextStatus,
+        nextLocale,
+        nextScheduled,
+        updater,
+        id,
+      )
       .run();
 
     const row = await db
       .prepare(
         `SELECT id, content_model_id, payload_json, status, locale,
-                created_at, updated_at, last_updated_by
+                created_at, updated_at, last_updated_by, scheduled_publish_at
            FROM cms_contents WHERE id = ?`,
       )
       .bind(id)

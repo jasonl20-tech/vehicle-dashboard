@@ -1,7 +1,12 @@
 import { ArrowLeft, ChevronDown } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CMS_ROOT } from "../../lib/cmsAccess";
+import {
+  datetimeLocalToIso,
+  isoToDatetimeLocal,
+  statusLabelDe,
+} from "../../lib/cmsApi";
 import {
   mergePayloadWithSchema,
   serializeEntryPayloadForApi,
@@ -23,14 +28,20 @@ type Props = {
   modelKey: string;
   schema: CmsContentModelSchema;
   contentId: string | null;
+  /** Aktuell gewähltes Content-Modell (bearbeitbar bei bestehendem Eintrag). */
+  selectedModelId: string;
+  onSelectedModelIdChange: (id: string) => void;
+  modelOptions: { id: string; key: string }[];
   initialPayload: Record<string, unknown>;
   initialStatus: string;
   initialLocale: string;
   initialUpdatedAt: string | null;
+  initialScheduledPublishAt: string | null;
   onCreate: (body: {
     payload: Record<string, unknown>;
     status: string;
     locale: string;
+    scheduledPublishAt: string | null;
   }) => Promise<{ id: string; updated_at: string }>;
   onUpdate: (
     id: string,
@@ -38,18 +49,24 @@ type Props = {
       payload: Record<string, unknown>;
       status: string;
       locale: string;
+      contentModelId: string;
+      scheduledPublishAt: string | null;
     },
-  ) => Promise<{ updated_at: string }>;
+  ) => Promise<{ updated_at: string; content_model_id: string }>;
 };
 
 export default function ContentEntryEditor({
   modelKey,
   schema,
   contentId,
+  selectedModelId,
+  onSelectedModelIdChange,
+  modelOptions,
   initialPayload,
   initialStatus,
   initialLocale,
   initialUpdatedAt,
+  initialScheduledPublishAt,
   onCreate,
   onUpdate,
 }: Props) {
@@ -57,9 +74,21 @@ export default function ContentEntryEditor({
   const [status, setStatus] = useState(initialStatus);
   const [locale] = useState(initialLocale);
   const [serverUpdatedAt, setServerUpdatedAt] = useState(initialUpdatedAt);
+  const [scheduledLocal, setScheduledLocal] = useState(() =>
+    isoToDatetimeLocal(initialScheduledPublishAt),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    setScheduledLocal(isoToDatetimeLocal(initialScheduledPublishAt));
+  }, [initialScheduledPublishAt, contentId]);
+
+  const resolvedModelKey = useMemo(() => {
+    const hit = modelOptions.find((m) => m.id === selectedModelId);
+    return hit?.key ?? modelKey;
+  }, [modelOptions, selectedModelId, modelKey]);
 
   const entryTitle = useMemo(() => {
     for (const k of ["title", "name", "headline", "slug", "internalTitle"]) {
@@ -89,11 +118,13 @@ export default function ContentEntryEditor({
     setError(null);
     setSaving(true);
     try {
+      const schedIso = datetimeLocalToIso(scheduledLocal);
       if (!contentId) {
         const row = await onCreate({
           payload: apiPayload,
           status: nextStatus,
           locale,
+          scheduledPublishAt: schedIso,
         });
         setStatus(nextStatus);
         setServerUpdatedAt(row.updated_at);
@@ -103,10 +134,13 @@ export default function ContentEntryEditor({
         payload: apiPayload,
         status: nextStatus,
         locale,
+        contentModelId: selectedModelId,
+        scheduledPublishAt: schedIso,
       });
       setStatus(nextStatus);
       setServerUpdatedAt(row.updated_at);
       applyPayload(apiPayload);
+      onSelectedModelIdChange(row.content_model_id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -114,10 +148,15 @@ export default function ContentEntryEditor({
     }
   };
 
+  const sl = status.toLowerCase();
   const statusBadgeClass =
-    status.toLowerCase() === "published"
+    sl === "published"
       ? "bg-emerald-500/15 text-emerald-900"
-      : "bg-orange-200/80 text-orange-950";
+      : sl === "archived"
+        ? "bg-ink-200/80 text-ink-800"
+        : sl === "scheduled"
+          ? "bg-brand-500/15 text-brand-800"
+          : "bg-orange-200/80 text-orange-950";
 
   return (
     <div className="-mx-4 -mt-2 min-h-[calc(100vh-5rem)] bg-[#f7f7f5] px-4 pb-10 pt-2 lg:-mx-6 lg:px-6 xl:-mx-8 xl:px-8">
@@ -133,7 +172,7 @@ export default function ContentEntryEditor({
           </Link>
           <span className="text-ink-300">/</span>
           <span className="min-w-0 truncate text-[13px] font-semibold text-ink-900">
-            <span className="text-ink-500">{modelKey}</span>
+            <span className="text-ink-500">{resolvedModelKey}</span>
             <span className="mx-1.5 text-ink-300">/</span>
             <span>{entryTitle}</span>
           </span>
@@ -206,11 +245,66 @@ export default function ContentEntryEditor({
                 <span
                   className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${statusBadgeClass}`}
                 >
-                  {status.toLowerCase() === "published"
-                    ? "Veröffentlicht"
-                    : "Entwurf"}
+                  {statusLabelDe(status)}
                 </span>
               </div>
+            </div>
+
+            {contentId && modelOptions.length > 0 ? (
+              <div>
+                <label
+                  htmlFor="cms-entry-model"
+                  className="mb-2 block text-[12px] font-medium text-ink-800"
+                >
+                  Content-Typ
+                </label>
+                <select
+                  id="cms-entry-model"
+                  value={selectedModelId}
+                  onChange={(e) => onSelectedModelIdChange(e.target.value)}
+                  disabled={saving}
+                  className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] text-ink-900 outline-none focus:border-[#0366d6] disabled:opacity-50"
+                >
+                  {modelOptions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.key}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[10.5px] leading-snug text-ink-500">
+                  Auch bei veröffentlichten Einträgen änderbar; Felder werden ans
+                  neue Modell angepasst (Speichern nicht vergessen).
+                </p>
+              </div>
+            ) : null}
+
+            <div>
+              <label
+                htmlFor="cms-scheduled-at"
+                className="mb-2 block text-[12px] font-medium text-ink-800"
+              >
+                Geplant veröffentlichen
+              </label>
+              <input
+                id="cms-scheduled-at"
+                type="datetime-local"
+                value={scheduledLocal}
+                onChange={(e) => setScheduledLocal(e.target.value)}
+                disabled={saving}
+                className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#0366d6] disabled:opacity-50"
+              />
+              <button
+                type="button"
+                disabled={saving || !scheduledLocal}
+                onClick={() => setScheduledLocal("")}
+                className="mt-1.5 text-[11px] font-medium text-[#0366d6] hover:underline disabled:opacity-40"
+              >
+                Planung entfernen
+              </button>
+              <p className="mt-1 text-[10.5px] leading-snug text-ink-500">
+                Erscheint im Bereich „Geplant“. Leer lassen, wenn nicht
+                terminiert.
+              </p>
             </div>
 
             <div className="space-y-2">

@@ -28,6 +28,7 @@ export type CmsContentRow = {
   created_at: string;
   updated_at: string;
   last_updated_by: string | null;
+  scheduled_publish_at: string | null;
 };
 
 export type CmsContentsListResponse = {
@@ -38,6 +39,24 @@ export type CmsContentsListResponse = {
 };
 
 /** Anzahl Felder aus schema_json (heuristisch, je nach Schema-Shape). */
+/** Für `<input type="datetime-local" />` aus API-ISO. */
+export function isoToDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Aus datetime-local Wert → ISO für API. */
+export function datetimeLocalToIso(local: string): string | null {
+  const t = local.trim();
+  if (!t) return null;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 export function countSchemaFields(schema: unknown): number {
   if (!schema || typeof schema !== "object") return 0;
   const o = schema as Record<string, unknown>;
@@ -73,5 +92,6 @@ export function statusLabelDe(status: string): string {
   if (s === "draft") return "Entwurf";
   if (s === "published") return "Veröffentlicht";
   if (s === "archived") return "Archiviert";
+  if (s === "scheduled") return "Geplant";
   return status || "—";
 }

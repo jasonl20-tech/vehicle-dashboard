@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Link,
   useLocation,
@@ -13,6 +13,7 @@ import {
   CMS_CONTENTS_API,
   parseSchemaJson,
   type CmsContentModelRow,
+  type CmsContentModelsListResponse,
   type CmsContentRow,
 } from "../../lib/cmsApi";
 import {
@@ -52,11 +53,18 @@ export default function CmsContentEntryPage() {
     : null;
   const contentRes = useApi<CmsContentRow>(contentUrl);
 
-  const modelIdResolved = useMemo(() => {
+  /** Override für Content-Typ (Dropdown); null = Server-Wert nutzen */
+  const [pickedModelId, setPickedModelId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPickedModelId(null);
+  }, [contentIdForEdit]);
+
+  const baseModelId = useMemo(() => {
     if (contentIdForEdit && contentRes.data?.content_model_id) {
       return contentRes.data.content_model_id;
     }
-    if (isNewRoute) return modelIdFromQuery;
+    if (isNewRoute && modelIdFromQuery) return modelIdFromQuery;
     return "";
   }, [
     contentIdForEdit,
@@ -65,10 +73,25 @@ export default function CmsContentEntryPage() {
     modelIdFromQuery,
   ]);
 
+  const modelIdResolved = pickedModelId ?? baseModelId;
+
   const modelUrl = modelIdResolved
     ? `${CMS_CONTENT_MODELS_API}/${encodeURIComponent(modelIdResolved)}`
     : null;
   const modelRes = useApi<CmsContentModelRow>(modelUrl);
+
+  const modelsForPickerUrl = contentIdForEdit
+    ? `${CMS_CONTENT_MODELS_API}?limit=500`
+    : null;
+  const modelsForPicker =
+    useApi<CmsContentModelsListResponse>(modelsForPickerUrl);
+
+  const modelOptions = useMemo(() => {
+    const rows = modelsForPicker.data?.rows ?? [];
+    return [...rows].sort((a, b) =>
+      a.key.localeCompare(b.key, "de", { sensitivity: "base" }),
+    );
+  }, [modelsForPicker.data?.rows]);
 
   const schema = useMemo(() => {
     const raw = modelRes.data?.schema_json ?? "{}";
@@ -97,14 +120,17 @@ export default function CmsContentEntryPage() {
   const initialStatus = contentRes.data?.status ?? "draft";
   const initialLocale = contentRes.data?.locale ?? "de-DE";
   const initialUpdatedAt = contentRes.data?.updated_at ?? null;
+  const initialScheduled =
+    contentRes.data?.scheduled_publish_at ?? null;
 
   const loading =
     Boolean(contentUrl && contentRes.loading) ||
     Boolean(modelUrl && modelRes.loading);
 
-  const modelsListUrl = isNewRoute && !modelIdFromQuery
-    ? `${CMS_CONTENT_MODELS_API}?limit=200`
-    : null;
+  const modelsListUrl =
+    isNewRoute && !modelIdFromQuery
+      ? `${CMS_CONTENT_MODELS_API}?limit=200`
+      : null;
   const modelsList = useApi<{ rows: CmsContentModelRow[] }>(modelsListUrl);
 
   if (isNewRoute && !modelIdFromQuery) {
@@ -184,6 +210,7 @@ export default function CmsContentEntryPage() {
     payload: Record<string, unknown>;
     status: string;
     locale: string;
+    scheduledPublishAt: string | null;
   }) => {
     const res = await fetch(CMS_CONTENTS_API, {
       method: "POST",
@@ -194,6 +221,7 @@ export default function CmsContentEntryPage() {
         payload_json: body.payload,
         status: body.status,
         locale: body.locale,
+        scheduled_publish_at: body.scheduledPublishAt,
       }),
     });
     if (!res.ok) throw new Error(await parseError(res));
@@ -208,36 +236,45 @@ export default function CmsContentEntryPage() {
       payload: Record<string, unknown>;
       status: string;
       locale: string;
+      contentModelId: string;
+      scheduledPublishAt: string | null;
     },
   ) => {
-    const res = await fetch(
-      `${CMS_CONTENTS_API}/${encodeURIComponent(id)}`,
-      {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payload_json: body.payload,
-          status: body.status,
-          locale: body.locale,
-        }),
-      },
-    );
+    const res = await fetch(`${CMS_CONTENTS_API}/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        payload_json: body.payload,
+        status: body.status,
+        locale: body.locale,
+        content_model_id: body.contentModelId,
+        scheduled_publish_at: body.scheduledPublishAt,
+      }),
+    });
     if (!res.ok) throw new Error(await parseError(res));
     const row = (await res.json()) as CmsContentRow;
-    return { updated_at: row.updated_at };
+    return { updated_at: row.updated_at, content_model_id: row.content_model_id };
   };
 
   return (
     <ContentEntryEditor
-      key={contentIdForEdit ?? `new-${model.id}`}
+      key={
+        contentIdForEdit
+          ? `${contentIdForEdit}-${modelIdResolved}`
+          : `new-${modelIdResolved}`
+      }
       modelKey={model.key}
       schema={schema}
       contentId={contentIdForEdit}
+      selectedModelId={modelIdResolved}
+      onSelectedModelIdChange={setPickedModelId}
+      modelOptions={modelOptions}
       initialPayload={initialPayload}
       initialStatus={initialStatus}
       initialLocale={initialLocale}
       initialUpdatedAt={initialUpdatedAt}
+      initialScheduledPublishAt={initialScheduled}
       onCreate={onCreate}
       onUpdate={onUpdate}
     />

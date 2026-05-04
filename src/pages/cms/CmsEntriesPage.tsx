@@ -34,17 +34,33 @@ function fmtEntryDate(iso: string): string {
 export default function CmsEntriesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const modelFromUrl = (searchParams.get("content_model_id") || "").trim();
+  const qFromUrl = (searchParams.get("q") || "").trim();
 
   const [qInput, setQInput] = useState(() => searchParams.get("q") || "");
-  const [qApplied, setQApplied] = useState(() => searchParams.get("q") || "");
   const [viewOpen, setViewOpen] = useState(false);
   const viewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const q = searchParams.get("q") || "";
-    setQInput(q);
-    setQApplied(q);
+    setQInput(searchParams.get("q") || "");
   }, [searchParams]);
+
+  useEffect(() => {
+    const h = setTimeout(() => {
+      setSearchParams(
+        (prev) => {
+          const cur = (prev.get("q") || "").trim();
+          const next = qInput.trim();
+          if (next === cur) return prev;
+          const p = new URLSearchParams(prev);
+          if (next) p.set("q", next);
+          else p.delete("q");
+          return p;
+        },
+        { replace: true },
+      );
+    }, 350);
+    return () => clearTimeout(h);
+  }, [qInput, setSearchParams]);
 
   useEffect(() => {
     function close(e: MouseEvent) {
@@ -80,7 +96,6 @@ export default function CmsEntriesPage() {
       },
       { replace: true },
     );
-    setQApplied(qInput.trim());
   }, [qInput, setSearchParams]);
 
   const modelsUrl = `${CMS_CONTENT_MODELS_API}?limit=500`;
@@ -95,11 +110,10 @@ export default function CmsEntriesPage() {
 
   const contentsUrl = useMemo(() => {
     const p = new URLSearchParams({ limit: "200" });
-    const term = qApplied.trim();
-    if (term) p.set("q", term);
+    if (qFromUrl) p.set("q", qFromUrl);
     if (modelFromUrl) p.set("content_model_id", modelFromUrl);
     return `${CMS_CONTENTS_API}?${p}`;
-  }, [qApplied, modelFromUrl]);
+  }, [qFromUrl, modelFromUrl]);
 
   const contents = useApi<CmsContentsListResponse>(contentsUrl);
 

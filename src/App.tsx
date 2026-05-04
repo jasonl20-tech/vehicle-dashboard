@@ -20,6 +20,7 @@ import CmsEntriesPage from "./pages/cms/CmsEntriesPage";
 import CmsLocalesPage from "./pages/cms/CmsLocalesPage";
 import CmsMediaPage from "./pages/cms/CmsMediaPage";
 import CmsOverviewPage from "./pages/cms/CmsOverviewPage";
+import CmsScheduledPage from "./pages/cms/CmsScheduledPage";
 import CmsSettingsPage from "./pages/cms/CmsSettingsPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControlPlatformPage from "./pages/ControlPlatformPage";
@@ -82,6 +83,7 @@ export default function App() {
               element={<CmsContentEntryPage />}
             />
             <Route path="entries" element={<CmsEntriesPage />} />
+            <Route path="scheduled" element={<CmsScheduledPage />} />
             <Route path="models/new" element={<CmsContentModelEditPage />} />
             <Route
               path="models/:modelId/edit"

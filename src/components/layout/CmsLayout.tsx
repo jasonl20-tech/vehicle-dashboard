@@ -1,20 +1,25 @@
 import {
   Box,
-  ChevronDown,
-  Clock,
   Calendar,
+  Clock,
   LayoutGrid,
   LogOut,
   Search,
   Settings,
-  Workflow,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Link,
   NavLink,
   Outlet,
   useLocation,
+  useNavigate,
   useSearchParams,
 } from "react-router-dom";
 import { Logo } from "../brand/Logo";
@@ -34,20 +39,81 @@ function useEntriesNavActive() {
   return { onEntries, modelFilter, allEntries: onEntries && !modelFilter };
 }
 
+function CmsHeaderSearch() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [val, setVal] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (location.pathname.startsWith(`${CMS_ROOT}/entries`)) {
+      setVal(searchParams.get("q") || "");
+    } else {
+      setVal("");
+    }
+  }, [location.pathname, searchParams]);
+
+  const pushQ = useCallback(
+    (q: string) => {
+      const p = new URLSearchParams();
+      if (location.pathname.startsWith(`${CMS_ROOT}/entries`)) {
+        const cid = searchParams.get("content_model_id");
+        if (cid) p.set("content_model_id", cid);
+      }
+      const t = q.trim();
+      if (t) p.set("q", t);
+      const qs = p.toString();
+      navigate(`${CMS_ROOT}/entries${qs ? `?${qs}` : ""}`, { replace: true });
+    },
+    [navigate, location.pathname, searchParams],
+  );
+
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
+
+  return (
+    <form
+      className="hidden min-w-0 max-w-[14rem] flex-1 sm:block lg:max-w-xs"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        pushQ(val);
+      }}
+    >
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+        <input
+          type="search"
+          value={val}
+          onChange={(e) => {
+            const v = e.target.value;
+            setVal(v);
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(() => pushQ(v), 320);
+          }}
+          placeholder="Einträge suchen…"
+          className="w-full rounded-md border border-[#dadce0] bg-[#f8f9fa] py-1.5 pl-8 pr-2 text-[12px] text-ink-800 placeholder:text-ink-400 focus:border-[#1a73e8] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#1a73e8]/25"
+          aria-label="Einträge durchsuchen"
+        />
+      </div>
+    </form>
+  );
+}
+
 export default function CmsLayout() {
   const { pathname: path } = useLocation();
   const { user, logout } = useAuth();
-  const [spaceOpen, setSpaceOpen] = useState(false);
   const { onEntries, modelFilter, allEntries } = useEntriesNavActive();
 
   const isModels = path.startsWith(`${CMS_ROOT}/models`);
   const isEntries = path.startsWith(`${CMS_ROOT}/entries`);
   const isMedia = path.startsWith(`${CMS_ROOT}/media`);
-  const isN8n = path.startsWith("/n8n");
-  const isApps =
-    path === "/" ||
-    path === "/developer" ||
-    path.startsWith("/developer/");
+  const isScheduled = path.startsWith(`${CMS_ROOT}/scheduled`);
 
   const tabClassFor = (active: boolean) =>
     [
@@ -108,15 +174,16 @@ export default function CmsLayout() {
             <Clock className="h-4 w-4 shrink-0" />
             Zuletzt
           </button>
-          <button
-            type="button"
-            disabled
-            title="Demnächst"
-            className={`${sideItemBase} w-full cursor-not-allowed text-left text-ink-400`}
+          <Link
+            to={`${CMS_ROOT}/scheduled`}
+            className={[
+              sideItemBase,
+              isScheduled ? sideItemActive : sideItemIdle,
+            ].join(" ")}
           >
-            <Calendar className="h-4 w-4 shrink-0" />
+            <Calendar className="h-4 w-4 shrink-0 opacity-90" />
             Geplant
-          </button>
+          </Link>
 
           <p className="mb-1.5 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
             Ansichten
@@ -137,8 +204,7 @@ export default function CmsLayout() {
               </p>
             ) : (
               sortedModels.map((m) => {
-                const active =
-                  onEntries && modelFilter === m.id;
+                const active = onEntries && modelFilter === m.id;
                 return (
                   <Link
                     key={m.id}
@@ -161,10 +227,9 @@ export default function CmsLayout() {
           <NavLink
             to={`${CMS_ROOT}/settings`}
             className={({ isActive }) =>
-              [
-                sideItemBase,
-                isActive ? sideItemActive : sideItemIdle,
-              ].join(" ")
+              [sideItemBase, isActive ? sideItemActive : sideItemIdle].join(
+                " ",
+              )
             }
           >
             <Settings className="h-4 w-4 shrink-0 opacity-90" />
@@ -173,10 +238,9 @@ export default function CmsLayout() {
           <NavLink
             to={`${CMS_ROOT}/locales`}
             className={({ isActive }) =>
-              [
-                sideItemBase,
-                isActive ? sideItemActive : sideItemIdle,
-              ].join(" ")
+              [sideItemBase, isActive ? sideItemActive : sideItemIdle].join(
+                " ",
+              )
             }
           >
             <Box className="h-4 w-4 shrink-0 opacity-90" />
@@ -196,9 +260,9 @@ export default function CmsLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 shrink-0 border-b border-[#e8eaed] bg-white">
-          <div className="flex h-14 items-center gap-4 overflow-x-auto px-4 lg:px-6">
+          <div className="flex h-14 items-center gap-3 overflow-x-auto px-4 lg:gap-4 lg:px-6">
             <nav
-              className="flex min-w-0 flex-1 items-center gap-5 lg:gap-7"
+              className="flex min-w-0 shrink-0 items-center gap-5 lg:gap-7"
               aria-label="CMS Bereiche"
             >
               <Link
@@ -219,56 +283,15 @@ export default function CmsLayout() {
               >
                 Medien
               </Link>
-              <Link to="/n8n" className={tabClassFor(isN8n)}>
-                KI &amp; Automation
-              </Link>
-              <Link to="/" className={tabClassFor(isApps)}>
-                Apps
-              </Link>
             </nav>
 
-            <div className="hidden items-center gap-2 sm:flex">
-              <span
-                className="rounded-full p-2 text-ink-400"
-                title="Suche (Inhalt folgt)"
-                aria-hidden
-              >
-                <Search className="h-4 w-4" />
-              </span>
-            </div>
+            <CmsHeaderSearch />
 
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setSpaceOpen((v) => !v)}
-                className="flex max-w-[200px] items-center gap-1.5 rounded-md border border-[#dadce0] bg-white px-3 py-1.5 text-left text-[12px] font-medium text-ink-800 lg:max-w-[260px]"
-              >
-                <Workflow className="h-3.5 w-3.5 shrink-0 text-ink-500" />
-                <span className="truncate">Produktion · master</span>
-                <ChevronDown
-                  className={`h-3.5 w-3.5 shrink-0 text-ink-400 ${spaceOpen ? "rotate-180" : ""}`}
-                />
-              </button>
-              {spaceOpen ? (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-hair bg-white py-1 shadow-lg"
-                >
-                  <button
-                    type="button"
-                    className="block w-full px-3 py-2 text-left text-[12px] text-ink-900 hover:bg-ink-50"
-                    onClick={() => setSpaceOpen(false)}
-                  >
-                    Produktion · master
-                    <span className="ml-2 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
-                      aktiv
-                    </span>
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-400 sm:inline">
+              production
+            </span>
 
-            <div className="flex shrink-0 items-center gap-2 border-l border-[#e8eaed] pl-3">
+            <div className="ml-auto flex shrink-0 items-center gap-2 border-l border-[#e8eaed] pl-3">
               {user ? (
                 <span className="hidden max-w-[7rem] truncate text-[12px] text-ink-500 md:inline">
                   {user.titel || user.benutzername}

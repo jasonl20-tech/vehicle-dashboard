@@ -1,9 +1,9 @@
 /**
  * CMS — Content-Einträge (D1 `website` → `cms_contents`).
  *
- *   GET  /api/cms/contents?content_model_id=&status=&locale=&q=&limit=&offset=
+ *   GET  /api/cms/contents?content_model_id=&status=&locale=&q=&scheduled_month=YYYY-MM&limit=&offset=
  *   POST /api/cms/contents
- *        { id?, content_model_id, payload_json, status?, locale? }
+ *        { id?, content_model_id, payload_json, status?, locale?, scheduled_publish_at? }
  *
  * `last_updated_by` setzt die API aus der Session (User-ID).
  */
@@ -28,6 +28,7 @@ type ContentRow = {
   created_at: string;
   updated_at: string;
   last_updated_by: string | null;
+  scheduled_publish_at: string | null;
 };
 
 function tableHint(e: unknown): string | null {
@@ -35,7 +36,23 @@ function tableHint(e: unknown): string | null {
   if (/no such table/i.test(msg) || /cms_contents/.test(msg)) {
     return "Migration: `d1/migrations/0013_cms_content.sql`.";
   }
+  if (/scheduled_publish_at/i.test(msg)) {
+    return "Migration: `d1/migrations/0014_cms_scheduled_publish.sql`.";
+  }
   return null;
+}
+
+/** ISO-String oder null; ungültige Werte → null */
+function normalizeScheduledPublishAt(
+  raw: unknown,
+): string | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const t = Date.parse(s);
+  if (Number.isNaN(t)) return null;
+  return new Date(t).toISOString();
 }
 
 function lastUpdater(user: SessionUser): string {
@@ -83,6 +100,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const status = (url.searchParams.get("status") || "").trim();
   const locale = (url.searchParams.get("locale") || "").trim();
   const q = (url.searchParams.get("q") || "").trim();
+  const scheduledMonth = (url.searchParams.get("scheduled_month") || "").trim();
 
   const limit = Math.min(
     MAX_LIMIT,
@@ -118,6 +136,31 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     );
     binds.push(pat, pat, pat);
   }
+  if (scheduledMonth) {
+    if (!/^\d{4}-\d{2}$/.test(scheduledMonth)) {
+      return jsonResponse(
+        { error: "scheduled_month ungültig (Format YYYY-MM)" },
+        { status: 400 },
+      );
+    }
+    const [ys, ms] = scheduledMonth.split("-");
+    const y = Number(ys);
+    const mo = Number(ms);
+    if (mo < 1 || mo > 12) {
+      return jsonResponse(
+        { error: "scheduled_month ungültig" },
+        { status: 400 },
+      );
+    }
+    const start = `${scheduledMonth}-01`;
+    const endY = mo === 12 ? y + 1 : y;
+    const endM = mo === 12 ? 1 : mo + 1;
+    const endExclusive = `${endY}-${String(endM).padStart(2, "0")}-01`;
+    where.push(
+      "(scheduled_publish_at IS NOT NULL AND substr(scheduled_publish_at, 1, 10) >= ? AND substr(scheduled_publish_at, 1, 10) < ?)",
+    );
+    binds.push(start, endExclusive);
+  }
 
   const whereSql = ` WHERE ${where.join(" AND ")}`;
 
@@ -133,7 +176,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     const { results } = await db
       .prepare(
         `SELECT id, content_model_id, payload_json, status, locale,
-                created_at, updated_at, last_updated_by
+                created_at, updated_at, last_updated_by, scheduled_publish_at
            FROM cms_contents${whereSql}
            ORDER BY datetime(updated_at) DESC
            LIMIT ? OFFSET ?`,
@@ -162,6 +205,7 @@ type PostBody = {
   payload_json?: unknown;
   status?: string;
   locale?: string;
+  scheduled_publish_at?: unknown;
 };
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
@@ -219,21 +263,25 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   const updater = lastUpdater(user);
+  const schedParsed = normalizeScheduledPublishAt(body.scheduled_publish_at);
+  const scheduled =
+    schedParsed === undefined ? null : schedParsed;
 
   try {
     await db
       .prepare(
         `INSERT INTO cms_contents (
-           id, content_model_id, payload_json, status, locale, last_updated_by
-         ) VALUES (?, ?, ?, ?, ?, ?)`,
+           id, content_model_id, payload_json, status, locale, last_updated_by,
+           scheduled_publish_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, contentModelId, payload, status, locale, updater)
+      .bind(id, contentModelId, payload, status, locale, updater, scheduled)
       .run();
 
     const row = await db
       .prepare(
         `SELECT id, content_model_id, payload_json, status, locale,
-                created_at, updated_at, last_updated_by
+                created_at, updated_at, last_updated_by, scheduled_publish_at
            FROM cms_contents WHERE id = ?`,
       )
       .bind(id)
