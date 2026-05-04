@@ -1,4 +1,22 @@
-import { ArrowLeft, ClipboardCopy, Plus, Settings2, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Braces,
+  CalendarClock,
+  CheckCircle2,
+  ClipboardCopy,
+  FileText,
+  GripVertical,
+  Hash,
+  Image as ImageLucide,
+  Link2,
+  MapPin,
+  Minus,
+  MoreHorizontal,
+  Plus,
+  ToggleLeft,
+  Trash2,
+  Type,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AddBooleanFieldModal from "./AddBooleanFieldModal";
@@ -102,6 +120,103 @@ export default function ContentModelEditorForm({
   );
 
   const [schemaJsonCopied, setSchemaJsonCopied] = useState(false);
+
+  const [editorPanel, setEditorPanel] = useState<"fields" | "meta" | "json">(
+    "fields",
+  );
+  const [fieldActionMenu, setFieldActionMenu] = useState<number | null>(null);
+  const [dragFieldIndex, setDragFieldIndex] = useState<number | null>(null);
+
+  function reorderFields(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    setSchema((s) => {
+      const n = s.fields.length;
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= n || toIndex >= n)
+        return s;
+      const fields = [...s.fields];
+      const [item] = fields.splice(fromIndex, 1);
+      fields.splice(toIndex, 0, item);
+      return { ...s, fields };
+    });
+  }
+
+  async function copyModelId() {
+    const text = !isNew && modelId ? String(modelId) : key.trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function openFieldConfig(i: number) {
+    const t = schema.fields[i]?.type;
+    if (t === "RichText") setRichModalIndex(i);
+    else if (t === "Text") setTextModalIndex(i);
+    else if (t === "Number") setNumberModalIndex(i);
+    else if (t === "DateTime") setDateTimeModalIndex(i);
+    else if (t === "Location") setLocationModalIndex(i);
+    else if (t === "Media") setMediaModalIndex(i);
+    else if (t === "Boolean") setBooleanModalIndex(i);
+    else if (t === "JsonObject") setJsonObjectModalIndex(i);
+    else if (t === "Reference") setReferenceModalIndex(i);
+  }
+
+  function fieldTypeSubtitle(f: CmsFieldDefinition): string | null {
+    if (f.type === "Text") {
+      if (f.list) return "Liste";
+      return null;
+    }
+    if (f.type === "Number")
+      return f.numberShape?.variant === "decimal" ? "Decimal" : "Integer";
+    if (f.type === "Media")
+      return f.mediaShape?.variant === "many" ? "Many files" : "One file";
+    if (f.type === "Boolean" && f.boolean?.widget)
+      return f.boolean.widget === "toggle" ? "Toggle" : f.boolean.widget;
+    if (f.type === "Reference")
+      return f.referenceShape?.variant === "many"
+        ? "Many references"
+        : "One reference";
+    return null;
+  }
+
+  function fieldTypeDisplay(f: CmsFieldDefinition): { label: string; Icon: typeof Type } {
+    switch (f.type) {
+      case "Text":
+        return {
+          label:
+            f.textShape?.variant === "long" ||
+            (f.validations?.maxLength ?? 0) > TEXT_SHORT_MAX
+              ? "Long text"
+              : "Short text",
+          Icon: Type,
+        };
+      case "RichText":
+        return { label: "Rich text", Icon: FileText };
+      case "Number":
+        return { label: "Number", Icon: Hash };
+      case "DateTime":
+        return { label: "Date & time", Icon: CalendarClock };
+      case "Location":
+        return { label: FIELD_TYPE_LABELS.Location, Icon: MapPin };
+      case "Media":
+        return { label: FIELD_TYPE_LABELS.Media, Icon: ImageLucide };
+      case "Boolean":
+        return { label: FIELD_TYPE_LABELS.Boolean, Icon: ToggleLeft };
+      case "JsonObject":
+        return { label: FIELD_TYPE_LABELS.JsonObject, Icon: Braces };
+      case "Reference":
+        return { label: FIELD_TYPE_LABELS.Reference, Icon: Link2 };
+      default:
+        return { label: FIELD_TYPE_LABELS[f.type], Icon: Type };
+    }
+  }
+
+  const modelTitle =
+    isNew && !key.trim()
+      ? "Neues Content-Modell"
+      : key.trim() || "Content-Modell";
 
   const validationHints = useMemo(() => {
     const msgs: string[] = [];
@@ -353,25 +468,32 @@ export default function ContentModelEditorForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl">
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Link
-          to={`${CMS_ROOT}/models`}
-          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-ink-600 hover:text-ink-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Content-Modelle
-        </Link>
-      </div>
-
-      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900 sm:text-[32px]">
-          {isNew ? "Neues Content-Modell" : "Content-Modell bearbeiten"}
-        </h1>
-        <div className="flex flex-wrap gap-2">
+    <>
+    <div className="w-full max-w-none">
+      <div className="-mx-6 mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-[#e8eaed] bg-white px-6 py-3 lg:-mx-8 lg:px-8">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Link
             to={`${CMS_ROOT}/models`}
-            className="rounded-lg border border-hair bg-white px-4 py-2 text-[12.5px] font-medium text-ink-700 hover:bg-ink-50"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#5f6368] transition hover:bg-[#f1f3f4]"
+            aria-label="Zurück zu Content-Modellen"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="truncate text-[17px] font-semibold tracking-tight text-[#1a1a1a]">
+            {modelTitle}
+          </h1>
+          <button
+            type="button"
+            onClick={() => void copyModelId()}
+            className="rounded-md border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f8f9fa]"
+          >
+            ID kopieren
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to={`${CMS_ROOT}/models`}
+            className="rounded-md border border-[#dadce0] bg-white px-4 py-2 text-[13px] font-medium text-[#5f6368] hover:bg-[#f8f9fa]"
           >
             Abbrechen
           </Link>
@@ -379,12 +501,12 @@ export default function ContentModelEditorForm({
             type="button"
             disabled={!canSave || saving}
             onClick={() => void handleSave()}
-            className="rounded-lg bg-ink-900 px-4 py-2 text-[12.5px] font-medium text-white hover:bg-ink-800 disabled:opacity-50"
+            className="rounded-md bg-[#1b873f] px-5 py-2 text-[13px] font-medium text-white shadow-sm hover:bg-[#146c32] disabled:opacity-50"
           >
             {saving ? "Speichern …" : "Speichern"}
           </button>
         </div>
-      </header>
+      </div>
 
       {error ? (
         <pre className="mb-4 whitespace-pre-wrap rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 font-sans text-[13px] text-rose-900">
@@ -400,545 +522,316 @@ export default function ContentModelEditorForm({
         </ul>
       ) : null}
 
-      <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[minmax(0,1fr)_min(400px,34vw)] xl:items-start xl:gap-10">
-        <div className="min-w-0 space-y-6">
-        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
-          <label
-            className="mb-1.5 block text-[12px] font-medium text-ink-700"
-            htmlFor="cms-model-key"
-          >
-            API-Name (key)
-          </label>
-          <input
-            id="cms-model-key"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="z. B. blogPost"
-            className="w-full rounded-lg border border-hair px-3 py-2.5 font-mono text-[14px] text-ink-900"
-          />
-          <p className="mt-1 text-[11px] text-ink-400">
-            Eindeutig, später in APIs und Code verwendet.
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
-          <label
-            className="mb-1.5 block text-[12px] font-medium text-ink-700"
-            htmlFor="cms-model-desc"
-          >
-            Beschreibung
-          </label>
-          <textarea
-            id="cms-model-desc"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            className="w-full rounded-lg border border-hair px-3 py-2.5 text-[14px] text-ink-900"
-          />
-        </div>
-
-        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[12px] font-semibold text-ink-800">
-              Felder
-            </span>
-            <button
-              type="button"
-              onClick={() => setAddModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-hair bg-white px-3 py-1.5 text-[12px] font-medium text-ink-800 hover:bg-ink-50"
-            >
-              <Plus className="h-4 w-4" />
-              Feld hinzufügen
-            </button>
-          </div>
-
-          {schema.fields.length === 0 ? (
-            <p className="text-[12px] text-ink-400">
-              Noch keine Felder — Typ wie in Contentful wählen.
-            </p>
-          ) : (
-            <ul className="space-y-4">
-              {schema.fields.map((f, i) =>
-                f.type === "RichText" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.RichText}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setRichModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "Text" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.Text}
-                      </span>
-                      <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5f6368]">
-                        {f.textShape?.variant === "long" ||
-                        (f.validations?.maxLength ?? 0) > TEXT_SHORT_MAX
-                          ? "Long text"
-                          : "Short text"}
-                      </span>
-                      {f.list ? (
-                        <span className="ml-1.5 rounded border border-[#0366d6] bg-[#e8f0fe] px-2 py-0.5 text-[10px] font-medium text-[#174ea6]">
-                          List
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setTextModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "Number" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.Number}
-                      </span>
-                      <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5f6368]">
-                        {f.numberShape?.variant === "decimal"
-                          ? "Decimal"
-                          : "Integer"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setNumberModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "DateTime" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.DateTime}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setDateTimeModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "Location" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.Location}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setLocationModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "Media" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.Media}
-                      </span>
-                      <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5f6368]">
-                        {f.mediaShape?.variant === "many"
-                          ? "Many files"
-                          : "One file"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMediaModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "Boolean" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.Boolean}
-                      </span>
-                      {f.boolean?.widget ? (
-                        <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium capitalize text-[#5f6368]">
-                          {f.boolean.widget === "toggle"
-                            ? "Toggle"
-                            : f.boolean.widget}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setBooleanModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "JsonObject" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.JsonObject}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setJsonObjectModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : f.type === "Reference" ? (
-                  <li
-                    key={`${f.id}-${i}`}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink-900">{f.name}</span>
-                      <code className="ml-2 text-[12px] text-ink-500">
-                        {f.id}
-                      </code>
-                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
-                        {FIELD_TYPE_LABELS.Reference}
-                      </span>
-                      <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5f6368]">
-                        {f.referenceShape?.variant === "many"
-                          ? "Many references"
-                          : "One reference"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setReferenceModalIndex(i)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
-                      >
-                        <Settings2 className="h-3.5 w-3.5" />
-                        Konfigurieren
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeField(i)}
-                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                        aria-label="Feld entfernen"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </li>
-                ) : (
-                <li
-                  key={`${f.id}-${i}`}
-                  className="rounded-lg border border-hair bg-ink-50/30 p-4"
-                >
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                    <div className="grid flex-1 gap-3 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-1 block text-[11px] font-medium text-ink-600">
-                          Name
-                        </label>
-                        <input
-                          value={f.name}
-                          onChange={(e) =>
-                            updateField(i, { name: e.target.value })
-                          }
-                          className="w-full rounded-md border border-hair bg-white px-2.5 py-1.5 text-[13px]"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-[11px] font-medium text-ink-600">
-                          Feld-ID
-                        </label>
-                        <input
-                          value={f.id}
-                          onChange={(e) =>
-                            updateField(i, { id: e.target.value.trim() })
-                          }
-                          className="w-full rounded-md border border-hair bg-white px-2.5 py-1.5 font-mono text-[13px]"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeField(i)}
-                      className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
-                      aria-label="Feld entfernen"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  <div className="mb-3 flex flex-wrap gap-4 text-[12px]">
-                    <span className="rounded-md bg-ink-900/90 px-2 py-0.5 font-medium text-white">
-                      {FIELD_TYPE_LABELS[f.type]}
-                    </span>
-                    <label className="inline-flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={f.required}
-                        onChange={(e) =>
-                          updateField(i, { required: e.target.checked })
-                        }
-                        className="rounded border-hair"
-                      />
-                      Pflichtfeld
-                    </label>
-                    <label className="inline-flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(f.localized)}
-                        onChange={(e) =>
-                          updateField(i, {
-                            localized: e.target.checked || undefined,
-                          })
-                        }
-                        className="rounded border-hair"
-                      />
-                      Lokalisiert
-                    </label>
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="mb-1 block text-[11px] font-medium text-ink-600">
-                      Hilfetext (optional)
-                    </label>
-                    <input
-                      value={f.helpText ?? ""}
-                      onChange={(e) =>
-                        updateField(i, {
-                          helpText: e.target.value.trim() || undefined,
-                        })
-                      }
-                      className="w-full rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px]"
-                    />
-                  </div>
-                </li>
-                ),
-              )}
-            </ul>
-          )}
-
-          <div className="mt-4 border-t border-hair pt-4">
-            <label className="mb-1.5 block text-[11px] font-medium text-ink-600">
-              Anzeige-Feld (Listen / Teaser)
-            </label>
-            <select
-              value={schema.displayField ?? ""}
-              onChange={(e) =>
-                setSchema((s) => ({
-                  ...s,
-                  displayField: e.target.value || undefined,
-                }))
-              }
-              className="w-full max-w-md rounded-md border border-hair bg-white px-2.5 py-2 text-[13px]"
-            >
-              <option value="">—</option>
-              {schema.fields
-                .filter((f) => f.type === "Text" || f.type === "RichText")
-                .map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.name} ({f.id})
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
-        </div>
-
-        <aside
-          className="min-w-0 xl:sticky xl:top-28 xl:self-start"
-          aria-label="JSON-Vorschau"
+      <div className="flex min-h-[min(70vh,640px)] flex-col lg:flex-row">
+        <nav
+          className="shrink-0 border-b border-[#e8eaed] bg-white lg:w-56 lg:border-b-0 lg:border-r lg:py-3"
+          aria-label="Content-Typ Abschnitte"
         >
-        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[12px] font-semibold text-ink-800">
-              JSON preview
-            </span>
-            <button
-              type="button"
-              onClick={() => void copySchemaJsonPreview()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-hair bg-white px-3 py-1.5 text-[11px] font-medium text-ink-700 hover:bg-ink-50"
-            >
-              <ClipboardCopy className="h-3.5 w-3.5" />
-              {schemaJsonCopied ? "Kopiert" : "Kopieren"}
-            </button>
-          </div>
-          <p className="mb-3 text-[11px] leading-snug text-ink-500">
-            Vorschau von <code className="font-mono text-ink-700">schema_json</code>{" "}
-            wie beim Speichern (nur Lesen).
-          </p>
-          <pre
-            className="max-h-[min(480px,55vh)] overflow-auto rounded-lg border border-hair bg-[#0d1117] p-4 font-mono text-[12px] leading-relaxed text-[#e6edf3] xl:max-h-[calc(100vh-11rem)]"
-            tabIndex={0}
+          <button
+            type="button"
+            onClick={() => setEditorPanel("fields")}
+            className={`flex w-full items-center px-4 py-2.5 text-left text-[13px] transition lg:px-4 ${
+              editorPanel === "fields"
+                ? "bg-[#f3f4f6] font-medium text-[#1a1a1a]"
+                : "text-[#5f6368] hover:bg-[#f9fafb]"
+            }`}
           >
-            {schemaJsonPreview}
-          </pre>
+            Felder ({schema.fields.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditorPanel("meta")}
+            className={`flex w-full items-center px-4 py-2.5 text-left text-[13px] transition lg:px-4 ${
+              editorPanel === "meta"
+                ? "bg-[#f3f4f6] font-medium text-[#1a1a1a]"
+                : "text-[#5f6368] hover:bg-[#f9fafb]"
+            }`}
+          >
+            Name und Beschreibung
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditorPanel("json")}
+            className={`flex w-full items-center px-4 py-2.5 text-left text-[13px] transition lg:px-4 ${
+              editorPanel === "json"
+                ? "bg-[#f3f4f6] font-medium text-[#1a1a1a]"
+                : "text-[#5f6368] hover:bg-[#f9fafb]"
+            }`}
+          >
+            JSON-Vorschau
+          </button>
+        </nav>
+
+        <div className="min-w-0 flex-1 bg-white px-4 py-8 lg:px-10 lg:py-10">
+          {editorPanel === "meta" ? (
+            <div className="mx-auto max-w-2xl space-y-6">
+              <h2 className="text-[22px] font-semibold tracking-tight text-[#1a1a1a]">
+                Name und Beschreibung
+              </h2>
+              <div>
+                <label
+                  className="mb-1.5 block text-[13px] font-medium text-[#1a1a1a]"
+                  htmlFor="cms-model-key"
+                >
+                  API-Name (key)
+                </label>
+                <input
+                  id="cms-model-key"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  placeholder="z. B. caseStudy"
+                  className="w-full rounded-md border border-[#dadce0] px-3 py-2.5 font-mono text-[14px] text-[#1a1a1a] outline-none focus:border-[#0366d6] focus:ring-1 focus:ring-[#0366d6]"
+                />
+                <p className="mt-1 text-[12px] text-[#5f6368]">
+                  Eindeutig, wird in APIs und Code verwendet.
+                </p>
+              </div>
+              <div>
+                <label
+                  className="mb-1.5 block text-[13px] font-medium text-[#1a1a1a]"
+                  htmlFor="cms-model-desc"
+                >
+                  Beschreibung
+                </label>
+                <textarea
+                  id="cms-model-desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border border-[#dadce0] px-3 py-2.5 text-[14px] text-[#1a1a1a] outline-none focus:border-[#0366d6] focus:ring-1 focus:ring-[#0366d6]"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[13px] font-medium text-[#1a1a1a]">
+                  Anzeige-Feld (Listen / Teaser)
+                </label>
+                <select
+                  value={schema.displayField ?? ""}
+                  onChange={(e) =>
+                    setSchema((s) => ({
+                      ...s,
+                      displayField: e.target.value || undefined,
+                    }))
+                  }
+                  className="w-full max-w-md rounded-md border border-[#dadce0] bg-white px-3 py-2.5 text-[13px]"
+                >
+                  <option value="">—</option>
+                  {schema.fields
+                    .filter((f) => f.type === "Text" || f.type === "RichText")
+                    .map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.id})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+          ) : editorPanel === "json" ? (
+            <div className="mx-auto max-w-4xl">
+              <h2 className="mb-4 text-[22px] font-semibold tracking-tight text-[#1a1a1a]">
+                JSON-Vorschau
+              </h2>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[12px] text-[#5f6368]">
+                  Vorschau von{" "}
+                  <code className="font-mono text-[#1a1a1a]">schema_json</code>{" "}
+                  beim Speichern (nur Lesen).
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void copySchemaJsonPreview()}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f8f9fa]"
+                >
+                  <ClipboardCopy className="h-3.5 w-3.5" />
+                  {schemaJsonCopied ? "Kopiert" : "Kopieren"}
+                </button>
+              </div>
+              <pre
+                className="max-h-[min(560px,60vh)] overflow-auto rounded-lg border border-[#e8eaed] bg-[#0d1117] p-4 font-mono text-[12px] leading-relaxed text-[#e6edf3] lg:max-h-[calc(100vh-16rem)]"
+                tabIndex={0}
+              >
+                {schemaJsonPreview}
+              </pre>
+            </div>
+          ) : (
+            <div>
+              <h2 className="mb-6 text-[26px] font-semibold tracking-tight text-[#1a1a1a]">
+                Felder
+              </h2>
+
+              {schema.fields.length === 0 ? (
+                <p className="text-[14px] text-[#5f6368]">
+                  Noch keine Felder — unten einen Typ hinzufügen.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[720px]">
+                    <div
+                      className="grid grid-cols-[36px_1fr_minmax(160px,1fr)_100px_148px] gap-3 border-b border-[#e8eaed] pb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#5f6368]"
+                      role="row"
+                    >
+                      <span className="sr-only">Sortieren</span>
+                      <span>Name</span>
+                      <span>Feldtyp</span>
+                      <span>Lokalisiert</span>
+                      <span className="text-right">Aktionen</span>
+                    </div>
+
+                    <div role="list">
+                      {schema.fields.map((f, i) => {
+                        const { label: typeLabel, Icon: TypeIcon } =
+                          fieldTypeDisplay(f);
+                        const sub = fieldTypeSubtitle(f);
+                        const isEntryTitle =
+                          schema.displayField === f.id &&
+                          (f.type === "Text" || f.type === "RichText");
+                        const known =
+                          f.type === "RichText" ||
+                          f.type === "Text" ||
+                          f.type === "Number" ||
+                          f.type === "DateTime" ||
+                          f.type === "Location" ||
+                          f.type === "Media" ||
+                          f.type === "Boolean" ||
+                          f.type === "JsonObject" ||
+                          f.type === "Reference";
+                        return (
+                          <div
+                            key={`${f.id}-${i}`}
+                            role="listitem"
+                            draggable={known}
+                            onDragStart={(e) => {
+                              if (!known) return;
+                              e.dataTransfer.effectAllowed = "move";
+                              e.dataTransfer.setData("text/plain", String(i));
+                              setDragFieldIndex(i);
+                            }}
+                            onDragEnd={() => setDragFieldIndex(null)}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = "move";
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const from = Number(
+                                e.dataTransfer.getData("text/plain"),
+                              );
+                              if (Number.isNaN(from)) return;
+                              reorderFields(from, i);
+                            }}
+                            className={`grid grid-cols-[36px_1fr_minmax(160px,1fr)_100px_148px] items-center gap-3 border-b border-[#f0f1f3] py-3.5 text-[13px] ${
+                              dragFieldIndex === i ? "bg-[#f8f9fa]" : ""
+                            }`}
+                          >
+                            <div
+                              className={`flex justify-center text-[#9aa0a6] ${known ? "cursor-grab active:cursor-grabbing" : ""}`}
+                              title={known ? "Zum Sortieren ziehen" : undefined}
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium text-[#1a1a1a]">
+                                  {f.name || "—"}
+                                </span>
+                                {isEntryTitle ? (
+                                  <span className="rounded bg-[#e8eaed] px-2 py-0.5 text-[11px] font-medium text-[#5f6368]">
+                                    Eintragstitel
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <div className="flex min-w-0 items-center gap-2 text-[#1a1a1a]">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#e8eaed] bg-[#fafafa]">
+                                <TypeIcon className="h-3.5 w-3.5 text-[#5f6368]" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium">
+                                  {typeLabel}
+                                </span>
+                                {sub ? (
+                                  <span className="block truncate text-[11px] text-[#80868b]">
+                                    {sub}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </div>
+                            <div className="flex justify-center">
+                              {f.localized ? (
+                                <CheckCircle2 className="h-5 w-5 text-green-600" aria-label="Ja" />
+                              ) : (
+                                <Minus className="h-5 w-5 text-[#dadce0]" aria-label="Nein" />
+                              )}
+                            </div>
+                            <div className="relative flex items-center justify-end gap-1">
+                              {known ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => openFieldConfig(i)}
+                                    className="rounded-md px-3 py-1.5 text-[13px] font-medium text-[#0366d6] hover:bg-[#e8f0fe]"
+                                  >
+                                    Bearbeiten
+                                  </button>
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setFieldActionMenu(
+                                          fieldActionMenu === i ? null : i,
+                                        )
+                                      }
+                                      className="rounded-md p-2 text-[#5f6368] hover:bg-[#f1f3f4]"
+                                      aria-label="Weitere Aktionen"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </button>
+                                    {fieldActionMenu === i ? (
+                                      <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-md border border-[#e8eaed] bg-white py-1 shadow-lg">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            removeField(i);
+                                            setFieldActionMenu(null);
+                                          }}
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-rose-700 hover:bg-rose-50"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                          Löschen
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </>
+                              ) : (
+                                <span className="text-[11px] text-[#9aa0a6]">
+                                  —
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-10 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setAddModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-full border border-dashed border-[#dadce0] bg-white px-5 py-2.5 text-[13px] font-medium text-[#1a1a1a] transition hover:border-[#0366d6] hover:bg-[#f8f9fa] hover:text-[#0366d6]"
+                >
+                  <Plus className="h-4 w-4" />
+                  Feld hinzufügen
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-        </aside>
       </div>
+    </div>
 
       <AddFieldModal
         open={addModalOpen}
@@ -1214,6 +1107,6 @@ export default function ContentModelEditorForm({
             }}
           />
         )}
-    </div>
+    </>
   );
 }
