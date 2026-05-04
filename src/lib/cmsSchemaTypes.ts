@@ -121,6 +121,23 @@ export function defaultBooleanFieldConfig(): BooleanFieldConfig {
   };
 }
 
+/** JSON Object: Validierung der Anzahl Top-Level-Keys (Contentful-nah). */
+export type JsonObjectPropertyCountValidation = {
+  enabled: boolean;
+  min?: number;
+  max?: number;
+};
+
+export type JsonObjectFieldConfig = {
+  validation: {
+    propertyCount?: JsonObjectPropertyCountValidation;
+  };
+};
+
+export function defaultJsonObjectFieldConfig(): JsonObjectFieldConfig {
+  return { validation: {} };
+}
+
 export type CmsFieldValidations = {
   maxLength?: number;
   /** Text: Mindestlänge in Zeichen */
@@ -273,6 +290,8 @@ export type CmsFieldDefinition = {
   boolean?: BooleanFieldConfig;
   /** Nur Boolean: Standardwert für neue Einträge */
   defaultBoolean?: boolean;
+  /** Nur JsonObject */
+  jsonObject?: JsonObjectFieldConfig;
 };
 
 export type CmsContentModelSchema = {
@@ -430,6 +449,14 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
         : defaultBooleanFieldConfig();
   }
 
+  let jsonObjectCfg: JsonObjectFieldConfig | undefined;
+  if (type === "JsonObject") {
+    jsonObjectCfg =
+      o.jsonObject && typeof o.jsonObject === "object"
+        ? normalizeJsonObjectConfig(o.jsonObject as Record<string, unknown>)
+        : defaultJsonObjectFieldConfig();
+  }
+
   return {
     id,
     name,
@@ -449,7 +476,51 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     ...(media ? { media } : {}),
     ...(booleanCfg ? { boolean: booleanCfg } : {}),
     ...(defaultBoolean !== undefined ? { defaultBoolean } : {}),
+    ...(jsonObjectCfg ? { jsonObject: jsonObjectCfg } : {}),
   };
+}
+
+function normalizeJsonObjectConfig(
+  raw: Record<string, unknown>,
+): JsonObjectFieldConfig {
+  const def = defaultJsonObjectFieldConfig();
+  const v = raw.validation;
+  if (v && typeof v === "object") {
+    const vo = v as Record<string, unknown>;
+    const pc = vo.propertyCount;
+    if (pc && typeof pc === "object") {
+      const p = pc as Record<string, unknown>;
+      if (p.enabled === true) {
+        def.validation.propertyCount = {
+          enabled: true,
+          ...(typeof p.min === "number" && p.min >= 0
+            ? { min: Math.floor(p.min) }
+            : {}),
+          ...(typeof p.max === "number" && p.max >= 0
+            ? { max: Math.floor(p.max) }
+            : {}),
+        };
+      }
+    }
+  }
+  return def;
+}
+
+export function serializeJsonObjectForStorage(
+  cfg: JsonObjectFieldConfig,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const validation: Record<string, unknown> = {};
+  const pc = cfg.validation.propertyCount;
+  if (pc?.enabled) {
+    validation.propertyCount = {
+      enabled: true,
+      ...(typeof pc.min === "number" ? { min: pc.min } : {}),
+      ...(typeof pc.max === "number" ? { max: pc.max } : {}),
+    };
+  }
+  if (Object.keys(validation).length > 0) out.validation = validation;
+  return out;
 }
 
 function normalizeBooleanConfig(raw: Record<string, unknown>): BooleanFieldConfig {
@@ -836,6 +907,11 @@ export function serializeContentModelSchema(
           row.defaultBoolean = f.defaultBoolean;
         }
       }
+      if (f.type === "JsonObject") {
+        row.jsonObject = serializeJsonObjectForStorage(
+          f.jsonObject ?? defaultJsonObjectFieldConfig(),
+        );
+      }
       return row;
     }),
   };
@@ -991,6 +1067,19 @@ export function newBooleanFieldFromWizard(args: {
     type: "Boolean",
     required: false,
     boolean: defaultBooleanFieldConfig(),
+  };
+}
+
+export function newJsonObjectFieldFromWizard(args: {
+  id: string;
+  name: string;
+}): CmsFieldDefinition {
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "JsonObject",
+    required: false,
+    jsonObject: defaultJsonObjectFieldConfig(),
   };
 }
 
