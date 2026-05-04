@@ -712,6 +712,18 @@ export function newDateTimeFieldFromWizard(args: {
   };
 }
 
+export function newLocationFieldFromWizard(args: {
+  id: string;
+  name: string;
+}): CmsFieldDefinition {
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "Location",
+    required: false,
+  };
+}
+
 export const FIELD_TYPE_LABELS: Record<CmsFieldType, string> = {
   RichText: "Rich text",
   Text: "Text",

@@ -3,9 +3,11 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AddDateTimeFieldModal from "./AddDateTimeFieldModal";
 import AddFieldModal from "./AddFieldModal";
+import AddLocationFieldModal from "./AddLocationFieldModal";
 import AddNumberFieldModal from "./AddNumberFieldModal";
 import AddTextFieldModal from "./AddTextFieldModal";
 import DateTimeFieldModal from "./DateTimeFieldModal";
+import LocationFieldModal from "./LocationFieldModal";
 import NumberFieldModal from "./NumberFieldModal";
 import RichTextFieldModal from "./RichTextFieldModal";
 import TextFieldModal from "./TextFieldModal";
@@ -52,12 +54,16 @@ export default function ContentModelEditorForm({
   const [addTextModalOpen, setAddTextModalOpen] = useState(false);
   const [addNumberModalOpen, setAddNumberModalOpen] = useState(false);
   const [addDateTimeModalOpen, setAddDateTimeModalOpen] = useState(false);
+  const [addLocationModalOpen, setAddLocationModalOpen] = useState(false);
   const [richModalIndex, setRichModalIndex] = useState<number | null>(null);
   const [textModalIndex, setTextModalIndex] = useState<number | null>(null);
   const [numberModalIndex, setNumberModalIndex] = useState<number | null>(
     null,
   );
   const [dateTimeModalIndex, setDateTimeModalIndex] = useState<number | null>(
+    null,
+  );
+  const [locationModalIndex, setLocationModalIndex] = useState<number | null>(
     null,
   );
   const [saving, setSaving] = useState(false);
@@ -116,6 +122,9 @@ export default function ContentModelEditorForm({
     setDateTimeModalIndex((cur) =>
       cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
     );
+    setLocationModalIndex((cur) =>
+      cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
+    );
     setSchema((s) => ({
       ...s,
       fields: s.fields.filter((_, i) => i !== index),
@@ -138,6 +147,10 @@ export default function ContentModelEditorForm({
     }
     if (type === "DateTime") {
       setAddDateTimeModalOpen(true);
+      return;
+    }
+    if (type === "Location") {
+      setAddLocationModalOpen(true);
       return;
     }
     setSchema((s) => {
@@ -179,6 +192,13 @@ export default function ContentModelEditorForm({
     setSchema((s) => ({ ...s, fields: [...s.fields, field] }));
     setAddDateTimeModalOpen(false);
     setDateTimeModalIndex(idx);
+  }
+
+  function appendLocationField(field: CmsFieldDefinition) {
+    const idx = schema.fields.length;
+    setSchema((s) => ({ ...s, fields: [...s.fields, field] }));
+    setAddLocationModalOpen(false);
+    setLocationModalIndex(idx);
   }
 
   async function handleSave() {
@@ -491,6 +511,39 @@ export default function ContentModelEditorForm({
                       </button>
                     </div>
                   </li>
+                ) : f.type === "Location" ? (
+                  <li
+                    key={`${f.id}-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium text-ink-900">{f.name}</span>
+                      <code className="ml-2 text-[12px] text-ink-500">
+                        {f.id}
+                      </code>
+                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
+                        {FIELD_TYPE_LABELS.Location}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setLocationModalIndex(i)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        Konfigurieren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeField(i)}
+                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
+                        aria-label="Feld entfernen"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
                 ) : (
                 <li
                   key={`${f.id}-${i}`}
@@ -701,6 +754,18 @@ export default function ContentModelEditorForm({
         onAddAndConfigure={appendDateTimeField}
       />
 
+      <AddLocationFieldModal
+        open={addLocationModalOpen}
+        suggestedName={FIELD_TYPE_LABELS.Location}
+        suggestedId={defaultFieldIdForType("Location", schema.fields.length)}
+        onClose={() => setAddLocationModalOpen(false)}
+        onChangeFieldType={() => {
+          setAddLocationModalOpen(false);
+          setAddModalOpen(true);
+        }}
+        onAddAndConfigure={appendLocationField}
+      />
+
       {richModalIndex !== null &&
         schema.fields[richModalIndex]?.type === "RichText" && (
           <RichTextFieldModal
@@ -778,6 +843,25 @@ export default function ContentModelEditorForm({
                 ),
               }));
               setDateTimeModalIndex(null);
+            }}
+          />
+        )}
+
+      {locationModalIndex !== null &&
+        schema.fields[locationModalIndex]?.type === "Location" && (
+          <LocationFieldModal
+            open
+            field={schema.fields[locationModalIndex]!}
+            onClose={() => setLocationModalIndex(null)}
+            onApply={(next) => {
+              const idx = locationModalIndex;
+              setSchema((s) => ({
+                ...s,
+                fields: s.fields.map((f, i) =>
+                  i === idx ? { ...f, ...next } : f,
+                ),
+              }));
+              setLocationModalIndex(null);
             }}
           />
         )}
