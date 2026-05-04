@@ -1,4 +1,7 @@
 import { Braces, Info, X } from "lucide-react";
+import CmsFieldEditorShell, {
+  cmsFieldSectionDomId,
+} from "./CmsFieldEditorShell";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type {
@@ -10,7 +13,7 @@ import {
   defaultJsonObjectFieldConfig,
 } from "../../lib/cmsSchemaTypes";
 
-type Tab = "name" | "settings" | "validation" | "default" | "appearance";
+type SectionId = "name" | "settings" | "validation" | "default" | "appearance";
 
 type Local = {
   name: string;
@@ -67,7 +70,7 @@ type Props = {
   onApply: (next: CmsFieldDefinition) => void;
 };
 
-const TAB_ITEMS: { id: Tab; label: string }[] = [
+const NAV_ITEMS: { id: SectionId; label: string }[] = [
   { id: "name", label: "Name and field ID" },
   { id: "settings", label: "Settings" },
   { id: "validation", label: "Validation" },
@@ -83,14 +86,12 @@ export default function JsonObjectFieldModal({
   onClose,
   onApply,
 }: Props) {
-  const [tab, setTab] = useState<Tab>("name");
   const [local, setLocal] = useState<Local>(() => cloneLocal(field));
   const prevOpen = useRef(false);
 
   useEffect(() => {
     if (open && !prevOpen.current) {
       setLocal(cloneLocal(field));
-      setTab("name");
     }
     prevOpen.current = open;
   }, [open, field]);
@@ -124,20 +125,6 @@ export default function JsonObjectFieldModal({
     onClose();
   }
 
-  const sidebarBtn = (t: Tab, label: string) => (
-    <button
-      key={t}
-      type="button"
-      onClick={() => setTab(t)}
-      className={`w-full px-3 py-2.5 text-left text-[13px] transition ${
-        tab === t
-          ? "border-l-[3px] border-l-[#0366d6] bg-[#e8eaed] font-medium text-[#1a1a1a]"
-          : "border-l-[3px] border-l-transparent text-[#5f6368] hover:bg-[#f1f3f4]"
-      }`}
-    >
-      {label}
-    </button>
-  );
 
   const valRow = (
     title: string,
@@ -168,45 +155,22 @@ export default function JsonObjectFieldModal({
   );
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
+    <CmsFieldEditorShell
+      open={open}
+      fieldName={local.name}
+      fieldNameFallback={field.name}
+      typeLabel={HEADER_TYPE_LABEL}
+      navItems={NAV_ITEMS}
+      onClose={onClose}
+      onConfirm={applyClick}
     >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/40"
-        aria-label="Schließen"
-        onClick={onClose}
-      />
-      <div className="relative flex max-h-[min(92vh,900px)] w-full max-w-[960px] flex-col overflow-hidden rounded-lg border border-[#dadce0] bg-white shadow-2xl">
-        <header className="flex shrink-0 items-center justify-between border-b border-[#dadce0] px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-[#1a1a1a]">
-            <span className="font-normal text-[#5f6368]">
-              {local.name || field.name}
-            </span>{" "}
-            <span className="text-[#5f6368]">{HEADER_TYPE_LABEL}</span>
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1.5 text-[#5f6368] hover:bg-[#f1f3f4]"
-            aria-label="Schließen"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-
-        <div className="flex min-h-0 flex-1">
-          <nav className="w-[220px] shrink-0 overflow-y-auto border-r border-[#dadce0] bg-[#f8f9fa] py-2">
-            {TAB_ITEMS.map(({ id, label }) => sidebarBtn(id, label))}
-          </nav>
-
-          <div className="min-w-0 flex-1 overflow-y-auto bg-white p-6">
-            {tab === "name" && (
-              <div className="max-w-xl space-y-8">
+      <section
+        id={cmsFieldSectionDomId("name")}
+        className="scroll-mt-6 space-y-8"
+      >
+        <div className="max-w-xl space-y-8">
                 <section>
-                  <h3 className="mb-4 text-[18px] font-semibold text-[#1a1a1a]">
+                  <h3 className="mb-4 text-[20px] font-semibold text-[#1a1a1a]">
                     Name and field ID
                   </h3>
                   <div className="space-y-5">
@@ -227,7 +191,7 @@ export default function JsonObjectFieldModal({
                             name: e.target.value.slice(0, 50),
                           }))
                         }
-                        className="w-full rounded border border-[#dadce0] px-3 py-2 text-[13px] outline-none focus:border-[#0366d6] focus:ring-1 focus:ring-[#0366d6]"
+                        className="w-full rounded-md border border-[#dadce0] px-3 py-2 text-[13px] outline-none focus:border-[#0366d6] focus:ring-1 focus:ring-[#0366d6]"
                       />
                     </div>
                     <div>
@@ -247,17 +211,20 @@ export default function JsonObjectFieldModal({
                             id: e.target.value.slice(0, 64),
                           }))
                         }
-                        className="w-full rounded border border-[#dadce0] px-3 py-2 font-mono text-[13px] outline-none focus:border-[#0366d6] focus:ring-1 focus:ring-[#0366d6]"
+                        className="w-full rounded-md border border-[#dadce0] px-3 py-2 font-mono text-[13px] outline-none focus:border-[#0366d6] focus:ring-1 focus:ring-[#0366d6]"
                       />
                     </div>
                   </div>
                 </section>
               </div>
-            )}
+      </section>
 
-            {tab === "settings" && (
-              <div className="max-w-xl space-y-6">
-                <h3 className="text-[18px] font-semibold text-[#1a1a1a]">
+      <section
+        id={cmsFieldSectionDomId("settings")}
+        className="scroll-mt-6 space-y-8"
+      >
+        <div className="max-w-xl space-y-6">
+                <h3 className="text-[20px] font-semibold text-[#1a1a1a]">
                   Settings
                 </h3>
                 <div>
@@ -288,11 +255,14 @@ export default function JsonObjectFieldModal({
                   </label>
                 </div>
               </div>
-            )}
+      </section>
 
-            {tab === "validation" && (
-              <div className="max-w-2xl">
-                <h3 className="mb-4 text-[18px] font-semibold text-[#1a1a1a]">
+      <section
+        id={cmsFieldSectionDomId("validation")}
+        className="scroll-mt-6 space-y-8"
+      >
+        <div className="max-w-2xl">
+                <h3 className="mb-4 text-[20px] font-semibold text-[#1a1a1a]">
                   Validation
                 </h3>
                 {valRow(
@@ -321,7 +291,7 @@ export default function JsonObjectFieldModal({
                         <input
                           type="number"
                           min={0}
-                          className="w-full rounded border border-[#dadce0] px-2 py-1.5 text-[13px]"
+                          className="w-full rounded-md border border-[#dadce0] px-2 py-1.5 text-[13px]"
                           value={local.minProps}
                           onChange={(e) =>
                             setLocal((s) => ({
@@ -338,7 +308,7 @@ export default function JsonObjectFieldModal({
                         <input
                           type="number"
                           min={0}
-                          className="w-full rounded border border-[#dadce0] px-2 py-1.5 text-[13px]"
+                          className="w-full rounded-md border border-[#dadce0] px-2 py-1.5 text-[13px]"
                           value={local.maxProps}
                           onChange={(e) =>
                             setLocal((s) => ({
@@ -352,11 +322,14 @@ export default function JsonObjectFieldModal({
                   ) : null,
                 )}
               </div>
-            )}
+      </section>
 
-            {tab === "default" && (
-              <div className="max-w-xl">
-                <h3 className="mb-4 text-[18px] font-semibold text-[#1a1a1a]">
+      <section
+        id={cmsFieldSectionDomId("default")}
+        className="scroll-mt-6 space-y-8"
+      >
+        <div className="max-w-xl">
+                <h3 className="mb-4 text-[20px] font-semibold text-[#1a1a1a]">
                   Default value
                 </h3>
                 <div className="flex gap-3 rounded-lg border border-[#aecbfa] bg-[#e8f0fe] p-4">
@@ -370,12 +343,15 @@ export default function JsonObjectFieldModal({
                   </div>
                 </div>
               </div>
-            )}
+      </section>
 
-            {tab === "appearance" && (
-              <div className="max-w-xl space-y-8">
+      <section
+        id={cmsFieldSectionDomId("appearance")}
+        className="scroll-mt-6 space-y-8"
+      >
+        <div className="max-w-xl space-y-8">
                 <section>
-                  <h3 className="mb-4 text-[18px] font-semibold text-[#1a1a1a]">
+                  <h3 className="mb-4 text-[20px] font-semibold text-[#1a1a1a]">
                     Appearance
                   </h3>
                   <div className="rounded-lg border border-[#0366d6] bg-[#e8f0fe]/40 p-4">
@@ -419,7 +395,7 @@ export default function JsonObjectFieldModal({
                         appearanceHelpText: e.target.value.slice(0, 255),
                       }))
                     }
-                    className="w-full rounded border border-[#dadce0] px-3 py-2 text-[13px]"
+                    className="w-full rounded-md border border-[#dadce0] px-3 py-2 text-[13px]"
                   />
                   <div className="mt-1 flex justify-between text-[11px] text-[#5f6368]">
                     <span>This help text will show up below the field.</span>
@@ -427,27 +403,7 @@ export default function JsonObjectFieldModal({
                   </div>
                 </section>
               </div>
-            )}
-          </div>
-        </div>
-
-        <footer className="flex shrink-0 justify-end gap-2 border-t border-[#dadce0] bg-[#f8f9fa] px-5 py-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded px-4 py-2 text-[13px] font-medium text-[#5f6368] hover:bg-[#e8eaed]"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={applyClick}
-            className="rounded bg-[#0366d6] px-4 py-2 text-[13px] font-medium text-white hover:bg-[#0256b9]"
-          >
-            Apply
-          </button>
-        </footer>
-      </div>
-    </div>
+      </section>
+    </CmsFieldEditorShell>
   );
 }
