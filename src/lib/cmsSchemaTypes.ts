@@ -64,6 +64,46 @@ export function defaultDateTimeFieldConfig(): DateTimeFieldConfig {
   };
 }
 
+/** Media: eine Datei vs. viele (nach Anlegen fixiert). */
+export type MediaFieldVariant = "one" | "many";
+
+export type MediaFileSizeValidation = {
+  enabled: boolean;
+  minBytes?: number;
+  maxBytes?: number;
+};
+
+export type MediaFileTypesValidation = {
+  enabled: boolean;
+  types: string[];
+};
+
+export type MediaImageDimensionsValidation = {
+  enabled: boolean;
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+};
+
+export type MediaFieldConfig = {
+  validation: {
+    fileSize?: MediaFileSizeValidation;
+    fileTypes?: MediaFileTypesValidation;
+    imageDimensions?: MediaImageDimensionsValidation;
+  };
+  allowCreateNew: boolean;
+  allowLinkExisting: boolean;
+};
+
+export function defaultMediaFieldConfig(): MediaFieldConfig {
+  return {
+    validation: {},
+    allowCreateNew: true,
+    allowLinkExisting: true,
+  };
+}
+
 export type CmsFieldValidations = {
   maxLength?: number;
   /** Text: Mindestlänge in Zeichen */
@@ -208,6 +248,10 @@ export type CmsFieldDefinition = {
   defaultNumber?: number;
   /** Nur bei type === "DateTime" */
   dateTime?: DateTimeFieldConfig;
+  /** Nur Media: One file vs. Many files — nach Anlegen fixiert */
+  mediaShape?: { variant: MediaFieldVariant };
+  /** Nur Media */
+  media?: MediaFieldConfig;
 };
 
 export type CmsContentModelSchema = {
@@ -325,6 +369,34 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
         : defaultDateTimeFieldConfig();
   }
 
+  let mediaShape: { variant: MediaFieldVariant } | undefined;
+  let media: MediaFieldConfig | undefined;
+  if (type === "Media") {
+    const mediaRaw =
+      o.media && typeof o.media === "object"
+        ? (o.media as Record<string, unknown>)
+        : undefined;
+    const ms = o.mediaShape;
+    if (ms && typeof ms === "object") {
+      const mv = (ms as Record<string, unknown>).variant;
+      if (mv === "one" || mv === "many") mediaShape = { variant: mv };
+    }
+    if (!mediaShape && mediaRaw) {
+      const mv = mediaRaw.variant;
+      if (mv === "one" || mv === "many") mediaShape = { variant: mv };
+    }
+    if (!mediaShape) {
+      if (o.list === true || o.multiple === true || o.many === true) {
+        mediaShape = { variant: "many" };
+      } else {
+        mediaShape = { variant: "one" };
+      }
+    }
+    media = mediaRaw
+      ? normalizeMediaConfig(mediaRaw)
+      : defaultMediaFieldConfig();
+  }
+
   return {
     id,
     name,
@@ -340,6 +412,8 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     ...(numberShape ? { numberShape } : {}),
     ...(defaultNumber !== undefined ? { defaultNumber } : {}),
     ...(dateTime ? { dateTime } : {}),
+    ...(mediaShape ? { mediaShape } : {}),
+    ...(media ? { media } : {}),
   };
 }
 
@@ -400,6 +474,99 @@ export function serializeDateTimeForStorage(
   if (cfg.defaultValue && Object.keys(cfg.defaultValue).length > 0) {
     out.defaultValue = { ...cfg.defaultValue };
   }
+  return out;
+}
+
+function normalizeMediaConfig(raw: Record<string, unknown>): MediaFieldConfig {
+  const def = defaultMediaFieldConfig();
+  const v = raw.validation;
+  if (v && typeof v === "object") {
+    const vo = v as Record<string, unknown>;
+    const fs = vo.fileSize;
+    if (fs && typeof fs === "object") {
+      const f = fs as Record<string, unknown>;
+      if (f.enabled === true) {
+        def.validation.fileSize = {
+          enabled: true,
+          ...(typeof f.minBytes === "number" && f.minBytes >= 0
+            ? { minBytes: Math.floor(f.minBytes) }
+            : {}),
+          ...(typeof f.maxBytes === "number" && f.maxBytes >= 0
+            ? { maxBytes: Math.floor(f.maxBytes) }
+            : {}),
+        };
+      }
+    }
+    const ft = vo.fileTypes;
+    if (ft && typeof ft === "object") {
+      const t = ft as Record<string, unknown>;
+      if (t.enabled === true && Array.isArray(t.types)) {
+        const types = t.types.filter(
+          (x): x is string => typeof x === "string" && x.trim().length > 0,
+        );
+        if (types.length > 0) {
+          def.validation.fileTypes = { enabled: true, types };
+        }
+      }
+    }
+    const idim = vo.imageDimensions;
+    if (idim && typeof idim === "object") {
+      const im = idim as Record<string, unknown>;
+      if (im.enabled === true) {
+        def.validation.imageDimensions = {
+          enabled: true,
+          ...(typeof im.minWidth === "number" && im.minWidth >= 0
+            ? { minWidth: Math.floor(im.minWidth) }
+            : {}),
+          ...(typeof im.maxWidth === "number" && im.maxWidth >= 0
+            ? { maxWidth: Math.floor(im.maxWidth) }
+            : {}),
+          ...(typeof im.minHeight === "number" && im.minHeight >= 0
+            ? { minHeight: Math.floor(im.minHeight) }
+            : {}),
+          ...(typeof im.maxHeight === "number" && im.maxHeight >= 0
+            ? { maxHeight: Math.floor(im.maxHeight) }
+            : {}),
+        };
+      }
+    }
+  }
+  if (raw.allowCreateNew === false) def.allowCreateNew = false;
+  if (raw.allowLinkExisting === false) def.allowLinkExisting = false;
+  return def;
+}
+
+export function serializeMediaForStorage(
+  cfg: MediaFieldConfig,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    allowCreateNew: cfg.allowCreateNew,
+    allowLinkExisting: cfg.allowLinkExisting,
+  };
+  const validation: Record<string, unknown> = {};
+  const fs = cfg.validation.fileSize;
+  if (fs?.enabled) {
+    validation.fileSize = {
+      enabled: true,
+      ...(typeof fs.minBytes === "number" ? { minBytes: fs.minBytes } : {}),
+      ...(typeof fs.maxBytes === "number" ? { maxBytes: fs.maxBytes } : {}),
+    };
+  }
+  const ft = cfg.validation.fileTypes;
+  if (ft?.enabled && ft.types.length > 0) {
+    validation.fileTypes = { enabled: true, types: [...ft.types] };
+  }
+  const id = cfg.validation.imageDimensions;
+  if (id?.enabled) {
+    validation.imageDimensions = {
+      enabled: true,
+      ...(typeof id.minWidth === "number" ? { minWidth: id.minWidth } : {}),
+      ...(typeof id.maxWidth === "number" ? { maxWidth: id.maxWidth } : {}),
+      ...(typeof id.minHeight === "number" ? { minHeight: id.minHeight } : {}),
+      ...(typeof id.maxHeight === "number" ? { maxHeight: id.maxHeight } : {}),
+    };
+  }
+  if (Object.keys(validation).length > 0) out.validation = validation;
   return out;
 }
 
@@ -594,6 +761,11 @@ export function serializeContentModelSchema(
       if (f.type === "DateTime" && f.dateTime) {
         row.dateTime = serializeDateTimeForStorage(f.dateTime);
       }
+      if (f.type === "Media") {
+        const variant = f.mediaShape?.variant ?? "one";
+        row.mediaShape = { variant };
+        row.media = serializeMediaForStorage(f.media ?? defaultMediaFieldConfig());
+      }
       return row;
     }),
   };
@@ -721,6 +893,21 @@ export function newLocationFieldFromWizard(args: {
     name: args.name.trim(),
     type: "Location",
     required: false,
+  };
+}
+
+export function newMediaFieldFromWizard(args: {
+  id: string;
+  name: string;
+  variant: MediaFieldVariant;
+}): CmsFieldDefinition {
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "Media",
+    required: false,
+    mediaShape: { variant: args.variant },
+    media: defaultMediaFieldConfig(),
   };
 }
 
