@@ -9,7 +9,8 @@
  *       - title        (optional → customMetadata, CMS-Anzeigename)
  *       - alt_text    (optional → customMetadata)
  *       - description (optional → customMetadata)
- *       - overwrite   (optional, "1" überschreibt einen existierenden Key)
+ *       - img_w, img_h (optional, Pixel → Metadata für CMS-Tabelle)
+ *       - status    (optional, `draft`|`published`, default published)
  *     → 201 mit der vollständigen Asset-Zeile
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
@@ -84,6 +85,17 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const altText = ((form.get("alt_text") as string | null) ?? "").trim();
   const description = ((form.get("description") as string | null) ?? "").trim();
   const overwrite = (form.get("overwrite") as string | null) === "1";
+  const statusForm = ((form.get("status") as string | null) ?? "").trim().toLowerCase();
+  const cmsStatus =
+    statusForm === "draft"
+      ? "draft"
+      : statusForm === "published"
+        ? "published"
+        : "published";
+  const imgW = ((form.get("img_w") as string | null) ?? "").trim();
+  const imgH = ((form.get("img_h") as string | null) ?? "").trim();
+  const imgWidth = imgW ? Number.parseInt(imgW, 10) : NaN;
+  const imgHeight = imgH ? Number.parseInt(imgH, 10) : NaN;
 
   let name: string;
   try {
@@ -115,6 +127,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       altText: altText || undefined,
       description: description || undefined,
       uploadedBy: user.id,
+      uploadedByName: user.benutzername || undefined,
+      cmsStatus,
+      imgWidth: Number.isFinite(imgWidth) && imgWidth > 0 ? imgWidth : undefined,
+      imgHeight: Number.isFinite(imgHeight) && imgHeight > 0 ? imgHeight : undefined,
       originalName: file.name,
     });
 

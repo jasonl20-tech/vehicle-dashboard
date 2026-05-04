@@ -337,7 +337,12 @@ function ToolbarPlugin() {
     run(() => {
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) return;
-      const imageNode = $createCmsImageNode(asset.url, alt, asset.key);
+      const imageNode = $createCmsImageNode(
+        asset.url,
+        alt,
+        asset.key,
+        asset.cms_status,
+      );
       selection.insertNodes([imageNode]);
       const paragraph = $createParagraphNode();
       imageNode.insertAfter(paragraph);

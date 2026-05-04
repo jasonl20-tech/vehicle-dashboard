@@ -12,8 +12,19 @@ import {
 import type { JSX } from "react";
 import CmsLexicalImageBlock from "./CmsLexicalImageBlock";
 
+function normalizedCmsStatus(
+  v: "draft" | "published" | undefined,
+): "draft" | "published" {
+  return v === "draft" ? "draft" : "published";
+}
+
 export type SerializedCmsImageNode = Spread<
-  { src: string; altText: string; assetKey: string },
+  {
+    src: string;
+    altText: string;
+    assetKey: string;
+    cmsStatus?: "draft" | "published";
+  },
   SerializedLexicalNode
 >;
 
@@ -21,6 +32,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
   __src: string;
   __altText: string;
   __assetKey: string;
+  __cmsStatus: "draft" | "published";
 
   static getType(): string {
     return "cms-image";
@@ -31,21 +43,30 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
       node.__src,
       node.__altText,
       node.__assetKey,
+      node.__cmsStatus,
       node.__key,
     );
   }
 
-  constructor(src: string, altText: string, assetKey: string, key?: NodeKey) {
+  constructor(
+    src: string,
+    altText: string,
+    assetKey: string,
+    cmsStatus: "draft" | "published" = "published",
+    key?: NodeKey,
+  ) {
     super(key);
     this.__src = src;
     this.__altText = altText;
     this.__assetKey = assetKey;
+    this.__cmsStatus = cmsStatus;
   }
 
   exportJSON(): SerializedCmsImageNode {
     return {
       altText: this.__altText,
       assetKey: this.__assetKey,
+      cmsStatus: this.__cmsStatus,
       src: this.__src,
       type: "cms-image",
       version: 1,
@@ -57,6 +78,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
       serialized.src,
       serialized.altText,
       serialized.assetKey,
+      normalizedCmsStatus(serialized.cmsStatus),
     );
   }
 
@@ -74,6 +96,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
         src={this.__src}
         altText={this.__altText}
         assetKey={this.__assetKey}
+        cmsStatus={this.__cmsStatus}
       />
     );
   }
@@ -91,8 +114,11 @@ export function $createCmsImageNode(
   src: string,
   altText: string,
   assetKey: string,
+  cmsStatus: "draft" | "published" = "published",
 ): CmsImageNode {
-  return $applyNodeReplacement(new CmsImageNode(src, altText, assetKey));
+  return $applyNodeReplacement(
+    new CmsImageNode(src, altText, assetKey, cmsStatus),
+  );
 }
 
 export function $isCmsImageNode(

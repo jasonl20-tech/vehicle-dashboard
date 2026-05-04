@@ -4,20 +4,43 @@
  */
 import { GripVertical, MoreHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getAsset } from "../../../lib/assetsApi";
 
 type Props = {
   src: string;
   altText: string;
   assetKey: string;
+  /** Aus dem gespeicherten Lexical-JSON; wird bei Bedarf per API aktualisiert. */
+  cmsStatus: "draft" | "published";
 };
 
 export default function CmsLexicalImageBlock({
   src,
   altText,
   assetKey,
+  cmsStatus,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [resolvedStatus, setResolvedStatus] = useState(cmsStatus);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setResolvedStatus(cmsStatus);
+  }, [cmsStatus]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAsset(assetKey)
+      .then((a) => {
+        if (!cancelled) setResolvedStatus(a.cms_status);
+      })
+      .catch(() => {
+        /* Offline o.ä. — Snapshot aus JSON */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [assetKey]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -42,6 +65,8 @@ export default function CmsLexicalImageBlock({
     setMenuOpen(false);
   }, [assetKey]);
 
+  const isPublished = resolvedStatus === "published";
+
   return (
     <figure
       className="my-4 flex w-full gap-0 overflow-hidden rounded-xl border border-[#e8eaed] bg-white shadow-[0_1px_2px_rgba(60,64,67,0.1),0_1px_3px_rgba(60,64,67,0.08)]"
@@ -57,8 +82,14 @@ export default function CmsLexicalImageBlock({
       </div>
       <div className="relative min-w-0 flex-1 p-2.5 sm:p-3">
         <div className="pointer-events-none absolute left-2.5 top-2.5 z-10 sm:left-3 sm:top-3">
-          <span className="pointer-events-auto inline-flex rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm">
-            Veröffentlicht
+          <span
+            className={
+              isPublished
+                ? "pointer-events-auto inline-flex rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+                : "pointer-events-auto inline-flex rounded-md bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
+            }
+          >
+            {isPublished ? "Veröffentlicht" : "Entwurf"}
           </span>
         </div>
         <div className="absolute right-1.5 top-1.5 z-10 sm:right-2 sm:top-2" ref={menuRef}>

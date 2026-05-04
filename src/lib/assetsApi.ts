@@ -38,6 +38,12 @@ export type Asset = {
   alt_text: string | null;
   description: string | null;
   uploaded_by: string | null;
+  /** Anzeigename beim Upload (Metadata). */
+  uploaded_by_name: string | null;
+  /** Redaktioneller CMS-Status. */
+  cms_status: "draft" | "published";
+  width: number | null;
+  height: number | null;
   uploaded_at: string;
   updated_at: string;
   /** Öffentliche URL via Custom-Domain. */
@@ -158,6 +164,10 @@ export async function uploadAsset(input: {
   title?: string;
   alt_text?: string;
   description?: string;
+  /** CMS: `draft` lädt als Entwurf, sonst veröffentlicht (Metadata). */
+  status?: "draft" | "published";
+  img_w?: number;
+  img_h?: number;
   overwrite?: boolean;
   onProgress?: (loaded: number, total: number) => void;
   signal?: AbortSignal;
@@ -169,6 +179,11 @@ export async function uploadAsset(input: {
   if (input.alt_text) fd.append("alt_text", input.alt_text);
   if (input.title) fd.append("title", input.title);
   if (input.description) fd.append("description", input.description);
+  if (input.status) fd.append("status", input.status);
+  if (input.img_w != null && input.img_w > 0)
+    fd.append("img_w", String(Math.round(input.img_w)));
+  if (input.img_h != null && input.img_h > 0)
+    fd.append("img_h", String(Math.round(input.img_h)));
   if (input.overwrite) fd.append("overwrite", "1");
 
   if (input.onProgress) {
@@ -242,6 +257,9 @@ export async function updateAsset(
     title?: string | null;
     alt_text?: string | null;
     description?: string | null;
+    cms_status?: "draft" | "published";
+    width?: number | null;
+    height?: number | null;
   },
 ): Promise<Asset> {
   const res = await fetch(itemUrl(key), {
@@ -316,6 +334,27 @@ export function isVideo(asset: {
 }): boolean {
   if (asset.content_type?.startsWith("video/")) return true;
   return VIDEO_EXTS.has(fileExt(asset.name));
+}
+
+/** Kurzbeschreibung für Tabellen (z. B. „Bild / PNG“). */
+export function formatAssetTypeLabel(a: {
+  kind: string;
+  name: string;
+  content_type: string;
+}): string {
+  if (a.kind === "folder") return "Ordner";
+  const ct = (a.content_type || "").toLowerCase();
+  if (ct.startsWith("image/")) {
+    const sub = ct.slice("image/".length).replace(/\+xml$/, "").toUpperCase();
+    return `Bild / ${sub}`;
+  }
+  if (ct.startsWith("video/")) {
+    const sub = ct.slice("video/".length).toUpperCase();
+    return `Video / ${sub}`;
+  }
+  const ext = fileExt(a.name).toUpperCase();
+  if (ext) return `${ct || "Datei"} / ${ext}`;
+  return ct || "—";
 }
 
 export function formatBytes(bytes: number): string {

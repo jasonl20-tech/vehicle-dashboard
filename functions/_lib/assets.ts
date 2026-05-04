@@ -146,8 +146,16 @@ const META_KEYS = {
   altText: "alttext",
   description: "description",
   uploadedBy: "uploadedby",
+  /** Anzeigename zum Zeitpunkt des Uploads (z. B. Benutzername). */
+  uploaderName: "uploadername",
   originalName: "originalname",
   folderMarker: "foldermarker",
+  /** CMS-Workflow: `draft` | `published` */
+  cmsStatus: "cmsstatus",
+  /** Bildbreite in px (Metadata-String) */
+  imgw: "imgw",
+  /** Bildhöhe in px */
+  imgh: "imgh",
 } as const;
 
 export type MetaInput = {
@@ -155,6 +163,11 @@ export type MetaInput = {
   altText?: string | null;
   description?: string | null;
   uploadedBy?: string | number | null;
+  uploadedByName?: string | null;
+  /** Nur `draft` oder `published`; null löscht den Schlüssel beim Merge. */
+  cmsStatus?: "draft" | "published" | null;
+  imgWidth?: number | null;
+  imgHeight?: number | null;
   originalName?: string | null;
   folderMarker?: boolean;
 };
@@ -183,6 +196,12 @@ function decodeMetaValue(v: string | undefined): string | null {
   return v;
 }
 
+/** CMS-Asset-Status aus R2-Metadata; fehlend/ungültig → veröffentlicht (R2-Objekt ist öffentlich erreichbar). */
+export function normalizeCmsAssetStatus(raw: string | undefined): "draft" | "published" {
+  if ((raw || "").toLowerCase() === "draft") return "draft";
+  return "published";
+}
+
 export function buildCustomMetadata(
   input: MetaInput,
   base?: Record<string, string>,
@@ -203,6 +222,25 @@ export function buildCustomMetadata(
   }
   if (input.uploadedBy !== undefined && input.uploadedBy !== null) {
     m[META_KEYS.uploadedBy] = String(input.uploadedBy);
+  }
+  if (input.uploadedByName !== undefined) {
+    if (input.uploadedByName)
+      m[META_KEYS.uploaderName] = encodeMetaValue(input.uploadedByName);
+    else delete m[META_KEYS.uploaderName];
+  }
+  if (input.cmsStatus !== undefined) {
+    if (input.cmsStatus) m[META_KEYS.cmsStatus] = input.cmsStatus;
+    else delete m[META_KEYS.cmsStatus];
+  }
+  if (input.imgWidth !== undefined) {
+    if (input.imgWidth != null && input.imgWidth > 0)
+      m[META_KEYS.imgw] = String(Math.round(input.imgWidth));
+    else delete m[META_KEYS.imgw];
+  }
+  if (input.imgHeight !== undefined) {
+    if (input.imgHeight != null && input.imgHeight > 0)
+      m[META_KEYS.imgh] = String(Math.round(input.imgHeight));
+    else delete m[META_KEYS.imgh];
   }
   if (input.originalName !== undefined && input.originalName) {
     m[META_KEYS.originalName] = encodeMetaValue(
@@ -301,6 +339,13 @@ export type AssetRow = {
   title: string | null;
   description: string | null;
   uploaded_by: string | null;
+  /** Benutzername o. ä. zum Zeitpunkt des Uploads (Metadata). */
+  uploaded_by_name: string | null;
+  /** Redaktioneller Status im CMS (nicht CDN-Sichtbarkeit). */
+  cms_status: "draft" | "published";
+  /** Bildabmessungen aus Metadata, falls erfasst. */
+  width: number | null;
+  height: number | null;
   uploaded_at: string;
   updated_at: string;
   /** Öffentliche URL (Custom-Domain). */
@@ -327,6 +372,10 @@ export function r2ObjectToAsset(env: AuthEnv, obj: R2Object): AssetRow {
   // Cloudflare-Console, wrangler ohne -t) tragen `application/octet-stream`
   // oder gar keinen Type. Wir schließen aus der Dateiendung zurück.
   const contentType = guessContentType(name, obj.httpMetadata?.contentType);
+  const wMeta = meta[META_KEYS.imgw];
+  const hMeta = meta[META_KEYS.imgh];
+  const w = wMeta != null ? Number.parseInt(String(wMeta), 10) : NaN;
+  const h = hMeta != null ? Number.parseInt(String(hMeta), 10) : NaN;
   return {
     id: obj.key,
     key: obj.key,
@@ -339,6 +388,10 @@ export function r2ObjectToAsset(env: AuthEnv, obj: R2Object): AssetRow {
     alt_text: decodeMetaValue(meta[META_KEYS.altText]),
     description: decodeMetaValue(meta[META_KEYS.description]),
     uploaded_by: meta[META_KEYS.uploadedBy] ?? null,
+    uploaded_by_name: decodeMetaValue(meta[META_KEYS.uploaderName]),
+    cms_status: normalizeCmsAssetStatus(meta[META_KEYS.cmsStatus]),
+    width: Number.isFinite(w) && w > 0 ? w : null,
+    height: Number.isFinite(h) && h > 0 ? h : null,
     uploaded_at: uploadedISO,
     updated_at: uploadedISO,
     url: publicUrl(env, obj.key),
@@ -369,6 +422,10 @@ export function syntheticFolder(
     alt_text: null,
     description: null,
     uploaded_by: null,
+    uploaded_by_name: null,
+    cms_status: "published",
+    width: null,
+    height: null,
     uploaded_at: uploadedAt,
     updated_at: uploadedAt,
     url: publicUrl(env, path),

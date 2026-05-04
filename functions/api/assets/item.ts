@@ -10,7 +10,7 @@
  *          umgezogen.)
  *   DELETE /api/assets/item?key=email/banner.png         → 204
  *
- * Datei-Metadaten (`alt_text`, `description`, `uploaded_by`) leben in
+ * Datei-Metadaten (`alt_text`, `description`, `uploaded_by`, `cms_status`, …) leben in
  * R2 customMetadata. R2 kennt keine Metadata-Patches — Änderungen werden
  * durch Re-Upload (Stream get → put mit gleichen Bytes + neuer Metadata)
  * realisiert.
@@ -64,6 +64,9 @@ type PatchBody = {
   title?: string | null;
   alt_text?: string | null;
   description?: string | null;
+  cms_status?: "draft" | "published";
+  width?: number | null;
+  height?: number | null;
 };
 
 export const onRequestPatch: PagesFunction<AuthEnv> = async ({
@@ -136,6 +139,10 @@ export const onRequestPatch: PagesFunction<AuthEnv> = async ({
         altText: body.alt_text === undefined ? undefined : body.alt_text,
         description:
           body.description === undefined ? undefined : body.description,
+        cmsStatus:
+          body.cms_status === undefined ? undefined : body.cms_status,
+        imgWidth: body.width === undefined ? undefined : body.width,
+        imgHeight: body.height === undefined ? undefined : body.height,
       },
       baseMeta,
     );
