@@ -1,3 +1,5 @@
+import { extractPlainFromLexicalOrText } from "./lexicalRichText";
+
 export const CMS_CONTENT_MODELS_API = "/api/cms/content-models";
 export const CMS_CONTENTS_API = "/api/cms/contents";
 
@@ -52,13 +54,16 @@ export function parseSchemaJson(schema_json: string): unknown {
   }
 }
 
-/** Titel aus Content-Payload (flexibel). */
+/** Titel aus Content-Payload (flexibel; Rich Text = Lexical-JSON oder Klartext). */
 export function extractContentTitle(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "—";
   const o = payload as Record<string, unknown>;
   for (const k of ["title", "name", "headline", "slug", "internalTitle"]) {
     const v = o[k];
-    if (typeof v === "string" && v.trim()) return v.trim().slice(0, 200);
+    if (typeof v === "string" && v.trim()) {
+      const plain = extractPlainFromLexicalOrText(v).trim();
+      if (plain) return plain.slice(0, 200);
+    }
   }
   return "—";
 }

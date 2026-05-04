@@ -1,15 +1,4 @@
-import {
-  ArrowLeft,
-  Bold,
-  ChevronDown,
-  Italic,
-  Link2,
-  List,
-  ListOrdered,
-  Quote,
-  Underline,
-} from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CMS_ROOT } from "../../lib/cmsAccess";
@@ -24,7 +13,9 @@ import type {
   CmsFieldDefinition,
 } from "../../lib/cmsSchemaTypes";
 import { FIELD_TYPE_LABELS } from "../../lib/cmsSchemaTypes";
+import { extractPlainFromLexicalOrText } from "../../lib/lexicalRichText";
 import { fmtRelative } from "../../lib/customerApi";
+import LexicalRichTextField from "./LexicalRichTextField";
 
 const TAB_ACTIVE = "border-b-2 border-[#0366d6] text-[#0366d6]";
 
@@ -73,7 +64,10 @@ export default function ContentEntryEditor({
   const entryTitle = useMemo(() => {
     for (const k of ["title", "name", "headline", "slug", "internalTitle"]) {
       const v = payload[k];
-      if (typeof v === "string" && v.trim()) return v.trim().slice(0, 80);
+      if (typeof v === "string" && v.trim()) {
+        const plain = extractPlainFromLexicalOrText(v).trim();
+        if (plain) return plain.slice(0, 80);
+      }
     }
     return contentId ? contentId.slice(0, 8) + "…" : "Neuer Eintrag";
   }, [payload, contentId]);
@@ -352,32 +346,16 @@ function EntryFieldBlock({
     return (
       <>
         {label}
-        <div className="overflow-hidden rounded-lg border border-[#dadce0]">
-          <div
-            className="flex flex-wrap gap-1 border-b border-[#dadce0] bg-[#f8f9fa] px-2 py-1.5"
-            aria-hidden
-          >
-            <FakeTool icon={<Bold className="h-3.5 w-3.5" />} />
-            <FakeTool icon={<Italic className="h-3.5 w-3.5" />} />
-            <FakeTool icon={<Underline className="h-3.5 w-3.5" />} />
-            <FakeTool icon={<Link2 className="h-3.5 w-3.5" />} />
-            <FakeTool icon={<List className="h-3.5 w-3.5" />} />
-            <FakeTool icon={<ListOrdered className="h-3.5 w-3.5" />} />
-            <FakeTool icon={<Quote className="h-3.5 w-3.5" />} />
-          </div>
-          <textarea
-            value={s}
-            onChange={(e) => onChange(f.id, e.target.value)}
-            rows={10}
-            className="w-full resize-y border-0 px-3 py-2.5 text-[14px] outline-none focus:ring-0"
-          />
-        </div>
-        <div className="mt-1.5 text-[11px] text-ink-400">
-          {s.length} Zeichen
-        </div>
-        {f.helpText ? (
-          <p className="mt-2 text-[12px] text-ink-500">{f.helpText}</p>
-        ) : null}
+        <LexicalRichTextField
+          fieldId={f.id}
+          value={s}
+          onChange={(json) => onChange(f.id, json)}
+          footer={
+            f.helpText ? (
+              <p className="mt-2 text-[12px] text-ink-500">{f.helpText}</p>
+            ) : null
+          }
+        />
       </>
     );
   }
@@ -603,17 +581,5 @@ function EntryFieldBlock({
       {label}
       <p className="text-[12px] text-ink-500">Feldtyp nicht unterstützt.</p>
     </>
-  );
-}
-
-function FakeTool({ icon }: { icon: ReactNode }) {
-  return (
-    <button
-      type="button"
-      tabIndex={-1}
-      className="rounded p-1.5 text-ink-600 hover:bg-white"
-    >
-      {icon}
-    </button>
   );
 }

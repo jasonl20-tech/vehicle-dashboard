@@ -1,5 +1,11 @@
 import type { CmsContentModelSchema, CmsFieldDefinition } from "./cmsSchemaTypes";
 import { TEXT_LONG_MAX, TEXT_SHORT_MAX } from "./cmsSchemaTypes";
+import {
+  EMPTY_LEXICAL_STATE_JSON,
+  richTextInitialSerialized,
+  richTextPlainTextLength,
+  richTextToApiString,
+} from "./lexicalRichText";
 
 export function textMaxLength(f: CmsFieldDefinition): number | undefined {
   if (f.type !== "Text") return undefined;
@@ -23,7 +29,7 @@ function defaultForField(f: CmsFieldDefinition): unknown {
     case "Text":
       return f.list ? [] : (f.defaultValue ?? "");
     case "RichText":
-      return "";
+      return EMPTY_LEXICAL_STATE_JSON;
     case "Number":
       return f.defaultNumber ?? "";
     case "DateTime":
@@ -94,7 +100,18 @@ function normalizeMergedValue(
     }
     return "";
   }
-  if (f.type === "RichText" || f.type === "Text" || f.type === "DateTime") {
+  if (f.type === "RichText") {
+    if (typeof v === "object" && v !== null) {
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return EMPTY_LEXICAL_STATE_JSON;
+      }
+    }
+    const s = v == null ? "" : String(v);
+    return richTextInitialSerialized(s);
+  }
+  if (f.type === "Text" || f.type === "DateTime") {
     return v == null ? "" : String(v);
   }
   if (
@@ -171,6 +188,12 @@ export function validateEntryPayload(
       if (!lat || !lon) errors.push(`${f.name} ist erforderlich.`);
       continue;
     }
+    if (f.type === "RichText") {
+      if (richTextPlainTextLength(v) === 0) {
+        errors.push(`${f.name} ist erforderlich.`);
+      }
+      continue;
+    }
     if (v === null || v === undefined || String(v).trim() === "") {
       errors.push(`${f.name} ist erforderlich.`);
     }
@@ -196,7 +219,7 @@ export function serializeEntryPayloadForApi(
         }
         break;
       case "RichText":
-        out[f.id] = raw == null ? "" : String(raw);
+        out[f.id] = richTextToApiString(raw);
         break;
       case "Number": {
         if (raw === "" || raw === null || raw === undefined) {
