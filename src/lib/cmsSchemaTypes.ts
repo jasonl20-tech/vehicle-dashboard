@@ -185,7 +185,7 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
   if (type === "RichText") {
     richText =
       o.richText && typeof o.richText === "object"
-        ? normalizeRichTextConfig(o.richText)
+        ? normalizeRichTextConfig(o.richText as Record<string, unknown>)
         : defaultRichTextFieldConfig();
   }
   return {
