@@ -327,6 +327,204 @@ export function emptyContentModelSchema(): CmsContentModelSchema {
   return { fields: [] };
 }
 
+// ---------- Contentful Content Type JSON (Export → internes Schema) ----------
+
+function isContentfulContentTypeRoot(o: Record<string, unknown>): boolean {
+  const sys = o.sys;
+  if (sys && typeof sys === "object") {
+    if ((sys as Record<string, unknown>).type === "ContentType") return true;
+  }
+  if (!Array.isArray(o.fields) || o.fields.length === 0) return false;
+  const cfOnly = new Set([
+    "Symbol",
+    "Link",
+    "Array",
+    "Object",
+    "Date",
+    "Integer",
+  ]);
+  return o.fields.some((f) => {
+    if (!f || typeof f !== "object") return false;
+    return cfOnly.has(String((f as Record<string, unknown>).type));
+  });
+}
+
+function extractLinkContentTypesFromContentful(validations: unknown): string[] {
+  if (!Array.isArray(validations)) return [];
+  const out: string[] = [];
+  for (const item of validations) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    if (!Array.isArray(r.linkContentType)) continue;
+    for (const x of r.linkContentType) {
+      if (typeof x === "string" && x.trim()) out.push(x.trim());
+    }
+  }
+  return out;
+}
+
+/** Contentful `validations`-Arrays → `CmsFieldValidations` */
+function contentfulValidationsToOurs(
+  validations: unknown,
+  cfFieldType: string,
+): CmsFieldValidations | undefined {
+  if (cfFieldType === "RichText") return undefined;
+  if (!Array.isArray(validations)) return undefined;
+  const out: CmsFieldValidations = {};
+  for (const item of validations) {
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.size === "object" && r.size) {
+      const s = r.size as Record<string, unknown>;
+      if (typeof s.max === "number") out.maxLength = Math.floor(s.max);
+      if (typeof s.min === "number") out.minLength = Math.floor(s.min);
+    }
+    if (typeof r.range === "object" && r.range) {
+      const rng = r.range as Record<string, unknown>;
+      if (typeof rng.min === "number") out.min = rng.min;
+      if (typeof rng.max === "number") out.max = rng.max;
+    }
+    if (Array.isArray(r.in)) {
+      const strings = r.in.filter(
+        (x): x is string => typeof x === "string" && x.length > 0,
+      );
+      if (strings.length > 0) out.allowedValues = strings;
+    }
+  }
+  const links = extractLinkContentTypesFromContentful(validations);
+  for (const k of links) {
+    if (!out.linkContentType) out.linkContentType = [];
+    if (!out.linkContentType.includes(k)) out.linkContentType.push(k);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function convertContentfulFieldToOurRaw(
+  field: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (field.omitted === true) return null;
+
+  const id = typeof field.id === "string" ? field.id.trim() : "";
+  const name = typeof field.name === "string" ? field.name.trim() : "";
+  const cfType = typeof field.type === "string" ? field.type : "";
+  if (!id || !name || !cfType) return null;
+
+  const required = Boolean(field.required);
+  const localized = field.localized === true;
+  const validations = contentfulValidationsToOurs(field.validations, cfType);
+
+  const base: Record<string, unknown> = {
+    id,
+    name,
+    required,
+    ...(localized ? { localized: true } : {}),
+    ...(validations ? { validations } : {}),
+  };
+
+  if (cfType === "Symbol") {
+    return { ...base, type: "Text", textShape: { variant: "short" } };
+  }
+  if (cfType === "Text") {
+    return { ...base, type: "Text", textShape: { variant: "long" } };
+  }
+  if (cfType === "RichText") {
+    return { ...base, type: "RichText" };
+  }
+  if (cfType === "Boolean") {
+    return { ...base, type: "Boolean" };
+  }
+  if (cfType === "Date") {
+    return {
+      ...base,
+      type: "DateTime",
+      dateTime: { format: "date", timeMode: "24" },
+    };
+  }
+  if (cfType === "Integer") {
+    return { ...base, type: "Number", numberShape: { variant: "integer" } };
+  }
+  if (cfType === "Number") {
+    return { ...base, type: "Number", numberShape: { variant: "decimal" } };
+  }
+  if (cfType === "Location") {
+    return { ...base, type: "Location" };
+  }
+  if (cfType === "Object") {
+    return { ...base, type: "JsonObject" };
+  }
+  if (cfType === "Link") {
+    const lt = field.linkType;
+    if (lt === "Asset") {
+      return { ...base, type: "Media", mediaShape: { variant: "one" } };
+    }
+    if (lt === "Entry") {
+      const linkTypes = extractLinkContentTypesFromContentful(field.validations);
+      const merged: CmsFieldValidations | undefined =
+        linkTypes.length > 0
+          ? { ...(validations ?? {}), linkContentType: linkTypes }
+          : validations;
+      return {
+        ...base,
+        type: "Reference",
+        referenceShape: { variant: "one" },
+        ...(merged ? { validations: merged } : {}),
+      };
+    }
+    return null;
+  }
+  if (cfType === "Array") {
+    const items = field.items;
+    if (!items || typeof items !== "object") return null;
+    const it = items as Record<string, unknown>;
+    const itemType = typeof it.type === "string" ? it.type : "";
+    if (itemType === "Symbol") {
+      return {
+        ...base,
+        type: "Text",
+        list: true,
+        textShape: { variant: "short" },
+      };
+    }
+    if (itemType === "Link" && it.linkType === "Asset") {
+      return { ...base, type: "Media", mediaShape: { variant: "many" } };
+    }
+    if (itemType === "Link" && it.linkType === "Entry") {
+      const linkTypes = extractLinkContentTypesFromContentful(it.validations);
+      const merged: CmsFieldValidations | undefined =
+        linkTypes.length > 0
+          ? { ...(validations ?? {}), linkContentType: linkTypes }
+          : validations;
+      return {
+        ...base,
+        type: "Reference",
+        referenceShape: { variant: "many" },
+        ...(merged ? { validations: merged } : {}),
+      };
+    }
+    return { ...base, type: "JsonObject" };
+  }
+
+  return null;
+}
+
+function convertContentfulRootToOurRaw(o: Record<string, unknown>): Record<string, unknown> {
+  const rawFields = Array.isArray(o.fields) ? o.fields : [];
+  const fields: Record<string, unknown>[] = [];
+  for (const f of rawFields) {
+    if (!f || typeof f !== "object") continue;
+    const row = convertContentfulFieldToOurRaw(f as Record<string, unknown>);
+    if (row) fields.push(row);
+  }
+  const displayField =
+    typeof o.displayField === "string" && o.displayField.trim()
+      ? o.displayField.trim()
+      : undefined;
+  return {
+    fields,
+    ...(displayField ? { displayField } : {}),
+  };
+}
+
 function normalizeField(raw: unknown): CmsFieldDefinition | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -916,7 +1114,10 @@ export function serializeRichTextForStorage(
 
 export function parseContentModelSchema(raw: unknown): CmsContentModelSchema {
   if (!raw || typeof raw !== "object") return emptyContentModelSchema();
-  const o = raw as Record<string, unknown>;
+  let o = raw as Record<string, unknown>;
+  if (isContentfulContentTypeRoot(o)) {
+    o = convertContentfulRootToOurRaw(o);
+  }
   if (!Array.isArray(o.fields)) return emptyContentModelSchema();
   const fields = o.fields.map(normalizeField).filter(Boolean) as CmsFieldDefinition[];
   const displayField =
