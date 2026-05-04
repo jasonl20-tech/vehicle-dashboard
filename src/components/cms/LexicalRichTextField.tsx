@@ -1,3 +1,11 @@
+import {
+  registerCodeHighlighting,
+  PrismTokenizer,
+  CodeHighlightNode,
+  CodeNode,
+  $createCodeNode,
+  $isCodeNode,
+} from "@lexical/code";
 import { AutoLinkNode, LinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
 import {
   INSERT_ORDERED_LIST_COMMAND,
@@ -5,17 +13,16 @@ import {
   ListItemNode,
   ListNode,
 } from "@lexical/list";
-import {
-  LexicalComposer,
-} from "@lexical/react/LexicalComposer";
+import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
-import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import { ListPlugin } from "@lexical/react/LexicalListPlugin";
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
+import { ListPlugin } from "@lexical/react/LexicalListPlugin";
+import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
 import {
   $createHeadingNode,
   $createQuoteNode,
@@ -23,6 +30,12 @@ import {
   HeadingNode,
   QuoteNode,
 } from "@lexical/rich-text";
+import {
+  INSERT_TABLE_COMMAND,
+  TableCellNode,
+  TableNode,
+  TableRowNode,
+} from "@lexical/table";
 import { $setBlocksType } from "@lexical/selection";
 import {
   $createParagraphNode,
@@ -34,18 +47,24 @@ import {
 } from "lexical";
 import {
   Bold,
+  Code,
+  Heading1,
   Heading2,
+  Heading3,
   Italic,
   Link2,
   List,
   ListOrdered,
+  Pilcrow,
   Quote,
   Redo2,
-  Undo2,
+  Strikethrough,
+  Table2,
   Underline,
+  Undo2,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   richTextInitialSerialized,
   richTextPlainTextLength,
@@ -79,6 +98,46 @@ const LEXICAL_THEME = {
     strikethrough: "line-through",
     code: "font-mono text-[13px] bg-ink-100/80 rounded px-1",
   },
+  table: "LexicalTable__table w-full border-collapse border border-hair my-2 text-[13px]",
+  tableCell:
+    "LexicalTable__cell border border-hair px-2 py-1.5 min-w-[3rem] align-top",
+  tableCellHeader:
+    "LexicalTable__cell LexicalTable__cellHeader border border-hair px-2 py-1.5 bg-ink-100 font-semibold text-left align-top",
+  tableRow: "LexicalTable__row",
+  tableSelection: "LexicalTable__selection",
+  code: "block bg-[#1a1a1a] text-[#e8e8e8] rounded-lg p-3 font-mono text-[13px] my-2 overflow-x-auto",
+  codeHighlight: {
+    atrule: "text-amber-300",
+    attr: "text-sky-300",
+    boolean: "text-purple-300",
+    builtin: "text-cyan-300",
+    cdata: "text-ink-400",
+    char: "text-green-300",
+    class: "text-yellow-300",
+    "class-name": "text-yellow-300",
+    comment: "text-ink-500 italic",
+    constant: "text-purple-300",
+    deleted: "text-rose-400",
+    doctype: "text-ink-500",
+    entity: "text-orange-300",
+    function: "text-blue-300",
+    important: "text-rose-400",
+    inserted: "text-green-400",
+    keyword: "text-fuchsia-300",
+    namespace: "text-ink-400",
+    number: "text-orange-300",
+    operator: "text-ink-300",
+    prolog: "text-ink-500",
+    property: "text-sky-300",
+    punctuation: "text-ink-400",
+    regex: "text-green-300",
+    selector: "text-yellow-200",
+    string: "text-green-400",
+    symbol: "text-rose-300",
+    tag: "text-rose-400",
+    url: "text-sky-400",
+    variable: "text-purple-200",
+  },
 };
 
 type Props = {
@@ -96,6 +155,11 @@ const LEXICAL_NODES = [
   ListItemNode,
   LinkNode,
   AutoLinkNode,
+  TableNode,
+  TableCellNode,
+  TableRowNode,
+  CodeNode,
+  CodeHighlightNode,
 ];
 
 export default function LexicalRichTextField({
@@ -128,7 +192,7 @@ export default function LexicalRichTextField({
         <div className="relative">
           <RichTextPlugin
             contentEditable={
-              <ContentEditable className="cms-lexical-input min-h-[180px] w-full resize-y px-3 py-2 text-[14px] text-ink-900 outline-none focus:ring-0" />
+              <ContentEditable className="cms-lexical-input min-h-[220px] w-full resize-y px-3 py-2 text-[14px] text-ink-900 outline-none focus:ring-0" />
             }
             placeholder={
               <div className="pointer-events-none absolute left-3 top-2 text-[13px] text-ink-400">
@@ -142,6 +206,8 @@ export default function LexicalRichTextField({
       <HistoryPlugin />
       <ListPlugin />
       <LinkPlugin />
+      <TablePlugin hasHorizontalScroll />
+      <CodeHighlightPlugin />
       <OnChangePlugin
         onChange={(editorState) => {
           const json = JSON.stringify(editorState.toJSON());
@@ -159,11 +225,74 @@ export default function LexicalRichTextField({
   );
 }
 
+function CodeHighlightPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    return registerCodeHighlighting(editor, PrismTokenizer);
+  }, [editor]);
+  return null;
+}
+
 function ToolbarPlugin() {
   const [editor] = useLexicalComposerContext();
 
   const run = (fn: () => void) => {
     editor.update(fn);
+  };
+
+  const setHeading = (tag: "h1" | "h2" | "h3") => {
+    run(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      try {
+        const top = selection.anchor.getNode().getTopLevelElementOrThrow();
+        if ($isHeadingNode(top) && top.getTag() === tag) {
+          $setBlocksType(selection, () => $createParagraphNode());
+        } else {
+          $setBlocksType(selection, () => $createHeadingNode(tag));
+        }
+      } catch {
+        $setBlocksType(selection, () => $createHeadingNode(tag));
+      }
+    });
+  };
+
+  const setParagraph = () => {
+    run(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        $setBlocksType(selection, () => $createParagraphNode());
+      }
+    });
+  };
+
+  const toggleCodeBlock = () => {
+    run(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      try {
+        const top = selection.anchor.getNode().getTopLevelElementOrThrow();
+        if ($isCodeNode(top)) {
+          $setBlocksType(selection, () => $createParagraphNode());
+        } else {
+          $setBlocksType(selection, () => $createCodeNode("plaintext"));
+        }
+      } catch {
+        $setBlocksType(selection, () => $createCodeNode("plaintext"));
+      }
+    });
+  };
+
+  const insertTable = () => {
+    const r = window.prompt("Anzahl Zeilen (1–20)", "3");
+    const c = window.prompt("Anzahl Spalten (1–12)", "3");
+    const rows = Math.min(20, Math.max(1, Number.parseInt(r || "3", 10) || 3));
+    const cols = Math.min(12, Math.max(1, Number.parseInt(c || "3", 10) || 3));
+    editor.dispatchCommand(INSERT_TABLE_COMMAND, {
+      rows: String(rows),
+      columns: String(cols),
+      includeHeaders: { rows: true, columns: false },
+    });
   };
 
   return (
@@ -200,28 +329,38 @@ function ToolbarPlugin() {
         }
         icon={<Underline className="h-3.5 w-3.5" />}
       />
+      <ToolBtn
+        label="Durchgestrichen"
+        onClick={() =>
+          editor.dispatchCommand(FORMAT_TEXT_COMMAND, "strikethrough")
+        }
+        icon={<Strikethrough className="h-3.5 w-3.5" />}
+      />
+      <ToolBtn
+        label="Code (inline)"
+        onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "code")}
+        icon={<Code className="h-3.5 w-3.5" />}
+      />
       <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
       <ToolBtn
+        label="Überschrift 1"
+        onClick={() => setHeading("h1")}
+        icon={<Heading1 className="h-3.5 w-3.5" />}
+      />
+      <ToolBtn
         label="Überschrift 2"
-        onClick={() =>
-          run(() => {
-            const selection = $getSelection();
-            if (!$isRangeSelection(selection)) return;
-            try {
-              const top = selection.anchor
-                .getNode()
-                .getTopLevelElementOrThrow();
-              if ($isHeadingNode(top) && top.getTag() === "h2") {
-                $setBlocksType(selection, () => $createParagraphNode());
-              } else {
-                $setBlocksType(selection, () => $createHeadingNode("h2"));
-              }
-            } catch {
-              $setBlocksType(selection, () => $createHeadingNode("h2"));
-            }
-          })
-        }
+        onClick={() => setHeading("h2")}
         icon={<Heading2 className="h-3.5 w-3.5" />}
+      />
+      <ToolBtn
+        label="Überschrift 3"
+        onClick={() => setHeading("h3")}
+        icon={<Heading3 className="h-3.5 w-3.5" />}
+      />
+      <ToolBtn
+        label="Absatz"
+        onClick={() => setParagraph()}
+        icon={<Pilcrow className="h-3.5 w-3.5" />}
       />
       <ToolBtn
         label="Zitat"
@@ -236,6 +375,12 @@ function ToolbarPlugin() {
         icon={<Quote className="h-3.5 w-3.5" />}
       />
       <ToolBtn
+        label="Code-Block"
+        onClick={() => toggleCodeBlock()}
+        icon={<span className="font-mono text-[11px] font-bold">{"{ }"}</span>}
+      />
+      <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
+      <ToolBtn
         label="Aufzählung"
         onClick={() =>
           editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)
@@ -249,6 +394,12 @@ function ToolbarPlugin() {
         }
         icon={<ListOrdered className="h-3.5 w-3.5" />}
       />
+      <ToolBtn
+        label="Tabelle einfügen"
+        onClick={() => insertTable()}
+        icon={<Table2 className="h-3.5 w-3.5" />}
+      />
+      <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
       <ToolBtn
         label="Link"
         onClick={() => {
