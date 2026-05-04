@@ -36,8 +36,9 @@ import {
 } from "../lib/controllButtonsConfig";
 import {
   postControllStatus,
-  r2KeyFromImageUrl,
+  r2KeyFromAnyVehicleImageUrl,
 } from "../lib/controllStatusApi";
+import { buildControlPlatformDisplayImageUrl } from "../lib/controlPlatformImageDelivery";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   areFirstViewsReady,
@@ -952,8 +953,14 @@ function readFilterFromStorage(): ControllListStatusFilter {
 }
 
 export default function ControlPlatformPage() {
-  const { viewsMode, liveEnabled, liveIntervalMs } =
-    useControlPlatformViewsMode();
+  const {
+    viewsMode,
+    liveEnabled,
+    liveIntervalMs,
+    imageDeliveryMode,
+    imageDeliveryCustomFormat,
+    imageDeliveryCustomQuality,
+  } = useControlPlatformViewsMode();
   const livePollMs = liveEnabled ? liveIntervalMs : 0;
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
@@ -1239,6 +1246,29 @@ export default function ControlPlatformPage() {
   const imageUrlQuery =
     detailApi.data?.imageUrlQuery ?? listApi.data?.imageUrlQuery ?? "";
 
+  const buildDisplayVehicleHref = useCallback(
+    (
+      vehicleRow: NonNullable<typeof row>,
+      viewToken: string,
+    ): string =>
+      buildControlPlatformDisplayImageUrl({
+        mode: imageDeliveryMode,
+        customFormat: imageDeliveryCustomFormat,
+        customQuality: imageDeliveryCustomQuality,
+        cdnBase,
+        row: vehicleRow,
+        viewToken,
+        imageUrlQuery,
+      }),
+    [
+      imageDeliveryMode,
+      imageDeliveryCustomFormat,
+      imageDeliveryCustomQuality,
+      cdnBase,
+      imageUrlQuery,
+    ],
+  );
+
   const filteredViewTokens =
     row ?
       parseViewTokens(row.views).filter((t) => tokenMatchesMode(t, viewsMode))
@@ -1470,12 +1500,7 @@ export default function ControlPlatformPage() {
       const slot = parseViewSlot(primaryRaw);
       const slugLabel = normalizeSlug(entry.slotSlug);
 
-      const baseHrefP = buildVehicleImageUrl(
-        cdnBase,
-        row,
-        primaryRaw,
-        imageUrlQuery,
-      );
+      const baseHrefP = buildDisplayVehicleHref(row, primaryRaw);
       const srcP = buildImageSrcWithReload(
         baseHrefP,
         row.id,
@@ -1487,7 +1512,7 @@ export default function ControlPlatformPage() {
       const srcS =
         secRaw ?
           buildImageSrcWithReload(
-            buildVehicleImageUrl(cdnBase, row, secRaw, imageUrlQuery),
+            buildDisplayVehicleHref(row, secRaw),
             row.id,
             secRaw,
             controllMode,
@@ -1553,8 +1578,6 @@ export default function ControlPlatformPage() {
   }, [
     row,
     viewGridEntries,
-    cdnBase,
-    imageUrlQuery,
     controllMode,
     statusMap,
     viewsMode,
@@ -1562,6 +1585,7 @@ export default function ControlPlatformPage() {
     firstViewsSet,
     firstViewsReady,
     buildImageSrcWithReload,
+    buildDisplayVehicleHref,
   ]);
 
   /**
@@ -1639,7 +1663,7 @@ export default function ControlPlatformPage() {
       if (selectedId == null) return;
       const status = CONTROLL_ACTION_TO_STATUS[action];
       if (!status) return;
-      const r2Key = r2KeyFromImageUrl(cdnBase, ctx.imageHref);
+      const r2Key = r2KeyFromAnyVehicleImageUrl(cdnBase, ctx.imageHref);
       setSubmittingAction(action);
       setActionError(null);
       try {
@@ -1655,8 +1679,8 @@ export default function ControlPlatformPage() {
           pairSrcSec != null;
 
         if (scalingPairRichtig) {
-          const kPrimary = r2KeyFromImageUrl(cdnBase, curItem.src);
-          const kSecondary = r2KeyFromImageUrl(cdnBase, pairSrcSec);
+          const kPrimary = r2KeyFromAnyVehicleImageUrl(cdnBase, curItem.src);
+          const kSecondary = r2KeyFromAnyVehicleImageUrl(cdnBase, pairSrcSec);
           await postControllStatus({
             vehicleId: selectedId,
             viewToken: curItem.raw,
@@ -1695,7 +1719,7 @@ export default function ControlPlatformPage() {
 
         const keyForAnalytics =
           scalingPairRichtig && curItem ?
-            r2KeyFromImageUrl(cdnBase, curItem.src)
+            r2KeyFromAnyVehicleImageUrl(cdnBase, curItem.src)
           : r2Key;
 
         postControllPlatformAnalyticsFireAndForget({
@@ -1789,7 +1813,7 @@ export default function ControlPlatformPage() {
       if (generationSubmittingSlot != null) return;
       const trimmed = slotSlug.trim().toLowerCase();
       if (!trimmed) return;
-      const r2Key = r2KeyFromImageUrl(cdnBase, imageHref);
+      const r2Key = r2KeyFromAnyVehicleImageUrl(cdnBase, imageHref);
       setGenerationSubmittingSlot(trimmed);
       setGenerationError(null);
       try {
@@ -2474,7 +2498,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                   onClick={() => {
                                     // Ziel-URL nach gleichem Schema wie
                                     // existierende Views des Fahrzeugs
-                                    // erzeugen, sodass `r2KeyFromImageUrl`
+                                    // erzeugen, sodass `r2KeyFromAnyVehicleImageUrl`
                                     // den passenden R2-Pfad liefern kann.
                                     const targetHref = buildVehicleImageUrl(
                                       cdnBase,
@@ -2541,12 +2565,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     const token = entry.token;
                     const slot = parseViewSlot(token);
                     const secTok = entry.tokenSecondary ?? null;
-                    const baseHref = buildVehicleImageUrl(
-                      cdnBase,
-                      row,
-                      slot.raw,
-                      imageUrlQuery,
-                    );
+                    const baseHref = buildDisplayVehicleHref(row, slot.raw);
                     const href = buildImageSrcWithReload(
                       baseHref,
                       row.id,
@@ -2617,12 +2636,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     const hrefS =
                       secTok ?
                         buildImageSrcWithReload(
-                          buildVehicleImageUrl(
-                            cdnBase,
-                            row,
-                            secTok,
-                            imageUrlQuery,
-                          ),
+                          buildDisplayVehicleHref(row, secTok),
                           row.id,
                           secTok,
                           controllMode,

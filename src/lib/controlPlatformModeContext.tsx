@@ -7,6 +7,10 @@ import {
   useMemo,
   useState,
 } from "react";
+import type {
+  ControlPlatformImageDeliveryMode,
+  ControlPlatformTranscodeFormat,
+} from "./controlPlatformImageDelivery";
 
 export const CONTROL_PLATFORM_MODES = [
   "korrektur",
@@ -45,6 +49,49 @@ export const CONTROL_PLATFORM_LIVE_DEFAULT_MS: ControlPlatformLiveIntervalMs =
 
 const LIVE_ENABLED_STORAGE_KEY = "controlPlatform.live.enabled";
 const LIVE_INTERVAL_STORAGE_KEY = "controlPlatform.live.intervalMs";
+
+const IMAGE_DELIVERY_MODE_STORAGE_KEY = "controlPlatform.imageDelivery.mode";
+const IMAGE_DELIVERY_CUSTOM_F_STORAGE_KEY =
+  "controlPlatform.imageDelivery.customFormat";
+const IMAGE_DELIVERY_CUSTOM_Q_STORAGE_KEY =
+  "controlPlatform.imageDelivery.customQuality";
+
+const DEFAULT_CUSTOM_IMAGE_QUALITY = 75;
+
+function readDeliveryModeFromStorage(): ControlPlatformImageDeliveryMode {
+  if (typeof window === "undefined") return "normal";
+  try {
+    const v = window.localStorage.getItem(IMAGE_DELIVERY_MODE_STORAGE_KEY);
+    if (v === "performance" || v === "custom") return v;
+  } catch {
+    /* noop */
+  }
+  return "normal";
+}
+
+function readCustomFormatFromStorage(): ControlPlatformTranscodeFormat {
+  if (typeof window === "undefined") return "webp";
+  try {
+    const v = window.localStorage.getItem(IMAGE_DELIVERY_CUSTOM_F_STORAGE_KEY);
+    if (v === "avif" || v === "webp") return v;
+  } catch {
+    /* noop */
+  }
+  return "webp";
+}
+
+function readCustomQualityFromStorage(): number {
+  if (typeof window === "undefined") return DEFAULT_CUSTOM_IMAGE_QUALITY;
+  try {
+    const v = window.localStorage.getItem(IMAGE_DELIVERY_CUSTOM_Q_STORAGE_KEY);
+    if (v == null) return DEFAULT_CUSTOM_IMAGE_QUALITY;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return DEFAULT_CUSTOM_IMAGE_QUALITY;
+    return Math.min(100, Math.max(1, Math.round(n)));
+  } catch {
+    return DEFAULT_CUSTOM_IMAGE_QUALITY;
+  }
+}
 
 /** Snappt einen beliebigen Wert auf den nächsten erlaubten Options-Wert. */
 function snapInterval(n: number): ControlPlatformLiveIntervalMs {
@@ -96,6 +143,13 @@ type Ctx = {
   /** Polling-Intervall in Millisekunden (snapt auf erlaubte Optionen). */
   liveIntervalMs: ControlPlatformLiveIntervalMs;
   setLiveIntervalMs: (ms: number) => void;
+  /** CDN für Fahrzeugbilder: Original vs. `resimages` mit Transcoding. */
+  imageDeliveryMode: ControlPlatformImageDeliveryMode;
+  setImageDeliveryMode: (m: ControlPlatformImageDeliveryMode) => void;
+  imageDeliveryCustomFormat: ControlPlatformTranscodeFormat;
+  setImageDeliveryCustomFormat: (f: ControlPlatformTranscodeFormat) => void;
+  imageDeliveryCustomQuality: number;
+  setImageDeliveryCustomQuality: (q: number) => void;
 };
 
 const ControlPlatformModeContext = createContext<Ctx | null>(null);
@@ -113,6 +167,17 @@ export function ControlPlatformModeProvider({
   );
   const [liveIntervalMs, setLiveIntervalMsState] =
     useState<ControlPlatformLiveIntervalMs>(() => readIntervalFromStorage());
+
+  const [imageDeliveryMode, setImageDeliveryModeState] =
+    useState<ControlPlatformImageDeliveryMode>(() =>
+      readDeliveryModeFromStorage(),
+    );
+  const [imageDeliveryCustomFormat, setImageDeliveryCustomFormatState] =
+    useState<ControlPlatformTranscodeFormat>(() =>
+      readCustomFormatFromStorage(),
+    );
+  const [imageDeliveryCustomQuality, setImageDeliveryCustomQualityState] =
+    useState<number>(() => readCustomQualityFromStorage());
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -138,6 +203,42 @@ export function ControlPlatformModeProvider({
     }
   }, [liveIntervalMs]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        IMAGE_DELIVERY_MODE_STORAGE_KEY,
+        imageDeliveryMode,
+      );
+    } catch {
+      /* noop */
+    }
+  }, [imageDeliveryMode]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        IMAGE_DELIVERY_CUSTOM_F_STORAGE_KEY,
+        imageDeliveryCustomFormat,
+      );
+    } catch {
+      /* noop */
+    }
+  }, [imageDeliveryCustomFormat]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        IMAGE_DELIVERY_CUSTOM_Q_STORAGE_KEY,
+        String(imageDeliveryCustomQuality),
+      );
+    } catch {
+      /* noop */
+    }
+  }, [imageDeliveryCustomQuality]);
+
   const setMode = useCallback((m: ControlPlatformViewsMode) => {
     setViewsMode(m);
   }, []);
@@ -150,6 +251,25 @@ export function ControlPlatformModeProvider({
     setLiveIntervalMsState(snapInterval(ms));
   }, []);
 
+  const setImageDeliveryMode = useCallback(
+    (m: ControlPlatformImageDeliveryMode) => {
+      setImageDeliveryModeState(m);
+    },
+    [],
+  );
+
+  const setImageDeliveryCustomFormat = useCallback(
+    (f: ControlPlatformTranscodeFormat) => {
+      setImageDeliveryCustomFormatState(f === "avif" ? "avif" : "webp");
+    },
+    [],
+  );
+
+  const setImageDeliveryCustomQuality = useCallback((q: number) => {
+    if (!Number.isFinite(q)) return;
+    setImageDeliveryCustomQualityState(Math.min(100, Math.max(1, Math.round(q))));
+  }, []);
+
   const v = useMemo<Ctx>(
     () => ({
       viewsMode,
@@ -158,6 +278,12 @@ export function ControlPlatformModeProvider({
       setLiveEnabled,
       liveIntervalMs,
       setLiveIntervalMs,
+      imageDeliveryMode,
+      setImageDeliveryMode,
+      imageDeliveryCustomFormat,
+      setImageDeliveryCustomFormat,
+      imageDeliveryCustomQuality,
+      setImageDeliveryCustomQuality,
     }),
     [
       viewsMode,
@@ -166,6 +292,12 @@ export function ControlPlatformModeProvider({
       setLiveEnabled,
       liveIntervalMs,
       setLiveIntervalMs,
+      imageDeliveryMode,
+      setImageDeliveryMode,
+      imageDeliveryCustomFormat,
+      setImageDeliveryCustomFormat,
+      imageDeliveryCustomQuality,
+      setImageDeliveryCustomQuality,
     ],
   );
 

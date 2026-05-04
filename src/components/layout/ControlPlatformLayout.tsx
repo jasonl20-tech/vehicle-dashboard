@@ -8,6 +8,11 @@ import {
   DEFAULT_ACTIVE_CONTROLL_MODE_CONFIG,
   isViewsModeActive,
 } from "../../lib/activeControllModeConfig";
+import type { ControlPlatformImageDeliveryMode } from "../../lib/controlPlatformImageDelivery";
+import {
+  CONTROL_PLATFORM_PERFORMANCE_FORMAT,
+  CONTROL_PLATFORM_PERFORMANCE_QUALITY,
+} from "../../lib/controlPlatformImageDelivery";
 import {
   type ControlPlatformViewsMode,
   CONTROL_PLATFORM_LIVE_INTERVAL_OPTIONS_MS,
@@ -22,6 +27,100 @@ function formatIntervalLabel(ms: number): string {
   if (ms < 1000) return `${ms} ms`;
   const s = ms / 1000;
   return Number.isInteger(s) ? `${s} s` : `${s.toFixed(1)} s`;
+}
+
+const IMAGE_DELIVERY_LABEL: Record<ControlPlatformImageDeliveryMode, string> =
+  {
+    normal: "Bilder: Normal",
+    performance: "Bilder: Performance",
+    custom: "Bilder: Benutzerdef.",
+  };
+
+const IMAGE_DELIVERY_ORDER: ControlPlatformImageDeliveryMode[] = [
+  "normal",
+  "performance",
+  "custom",
+];
+
+function ImageDeliveryControls() {
+  const {
+    imageDeliveryMode,
+    setImageDeliveryMode,
+    imageDeliveryCustomFormat,
+    setImageDeliveryCustomFormat,
+    imageDeliveryCustomQuality,
+    setImageDeliveryCustomQuality,
+  } = useControlPlatformViewsMode();
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-x-1 gap-y-0.5 border-l border-hair pl-2">
+      <label className="sr-only" htmlFor="control-platform-image-delivery">
+        Bilddarstellung
+      </label>
+      <select
+        id="control-platform-image-delivery"
+        aria-label="Bilddarstellung"
+        title={
+          imageDeliveryMode === "performance"
+            ? `Transcoded: ${CONTROL_PLATFORM_PERFORMANCE_FORMAT}, Qualität ${CONTROL_PLATFORM_PERFORMANCE_QUALITY}`
+            : "Original-CDN vs. resimages mit f/q"
+        }
+        value={imageDeliveryMode}
+        onChange={(e) =>
+          setImageDeliveryMode(e.target.value as ControlPlatformImageDeliveryMode)
+        }
+        className="h-6 max-w-[10.5rem] border border-hair bg-white py-0 pr-6 pl-1 text-[11px] text-ink-800 focus:border-ink-600 focus:outline-none"
+      >
+        {IMAGE_DELIVERY_ORDER.map((m) => (
+          <option key={m} value={m}>
+            {IMAGE_DELIVERY_LABEL[m]}
+          </option>
+        ))}
+      </select>
+
+      {imageDeliveryMode === "custom" ?
+        <>
+          <label className="sr-only" htmlFor="control-platform-image-delivery-f">
+            Ausgabeformat
+          </label>
+          <select
+            id="control-platform-image-delivery-f"
+            aria-label="Transcoding-Format"
+            title="Ausgabeformat (f)"
+            value={imageDeliveryCustomFormat}
+            onChange={(e) =>
+              setImageDeliveryCustomFormat(
+                e.target.value === "avif" ? "avif" : "webp",
+              )
+            }
+            className="h-6 w-[4.25rem] border border-hair bg-white py-0 pl-1 text-[11px] text-ink-800 focus:border-ink-600 focus:outline-none"
+          >
+            <option value="webp">WebP</option>
+            <option value="avif">AVIF</option>
+          </select>
+          <label
+            className="flex items-center gap-1 text-[10px] tabular-nums text-ink-600"
+            htmlFor="control-platform-image-delivery-q"
+            title="Qualität (q)"
+          >
+            <span className="hidden sm:inline">q</span>
+            <input
+              id="control-platform-image-delivery-q"
+              type="range"
+              min={1}
+              max={100}
+              value={imageDeliveryCustomQuality}
+              onChange={(e) =>
+                setImageDeliveryCustomQuality(Number(e.target.value))
+              }
+              className="h-4 w-[72px] max-w-[min(18vw,7rem)] accent-ink-700"
+            />
+            <span className="min-w-[1.5rem]">{imageDeliveryCustomQuality}</span>
+          </label>
+        </>
+      : null}
+    </div>
+  );
 }
 
 function LiveControls() {
@@ -143,6 +242,8 @@ function ControlChrome() {
             </option>
           ))}
         </select>
+
+        <ImageDeliveryControls />
 
         <LiveControls />
       </header>

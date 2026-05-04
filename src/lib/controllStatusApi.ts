@@ -37,6 +37,23 @@ export function r2KeyFromImageUrl(
   return noQuery.slice(prefix.length) || null;
 }
 
+/**
+ * Wie `r2KeyFromImageUrl`, zusätzlich Fallback über `/v1/` im Pfad — z. B.
+ * wenn dasselbe Objekt über `resimages.vehicleimagery.com` geladen wird.
+ */
+export function r2KeyFromAnyVehicleImageUrl(
+  cdnBase: string,
+  imageUrl: string,
+): string | null {
+  const primary = r2KeyFromImageUrl(cdnBase, imageUrl);
+  if (primary) return primary;
+  const noQuery = imageUrl.split("?")[0];
+  const idx = noQuery.indexOf("/v1/");
+  if (idx === -1) return null;
+  const rest = noQuery.slice(idx + 1).trim();
+  return rest || null;
+}
+
 export async function postControllStatus(
   input: ControllStatusInput,
 ): Promise<ControllStatusResponse> {
