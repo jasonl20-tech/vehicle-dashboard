@@ -3,6 +3,16 @@ import { extractPlainFromLexicalOrText } from "./lexicalRichText";
 export const CMS_CONTENT_MODELS_API = "/api/cms/content-models";
 export const CMS_CONTENTS_API = "/api/cms/contents";
 
+/**
+ * Muss mit `CMS_DESTROY_MIN_SICHERHEITSSTUFE` in `functions/_lib/auth.ts` übereinstimmen.
+ * Nur Nutzer mit Stufe ≥ dieses Werts dürfen CMS-Einträge und -Modelle per API löschen.
+ */
+export const CMS_DESTROY_MIN_SICHERHEITSSTUFE = 9;
+
+export function userMayDeleteCmsContent(sicherheitsstufe: number): boolean {
+  return sicherheitsstufe >= CMS_DESTROY_MIN_SICHERHEITSSTUFE;
+}
+
 export type CmsContentModelRow = {
   id: string;
   key: string;

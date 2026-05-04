@@ -5,7 +5,12 @@
  *   PUT    /api/cms/content-models/:id  { key?, description?, schema_json? }
  *   DELETE /api/cms/content-models/:id
  */
-import { getCurrentUser, jsonResponse, type AuthEnv } from "../../../_lib/auth";
+import {
+  assertCmsDestroyAllowed,
+  getCurrentUser,
+  jsonResponse,
+  type AuthEnv,
+} from "../../../_lib/auth";
 import { requireWebsiteDb } from "../../../_lib/websiteDb";
 
 const MAX_KEY_LEN = 128;
@@ -195,6 +200,8 @@ export const onRequestDelete: PagesFunction<AuthEnv> = async ({
 }) => {
   const user = await getCurrentUser(env, request);
   if (!user) return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  const denied = assertCmsDestroyAllowed(user);
+  if (denied) return denied;
 
   const db = requireWebsiteDb(env);
   if (db instanceof Response) return db;

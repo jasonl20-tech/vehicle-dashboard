@@ -6,6 +6,7 @@
  *   DELETE /api/cms/contents/:id
  */
 import {
+  assertCmsDestroyAllowed,
   getCurrentUser,
   jsonResponse,
   type AuthEnv,
@@ -256,6 +257,8 @@ export const onRequestDelete: PagesFunction<AuthEnv> = async ({
 }) => {
   const user = await getCurrentUser(env, request);
   if (!user) return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  const denied = assertCmsDestroyAllowed(user);
+  if (denied) return denied;
 
   const db = requireWebsiteDb(env);
   if (db instanceof Response) return db;

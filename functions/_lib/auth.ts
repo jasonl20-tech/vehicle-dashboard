@@ -497,3 +497,21 @@ export function jsonResponse(
   headers.set("Cache-Control", "no-store");
   return new Response(JSON.stringify(data), { ...init, headers });
 }
+
+/**
+ * Löschen von CMS-Content-Modellen und -Einträgen (`DELETE /api/cms/…`) ab dieser
+ * `user.sicherheitsstufe` (inkl.).
+ */
+export const CMS_DESTROY_MIN_SICHERHEITSSTUFE = 9;
+
+/** @returns `Response` mit 403, wenn nicht erlaubt; sonst `null`. */
+export function assertCmsDestroyAllowed(user: SessionUser): Response | null {
+  if (user.sicherheitsstufe >= CMS_DESTROY_MIN_SICHERHEITSSTUFE) return null;
+  return jsonResponse(
+    {
+      error:
+        "Löschen im CMS ist nur für Benutzer mit Sicherheitsstufe 9 oder höher erlaubt.",
+    },
+    { status: 403 },
+  );
+}
