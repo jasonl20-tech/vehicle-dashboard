@@ -27,6 +27,43 @@ export type TextFieldVariant = "short" | "long";
 
 export type NumberFieldVariant = "integer" | "decimal";
 
+/** Date & time — Editor-/Validierungs-Optionen (Contentful-nah). */
+export type DateTimeFormat =
+  | "date"
+  | "dateAndTime"
+  | "dateAndTimeWithTimezone";
+
+export type DateTimeTimeMode = "12" | "24";
+
+export type DateTimeDateRange = {
+  enabled: boolean;
+  min?: string;
+  max?: string;
+};
+
+export type DateTimeDefaultSlice = {
+  date?: string;
+  time?: string;
+  timezone?: string;
+};
+
+export type DateTimeFieldConfig = {
+  validation: {
+    dateRange?: DateTimeDateRange;
+  };
+  defaultValue?: DateTimeDefaultSlice;
+  format: DateTimeFormat;
+  timeMode: DateTimeTimeMode;
+};
+
+export function defaultDateTimeFieldConfig(): DateTimeFieldConfig {
+  return {
+    validation: {},
+    format: "dateAndTimeWithTimezone",
+    timeMode: "24",
+  };
+}
+
 export type CmsFieldValidations = {
   maxLength?: number;
   /** Text: Mindestlänge in Zeichen */
@@ -169,6 +206,8 @@ export type CmsFieldDefinition = {
   numberShape?: { variant: NumberFieldVariant };
   /** Nur Number: Vorgabewert */
   defaultNumber?: number;
+  /** Nur bei type === "DateTime" */
+  dateTime?: DateTimeFieldConfig;
 };
 
 export type CmsContentModelSchema = {
@@ -278,6 +317,14 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     }
   }
 
+  let dateTime: DateTimeFieldConfig | undefined;
+  if (type === "DateTime") {
+    dateTime =
+      o.dateTime && typeof o.dateTime === "object"
+        ? normalizeDateTimeConfig(o.dateTime as Record<string, unknown>)
+        : defaultDateTimeFieldConfig();
+  }
+
   return {
     id,
     name,
@@ -292,7 +339,68 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     ...(defaultValue !== undefined ? { defaultValue } : {}),
     ...(numberShape ? { numberShape } : {}),
     ...(defaultNumber !== undefined ? { defaultNumber } : {}),
+    ...(dateTime ? { dateTime } : {}),
   };
+}
+
+function normalizeDateTimeConfig(raw: Record<string, unknown>): DateTimeFieldConfig {
+  const def = defaultDateTimeFieldConfig();
+  const v = raw.validation;
+  if (v && typeof v === "object") {
+    const vo = v as Record<string, unknown>;
+    const dr = vo.dateRange;
+    if (dr && typeof dr === "object") {
+      const d = dr as Record<string, unknown>;
+      if (d.enabled === true) {
+        def.validation.dateRange = {
+          enabled: true,
+          ...(typeof d.min === "string" && d.min.trim() ? { min: d.min.trim() } : {}),
+          ...(typeof d.max === "string" && d.max.trim() ? { max: d.max.trim() } : {}),
+        };
+      }
+    }
+  }
+  const dv = raw.defaultValue;
+  if (dv && typeof dv === "object") {
+    const o = dv as Record<string, unknown>;
+    const slice: DateTimeDefaultSlice = {};
+    if (typeof o.date === "string" && o.date.trim()) slice.date = o.date.trim();
+    if (typeof o.time === "string" && o.time.trim()) slice.time = o.time.trim();
+    if (typeof o.timezone === "string" && o.timezone.trim()) {
+      slice.timezone = o.timezone.trim();
+    }
+    if (Object.keys(slice).length > 0) def.defaultValue = slice;
+  }
+  const fmt = raw.format;
+  if (fmt === "date" || fmt === "dateAndTime" || fmt === "dateAndTimeWithTimezone") {
+    def.format = fmt;
+  }
+  const tm = raw.timeMode;
+  if (tm === "12" || tm === "24") def.timeMode = tm;
+  return def;
+}
+
+export function serializeDateTimeForStorage(
+  cfg: DateTimeFieldConfig,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    format: cfg.format,
+    timeMode: cfg.timeMode,
+  };
+  const validation: Record<string, unknown> = {};
+  if (cfg.validation.dateRange?.enabled) {
+    const dr = cfg.validation.dateRange;
+    validation.dateRange = {
+      enabled: true,
+      ...(dr.min ? { min: dr.min } : {}),
+      ...(dr.max ? { max: dr.max } : {}),
+    };
+  }
+  if (Object.keys(validation).length > 0) out.validation = validation;
+  if (cfg.defaultValue && Object.keys(cfg.defaultValue).length > 0) {
+    out.defaultValue = { ...cfg.defaultValue };
+  }
+  return out;
 }
 
 function normalizeRichTextConfig(raw: Record<string, unknown>): RichTextFieldConfig {
@@ -483,6 +591,9 @@ export function serializeContentModelSchema(
       if (f.type === "RichText" && f.richText) {
         row.richText = serializeRichTextForStorage(f.richText);
       }
+      if (f.type === "DateTime" && f.dateTime) {
+        row.dateTime = serializeDateTimeForStorage(f.dateTime);
+      }
       return row;
     }),
   };
@@ -585,6 +696,19 @@ export function newNumberFieldFromWizard(args: {
     type: "Number",
     required: false,
     numberShape: { variant: args.variant },
+  };
+}
+
+export function newDateTimeFieldFromWizard(args: {
+  id: string;
+  name: string;
+}): CmsFieldDefinition {
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "DateTime",
+    required: false,
+    dateTime: defaultDateTimeFieldConfig(),
   };
 }
 
