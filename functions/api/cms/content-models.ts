@@ -3,10 +3,16 @@
  *
  *   GET  /api/cms/content-models?q=&limit=&offset=
  *   POST /api/cms/content-models  { id?, key, description?, schema_json }
+ *        (nur ab Sicherheitsstufe 8, siehe `assertCmsModelWriteAllowed`)
  *
  * Migration: d1/migrations/0013_cms_content.sql
  */
-import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import {
+  assertCmsModelWriteAllowed,
+  getCurrentUser,
+  jsonResponse,
+  type AuthEnv,
+} from "../../_lib/auth";
 import { requireWebsiteDb } from "../../_lib/websiteDb";
 
 const MAX_LIMIT = 200;
@@ -142,6 +148,8 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
 }) => {
   const user = await getCurrentUser(env, request);
   if (!user) return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  const deniedModel = assertCmsModelWriteAllowed(user);
+  if (deniedModel) return deniedModel;
 
   const db = requireWebsiteDb(env);
   if (db instanceof Response) return db;

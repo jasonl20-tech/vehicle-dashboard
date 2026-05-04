@@ -3,10 +3,11 @@
  *
  *   GET    /api/cms/content-models/:id
  *   PUT    /api/cms/content-models/:id  { key?, description?, schema_json? }
- *   DELETE /api/cms/content-models/:id
- */
+ *          (nur ab Sicherheitsstufe 8)
+ *   DELETE /api/cms/content-models/:id (ab Sicherheitsstufe 9)
 import {
   assertCmsDestroyAllowed,
+  assertCmsModelWriteAllowed,
   getCurrentUser,
   jsonResponse,
   type AuthEnv,
@@ -116,6 +117,8 @@ export const onRequestPut: PagesFunction<AuthEnv> = async ({
 }) => {
   const user = await getCurrentUser(env, request);
   if (!user) return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  const deniedModel = assertCmsModelWriteAllowed(user);
+  if (deniedModel) return deniedModel;
 
   const db = requireWebsiteDb(env);
   if (db instanceof Response) return db;

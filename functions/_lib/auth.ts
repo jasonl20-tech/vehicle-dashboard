@@ -515,3 +515,21 @@ export function assertCmsDestroyAllowed(user: SessionUser): Response | null {
     { status: 403 },
   );
 }
+
+/**
+ * Anlegen und Bearbeiten von CMS-Content-Modellen (`POST/PUT /api/cms/content-models…`)
+ * ab dieser Stufe (inkl.). Darunter: nur Content-Einträge u. Ä., keine Schema-Änderungen.
+ */
+export const CMS_MODEL_WRITE_MIN_SICHERHEITSSTUFE = 8;
+
+/** @returns `Response` mit 403, wenn nicht erlaubt; sonst `null`. */
+export function assertCmsModelWriteAllowed(user: SessionUser): Response | null {
+  if (user.sicherheitsstufe >= CMS_MODEL_WRITE_MIN_SICHERHEITSSTUFE) return null;
+  return jsonResponse(
+    {
+      error:
+        "Content-Modelle anlegen und bearbeiten ist nur ab Sicherheitsstufe 8 erlaubt.",
+    },
+    { status: 403 },
+  );
+}

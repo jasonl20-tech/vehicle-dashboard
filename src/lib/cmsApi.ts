@@ -13,6 +13,13 @@ export function userMayDeleteCmsContent(sicherheitsstufe: number): boolean {
   return sicherheitsstufe >= CMS_DESTROY_MIN_SICHERHEITSSTUFE;
 }
 
+/** Abgleich mit `CMS_MODEL_WRITE_MIN_SICHERHEITSSTUFE` in `functions/_lib/auth.ts`. */
+export const CMS_MODEL_WRITE_MIN_SICHERHEITSSTUFE = 8;
+
+export function userMayWriteCmsContentModels(sicherheitsstufe: number): boolean {
+  return sicherheitsstufe >= CMS_MODEL_WRITE_MIN_SICHERHEITSSTUFE;
+}
+
 export type CmsContentModelRow = {
   id: string;
   key: string;
