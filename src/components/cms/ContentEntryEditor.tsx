@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronDown } from "lucide-react";
+import { ArrowLeft, ChevronDown, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CMS_ROOT } from "../../lib/cmsAccess";
@@ -22,10 +22,6 @@ import { extractPlainFromLexicalOrText } from "../../lib/lexicalRichText";
 import { fmtRelative } from "../../lib/customerApi";
 import LexicalRichTextField from "./LexicalRichTextField";
 
-const MAIN_TAB_ACTIVE =
-  "border-b-2 border-[#0366d6] pb-3 text-[13px] font-semibold text-[#0366d6]";
-const MAIN_TAB_IDLE =
-  "border-b-2 border-transparent pb-3 text-[13px] font-medium text-[#5f6368] hover:text-[#1a1a1a]";
 const SIDE_TAB_ACTIVE =
   "border-b-2 border-[#0366d6] pb-2.5 text-[12px] font-semibold text-[#0366d6]";
 const SIDE_TAB_IDLE =
@@ -87,15 +83,8 @@ export default function ContentEntryEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<string[]>([]);
-  const [mainTab, setMainTab] = useState<
-    "editor" | "references" | "taxonomy" | "tags"
-  >("editor");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sideTab, setSideTab] = useState<"general" | "info">("general");
-
-  const referenceFields = useMemo(
-    () => schema.fields.filter((f) => f.type === "Reference"),
-    [schema.fields],
-  );
 
   useEffect(() => {
     setScheduledLocal(isoToDatetimeLocal(initialScheduledPublishAt));
@@ -191,51 +180,28 @@ export default function ContentEntryEditor({
             <span className="mx-2 font-normal text-[#dadce0]">/</span>
             <span>{entryTitle}</span>
           </div>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen((o) => !o)}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-2.5 text-[12px] font-medium text-[#5f6368] hover:bg-[#f8f9fa] sm:px-3"
+            aria-expanded={sidebarOpen}
+            aria-controls="cms-entry-sidebar"
+          >
+            {sidebarOpen ? (
+              <PanelRightClose className="h-4 w-4 shrink-0" aria-hidden />
+            ) : (
+              <PanelRightOpen className="h-4 w-4 shrink-0" aria-hidden />
+            )}
+            <span className="max-sm:sr-only">
+              {sidebarOpen ? "Ausblenden" : "Seitenleiste"}
+            </span>
+          </button>
           <span
             className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] font-semibold ${statusBadgeClass}`}
           >
             {statusLabelDe(status)}
           </span>
         </div>
-      </div>
-
-      {/* Haupt-Tabs */}
-      <div className="flex flex-wrap gap-6 border-b border-[#e8eaed] bg-white px-4 lg:gap-8 lg:px-8">
-        <button
-          type="button"
-          onClick={() => setMainTab("editor")}
-          className={mainTab === "editor" ? MAIN_TAB_ACTIVE : MAIN_TAB_IDLE}
-        >
-          Editor
-        </button>
-        <button
-          type="button"
-          onClick={() => setMainTab("references")}
-          className={
-            mainTab === "references" ? MAIN_TAB_ACTIVE : MAIN_TAB_IDLE
-          }
-        >
-          Referenzen
-          {referenceFields.length > 0 ? (
-            <span className="ml-1 text-[#80868b]">
-              ({referenceFields.length})
-            </span>
-          ) : null}
-        </button>
-        <button
-          type="button"
-          onClick={() => setMainTab("taxonomy")}
-          className={mainTab === "taxonomy" ? MAIN_TAB_ACTIVE : MAIN_TAB_IDLE}
-        >
-          Taxonomie
-        </button>
-        <button
-          type="button"
-          onClick={() => setMainTab("tags")}
-          className={mainTab === "tags" ? MAIN_TAB_ACTIVE : MAIN_TAB_IDLE}
-        >
-          Tags
-        </button>
       </div>
 
       {error ? (
@@ -259,232 +225,201 @@ export default function ContentEntryEditor({
         <div className="flex flex-col xl:flex-row xl:items-stretch">
           {/* Editor-Hauptspalte */}
           <div className="min-w-0 flex-1 bg-white">
-            {mainTab === "editor" ? (
-              <div className="px-4 py-8 lg:px-10 lg:py-10">
-                {schema.fields.length === 0 ? (
-                  <p className="text-[14px] text-[#5f6368]">
-                    Dieses Modell hat keine Felder — im Bereich Content-Modelle
-                    Felder anlegen.
-                  </p>
-                ) : schema.fields.every((f) => f.type === "Reference") ? (
-                  <p className="text-[14px] text-[#5f6368]">
-                    Alle Felder dieses Modells sind Referenzen — bitte den Tab
-                    „Referenzen“ öffnen.
-                  </p>
-                ) : (
-                  <div>
-                    {schema.fields
-                      .filter((f) => f.type !== "Reference")
-                      .map((f) => (
-                        <div
-                          key={f.id}
-                          className="border-b border-[#e8eaed] py-8 first:pt-0 last:border-b-0 last:pb-0"
-                        >
-                          <EntryFieldBlock
-                            field={f}
-                            payload={payload}
-                            locale={locale}
-                            onChange={(id, v) =>
-                              setPayload((prev) => ({ ...prev, [id]: v }))
-                            }
-                          />
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            ) : mainTab === "references" ? (
-              <div className="px-4 py-8 lg:px-10 lg:py-10">
-                {referenceFields.length === 0 ? (
-                  <p className="text-[14px] text-[#5f6368]">
-                    Keine Referenzfelder in diesem Content-Typ.
-                  </p>
-                ) : (
-                  <div className="space-y-0">
-                    {referenceFields.map((f) => (
-                      <div
-                        key={f.id}
-                        className="border-b border-[#e8eaed] py-8 first:pt-0 last:border-b-0"
-                      >
-                        <EntryFieldBlock
-                          field={f}
-                          payload={payload}
-                          locale={locale}
-                          onChange={(id, v) =>
-                            setPayload((prev) => ({ ...prev, [id]: v }))
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="px-4 py-10 lg:px-10">
+            <div className="px-4 py-8 lg:px-10 lg:py-10">
+              {schema.fields.length === 0 ? (
                 <p className="text-[14px] text-[#5f6368]">
-                  {mainTab === "taxonomy"
-                    ? "Taxonomien sind für dieses Projekt noch nicht angebunden."
-                    : "Tags können hier später ergänzt werden."}
+                  Dieses Modell hat keine Felder — im Bereich Content-Modelle
+                  Felder anlegen.
                 </p>
-              </div>
-            )}
+              ) : (
+                <div>
+                  {schema.fields.map((f) => (
+                    <div
+                      key={f.id}
+                      className="border-b border-[#e8eaed] py-8 first:pt-0 last:border-b-0 last:pb-0"
+                    >
+                      <EntryFieldBlock
+                        field={f}
+                        payload={payload}
+                        locale={locale}
+                        onChange={(id, v) =>
+                          setPayload((prev) => ({ ...prev, [id]: v }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Rechte Sidebar — Contentful-artig */}
-          <aside className="w-full shrink-0 border-t border-[#e8eaed] bg-white xl:w-[380px] xl:border-l xl:border-t-0">
-            <div className="sticky top-0 flex max-h-[calc(100vh-8rem)] flex-col xl:max-h-none">
-              <div className="flex shrink-0 gap-6 border-b border-[#e8eaed] px-4 pt-4 lg:px-6">
-                <button
-                  type="button"
-                  onClick={() => setSideTab("general")}
-                  className={
-                    sideTab === "general" ? SIDE_TAB_ACTIVE : SIDE_TAB_IDLE
-                  }
-                >
-                  Allgemein
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSideTab("info")}
-                  className={sideTab === "info" ? SIDE_TAB_ACTIVE : SIDE_TAB_IDLE}
-                >
-                  Info
-                </button>
-              </div>
+          {sidebarOpen ? (
+            <aside
+              id="cms-entry-sidebar"
+              className="w-full shrink-0 border-t border-[#e8eaed] bg-white xl:w-[380px] xl:border-l xl:border-t-0"
+            >
+              <div className="sticky top-0 flex max-h-[calc(100vh-8rem)] flex-col xl:max-h-none">
+                <div className="flex shrink-0 gap-6 border-b border-[#e8eaed] px-4 pt-4 lg:px-6">
+                  <button
+                    type="button"
+                    onClick={() => setSideTab("general")}
+                    className={
+                      sideTab === "general" ? SIDE_TAB_ACTIVE : SIDE_TAB_IDLE
+                    }
+                  >
+                    Allgemein
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSideTab("info")}
+                    className={
+                      sideTab === "info" ? SIDE_TAB_ACTIVE : SIDE_TAB_IDLE
+                    }
+                  >
+                    Info
+                  </button>
+                </div>
 
-              <div className="flex-1 overflow-y-auto p-4 lg:p-6">
-                {sideTab === "general" ? (
-                  <div className="space-y-5">
-                    <div>
-                      <p className="mb-2 text-[12px] font-medium text-[#1a1a1a]">
-                        Status
-                      </p>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[12px] text-[#5f6368]">
-                          Aktuell
-                        </span>
-                        <span
-                          className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${statusBadgeClass}`}
-                        >
-                          {statusLabelDe(status)}
-                        </span>
+                <div className="flex-1 overflow-y-auto p-4 lg:p-6">
+                  {sideTab === "general" ? (
+                    <div className="space-y-5">
+                      <div>
+                        <p className="mb-2 text-[12px] font-medium text-[#1a1a1a]">
+                          Status
+                        </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[12px] text-[#5f6368]">
+                            Aktuell
+                          </span>
+                          <span
+                            className={`rounded-md px-2.5 py-1 text-[11px] font-semibold ${statusBadgeClass}`}
+                          >
+                            {statusLabelDe(status)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    {contentId ? (
+                      {contentId ? (
+                        <div>
+                          <label
+                            htmlFor="cms-entry-model"
+                            className="mb-2 block text-[12px] font-medium text-[#1a1a1a]"
+                          >
+                            Content-Typ
+                          </label>
+                          <select
+                            id="cms-entry-model"
+                            value={selectedModelId}
+                            onChange={(e) =>
+                              onSelectedModelIdChange(e.target.value)
+                            }
+                            disabled={saving || modelOptions.length === 0}
+                            className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] text-ink-900 outline-none focus:border-[#0366d6] disabled:opacity-50"
+                          >
+                            {modelOptions.length === 0 ? (
+                              <option value={selectedModelId}>—</option>
+                            ) : (
+                              modelOptions.map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.key}
+                                </option>
+                              ))
+                            )}
+                          </select>
+                          <p className="mt-1.5 text-[11px] leading-snug text-[#5f6368]">
+                            Nach dem Wechsel Felder prüfen und speichern.
+                          </p>
+                        </div>
+                      ) : null}
+
                       <div>
                         <label
-                          htmlFor="cms-entry-model"
+                          htmlFor="cms-scheduled-at"
                           className="mb-2 block text-[12px] font-medium text-[#1a1a1a]"
                         >
-                          Content-Typ
+                          Geplant veröffentlichen
                         </label>
-                        <select
-                          id="cms-entry-model"
-                          value={selectedModelId}
-                          onChange={(e) =>
-                            onSelectedModelIdChange(e.target.value)
-                          }
-                          disabled={saving || modelOptions.length === 0}
-                          className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] text-ink-900 outline-none focus:border-[#0366d6] disabled:opacity-50"
+                        <input
+                          id="cms-scheduled-at"
+                          type="datetime-local"
+                          value={scheduledLocal}
+                          onChange={(e) => setScheduledLocal(e.target.value)}
+                          disabled={saving}
+                          className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#0366d6] disabled:opacity-50"
+                        />
+                        <button
+                          type="button"
+                          disabled={saving || !scheduledLocal}
+                          onClick={() => setScheduledLocal("")}
+                          className="mt-1.5 text-[11px] font-medium text-[#0366d6] hover:underline disabled:opacity-40"
                         >
-                          {modelOptions.length === 0 ? (
-                            <option value={selectedModelId}>—</option>
-                          ) : (
-                            modelOptions.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.key}
-                              </option>
-                            ))
-                          )}
-                        </select>
+                          Planung entfernen
+                        </button>
                         <p className="mt-1.5 text-[11px] leading-snug text-[#5f6368]">
-                          Nach dem Wechsel Felder prüfen und speichern.
+                          Erscheint unter „Geplant“, wenn gesetzt.
                         </p>
                       </div>
-                    ) : null}
 
-                    <div>
-                      <label
-                        htmlFor="cms-scheduled-at"
-                        className="mb-2 block text-[12px] font-medium text-[#1a1a1a]"
-                      >
-                        Geplant veröffentlichen
-                      </label>
-                      <input
-                        id="cms-scheduled-at"
-                        type="datetime-local"
-                        value={scheduledLocal}
-                        onChange={(e) => setScheduledLocal(e.target.value)}
-                        disabled={saving}
-                        className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] outline-none focus:border-[#0366d6] disabled:opacity-50"
-                      />
-                      <button
-                        type="button"
-                        disabled={saving || !scheduledLocal}
-                        onClick={() => setScheduledLocal("")}
-                        className="mt-1.5 text-[11px] font-medium text-[#0366d6] hover:underline disabled:opacity-40"
-                      >
-                        Planung entfernen
-                      </button>
-                      <p className="mt-1.5 text-[11px] leading-snug text-[#5f6368]">
-                        Erscheint unter „Geplant“, wenn gesetzt.
+                      <div className="space-y-2 border-t border-[#e8eaed] pt-5">
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void saveWithStatus("published")}
+                          className="flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          Veröffentlichen
+                          <ChevronDown
+                            className="h-4 w-4 opacity-80"
+                            aria-hidden
+                          />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => void saveWithStatus("draft")}
+                          className="w-full rounded-lg border border-[#dadce0] bg-white py-2.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f9fa] disabled:opacity-50"
+                        >
+                          Als Entwurf speichern
+                        </button>
+                      </div>
+
+                      <p className="text-[11px] text-[#80868b]">
+                        {serverUpdatedAt
+                          ? `Zuletzt gespeichert ${fmtRelative(serverUpdatedAt)}`
+                          : "Noch nicht gespeichert"}
                       </p>
                     </div>
-
-                    <div className="space-y-2 border-t border-[#e8eaed] pt-5">
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => void saveWithStatus("published")}
-                        className="flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 py-2.5 text-[13px] font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        Veröffentlichen
-                        <ChevronDown className="h-4 w-4 opacity-80" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => void saveWithStatus("draft")}
-                        className="w-full rounded-lg border border-[#dadce0] bg-white py-2.5 text-[13px] font-semibold text-[#1a1a1a] hover:bg-[#f8f9fa] disabled:opacity-50"
-                      >
-                        Als Entwurf speichern
-                      </button>
-                    </div>
-
-                    <p className="text-[11px] text-[#80868b]">
-                      {serverUpdatedAt
-                        ? `Zuletzt gespeichert ${fmtRelative(serverUpdatedAt)}`
-                        : "Noch nicht gespeichert"}
-                    </p>
-                  </div>
-                ) : (
-                  <dl className="space-y-4 text-[13px]">
-                    <div>
-                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
-                        Eintrag-ID
-                      </dt>
-                      <dd className="mt-1 font-mono text-[12px] text-[#1a1a1a]">
-                        {contentId ?? "— (nach dem ersten Speichern)"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
-                        Content-Typ
-                      </dt>
-                      <dd className="mt-1 text-[#1a1a1a]">{resolvedModelKey}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
-                        Locale
-                      </dt>
-                      <dd className="mt-1 text-[#1a1a1a]">{locale}</dd>
-                    </div>
-                  </dl>
-                )}
+                  ) : (
+                    <dl className="space-y-4 text-[13px]">
+                      <div>
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
+                          Eintrag-ID
+                        </dt>
+                        <dd className="mt-1 font-mono text-[12px] text-[#1a1a1a]">
+                          {contentId ?? "— (nach dem ersten Speichern)"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
+                          Content-Typ
+                        </dt>
+                        <dd className="mt-1 text-[#1a1a1a]">
+                          {resolvedModelKey}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
+                          Locale
+                        </dt>
+                        <dd className="mt-1 text-[#1a1a1a]">{locale}</dd>
+                      </div>
+                    </dl>
+                  )}
+                </div>
               </div>
-            </div>
-          </aside>
+            </aside>
+          ) : null}
         </div>
       </div>
     </div>
