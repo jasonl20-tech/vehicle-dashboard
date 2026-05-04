@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import MfaForcedSetupGate from "./components/auth/MfaForcedSetupGate";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import AccountLayout from "./components/layout/AccountLayout";
+import CmsLayout from "./components/layout/CmsLayout";
 import ControlPlatformLayout from "./components/layout/ControlPlatformLayout";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AccountPage from "./pages/AccountPage";
@@ -12,6 +13,12 @@ import AssetsPage from "./pages/AssetsPage";
 import BildaustrahlungKartePage from "./pages/BildaustrahlungKartePage";
 import BildempfangPage from "./pages/BildempfangPage";
 import ControllingPage from "./pages/ControllingPage";
+import CmsContentModelsPage from "./pages/cms/CmsContentModelsPage";
+import CmsEntriesPage from "./pages/cms/CmsEntriesPage";
+import CmsLocalesPage from "./pages/cms/CmsLocalesPage";
+import CmsMediaPage from "./pages/cms/CmsMediaPage";
+import CmsOverviewPage from "./pages/cms/CmsOverviewPage";
+import CmsSettingsPage from "./pages/cms/CmsSettingsPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControlPlatformPage from "./pages/ControlPlatformPage";
 import DeveloperOverviewPage from "./pages/DeveloperOverviewPage";
@@ -64,6 +71,15 @@ export default function App() {
         >
           <Route index element={<PlatformHomePage />} />
           <Route path="/developer" element={<DeveloperOverviewPage />} />
+
+          <Route element={<CmsLayout />}>
+            <Route path="/cms" element={<CmsOverviewPage />} />
+            <Route path="/cms/entries" element={<CmsEntriesPage />} />
+            <Route path="/cms/models" element={<CmsContentModelsPage />} />
+            <Route path="/cms/media" element={<CmsMediaPage />} />
+            <Route path="/cms/locales" element={<CmsLocalesPage />} />
+            <Route path="/cms/settings" element={<CmsSettingsPage />} />
+          </Route>
 
           <Route element={<ControlPlatformLayout />}>
             <Route

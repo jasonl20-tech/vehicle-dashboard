@@ -4,6 +4,7 @@ import {
   Code2,
   FileText,
   Gauge,
+  Library,
   LineChart,
   LayoutDashboard,
   LogOut,
@@ -21,6 +22,7 @@ import {
   NAV_PRIMARY,
   firstAllowedNavRoute,
 } from "../components/layout/navConfig";
+import { mayAccessCms } from "../lib/cmsAccess";
 import {
   DEVELOPER_HUB_PATH,
   mayAccessDeveloperHub,
@@ -61,9 +63,8 @@ const TILES: PlatformTile[] = [
   },
   {
     title: "Content Management System",
-    icon: FileText,
+    icon: Library,
     to: "/cms",
-    status: "Bald verfügbar",
   },
   {
     title: "Control Platform",
@@ -132,6 +133,9 @@ export default function PlatformHomePage() {
       // /account ist für jeden eingeloggten User immer erreichbar (eigene
       // Top-Level-Route, keine Sicherheitsstufen-Pflicht).
       if (t.to === "/account") return [t];
+      if (t.to === "/cms") {
+        return mayAccessCms(erlaubtePfade) ? [t] : [];
+      }
       return pathDirectlyAllowed(t.to, erlaubtePfade) ? [t] : [];
     });
   }, [erlaubtePfade, dashboardEntry]);

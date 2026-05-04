@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../lib/auth";
+import { mayAccessCms, isCmsPath } from "../../lib/cmsAccess";
 import {
   DEVELOPER_HUB_PATH,
   mayAccessDeveloperHub,
@@ -48,10 +49,12 @@ export default function ProtectedRoute({
   const developerHubAllowed =
     pathNorm === normalizePathname(DEVELOPER_HUB_PATH) &&
     mayAccessDeveloperHub(erlaubtePfade);
+  const cmsAllowed = isCmsPath(pathNorm) && mayAccessCms(erlaubtePfade);
   if (
     !SPA_ROUTE_NO_ACL.has(pathNorm) &&
     !accountAllowed &&
     !developerHubAllowed &&
+    !cmsAllowed &&
     !pathMatchesPfadliste(pathNorm, erlaubtePfade)
   ) {
     return <Navigate to="/" replace />;
