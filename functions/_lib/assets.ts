@@ -1,7 +1,9 @@
 /**
- * Helpers für die Asset-Manager-API. Datenquelle ist ausschließlich
- * der R2-Bucket `env.assets` (Custom-Domain `assets.vehicleimagery.com`)
- * — KEINE eigene D1-Tabelle.
+ * Helpers für die Asset-Manager-API. Dateien liegen im R2-Bucket
+ * `env.assets` (Custom-Domain `assets.vehicleimagery.com`).
+ * Redaktionelle CMS-Felder (Titel, Beschreibung, Alt, Status, …) werden
+ * zusätzlich in D1 (`cms_assets`, siehe `cmsAssetsDb.ts`) gespeichert und
+ * in der API mit R2-Metadaten zusammengeführt (D1 gewinnt, wenn vorhanden).
  *
  * Konventionen:
  *   - Pfade sind POSIX (`/`-getrennt), case-sensitive, ohne führenden

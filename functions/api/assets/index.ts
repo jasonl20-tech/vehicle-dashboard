@@ -32,6 +32,11 @@ import {
   syntheticFolder,
   type AssetRow,
 } from "../../_lib/assets";
+import {
+  fetchCmsAssetsByR2Keys,
+  mergeAssetRowWithCmsDb,
+} from "../../_lib/cmsAssetsDb";
+import { requireWebsiteDb } from "../../_lib/websiteDb";
 
 const MAX_LIMIT = 500;
 const DEFAULT_LIMIT = 200;
@@ -123,8 +128,22 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     const total = rows.length;
     const sliced = rows.slice(offset, offset + limit);
 
+    let outRows: AssetRow[] = sliced;
+    const dbOr = requireWebsiteDb(env);
+    if (!(dbOr instanceof Response)) {
+      const fileKeys = sliced
+        .filter((r) => r.kind === "file")
+        .map((r) => r.key);
+      const map = await fetchCmsAssetsByR2Keys(dbOr, fileKeys);
+      outRows = sliced.map((r) =>
+        r.kind === "folder"
+          ? r
+          : mergeAssetRowWithCmsDb(r, map.get(r.key) ?? null),
+      );
+    }
+
     return jsonResponse({
-      rows: sliced,
+      rows: outRows,
       total,
       limit,
       offset,

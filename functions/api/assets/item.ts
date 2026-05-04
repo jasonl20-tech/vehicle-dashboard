@@ -25,6 +25,13 @@ import {
   requireAssetsBucket,
   splitKey,
 } from "../../_lib/assets";
+import {
+  fetchCmsAssetsByR2Keys,
+  mergeAssetRowWithCmsDb,
+  upsertCmsAssetAfterPatch,
+  deleteCmsAssetByR2Key,
+} from "../../_lib/cmsAssetsDb";
+import { requireWebsiteDb } from "../../_lib/websiteDb";
 
 function readKey(url: URL): string {
   const k = (url.searchParams.get("key") || "").trim();
@@ -52,7 +59,13 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     if (!obj) {
       return jsonResponse({ error: "Asset nicht gefunden" }, { status: 404 });
     }
-    return jsonResponse(r2ObjectToAsset(env, obj));
+    let row = r2ObjectToAsset(env, obj);
+    const dbOr = requireWebsiteDb(env);
+    if (!(dbOr instanceof Response)) {
+      const map = await fetchCmsAssetsByR2Keys(dbOr, [key]);
+      row = mergeAssetRowWithCmsDb(row, map.get(key) ?? null);
+    }
+    return jsonResponse(row);
   } catch (e) {
     return jsonResponse({ error: (e as Error).message }, { status: 500 });
   }
@@ -152,7 +165,13 @@ export const onRequestPatch: PagesFunction<AuthEnv> = async ({
     const metaChanged =
       JSON.stringify(updatedMeta) !== JSON.stringify(baseMeta);
     if (!keyChanged && !metaChanged) {
-      return jsonResponse(r2ObjectToAsset(env, cur));
+      let row = r2ObjectToAsset(env, cur);
+      const dbOrEarly = requireWebsiteDb(env);
+      if (!(dbOrEarly instanceof Response)) {
+        const map = await fetchCmsAssetsByR2Keys(dbOrEarly, [key]);
+        row = mergeAssetRowWithCmsDb(row, map.get(key) ?? null);
+      }
+      return jsonResponse(row);
     }
 
     const obj = await bucket.get(key);
@@ -184,7 +203,32 @@ export const onRequestPatch: PagesFunction<AuthEnv> = async ({
       }
     }
 
-    return jsonResponse(r2ObjectToAsset(env, written));
+    let asset = r2ObjectToAsset(env, written);
+    const dbOrPatch = requireWebsiteDb(env);
+    if (!(dbOrPatch instanceof Response)) {
+      try {
+        await upsertCmsAssetAfterPatch(dbOrPatch, {
+          old_r2_key: key,
+          new_r2_key: newKey,
+          asset,
+          patch: {
+            title: body.title,
+            alt_text: body.alt_text,
+            description: body.description,
+            cms_status: body.cms_status,
+            width: body.width,
+            height: body.height,
+          },
+          last_updated_by: user.benutzername ?? null,
+        });
+        const map = await fetchCmsAssetsByR2Keys(dbOrPatch, [newKey]);
+        asset = mergeAssetRowWithCmsDb(asset, map.get(newKey) ?? null);
+      } catch {
+        // D1-Fehler: R2 ist bereits korrekt; Antwort ohne D1-Merge
+      }
+    }
+
+    return jsonResponse(asset);
   } catch (e) {
     return jsonResponse({ error: (e as Error).message }, { status: 500 });
   }
@@ -211,6 +255,10 @@ export const onRequestDelete: PagesFunction<AuthEnv> = async ({
     const cur = await bucket.head(key);
     if (!cur) {
       return jsonResponse({ error: "Asset nicht gefunden" }, { status: 404 });
+    }
+    const dbOrDel = requireWebsiteDb(env);
+    if (!(dbOrDel instanceof Response)) {
+      await deleteCmsAssetByR2Key(dbOrDel, key).catch(() => {});
     }
     await bucket.delete(key);
     return new Response(null, { status: 204 });

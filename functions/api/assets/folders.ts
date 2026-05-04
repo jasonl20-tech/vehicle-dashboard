@@ -31,6 +31,8 @@ import {
   requireAssetsBucket,
   splitKey,
 } from "../../_lib/assets";
+import { deleteCmsAssetsByR2Keys } from "../../_lib/cmsAssetsDb";
+import { requireWebsiteDb } from "../../_lib/websiteDb";
 
 /** Erzeugt aus `email/team/sub` die Liste aller übergeordneten Pfade
  *  (`email`, `email/team`, `email/team/sub`). */
@@ -207,6 +209,10 @@ export const onRequestDelete: PagesFunction<AuthEnv> = async ({
     if (keys.length > 0) {
       // R2 hat einen Bulk-Delete: `bucket.delete(keys: string[])`.
       await bucket.delete(keys);
+      const dbOr = requireWebsiteDb(env);
+      if (!(dbOr instanceof Response)) {
+        await deleteCmsAssetsByR2Keys(dbOr, keys).catch(() => {});
+      }
     }
     return new Response(null, { status: 204 });
   } catch (e) {

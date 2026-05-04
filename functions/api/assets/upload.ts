@@ -23,6 +23,12 @@ import {
   r2ObjectToAsset,
   requireAssetsBucket,
 } from "../../_lib/assets";
+import {
+  fetchCmsAssetsByR2Keys,
+  mergeAssetRowWithCmsDb,
+  upsertCmsAssetAfterUpload,
+} from "../../_lib/cmsAssetsDb";
+import { requireWebsiteDb } from "../../_lib/websiteDb";
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
   request,
@@ -152,7 +158,37 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       );
     }
 
-    return jsonResponse(r2ObjectToAsset(env, written), { status: 201 });
+    let asset = r2ObjectToAsset(env, written);
+    const dbOr = requireWebsiteDb(env);
+    if (dbOr instanceof Response) {
+      await bucket.delete(key).catch(() => {});
+      return dbOr;
+    }
+    try {
+      await upsertCmsAssetAfterUpload(dbOr, {
+        r2_key: key,
+        title: title ? title : null,
+        description: description ? description : null,
+        alt_text: altText ? altText : null,
+        original_filename: file.name || null,
+        content_type: contentType || null,
+        size_bytes: file.size,
+        width: Number.isFinite(imgWidth) && imgWidth > 0 ? imgWidth : null,
+        height: Number.isFinite(imgHeight) && imgHeight > 0 ? imgHeight : null,
+        status: cmsStatus,
+        last_updated_by: user.benutzername ?? null,
+      });
+      const map = await fetchCmsAssetsByR2Keys(dbOr, [key]);
+      asset = mergeAssetRowWithCmsDb(asset, map.get(key) ?? null);
+    } catch {
+      await bucket.delete(key).catch(() => {});
+      return jsonResponse(
+        { error: "Metadaten konnten in D1 (cms_assets) nicht gespeichert werden." },
+        { status: 502 },
+      );
+    }
+
+    return jsonResponse(asset, { status: 201 });
   } catch (e) {
     return jsonResponse(
       { error: (e as Error).message || String(e) },
