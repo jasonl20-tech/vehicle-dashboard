@@ -19,7 +19,6 @@ import CmsContentEntryPage from "./pages/cms/CmsContentEntryPage";
 import CmsEntriesPage from "./pages/cms/CmsEntriesPage";
 import CmsLocalesPage from "./pages/cms/CmsLocalesPage";
 import CmsMediaPage from "./pages/cms/CmsMediaPage";
-import CmsOverviewPage from "./pages/cms/CmsOverviewPage";
 import CmsScheduledPage from "./pages/cms/CmsScheduledPage";
 import CmsSettingsPage from "./pages/cms/CmsSettingsPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
@@ -76,7 +75,7 @@ export default function App() {
           <Route path="/developer" element={<DeveloperOverviewPage />} />
 
           <Route path="/cms" element={<CmsLayout />}>
-            <Route index element={<CmsOverviewPage />} />
+            <Route index element={<Navigate to="models" replace />} />
             <Route path="entries/new" element={<CmsContentEntryPage />} />
             <Route
               path="entries/:contentId/edit"
