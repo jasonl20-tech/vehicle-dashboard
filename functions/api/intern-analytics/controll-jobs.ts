@@ -5,6 +5,12 @@
  *
  * Query: check=all|0|1|2|3  vehicle_id=  q=  limit=  offset=
  *   job_check: 0 offen, 1 in Bearbeitung, 2 korrekt, 3 fehlgeschlagen
+ *
+ * POST /api/intern-analytics/controll-jobs
+ *
+ * Body: { action: "reset-check", from: 1 | 3 }
+ *   Setzt alle Zeilen mit `check = from` auf `check = 0` zurück und
+ *   aktualisiert `updated_at`. Antwort: { changed: number, from, to: 0 }
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -147,4 +153,76 @@ GROUP BY "check"`,
     },
     { status: 200 },
   );
+};
+
+/**
+ * POST /api/intern-analytics/controll-jobs
+ *
+ * Bulk-Reset: setzt alle `controll_status`-Zeilen, deren `"check"`-Spalte
+ * dem Wert `from` entspricht, auf `0` zurück. Erlaubt sind ausschließlich
+ * `from = 1` (In Arbeit) und `from = 3` (Fehler), damit weder „Offen“
+ * (bereits 0) noch „Korrekt“ (2) versehentlich überschrieben werden.
+ */
+export const onRequestPost: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  const db = requireVehicleDb(env);
+  if (db instanceof Response) return db;
+
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return jsonResponse({ error: "Ungültige JSON-Anfrage" }, { status: 400 });
+  }
+
+  const body = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const action = typeof body.action === "string" ? body.action : "";
+  if (action !== "reset-check") {
+    return jsonResponse(
+      { error: "Unbekannte Aktion. Erwartet: action=\"reset-check\"" },
+      { status: 400 },
+    );
+  }
+
+  const from = Number(body.from);
+  if (from !== 1 && from !== 3) {
+    return jsonResponse(
+      {
+        error:
+          "from muss 1 (In Arbeit) oder 3 (Fehler) sein – andere Werte werden nicht zurückgesetzt.",
+      },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const res = await db
+      .prepare(
+        `UPDATE controll_status
+SET "check" = 0, updated_at = datetime('now')
+WHERE "check" = ?`,
+      )
+      .bind(from)
+      .run();
+    const changed =
+      typeof res.meta?.changes === "number" ? res.meta.changes : 0;
+    return jsonResponse({ changed, from, to: 0 }, { status: 200 });
+  } catch (err) {
+    return jsonResponse(
+      {
+        error: "controll_status: Bulk-Reset fehlgeschlagen.",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 },
+    );
+  }
 };

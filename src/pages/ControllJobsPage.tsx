@@ -1,8 +1,9 @@
-import { ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import {
   controllJobsListUrl,
+  resetControllJobsCheck,
   type ControllJobCheck,
   type ControllJobsListResponse,
 } from "../lib/controllJobsApi";
@@ -59,6 +60,12 @@ export default function ControllJobsPage() {
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
+  const [resetting, setResetting] = useState<null | 1 | 3>(null);
+  const [resetMsg, setResetMsg] = useState<
+    | { kind: "ok"; text: string }
+    | { kind: "err"; text: string }
+    | null
+  >(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -102,6 +109,32 @@ export default function ControllJobsPage() {
       return Object.values(checkCounts).reduce((a, b) => a + b, 0);
     }
     return checkCounts[id] ?? 0;
+  };
+
+  const onReset = async (from: 1 | 3) => {
+    const label = from === 3 ? "Fehler (check = 3)" : "In Arbeit (check = 1)";
+    const n = checkCounts[String(from)] ?? 0;
+    const ok = window.confirm(
+      `Wirklich alle ${fmtNumber(n)} Einträge mit ${label} auf check = 0 (Offen) zurücksetzen?`,
+    );
+    if (!ok) return;
+    setResetting(from);
+    setResetMsg(null);
+    try {
+      const r = await resetControllJobsCheck(from);
+      setResetMsg({
+        kind: "ok",
+        text: `${fmtNumber(r.changed)} Einträge auf check = 0 zurückgesetzt (vorher ${label}).`,
+      });
+      api.reload();
+    } catch (e) {
+      setResetMsg({
+        kind: "err",
+        text: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setResetting(null);
+    }
   };
 
   return (
@@ -167,6 +200,52 @@ export default function ControllJobsPage() {
         <strong className="text-ink-700">2</strong> korrekt ·{" "}
         <strong className="text-ink-700">3</strong> fehlgeschlagen
       </p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-[11.5px] uppercase tracking-wider text-ink-400">
+          Massen-Reset →{" "}
+          <span className="font-mono normal-case tracking-normal">check = 0</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => onReset(3)}
+          disabled={resetting !== null || api.loading}
+          title="Setzt alle Einträge mit check = 3 (Fehler) auf check = 0 (Offen) zurück."
+          className="inline-flex items-center gap-1.5 rounded-md border border-accent-rose/40 bg-accent-rose/5 px-2.5 py-1.5 text-[12px] text-accent-rose transition-colors enabled:hover:bg-accent-rose/10 disabled:opacity-50"
+        >
+          <RotateCcw
+            className={`h-3.5 w-3.5 ${resetting === 3 ? "animate-spin" : ""}`}
+          />
+          Fehler (3) → 0
+          <span className="font-mono text-[10.5px] tabular-nums text-accent-rose/80">
+            {fmtNumber(checkCounts["3"] ?? 0)}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onReset(1)}
+          disabled={resetting !== null || api.loading}
+          title="Setzt alle Einträge mit check = 1 (In Arbeit) auf check = 0 (Offen) zurück."
+          className="inline-flex items-center gap-1.5 rounded-md border border-accent-amber/40 bg-accent-amber/5 px-2.5 py-1.5 text-[12px] text-accent-amber transition-colors enabled:hover:bg-accent-amber/10 disabled:opacity-50"
+        >
+          <RotateCcw
+            className={`h-3.5 w-3.5 ${resetting === 1 ? "animate-spin" : ""}`}
+          />
+          In Arbeit (1) → 0
+          <span className="font-mono text-[10.5px] tabular-nums text-accent-amber/80">
+            {fmtNumber(checkCounts["1"] ?? 0)}
+          </span>
+        </button>
+        {resetMsg && (
+          <span
+            className={`text-[11.5px] ${
+              resetMsg.kind === "ok" ? "text-brand-700" : "text-accent-rose"
+            }`}
+          >
+            {resetMsg.text}
+          </span>
+        )}
+      </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-full min-w-[200px] max-w-[320px]">

@@ -40,3 +40,33 @@ export function controllJobsListUrl(
   }
   return u.pathname + u.search;
 }
+
+export type ControllJobsResetResponse = {
+  changed: number;
+  from: 1 | 3;
+  to: 0;
+};
+
+/**
+ * Setzt alle Zeilen aus `controll_status` mit `"check" = from` auf `0` zurück.
+ * Erlaubt sind nur `from = 1` (In Arbeit) und `from = 3` (Fehler).
+ */
+export async function resetControllJobsCheck(
+  from: 1 | 3,
+): Promise<ControllJobsResetResponse> {
+  const res = await fetch(BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "reset-check", from }),
+  });
+  const j = (await res.json().catch(() => ({}))) as Partial<
+    ControllJobsResetResponse
+  > & { error?: string };
+  if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+  return {
+    changed: j.changed ?? 0,
+    from,
+    to: 0,
+  };
+}
