@@ -13,6 +13,7 @@ import AssetsPage from "./pages/AssetsPage";
 import BildaustrahlungKartePage from "./pages/BildaustrahlungKartePage";
 import BildempfangPage from "./pages/BildempfangPage";
 import ControllingPage from "./pages/ControllingPage";
+import CmsContentModelEditPage from "./pages/cms/CmsContentModelEditPage";
 import CmsContentModelsPage from "./pages/cms/CmsContentModelsPage";
 import CmsEntriesPage from "./pages/cms/CmsEntriesPage";
 import CmsLocalesPage from "./pages/cms/CmsLocalesPage";
@@ -75,6 +76,11 @@ export default function App() {
           <Route path="/cms" element={<CmsLayout />}>
             <Route index element={<CmsOverviewPage />} />
             <Route path="entries" element={<CmsEntriesPage />} />
+            <Route path="models/new" element={<CmsContentModelEditPage />} />
+            <Route
+              path="models/:modelId/edit"
+              element={<CmsContentModelEditPage />}
+            />
             <Route path="models" element={<CmsContentModelsPage />} />
             <Route path="media" element={<CmsMediaPage />} />
             <Route path="locales" element={<CmsLocalesPage />} />

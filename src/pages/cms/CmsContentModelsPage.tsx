@@ -1,5 +1,7 @@
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
+import { CMS_ROOT } from "../../lib/cmsAccess";
 import {
   CMS_CONTENT_MODELS_API,
   countSchemaFields,
@@ -32,10 +34,17 @@ export default function CmsContentModelsPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <header className="mb-8">
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
           Content-Modelle
         </h1>
+        <Link
+          to={`${CMS_ROOT}/models/new`}
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-ink-900 px-4 py-2 text-[12.5px] font-medium text-white hover:bg-ink-800"
+        >
+          <Plus className="h-4 w-4" />
+          Neues Modell
+        </Link>
       </header>
 
       {errMsg ? (
@@ -48,8 +57,8 @@ export default function CmsContentModelsPage() {
         <ul className="space-y-2">
           {rows.map((m) => (
             <li key={m.id}>
-              <button
-                type="button"
+              <Link
+                to={`${CMS_ROOT}/models/${m.id}/edit`}
                 className="flex w-full items-center justify-between gap-3 rounded-xl border border-hair bg-white p-4 text-left shadow-sm transition hover:border-ink-200 hover:bg-ink-50/30"
               >
                 <div className="min-w-0">
@@ -67,7 +76,7 @@ export default function CmsContentModelsPage() {
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-ink-300" />
-              </button>
+              </Link>
             </li>
           ))}
         </ul>
