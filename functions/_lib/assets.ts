@@ -15,6 +15,8 @@
  *   - Datei-Metadaten (`alt_text`, `description`, `uploadedBy`) leben in
  *     `customMetadata` des R2-Objekts (URI-encoded, da R2 die Werte
  *     in HTTP-Headern transportiert).
+ *   - CMS legt Medien unter dem Prefix `cms/` ab (siehe `CMS_ASSETS_FOLDER`
+ *     im Frontend / Medien-Bereich der Konsole).
  */
 import { jsonResponse, type AuthEnv } from "./auth";
 

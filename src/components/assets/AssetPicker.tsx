@@ -25,6 +25,8 @@ export type AssetPickerProps = {
   accept?: ("image/" | "video/" | "*")[];
   /** Initialer Folder-Pfad (z. B. "email"). */
   initialFolder?: string;
+  /** Navigation auf diesen Prefix beschränken (z. B. CMS: "cms"). */
+  rootFolder?: string;
   /** Optional: Title oben im Modal. */
   title?: string;
   onPick: (asset: Asset) => void;
@@ -35,6 +37,7 @@ export default function AssetPicker({
   open,
   accept,
   initialFolder = "email",
+  rootFolder,
   title = "Asset auswählen",
   onPick,
   onClose,
@@ -71,6 +74,7 @@ export default function AssetPicker({
             mode="pick"
             accept={accept}
             initialFolder={initialFolder}
+            rootFolder={rootFolder}
             onPick={(a) => {
               onPick(a);
               onClose();

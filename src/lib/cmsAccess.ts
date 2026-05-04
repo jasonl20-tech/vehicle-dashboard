@@ -3,6 +3,12 @@ import { normalizePathname, pathMatchesPfadliste } from "./routeAccess";
 export const CMS_ROOT = "/cms" as const;
 
 /**
+ * Alle CMS-Medien liegen im R2-Bucket `env.assets` unter diesem Prefix
+ * (Keys wie `cms/…`, öffentlich unter der Asset-Domain).
+ */
+export const CMS_ASSETS_FOLDER = "cms" as const;
+
+/**
  * CMS ist für Nutzer mit Dashboard-Zugriff nutzbar (analog sichtbar wie
  * Content-Bereiche in der Konsole), zusätzlich bei expliziter `/cms`-Zeile.
  */

@@ -11,6 +11,19 @@
 
 export const ASSETS_API = "/api/assets" as const;
 
+/** Entspricht dem Server-Fallback in `functions/_lib/assets.ts`. */
+export const ASSETS_PUBLIC_BASE_FALLBACK =
+  "https://assets.vehicleimagery.com" as const;
+
+/** Öffentliche URL für einen R2-Key (Custom-Domain, segment-codiert). */
+export function publicAssetUrl(key: string): string {
+  const k = key.trim();
+  if (!k) return "";
+  const base = ASSETS_PUBLIC_BASE_FALLBACK.replace(/\/+$/, "");
+  const path = k.split("/").map((seg) => encodeURIComponent(seg)).join("/");
+  return `${base}/${path}`;
+}
+
 export type Asset = {
   /** R2-Object-Key — gleichzeitig der eindeutige Identifier. */
   id: string;

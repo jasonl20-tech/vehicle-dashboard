@@ -1,7 +1,14 @@
 import { ArrowLeft, ChevronDown, PanelRightClose, PanelRightOpen } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
-import { CMS_ROOT } from "../../lib/cmsAccess";
+import AssetPicker from "../assets/AssetPicker";
+import { CMS_ASSETS_FOLDER, CMS_ROOT } from "../../lib/cmsAccess";
 import {
   datetimeLocalToIso,
   isoToDatetimeLocal,
@@ -20,6 +27,7 @@ import type {
 import { FIELD_TYPE_LABELS } from "../../lib/cmsSchemaTypes";
 import { extractPlainFromLexicalOrText } from "../../lib/lexicalRichText";
 import { fmtRelative } from "../../lib/customerApi";
+import { isImage, publicAssetUrl } from "../../lib/assetsApi";
 import LexicalRichTextField from "./LexicalRichTextField";
 
 const SIDE_TAB_ACTIVE =
@@ -381,6 +389,197 @@ export default function ContentEntryEditor({
   );
 }
 
+/** Medien: Wert = R2-Object-Key unter {@link CMS_ASSETS_FOLDER}/ (Bucket `env.assets`). */
+function CmsMediaFieldInput({
+  variant,
+  raw,
+  label,
+  helpText,
+  onChange,
+}: {
+  variant: "one" | "many";
+  raw: unknown;
+  label: ReactNode;
+  helpText: string | null | undefined;
+  onChange: (v: unknown) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTargetIndex, setPickerTargetIndex] = useState<number | null>(
+    null,
+  );
+
+  function applyPick(key: string) {
+    if (variant === "one") {
+      onChange(key);
+      return;
+    }
+    const arr = Array.isArray(raw) ? (raw as unknown[]).map(String) : [];
+    if (pickerTargetIndex !== null && pickerTargetIndex >= 0) {
+      const next = [...arr];
+      next[pickerTargetIndex] = key;
+      onChange(next);
+    } else {
+      onChange([...arr, key]);
+    }
+    setPickerTargetIndex(null);
+  }
+
+  if (variant === "many") {
+    const arr = Array.isArray(raw) ? (raw as unknown[]).map(String) : [];
+    return (
+      <>
+        {label}
+        <p className="mb-3 text-[12px] text-[#5f6368]">
+          Dateien im R2-Bucket unter{" "}
+          <code className="rounded bg-[#f1f3f4] px-1 font-mono text-[11px]">
+            {CMS_ASSETS_FOLDER}/
+          </code>
+          . Über die Mediathek wählen oder Keys manuell eintragen.
+        </p>
+        <div className="space-y-2">
+          {arr.map((key, i) => (
+            <div
+              key={i}
+              className="flex flex-wrap items-center gap-2 rounded-lg border border-[#e8eaed] bg-[#fafbfc] p-2"
+            >
+              <input
+                value={key}
+                onChange={(e) => {
+                  const next = [...arr];
+                  next[i] = e.target.value;
+                  onChange(next);
+                }}
+                placeholder={`z. B. ${CMS_ASSETS_FOLDER}/bild.jpg`}
+                className="min-w-[12rem] flex-1 rounded-lg border border-[#dadce0] bg-white px-3 py-2 font-mono text-[13px]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setPickerTargetIndex(i);
+                  setPickerOpen(true);
+                }}
+                className="shrink-0 rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f8f9fa]"
+              >
+                Mediathek
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange(arr.filter((_, j) => j !== i))}
+                className="shrink-0 rounded-lg border border-[#dadce0] px-2.5 py-2 text-[12px] text-[#5f6368] hover:bg-rose-50 hover:text-rose-800"
+                aria-label="Eintrag entfernen"
+              >
+                Entfernen
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onChange([...arr, ""])}
+            className="rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[12px] font-medium text-[#1a1a1a] hover:bg-[#f8f9fa]"
+          >
+            Zeile hinzufügen
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPickerTargetIndex(null);
+              setPickerOpen(true);
+            }}
+            className="rounded-lg border border-[#0366d6] bg-[#0366d6]/10 px-3 py-2 text-[12px] font-medium text-[#0366d6] hover:bg-[#0366d6]/15"
+          >
+            Aus Mediathek anhängen
+          </button>
+        </div>
+        {helpText ? (
+          <p className="mt-2 text-[12px] text-ink-500">{helpText}</p>
+        ) : null}
+        <AssetPicker
+          open={pickerOpen}
+          accept={["*"]}
+          initialFolder={CMS_ASSETS_FOLDER}
+          rootFolder={CMS_ASSETS_FOLDER}
+          title="CMS-Medium wählen"
+          onPick={(a) => applyPick(a.key)}
+          onClose={() => {
+            setPickerOpen(false);
+            setPickerTargetIndex(null);
+          }}
+        />
+      </>
+    );
+  }
+
+  const s = raw == null ? "" : String(raw);
+  const previewUrl = s ? publicAssetUrl(s) : "";
+  const showPreview = Boolean(s && isImage({ content_type: "", name: s }));
+
+  return (
+    <>
+      {label}
+      <p className="mb-2 text-[12px] text-[#5f6368]">
+        R2-Schlüssel (z. B.{" "}
+        <code className="rounded bg-[#f1f3f4] px-1 font-mono text-[11px]">
+          {CMS_ASSETS_FOLDER}/datei.png
+        </code>
+        ).
+      </p>
+      <div className="flex flex-wrap items-start gap-2">
+        <input
+          value={s}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={`${CMS_ASSETS_FOLDER}/…`}
+          className="min-w-[12rem] flex-1 rounded-lg border border-[#dadce0] px-3 py-2.5 font-mono text-[14px]"
+        />
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          className="shrink-0 rounded-lg border border-[#0366d6] bg-[#0366d6]/10 px-3 py-2.5 text-[13px] font-medium text-[#0366d6] hover:bg-[#0366d6]/15"
+        >
+          Mediathek
+        </button>
+      </div>
+      {showPreview ? (
+        <a
+          href={previewUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-block max-w-full"
+        >
+          <img
+            src={previewUrl}
+            alt=""
+            className="max-h-48 max-w-full rounded-lg border border-[#e8eaed] object-contain"
+          />
+        </a>
+      ) : null}
+      {s && !showPreview ? (
+        <a
+          href={previewUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-block text-[12px] font-medium text-[#0366d6] hover:underline"
+        >
+          Öffentliche URL öffnen
+        </a>
+      ) : null}
+      {helpText ? (
+        <p className="mt-2 text-[12px] text-ink-500">{helpText}</p>
+      ) : null}
+      <AssetPicker
+        open={pickerOpen}
+        accept={["*"]}
+        initialFolder={CMS_ASSETS_FOLDER}
+        rootFolder={CMS_ASSETS_FOLDER}
+        title="CMS-Medium wählen"
+        onPick={(a) => applyPick(a.key)}
+        onClose={() => setPickerOpen(false)}
+      />
+    </>
+  );
+}
+
 function EntryFieldBlock({
   field: f,
   payload,
@@ -633,45 +832,14 @@ function EntryFieldBlock({
   }
 
   if (f.type === "Media") {
-    if (f.mediaShape?.variant === "many") {
-      const arr = Array.isArray(raw) ? (raw as unknown[]).map(String) : [];
-      return (
-        <>
-          {label}
-          <p className="mb-2 text-[12px] text-ink-500">
-            Asset-IDs (ein Eintrag pro Zeile; Medien-API folgt).
-          </p>
-          <textarea
-            value={arr.join("\n")}
-            onChange={(e) =>
-              onChange(
-                f.id,
-                e.target.value
-                  .split("\n")
-                  .map((x) => x.trim())
-                  .filter(Boolean),
-              )
-            }
-            rows={4}
-            className="w-full rounded-lg border border-[#dadce0] px-3 py-2 font-mono text-[12px]"
-          />
-        </>
-      );
-    }
-    const s = raw == null ? "" : String(raw);
     return (
-      <>
-        {label}
-        <input
-          value={s}
-          onChange={(e) => onChange(f.id, e.target.value)}
-          placeholder="Asset-ID"
-          className="w-full rounded-lg border border-[#dadce0] px-3 py-2.5 font-mono text-[14px]"
-        />
-        {f.helpText ? (
-          <p className="mt-2 text-[12px] text-ink-500">{f.helpText}</p>
-        ) : null}
-      </>
+      <CmsMediaFieldInput
+        variant={f.mediaShape?.variant === "many" ? "many" : "one"}
+        raw={raw}
+        label={label}
+        helpText={f.helpText}
+        onChange={(v) => onChange(f.id, v)}
+      />
     );
   }
 

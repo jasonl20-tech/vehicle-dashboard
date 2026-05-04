@@ -68,6 +68,20 @@ import {
   uploadAsset,
 } from "../../lib/assetsApi";
 
+function normalizeRootFolder(raw: string | undefined): string {
+  if (!raw) return "";
+  return raw.trim().replace(/^\/+|\/+$/g, "");
+}
+
+function clampFolderPath(path: string, root: string): string {
+  const r = normalizeRootFolder(root);
+  if (!r) return path;
+  const p = (path || "").trim();
+  if (!p || p === "/") return r;
+  if (p === r || p.startsWith(`${r}/`)) return p;
+  return r;
+}
+
 export type AssetBrowserMode = "manage" | "pick";
 
 export type AssetBrowserProps = {
@@ -78,6 +92,11 @@ export type AssetBrowserProps = {
   onPick?: (asset: Asset) => void;
   /** Initial-Folder beim Öffnen (z. B. "email"). */
   initialFolder?: string;
+  /**
+   * Wenn gesetzt (z. B. "cms"), Navigation und Uploads bleiben unter diesem
+   * Prefix — sinnvoll für CMS-Medien im gemeinsamen R2-Bucket `env.assets`.
+   */
+  rootFolder?: string;
   /** Bei mode="pick": Schließen-Handler (für Modal). */
   onClose?: () => void;
   /** Optionale Klasse für äußeren Container. */
@@ -102,10 +121,38 @@ export default function AssetBrowser({
   accept,
   onPick,
   initialFolder = "",
+  rootFolder,
   onClose,
   className,
 }: AssetBrowserProps) {
-  const [folder, setFolder] = useState<string>(initialFolder);
+  const rootNorm = normalizeRootFolder(rootFolder);
+  const [folder, setFolderState] = useState<string>(() =>
+    rootNorm
+      ? clampFolderPath((initialFolder || rootNorm).trim(), rootNorm)
+      : initialFolder,
+  );
+
+  const setFolder = useCallback(
+    (next: string) => {
+      if (!rootNorm) {
+        setFolderState(next);
+        return;
+      }
+      const n = (next || "").trim();
+      setFolderState(clampFolderPath(n || rootNorm, rootNorm));
+    },
+    [rootNorm],
+  );
+
+  useEffect(() => {
+    if (!rootNorm) {
+      setFolderState(initialFolder);
+      return;
+    }
+    setFolderState(
+      clampFolderPath((initialFolder || rootNorm).trim(), rootNorm),
+    );
+  }, [rootNorm, initialFolder]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
@@ -148,8 +195,11 @@ export default function AssetBrowser({
     setAssetsLoading(true);
     setAssetsError(null);
     try {
+      const folderArg = debouncedSearch
+        ? rootNorm || undefined
+        : folder;
       const r = await listAssets({
-        folder: debouncedSearch ? undefined : folder,
+        folder: folderArg,
         q: debouncedSearch || undefined,
         sort,
         limit: PAGE_SIZE,
@@ -160,7 +210,7 @@ export default function AssetBrowser({
     } finally {
       setAssetsLoading(false);
     }
-  }, [folder, debouncedSearch, sort]);
+  }, [folder, debouncedSearch, sort, rootNorm]);
 
   useEffect(() => {
     reloadFolders();
@@ -180,7 +230,17 @@ export default function AssetBrowser({
     [mode, accept],
   );
 
-  const tree = useMemo(() => buildTree(folders), [folders]);
+  const foldersForTree = useMemo(() => {
+    if (!rootNorm) return folders;
+    return folders.filter(
+      (f) => f.path === rootNorm || f.path.startsWith(`${rootNorm}/`),
+    );
+  }, [folders, rootNorm]);
+
+  const tree = useMemo(
+    () => buildTree(foldersForTree),
+    [foldersForTree],
+  );
 
   const fileAssets = useMemo(
     () => assets.filter((a) => a.kind === "file"),
@@ -422,12 +482,12 @@ export default function AssetBrowser({
           </div>
           <nav className="min-h-0 flex-1 overflow-y-auto p-2 text-sm">
             <FolderRow
-              path=""
-              label="Alle Assets"
+              path={rootNorm || ""}
+              label={rootNorm ? rootNorm : "Alle Assets"}
               count={null}
-              active={folder === "" && !debouncedSearch}
+              active={folder === (rootNorm || "") && !debouncedSearch}
               onSelect={() => {
-                setFolder("");
+                setFolder(rootNorm || "");
                 setSearch("");
               }}
               icon={<FolderIcon className="h-4 w-4 text-neutral-500" />}
@@ -467,6 +527,7 @@ export default function AssetBrowser({
             )}
             <Breadcrumbs
               folder={debouncedSearch ? "" : folder}
+              rootFolder={rootNorm}
               onSelect={(p) => {
                 setFolder(p);
                 setSearch("");
@@ -862,23 +923,63 @@ function FolderRow({
 
 function Breadcrumbs({
   folder,
+  rootFolder,
   onSelect,
 }: {
   folder: string;
+  /** Top-Prefix; Breadcrumb startet hier (z. B. `cms`). */
+  rootFolder?: string;
   onSelect: (path: string) => void;
 }) {
-  const parts = folder ? folder.split("/") : [];
+  const root = normalizeRootFolder(rootFolder);
+  if (!root) {
+    const parts = folder ? folder.split("/") : [];
+    return (
+      <nav className="flex flex-wrap items-center gap-1 text-sm">
+        <button
+          type="button"
+          onClick={() => onSelect("")}
+          className="rounded px-1.5 py-0.5 font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800"
+        >
+          Root
+        </button>
+        {parts.map((part, idx) => {
+          const path = parts.slice(0, idx + 1).join("/");
+          return (
+            <span key={path} className="flex items-center gap-1">
+              <ChevronRight className="h-3.5 w-3.5 text-neutral-400" />
+              <button
+                type="button"
+                onClick={() => onSelect(path)}
+                className="rounded px-1.5 py-0.5 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                {part}
+              </button>
+            </span>
+          );
+        })}
+      </nav>
+    );
+  }
+
+  const under =
+    folder === root
+      ? []
+      : folder.startsWith(`${root}/`)
+        ? folder.slice(root.length + 1).split("/").filter(Boolean)
+        : [];
+
   return (
     <nav className="flex flex-wrap items-center gap-1 text-sm">
       <button
         type="button"
-        onClick={() => onSelect("")}
+        onClick={() => onSelect(root)}
         className="rounded px-1.5 py-0.5 font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800"
       >
-        Root
+        {root}
       </button>
-      {parts.map((part, idx) => {
-        const path = parts.slice(0, idx + 1).join("/");
+      {under.map((part, idx) => {
+        const path = `${root}/${under.slice(0, idx + 1).join("/")}`;
         return (
           <span key={path} className="flex items-center gap-1">
             <ChevronRight className="h-3.5 w-3.5 text-neutral-400" />
