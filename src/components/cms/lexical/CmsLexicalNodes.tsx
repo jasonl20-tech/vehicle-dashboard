@@ -10,6 +10,7 @@ import {
   Spread,
 } from "lexical";
 import type { JSX } from "react";
+import CmsLexicalImageBlock from "./CmsLexicalImageBlock";
 
 export type SerializedCmsImageNode = Spread<
   { src: string; altText: string; assetKey: string },
@@ -69,11 +70,10 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
 
   decorate(_editor: LexicalEditor, _config: EditorConfig): JSX.Element {
     return (
-      <img
+      <CmsLexicalImageBlock
         src={this.__src}
-        alt={this.__altText}
-        className="my-3 max-h-[min(28rem,70vh)] max-w-full rounded-lg border border-[#e8eaed] bg-[#f8f9fa] object-contain"
-        draggable={false}
+        altText={this.__altText}
+        assetKey={this.__assetKey}
       />
     );
   }
