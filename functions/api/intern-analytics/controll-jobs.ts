@@ -8,9 +8,12 @@
  *
  * POST /api/intern-analytics/controll-jobs
  *
- * Body: { action: "reset-check", from: 1 | 3 }
- *   Setzt alle Zeilen mit `check = from` auf `check = 0` zurück und
- *   aktualisiert `updated_at`. Antwort: { changed: number, from, to: 0 }
+ * Body:
+ *   { action: "reset-check", from: 1 | 3 }
+ *     Setzt alle Zeilen mit `check = from` auf `check = 0` zurück und
+ *     aktualisiert `updated_at`. Antwort: { changed: number, from, to: 0 }
+ *   { action: "delete-check", from: 1 | 3 }
+ *     Löscht alle Zeilen mit `check = from`. Antwort: { deleted: number, from }
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
@@ -158,10 +161,9 @@ GROUP BY "check"`,
 /**
  * POST /api/intern-analytics/controll-jobs
  *
- * Bulk-Reset: setzt alle `controll_status`-Zeilen, deren `"check"`-Spalte
- * dem Wert `from` entspricht, auf `0` zurück. Erlaubt sind ausschließlich
- * `from = 1` (In Arbeit) und `from = 3` (Fehler), damit weder „Offen“
- * (bereits 0) noch „Korrekt“ (2) versehentlich überschrieben werden.
+ * Bulk-Reset (`reset-check`) bzw. Bulk-Löschen (`delete-check`) für Zeilen mit
+ * `"check" = from`. Erlaubt sind ausschließlich `from = 1` (In Arbeit) und
+ * `from = 3` (Fehler); „Offen“ (0) und „Korrekt“ (2) sind nicht erlaubt.
  */
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
   request,
@@ -186,9 +188,12 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     unknown
   >;
   const action = typeof body.action === "string" ? body.action : "";
-  if (action !== "reset-check") {
+  if (action !== "reset-check" && action !== "delete-check") {
     return jsonResponse(
-      { error: "Unbekannte Aktion. Erwartet: action=\"reset-check\"" },
+      {
+        error:
+          "Unbekannte Aktion. Erwartet: action=\"reset-check\" oder \"delete-check\".",
+      },
       { status: 400 },
     );
   }
@@ -198,28 +203,40 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     return jsonResponse(
       {
         error:
-          "from muss 1 (In Arbeit) oder 3 (Fehler) sein – andere Werte werden nicht zurückgesetzt.",
+          "from muss 1 (In Arbeit) oder 3 (Fehler) sein – andere Werte sind nicht erlaubt.",
       },
       { status: 400 },
     );
   }
 
   try {
-    const res = await db
-      .prepare(
-        `UPDATE controll_status
+    if (action === "reset-check") {
+      const res = await db
+        .prepare(
+          `UPDATE controll_status
 SET "check" = 0, updated_at = datetime('now')
 WHERE "check" = ?`,
-      )
+        )
+        .bind(from)
+        .run();
+      const changed =
+        typeof res.meta?.changes === "number" ? res.meta.changes : 0;
+      return jsonResponse({ changed, from, to: 0 }, { status: 200 });
+    }
+
+    const res = await db
+      .prepare(`DELETE FROM controll_status WHERE "check" = ?`)
       .bind(from)
       .run();
-    const changed =
+    const deleted =
       typeof res.meta?.changes === "number" ? res.meta.changes : 0;
-    return jsonResponse({ changed, from, to: 0 }, { status: 200 });
+    return jsonResponse({ deleted, from }, { status: 200 });
   } catch (err) {
+    const verb =
+      action === "reset-check" ? "Bulk-Reset" : "Bulk-Löschen";
     return jsonResponse(
       {
-        error: "controll_status: Bulk-Reset fehlgeschlagen.",
+        error: `controll_status: ${verb} fehlgeschlagen.`,
         detail: err instanceof Error ? err.message : String(err),
       },
       { status: 500 },

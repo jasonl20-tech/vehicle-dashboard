@@ -70,3 +70,31 @@ export async function resetControllJobsCheck(
     to: 0,
   };
 }
+
+export type ControllJobsDeleteResponse = {
+  deleted: number;
+  from: 1 | 3;
+};
+
+/**
+ * Löscht alle Zeilen aus `controll_status` mit `"check" = from`.
+ * Erlaubt sind nur `from = 1` und `from = 3`.
+ */
+export async function deleteControllJobsCheck(
+  from: 1 | 3,
+): Promise<ControllJobsDeleteResponse> {
+  const res = await fetch(BASE, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ action: "delete-check", from }),
+  });
+  const j = (await res.json().catch(() => ({}))) as Partial<
+    ControllJobsDeleteResponse
+  > & { error?: string };
+  if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+  return {
+    deleted: j.deleted ?? 0,
+    from,
+  };
+}

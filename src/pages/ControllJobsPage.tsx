@@ -1,8 +1,17 @@
-import { ChevronLeft, ChevronRight, RefreshCw, RotateCcw, Search } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import {
   controllJobsListUrl,
+  deleteControllJobsCheck,
   resetControllJobsCheck,
   type ControllJobCheck,
   type ControllJobsListResponse,
@@ -54,14 +63,16 @@ const TEXT_IN =
 const TH = "px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
 const TD = "px-2 py-2 align-top text-[12.5px] text-ink-800 max-w-0";
 
+type BulkBusy = { op: "reset" | "delete"; from: 1 | 3 };
+
 export default function ControllJobsPage() {
   const [check, setCheck] = useState<ControllJobCheck>("all");
   const [vehicleId, setVehicleId] = useState("");
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
-  const [resetting, setResetting] = useState<null | 1 | 3>(null);
-  const [resetMsg, setResetMsg] = useState<
+  const [bulkBusy, setBulkBusy] = useState<BulkBusy | null>(null);
+  const [bulkMsg, setBulkMsg] = useState<
     | { kind: "ok"; text: string }
     | { kind: "err"; text: string }
     | null
@@ -118,24 +129,54 @@ export default function ControllJobsPage() {
       `Wirklich alle ${fmtNumber(n)} Einträge mit ${label} auf check = 0 (Offen) zurücksetzen?`,
     );
     if (!ok) return;
-    setResetting(from);
-    setResetMsg(null);
+    setBulkBusy({ op: "reset", from });
+    setBulkMsg(null);
     try {
       const r = await resetControllJobsCheck(from);
-      setResetMsg({
+      setBulkMsg({
         kind: "ok",
         text: `${fmtNumber(r.changed)} Einträge auf check = 0 zurückgesetzt (vorher ${label}).`,
       });
       api.reload();
     } catch (e) {
-      setResetMsg({
+      setBulkMsg({
         kind: "err",
         text: e instanceof Error ? e.message : String(e),
       });
     } finally {
-      setResetting(null);
+      setBulkBusy(null);
     }
   };
+
+  const onDeleteBulk = async (from: 1 | 3) => {
+    const label = from === 3 ? "Fehler (check = 3)" : "In Arbeit (check = 1)";
+    const n = checkCounts[String(from)] ?? 0;
+    const ok = window.confirm(
+      `Unwiderruflich: Alle ${fmtNumber(n)} Einträge mit ${label} aus der Datenbank löschen (DELETE WHERE "check" = ${from})?`,
+    );
+    if (!ok) return;
+    setBulkBusy({ op: "delete", from });
+    setBulkMsg(null);
+    try {
+      const r = await deleteControllJobsCheck(from);
+      setBulkMsg({
+        kind: "ok",
+        text: `${fmtNumber(r.deleted)} Einträge gelöscht (${label}).`,
+      });
+      api.reload();
+    } catch (e) {
+      setBulkMsg({
+        kind: "err",
+        text: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBulkBusy(null);
+    }
+  };
+
+  const bulkDisabled = bulkBusy !== null || api.loading;
+  const spinReset = bulkBusy?.op === "reset" ? bulkBusy.from : null;
+  const spinDelete = bulkBusy?.op === "delete" ? bulkBusy.from : null;
 
   return (
     <div>
@@ -209,12 +250,12 @@ export default function ControllJobsPage() {
         <button
           type="button"
           onClick={() => onReset(3)}
-          disabled={resetting !== null || api.loading}
+          disabled={bulkDisabled}
           title="Setzt alle Einträge mit check = 3 (Fehler) auf check = 0 (Offen) zurück."
           className="inline-flex items-center gap-1.5 rounded-md border border-accent-rose/40 bg-accent-rose/5 px-2.5 py-1.5 text-[12px] text-accent-rose transition-colors enabled:hover:bg-accent-rose/10 disabled:opacity-50"
         >
           <RotateCcw
-            className={`h-3.5 w-3.5 ${resetting === 3 ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 ${spinReset === 3 ? "animate-spin" : ""}`}
           />
           Fehler (3) → 0
           <span className="font-mono text-[10.5px] tabular-nums text-accent-rose/80">
@@ -224,25 +265,69 @@ export default function ControllJobsPage() {
         <button
           type="button"
           onClick={() => onReset(1)}
-          disabled={resetting !== null || api.loading}
+          disabled={bulkDisabled}
           title="Setzt alle Einträge mit check = 1 (In Arbeit) auf check = 0 (Offen) zurück."
           className="inline-flex items-center gap-1.5 rounded-md border border-accent-amber/40 bg-accent-amber/5 px-2.5 py-1.5 text-[12px] text-accent-amber transition-colors enabled:hover:bg-accent-amber/10 disabled:opacity-50"
         >
           <RotateCcw
-            className={`h-3.5 w-3.5 ${resetting === 1 ? "animate-spin" : ""}`}
+            className={`h-3.5 w-3.5 ${spinReset === 1 ? "animate-spin" : ""}`}
           />
           In Arbeit (1) → 0
           <span className="font-mono text-[10.5px] tabular-nums text-accent-amber/80">
             {fmtNumber(checkCounts["1"] ?? 0)}
           </span>
         </button>
-        {resetMsg && (
+
+        <span className="mx-1 hidden h-4 w-px bg-hair sm:inline-block" aria-hidden />
+
+        <span className="text-[11.5px] uppercase tracking-wider text-ink-400">
+          Massen-Löschen{" "}
+          <span className="font-mono normal-case tracking-normal">
+            DELETE WHERE check =
+          </span>
+        </span>
+        <button
+          type="button"
+          onClick={() => onDeleteBulk(3)}
+          disabled={bulkDisabled}
+          title='Löscht alle Zeilen mit "check" = 3 aus controll_status.'
+          className="inline-flex items-center gap-1.5 rounded-md border border-accent-rose/60 bg-white px-2.5 py-1.5 text-[12px] text-accent-rose transition-colors enabled:hover:bg-accent-rose/10 disabled:opacity-50"
+        >
+          {spinDelete === 3 ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="h-3.5 w-3.5" />
+          )}
+          Löschen check = 3
+          <span className="font-mono text-[10.5px] tabular-nums text-accent-rose/80">
+            {fmtNumber(checkCounts["3"] ?? 0)}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onDeleteBulk(1)}
+          disabled={bulkDisabled}
+          title='Löscht alle Zeilen mit "check" = 1 aus controll_status.'
+          className="inline-flex items-center gap-1.5 rounded-md border border-accent-amber/60 bg-white px-2.5 py-1.5 text-[12px] text-accent-amber transition-colors enabled:hover:bg-accent-amber/10 disabled:opacity-50"
+        >
+          {spinDelete === 1 ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="h-3.5 w-3.5" />
+          )}
+          Löschen check = 1
+          <span className="font-mono text-[10.5px] tabular-nums text-accent-amber/80">
+            {fmtNumber(checkCounts["1"] ?? 0)}
+          </span>
+        </button>
+
+        {bulkMsg && (
           <span
             className={`text-[11.5px] ${
-              resetMsg.kind === "ok" ? "text-brand-700" : "text-accent-rose"
+              bulkMsg.kind === "ok" ? "text-brand-700" : "text-accent-rose"
             }`}
           >
-            {resetMsg.text}
+            {bulkMsg.text}
           </span>
         )}
       </div>
