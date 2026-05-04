@@ -471,6 +471,8 @@ function MediaFieldPayloadMeta({ raw }: { raw: unknown }) {
     </div>
   );
 }
+
+function CmsMediaFieldInput({
   variant,
   raw,
   label,
