@@ -1,4 +1,4 @@
-import { Braces, Info, X } from "lucide-react";
+import { Braces, Info } from "lucide-react";
 import CmsFieldEditorShell, {
   cmsFieldSectionDomId,
 } from "./CmsFieldEditorShell";

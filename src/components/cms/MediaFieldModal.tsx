@@ -1,4 +1,4 @@
-import { Info, X } from "lucide-react";
+import { Info } from "lucide-react";
 import CmsFieldEditorShell, {
   cmsFieldSectionDomId,
 } from "./CmsFieldEditorShell";

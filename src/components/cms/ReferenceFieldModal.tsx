@@ -1,4 +1,4 @@
-import { Info, LayoutGrid, Link2, X } from "lucide-react";
+import { Info, LayoutGrid, Link2 } from "lucide-react";
 import CmsFieldEditorShell, {
   cmsFieldSectionDomId,
 } from "./CmsFieldEditorShell";
