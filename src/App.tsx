@@ -18,6 +18,7 @@ import CmsContentModelsPage from "./pages/cms/CmsContentModelsPage";
 import CmsContentEntryPage from "./pages/cms/CmsContentEntryPage";
 import CmsEntriesPage from "./pages/cms/CmsEntriesPage";
 import CmsLocalesPage from "./pages/cms/CmsLocalesPage";
+import CmsMediaAssetPage from "./pages/cms/CmsMediaAssetPage";
 import CmsMediaPage from "./pages/cms/CmsMediaPage";
 import CmsScheduledPage from "./pages/cms/CmsScheduledPage";
 import CmsSettingsPage from "./pages/cms/CmsSettingsPage";
@@ -89,7 +90,10 @@ export default function App() {
               element={<CmsContentModelEditPage />}
             />
             <Route path="models" element={<CmsContentModelsPage />} />
-            <Route path="media" element={<CmsMediaPage />} />
+            <Route path="media" element={<Outlet />}>
+              <Route index element={<CmsMediaPage />} />
+              <Route path="*" element={<CmsMediaAssetPage />} />
+            </Route>
             <Route path="locales" element={<CmsLocalesPage />} />
             <Route path="settings" element={<CmsSettingsPage />} />
           </Route>

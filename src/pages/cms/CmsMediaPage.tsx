@@ -1,6 +1,7 @@
 import {
   Bookmark,
   ChevronDown,
+  ExternalLink,
   FileText,
   Loader2,
   Plus,
@@ -17,7 +18,7 @@ import {
   updateAsset,
   type Asset,
 } from "../../lib/assetsApi";
-import { CMS_ASSETS_FOLDER } from "../../lib/cmsAccess";
+import { CMS_ASSETS_FOLDER, CMS_ROOT } from "../../lib/cmsAccess";
 
 /** ISO- oder AE-Timestamp → „vor X Tagen“ ( Asset-API liefert ISO). */
 function safeFmtRelative(iso: string | null | undefined): string {
@@ -363,14 +364,23 @@ export default function CmsMediaPage() {
                             )}
                           </div>
                           <div className="min-w-0">
-                            <a
-                              href={a.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="truncate font-medium text-[#0366d6] hover:underline"
-                            >
-                              {displayName(a)}
-                            </a>
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <Link
+                                to={`${CMS_ROOT}/media/${a.id}`}
+                                className="truncate font-medium text-[#0366d6] hover:underline"
+                              >
+                                {displayName(a)}
+                              </Link>
+                              <a
+                                href={a.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="shrink-0 rounded p-0.5 text-[#80868b] hover:bg-[#f1f3f4] hover:text-[#0366d6]"
+                                title="Öffentliche URL"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
                             <p className="truncate font-mono text-[11px] text-[#80868b]">
                               {a.key}
                             </p>
