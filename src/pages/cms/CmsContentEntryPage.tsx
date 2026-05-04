@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Link,
   useLocation,
@@ -13,7 +13,6 @@ import {
   CMS_CONTENTS_API,
   parseSchemaJson,
   type CmsContentModelRow,
-  type CmsContentModelsListResponse,
   type CmsContentRow,
 } from "../../lib/cmsApi";
 import {
@@ -53,13 +52,6 @@ export default function CmsContentEntryPage() {
     : null;
   const contentRes = useApi<CmsContentRow>(contentUrl);
 
-  /** Override für Content-Typ (Dropdown); null = Server-Wert nutzen */
-  const [pickedModelId, setPickedModelId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setPickedModelId(null);
-  }, [contentIdForEdit]);
-
   const baseModelId = useMemo(() => {
     if (contentIdForEdit && contentRes.data?.content_model_id) {
       return contentRes.data.content_model_id;
@@ -73,25 +65,10 @@ export default function CmsContentEntryPage() {
     modelIdFromQuery,
   ]);
 
-  const modelIdResolved = pickedModelId ?? baseModelId;
-
-  const modelUrl = modelIdResolved
-    ? `${CMS_CONTENT_MODELS_API}/${encodeURIComponent(modelIdResolved)}`
+  const modelUrl = baseModelId
+    ? `${CMS_CONTENT_MODELS_API}/${encodeURIComponent(baseModelId)}`
     : null;
   const modelRes = useApi<CmsContentModelRow>(modelUrl);
-
-  const modelsForPickerUrl = contentIdForEdit
-    ? `${CMS_CONTENT_MODELS_API}?limit=500`
-    : null;
-  const modelsForPicker =
-    useApi<CmsContentModelsListResponse>(modelsForPickerUrl);
-
-  const modelOptions = useMemo(() => {
-    const rows = modelsForPicker.data?.rows ?? [];
-    return [...rows].sort((a, b) =>
-      a.key.localeCompare(b.key, "de", { sensitivity: "base" }),
-    );
-  }, [modelsForPicker.data?.rows]);
 
   const schema = useMemo(() => {
     const raw = modelRes.data?.schema_json ?? "{}";
@@ -125,8 +102,7 @@ export default function CmsContentEntryPage() {
 
   const loading =
     Boolean(contentUrl && contentRes.loading) ||
-    Boolean(modelUrl && modelRes.loading) ||
-    Boolean(contentIdForEdit && modelsForPicker.loading);
+    Boolean(modelUrl && modelRes.loading);
 
   const modelsListUrl =
     isNewRoute && !modelIdFromQuery
@@ -262,15 +238,13 @@ export default function CmsContentEntryPage() {
     <ContentEntryEditor
       key={
         contentIdForEdit
-          ? `${contentIdForEdit}-${modelIdResolved}`
-          : `new-${modelIdResolved}`
+          ? `${contentIdForEdit}-${baseModelId}`
+          : `new-${baseModelId}`
       }
       modelKey={model.key}
       schema={schema}
       contentId={contentIdForEdit}
-      selectedModelId={modelIdResolved}
-      onSelectedModelIdChange={setPickedModelId}
-      modelOptions={modelOptions}
+      selectedModelId={baseModelId}
       initialPayload={initialPayload}
       initialStatus={initialStatus}
       initialLocale={initialLocale}

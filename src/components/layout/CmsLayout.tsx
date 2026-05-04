@@ -231,13 +231,6 @@ export default function CmsLayout() {
           </Link>
 
           <p className="mb-1.5 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-            Ansichten
-          </p>
-          <p className="px-3 text-[12px] leading-snug text-ink-400">
-            Gespeicherte Filter folgen.
-          </p>
-
-          <p className="mb-1.5 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
             Content-Typ
           </p>
           <div className="space-y-0.5">

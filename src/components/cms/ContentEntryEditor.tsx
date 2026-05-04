@@ -31,10 +31,8 @@ type Props = {
   modelKey: string;
   schema: CmsContentModelSchema;
   contentId: string | null;
-  /** Aktuell gewähltes Content-Modell (bearbeitbar bei bestehendem Eintrag). */
+  /** Content-Modell-ID für API-Updates (nicht im UI änderbar). */
   selectedModelId: string;
-  onSelectedModelIdChange: (id: string) => void;
-  modelOptions: { id: string; key: string }[];
   initialPayload: Record<string, unknown>;
   initialStatus: string;
   initialLocale: string;
@@ -63,8 +61,6 @@ export default function ContentEntryEditor({
   schema,
   contentId,
   selectedModelId,
-  onSelectedModelIdChange,
-  modelOptions,
   initialPayload,
   initialStatus,
   initialLocale,
@@ -89,11 +85,6 @@ export default function ContentEntryEditor({
   useEffect(() => {
     setScheduledLocal(isoToDatetimeLocal(initialScheduledPublishAt));
   }, [initialScheduledPublishAt, contentId]);
-
-  const resolvedModelKey = useMemo(() => {
-    const hit = modelOptions.find((m) => m.id === selectedModelId);
-    return hit?.key ?? modelKey;
-  }, [modelOptions, selectedModelId, modelKey]);
 
   const entryTitle = useMemo(() => {
     for (const k of ["title", "name", "headline", "slug", "internalTitle"]) {
@@ -145,7 +136,6 @@ export default function ContentEntryEditor({
       setStatus(nextStatus);
       setServerUpdatedAt(row.updated_at);
       applyPayload(apiPayload);
-      onSelectedModelIdChange(row.content_model_id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -176,7 +166,7 @@ export default function ContentEntryEditor({
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-tight text-[#1a1a1a]">
-            <span className="text-[#5f6368]">{resolvedModelKey}</span>
+            <span className="text-[#5f6368]">{modelKey}</span>
             <span className="mx-2 font-normal text-[#dadce0]">/</span>
             <span>{entryTitle}</span>
           </div>
@@ -300,39 +290,6 @@ export default function ContentEntryEditor({
                         </div>
                       </div>
 
-                      {contentId ? (
-                        <div>
-                          <label
-                            htmlFor="cms-entry-model"
-                            className="mb-2 block text-[12px] font-medium text-[#1a1a1a]"
-                          >
-                            Content-Typ
-                          </label>
-                          <select
-                            id="cms-entry-model"
-                            value={selectedModelId}
-                            onChange={(e) =>
-                              onSelectedModelIdChange(e.target.value)
-                            }
-                            disabled={saving || modelOptions.length === 0}
-                            className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] text-ink-900 outline-none focus:border-[#0366d6] disabled:opacity-50"
-                          >
-                            {modelOptions.length === 0 ? (
-                              <option value={selectedModelId}>—</option>
-                            ) : (
-                              modelOptions.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                  {m.key}
-                                </option>
-                              ))
-                            )}
-                          </select>
-                          <p className="mt-1.5 text-[11px] leading-snug text-[#5f6368]">
-                            Nach dem Wechsel Felder prüfen und speichern.
-                          </p>
-                        </div>
-                      ) : null}
-
                       <div>
                         <label
                           htmlFor="cms-scheduled-at"
@@ -404,9 +361,7 @@ export default function ContentEntryEditor({
                         <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
                           Content-Typ
                         </dt>
-                        <dd className="mt-1 text-[#1a1a1a]">
-                          {resolvedModelKey}
-                        </dd>
+                        <dd className="mt-1 text-[#1a1a1a]">{modelKey}</dd>
                       </div>
                       <div>
                         <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#80868b]">
