@@ -42,9 +42,9 @@ export default function CmsContentModelsPage() {
     error && String(error).trim() ? String(error).trim() : null;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto w-full max-w-7xl">
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
+        <h1 className="font-display text-[28px] font-semibold tracking-tighter2 text-ink-900 sm:text-[32px]">
           Content-Modelle
         </h1>
         <Link
@@ -71,7 +71,7 @@ export default function CmsContentModelsPage() {
             >
               <Link
                 to={`${CMS_ROOT}/models/${m.id}/edit`}
-                className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:border-ink-200 hover:bg-ink-50/30"
+                className="flex w-full items-center justify-between gap-4 p-5 text-left transition hover:border-ink-200 hover:bg-ink-50/30"
               >
                 <div className="min-w-0">
                   <p className="font-medium text-ink-900">{m.key}</p>

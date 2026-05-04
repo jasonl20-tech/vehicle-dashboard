@@ -16,7 +16,7 @@ import { CMS_ROOT } from "../../lib/cmsAccess";
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   [
-    "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[14px] font-medium transition-colors",
     isActive
       ? "bg-ink-900 text-white shadow-sm"
       : "text-ink-600 hover:bg-night-900/[0.05] hover:text-ink-900",
@@ -27,24 +27,24 @@ export default function CmsLayout() {
   const [spaceOpen, setSpaceOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-[#f7f7f5] text-ink-900">
+    <div className="flex min-h-screen bg-[#f5f5f2] text-ink-900">
       <aside
-        className="sticky top-0 flex h-screen w-[240px] shrink-0 flex-col border-r border-hair bg-white"
+        className="sticky top-0 flex h-screen w-[280px] shrink-0 flex-col border-r border-hair bg-white"
         aria-label="CMS Navigation"
       >
-        <div className="flex h-14 items-center border-b border-hair px-4">
+        <div className="flex h-[3.75rem] items-center border-b border-hair px-5">
           <Link
             to={CMS_ROOT}
             className="inline-flex min-w-0 items-center"
             aria-label="CMS — zur Übersicht"
           >
-            <Logo className="h-[22px] w-auto shrink-0 text-ink-900" />
+            <Logo className="h-6 w-auto shrink-0 text-ink-900" />
           </Link>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-2 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-5">
           <NavLink to={CMS_ROOT} end className={navClass}>
-            <LayoutGrid className="h-4 w-4 shrink-0 opacity-80" />
+            <LayoutGrid className="h-[18px] w-[18px] shrink-0 opacity-80" />
             Übersicht
           </NavLink>
 
@@ -52,19 +52,19 @@ export default function CmsLayout() {
             Inhalt
           </p>
           <NavLink to={`${CMS_ROOT}/models`} className={navClass}>
-            <Sparkles className="h-4 w-4 shrink-0 opacity-80" />
+            <Sparkles className="h-[18px] w-[18px] shrink-0 opacity-80" />
             Content-Modelle
           </NavLink>
           <NavLink to={`${CMS_ROOT}/entries`} className={navClass}>
-            <Box className="h-4 w-4 shrink-0 opacity-80" />
+            <Box className="h-[18px] w-[18px] shrink-0 opacity-80" />
             Content
           </NavLink>
           <NavLink to={`${CMS_ROOT}/media`} className={navClass}>
-            <ImageIcon className="h-4 w-4 shrink-0 opacity-80" />
+            <ImageIcon className="h-[18px] w-[18px] shrink-0 opacity-80" />
             Medien
           </NavLink>
           <NavLink to={`${CMS_ROOT}/locales`} className={navClass}>
-            <Globe className="h-4 w-4 shrink-0 opacity-80" />
+            <Globe className="h-[18px] w-[18px] shrink-0 opacity-80" />
             Sprachen
           </NavLink>
 
@@ -72,7 +72,7 @@ export default function CmsLayout() {
             Space
           </p>
           <NavLink to={`${CMS_ROOT}/settings`} className={navClass}>
-            <Settings className="h-4 w-4 shrink-0 opacity-80" />
+            <Settings className="h-[18px] w-[18px] shrink-0 opacity-80" />
             Einstellungen
           </NavLink>
         </nav>
@@ -88,12 +88,12 @@ export default function CmsLayout() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-4 border-b border-hair bg-white/90 px-6 backdrop-blur">
+        <header className="sticky top-0 z-10 flex h-[3.75rem] shrink-0 items-center justify-between gap-4 border-b border-hair bg-white/90 px-6 backdrop-blur lg:px-8">
           <div className="relative min-w-0">
             <button
               type="button"
               onClick={() => setSpaceOpen((v) => !v)}
-              className="flex max-w-full items-center gap-2 rounded-lg border border-hair bg-white px-3 py-1.5 text-left text-[12.5px] font-medium text-ink-800 shadow-sm transition hover:border-ink-200"
+              className="flex max-w-full items-center gap-2 rounded-lg border border-hair bg-white px-3.5 py-2 text-left text-[13px] font-medium text-ink-800 shadow-sm transition hover:border-ink-200"
             >
               <span className="truncate">Space · Produktions-Space</span>
               <ChevronDown
@@ -147,7 +147,7 @@ export default function CmsLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-6 lg:p-8">
+        <main className="flex-1 overflow-auto p-6 lg:p-10 xl:px-12">
           <Outlet />
         </main>
       </div>

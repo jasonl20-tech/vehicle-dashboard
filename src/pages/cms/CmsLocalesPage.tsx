@@ -1,8 +1,8 @@
 export default function CmsLocalesPage() {
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto w-full max-w-3xl">
       <header className="mb-8">
-        <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
+        <h1 className="font-display text-[28px] font-semibold tracking-tighter2 text-ink-900 sm:text-[32px]">
           Sprachen
         </h1>
       </header>

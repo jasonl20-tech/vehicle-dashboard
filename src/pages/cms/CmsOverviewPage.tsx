@@ -29,12 +29,12 @@ const cards = [
 
 export default function CmsOverviewPage() {
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto w-full max-w-7xl">
       <div className="mb-10">
-        <h1 className="font-display text-[28px] font-semibold tracking-tighter2 text-ink-900 sm:text-[32px]">
+        <h1 className="font-display text-[30px] font-semibold tracking-tighter2 text-ink-900 sm:text-[36px]">
           Content Management
         </h1>
-        <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-ink-500">
+        <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-ink-500">
           Headless-CMS-Bereich: Modelle, Inhalte und Medien.
         </p>
       </div>

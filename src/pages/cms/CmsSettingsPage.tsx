@@ -1,13 +1,13 @@
 export default function CmsSettingsPage() {
   return (
-    <div className="mx-auto max-w-2xl">
+    <div className="mx-auto w-full max-w-3xl">
       <header className="mb-8">
-        <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
+        <h1 className="font-display text-[28px] font-semibold tracking-tighter2 text-ink-900 sm:text-[32px]">
           Space-Einstellungen
         </h1>
       </header>
 
-      <div className="space-y-6 rounded-xl border border-hair bg-white p-6">
+      <div className="space-y-6 rounded-xl border border-hair bg-white p-8 shadow-sm">
         <div>
           <label
             className="mb-1.5 block text-[12px] font-medium text-ink-700"

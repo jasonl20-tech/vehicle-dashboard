@@ -353,7 +353,7 @@ export default function ContentModelEditorForm({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto w-full max-w-7xl">
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <Link
           to={`${CMS_ROOT}/models`}
@@ -365,7 +365,7 @@ export default function ContentModelEditorForm({
       </div>
 
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <h1 className="font-display text-[24px] font-semibold tracking-tighter2 text-ink-900">
+        <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900 sm:text-[32px]">
           {isNew ? "Neues Content-Modell" : "Content-Modell bearbeiten"}
         </h1>
         <div className="flex flex-wrap gap-2">
@@ -400,8 +400,9 @@ export default function ContentModelEditorForm({
         </ul>
       ) : null}
 
-      <div className="space-y-6">
-        <div className="rounded-xl border border-hair bg-white p-5">
+      <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[minmax(0,1fr)_min(400px,34vw)] xl:items-start xl:gap-10">
+        <div className="min-w-0 space-y-6">
+        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
           <label
             className="mb-1.5 block text-[12px] font-medium text-ink-700"
             htmlFor="cms-model-key"
@@ -413,14 +414,14 @@ export default function ContentModelEditorForm({
             value={key}
             onChange={(e) => setKey(e.target.value)}
             placeholder="z. B. blogPost"
-            className="w-full rounded-lg border border-hair px-3 py-2 font-mono text-[13px] text-ink-900"
+            className="w-full rounded-lg border border-hair px-3 py-2.5 font-mono text-[14px] text-ink-900"
           />
           <p className="mt-1 text-[11px] text-ink-400">
             Eindeutig, später in APIs und Code verwendet.
           </p>
         </div>
 
-        <div className="rounded-xl border border-hair bg-white p-5">
+        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
           <label
             className="mb-1.5 block text-[12px] font-medium text-ink-700"
             htmlFor="cms-model-desc"
@@ -432,11 +433,11 @@ export default function ContentModelEditorForm({
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-hair px-3 py-2 text-[13px] text-ink-900"
+            className="w-full rounded-lg border border-hair px-3 py-2.5 text-[14px] text-ink-900"
           />
         </div>
 
-        <div className="rounded-xl border border-hair bg-white p-5">
+        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[12px] font-semibold text-ink-800">
               Felder
@@ -905,8 +906,13 @@ export default function ContentModelEditorForm({
             </select>
           </div>
         </div>
+        </div>
 
-        <div className="rounded-xl border border-hair bg-white p-5">
+        <aside
+          className="min-w-0 xl:sticky xl:top-28 xl:self-start"
+          aria-label="JSON-Vorschau"
+        >
+        <div className="rounded-xl border border-hair bg-white p-6 shadow-sm">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[12px] font-semibold text-ink-800">
               JSON preview
@@ -925,12 +931,13 @@ export default function ContentModelEditorForm({
             wie beim Speichern (nur Lesen).
           </p>
           <pre
-            className="max-h-[min(480px,55vh)] overflow-auto rounded-lg border border-hair bg-[#0d1117] p-3 font-mono text-[11px] leading-relaxed text-[#e6edf3]"
+            className="max-h-[min(480px,55vh)] overflow-auto rounded-lg border border-hair bg-[#0d1117] p-4 font-mono text-[12px] leading-relaxed text-[#e6edf3] xl:max-h-[calc(100vh-11rem)]"
             tabIndex={0}
           >
             {schemaJsonPreview}
           </pre>
         </div>
+        </aside>
       </div>
 
       <AddFieldModal
