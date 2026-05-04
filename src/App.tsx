@@ -15,6 +15,7 @@ import BildempfangPage from "./pages/BildempfangPage";
 import ControllingPage from "./pages/ControllingPage";
 import CmsContentModelEditPage from "./pages/cms/CmsContentModelEditPage";
 import CmsContentModelsPage from "./pages/cms/CmsContentModelsPage";
+import CmsContentEntryPage from "./pages/cms/CmsContentEntryPage";
 import CmsEntriesPage from "./pages/cms/CmsEntriesPage";
 import CmsLocalesPage from "./pages/cms/CmsLocalesPage";
 import CmsMediaPage from "./pages/cms/CmsMediaPage";
@@ -75,6 +76,11 @@ export default function App() {
 
           <Route path="/cms" element={<CmsLayout />}>
             <Route index element={<CmsOverviewPage />} />
+            <Route path="entries/new" element={<CmsContentEntryPage />} />
+            <Route
+              path="entries/:contentId/edit"
+              element={<CmsContentEntryPage />}
+            />
             <Route path="entries" element={<CmsEntriesPage />} />
             <Route path="models/new" element={<CmsContentModelEditPage />} />
             <Route

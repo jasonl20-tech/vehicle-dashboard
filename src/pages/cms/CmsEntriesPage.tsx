@@ -1,5 +1,7 @@
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { CMS_ROOT } from "../../lib/cmsAccess";
 import {
   CMS_CONTENT_MODELS_API,
   CMS_CONTENTS_API,
@@ -51,6 +53,7 @@ export default function CmsEntriesPage() {
         locale: r.locale,
         updated: fmtRelative(r.updated_at),
         state: statusLabelDe(r.status),
+        statusRaw: r.status.trim().toLowerCase(),
       };
     });
   }, [contents.data?.rows, modelKeyById]);
@@ -71,13 +74,12 @@ export default function CmsEntriesPage() {
             Content
           </h1>
         </div>
-        <button
-          type="button"
-          disabled
-          className="inline-flex items-center justify-center rounded-lg bg-ink-900 px-4 py-2 text-[12.5px] font-medium text-white opacity-60"
+        <Link
+          to={`${CMS_ROOT}/entries/new`}
+          className="inline-flex items-center justify-center rounded-lg bg-ink-900 px-4 py-2 text-[12.5px] font-medium text-white hover:bg-ink-800"
         >
           Content anlegen
-        </button>
+        </Link>
       </header>
 
       {errMsg ? (
@@ -116,12 +118,14 @@ export default function CmsEntriesPage() {
           </thead>
           <tbody className="divide-y divide-hair">
             {rows.map((r) => (
-              <tr
-                key={r.id}
-                className="transition hover:bg-night-900/[0.02]"
-              >
+              <tr key={r.id} className="transition hover:bg-night-900/[0.02]">
                 <td className="px-4 py-3 font-medium text-ink-900">
-                  {r.title}
+                  <Link
+                    to={`${CMS_ROOT}/entries/${r.id}/edit`}
+                    className="text-ink-900 hover:underline"
+                  >
+                    {r.title}
+                  </Link>
                 </td>
                 <td className="px-4 py-3 text-ink-600">{r.type}</td>
                 <td className="hidden px-4 py-3 text-ink-500 sm:table-cell">
@@ -131,7 +135,13 @@ export default function CmsEntriesPage() {
                   {r.updated}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="rounded-md border border-hair bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                  <span
+                    className={
+                      r.statusRaw === "published"
+                        ? "rounded-md border border-emerald-200 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-900"
+                        : "rounded-md border border-hair bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-900"
+                    }
+                  >
                     {r.state}
                   </span>
                 </td>
