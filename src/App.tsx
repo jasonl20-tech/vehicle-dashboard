@@ -72,13 +72,13 @@ export default function App() {
           <Route index element={<PlatformHomePage />} />
           <Route path="/developer" element={<DeveloperOverviewPage />} />
 
-          <Route element={<CmsLayout />}>
-            <Route path="/cms" element={<CmsOverviewPage />} />
-            <Route path="/cms/entries" element={<CmsEntriesPage />} />
-            <Route path="/cms/models" element={<CmsContentModelsPage />} />
-            <Route path="/cms/media" element={<CmsMediaPage />} />
-            <Route path="/cms/locales" element={<CmsLocalesPage />} />
-            <Route path="/cms/settings" element={<CmsSettingsPage />} />
+          <Route path="/cms" element={<CmsLayout />}>
+            <Route index element={<CmsOverviewPage />} />
+            <Route path="entries" element={<CmsEntriesPage />} />
+            <Route path="models" element={<CmsContentModelsPage />} />
+            <Route path="media" element={<CmsMediaPage />} />
+            <Route path="locales" element={<CmsLocalesPage />} />
+            <Route path="settings" element={<CmsSettingsPage />} />
           </Route>
 
           <Route element={<ControlPlatformLayout />}>
