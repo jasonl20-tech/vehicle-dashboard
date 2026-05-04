@@ -11,6 +11,14 @@ import {
 } from "../../lib/cmsApi";
 import { useApi } from "../../lib/customerApi";
 
+function prettySchemaJson(raw: string): string {
+  try {
+    return JSON.stringify(JSON.parse(raw) as unknown, null, 2);
+  } catch {
+    return raw;
+  }
+}
+
 export default function CmsContentModelsPage() {
   const url = `${CMS_CONTENT_MODELS_API}?limit=200`;
   const { data, error, loading } = useApi<CmsContentModelsListResponse>(url);
@@ -25,6 +33,7 @@ export default function CmsContentModelsPage() {
         key: m.key,
         fields: n,
         desc: m.description?.trim() || "",
+        schema_json: m.schema_json,
       };
     });
   }, [data?.rows]);
@@ -56,10 +65,13 @@ export default function CmsContentModelsPage() {
       {!loading && !errMsg ? (
         <ul className="space-y-2">
           {rows.map((m) => (
-            <li key={m.id}>
+            <li
+              key={m.id}
+              className="overflow-hidden rounded-xl border border-hair bg-white shadow-sm"
+            >
               <Link
                 to={`${CMS_ROOT}/models/${m.id}/edit`}
-                className="flex w-full items-center justify-between gap-3 rounded-xl border border-hair bg-white p-4 text-left shadow-sm transition hover:border-ink-200 hover:bg-ink-50/30"
+                className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:border-ink-200 hover:bg-ink-50/30"
               >
                 <div className="min-w-0">
                   <p className="font-medium text-ink-900">{m.key}</p>
@@ -77,6 +89,14 @@ export default function CmsContentModelsPage() {
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-ink-300" />
               </Link>
+              <details className="border-t border-hair bg-ink-50/25">
+                <summary className="cursor-pointer list-none px-4 py-2.5 text-[11px] font-medium text-ink-600 marker:content-none [&::-webkit-details-marker]:hidden">
+                  JSON preview
+                </summary>
+                <pre className="max-h-64 overflow-auto border-t border-hair bg-[#0d1117] px-4 py-3 font-mono text-[10px] leading-relaxed text-[#e6edf3]">
+                  {prettySchemaJson(m.schema_json)}
+                </pre>
+              </details>
             </li>
           ))}
         </ul>

@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-react";
+import { ArrowLeft, ClipboardCopy, Plus, Settings2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AddBooleanFieldModal from "./AddBooleanFieldModal";
@@ -95,6 +95,13 @@ export default function ContentModelEditorForm({
     const k = key.trim();
     return otherModelKeys.filter((x) => x !== k);
   }, [otherModelKeys, key]);
+
+  const schemaJsonPreview = useMemo(
+    () => JSON.stringify(serializeContentModelSchema(schema), null, 2),
+    [schema],
+  );
+
+  const [schemaJsonCopied, setSchemaJsonCopied] = useState(false);
 
   const validationHints = useMemo(() => {
     const msgs: string[] = [];
@@ -332,6 +339,16 @@ export default function ContentModelEditorForm({
       setError((e as Error).message || String(e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function copySchemaJsonPreview() {
+    try {
+      await navigator.clipboard.writeText(schemaJsonPreview);
+      setSchemaJsonCopied(true);
+      window.setTimeout(() => setSchemaJsonCopied(false), 2000);
+    } catch {
+      /* Clipboard nicht verfügbar */
     }
   }
 
@@ -887,6 +904,32 @@ export default function ContentModelEditorForm({
                 ))}
             </select>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-hair bg-white p-5">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-[12px] font-semibold text-ink-800">
+              JSON preview
+            </span>
+            <button
+              type="button"
+              onClick={() => void copySchemaJsonPreview()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-hair bg-white px-3 py-1.5 text-[11px] font-medium text-ink-700 hover:bg-ink-50"
+            >
+              <ClipboardCopy className="h-3.5 w-3.5" />
+              {schemaJsonCopied ? "Kopiert" : "Kopieren"}
+            </button>
+          </div>
+          <p className="mb-3 text-[11px] leading-snug text-ink-500">
+            Vorschau von <code className="font-mono text-ink-700">schema_json</code>{" "}
+            wie beim Speichern (nur Lesen).
+          </p>
+          <pre
+            className="max-h-[min(480px,55vh)] overflow-auto rounded-lg border border-hair bg-[#0d1117] p-3 font-mono text-[11px] leading-relaxed text-[#e6edf3]"
+            tabIndex={0}
+          >
+            {schemaJsonPreview}
+          </pre>
         </div>
       </div>
 
