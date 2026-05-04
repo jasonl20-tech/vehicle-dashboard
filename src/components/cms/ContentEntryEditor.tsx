@@ -1,4 +1,10 @@
-import { ArrowLeft, ChevronDown, PanelRightClose, PanelRightOpen } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ExternalLink,
+  PanelRightClose,
+  PanelRightOpen,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -26,7 +32,7 @@ import type {
   CmsContentModelSchema,
   CmsFieldDefinition,
 } from "../../lib/cmsSchemaTypes";
-import { FIELD_TYPE_LABELS } from "../../lib/cmsSchemaTypes";
+import { buildCmsPreviewUrl, FIELD_TYPE_LABELS } from "../../lib/cmsSchemaTypes";
 import { extractPlainFromLexicalOrText } from "../../lib/lexicalRichText";
 import { fmtRelative } from "../../lib/customerApi";
 import { isImage, publicAssetUrl, type Asset } from "../../lib/assetsApi";
@@ -106,6 +112,25 @@ export default function ContentEntryEditor({
     }
     return contentId ? contentId.slice(0, 8) + "…" : "Neuer Eintrag";
   }, [payload, contentId]);
+
+  const previewHref = useMemo(() => {
+    const base = schema.previewBaseUrl?.trim();
+    if (!base || !contentId) return null;
+    return buildCmsPreviewUrl(base, {
+      contentId,
+      contentModelId: selectedModelId,
+      modelKey,
+      locale,
+      deliveryEnvironment: schema.deliveryEnvironment,
+    });
+  }, [
+    schema.previewBaseUrl,
+    schema.deliveryEnvironment,
+    contentId,
+    selectedModelId,
+    modelKey,
+    locale,
+  ]);
 
   const applyPayload = useCallback((p: Record<string, unknown>) => {
     setPayload(mergePayloadWithSchema(schema, p));
@@ -196,6 +221,29 @@ export default function ContentEntryEditor({
               {sidebarOpen ? "Ausblenden" : "Seitenleiste"}
             </span>
           </button>
+          {previewHref ? (
+            <a
+              href={previewHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#0366d6] bg-white px-2.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f0f7ff] sm:px-3"
+            >
+              <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="max-sm:sr-only">Vorschau</span>
+            </a>
+          ) : schema.previewBaseUrl?.trim() && !contentId ? (
+            <span
+              className="inline-flex h-9 shrink-0 items-center rounded-lg border border-dashed border-[#dadce0] px-2.5 text-[11px] text-[#5f6368] sm:px-3"
+              title="Zuerst speichern, um die Vorschau-URL mit contentId zu öffnen."
+            >
+              Vorschau nach Speichern
+            </span>
+          ) : null}
+          {schema.deliveryEnvironment === "preview" ? (
+            <span className="shrink-0 rounded-md bg-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-violet-950">
+              Preview-Modell
+            </span>
+          ) : null}
           <span
             className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] font-semibold ${statusBadgeClass}`}
           >

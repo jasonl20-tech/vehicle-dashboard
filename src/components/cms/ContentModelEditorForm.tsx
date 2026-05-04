@@ -625,6 +625,62 @@ export default function ContentModelEditorForm({
                     ))}
                 </select>
               </div>
+              <div>
+                <label className="mb-1.5 block text-[13px] font-medium text-[#1a1a1a]">
+                  Auslieferung (Production / Preview)
+                </label>
+                <select
+                  value={schema.deliveryEnvironment}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSchema((s) => ({
+                      ...s,
+                      deliveryEnvironment: v === "preview" ? "preview" : "production",
+                    }));
+                  }}
+                  className="w-full max-w-md rounded-md border border-[#dadce0] bg-white px-3 py-2.5 text-[13px]"
+                >
+                  <option value="production">Production (Live-Webseite)</option>
+                  <option value="preview">Preview (Staging / Vorschau)</option>
+                </select>
+                <p className="mt-1 text-[12px] text-[#5f6368]">
+                  Wird in <code className="font-mono text-[11px]">schema_json</code>{" "}
+                  als <code className="font-mono text-[11px]">deliveryEnvironment</code>{" "}
+                  gespeichert — damit kann die Webseite Preview- und Production-Typen
+                  unterscheiden.
+                </p>
+              </div>
+              <div>
+                <label
+                  className="mb-1.5 block text-[13px] font-medium text-[#1a1a1a]"
+                  htmlFor="cms-model-preview-base-url"
+                >
+                  Vorschau-Basis-URL (optional)
+                </label>
+                <input
+                  id="cms-model-preview-base-url"
+                  type="url"
+                  value={schema.previewBaseUrl ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setSchema((s) => ({
+                      ...s,
+                      previewBaseUrl: v === "" ? undefined : v,
+                    }));
+                  }}
+                  placeholder="https://staging.example.com/cms-preview"
+                  className="w-full rounded-md border border-[#dadce0] px-3 py-2.5 font-mono text-[13px] text-[#1a1a1a] outline-none focus:border-[#0366d6] focus:ring-1 focus:ring-[#0366d6]"
+                />
+                <p className="mt-1 text-[12px] text-[#5f6368]">
+                  Nur <span className="font-mono text-[11px]">http</span> oder{" "}
+                  <span className="font-mono text-[11px]">https</span>. Beim Speichern
+                  des Modells wird die URL normalisiert. Im Eintrags-Editor erscheint
+                  „Vorschau“, sobald der Eintrag eine ID hat — es werden u. a.{" "}
+                  <span className="font-mono text-[11px]">contentId</span> und{" "}
+                  <span className="font-mono text-[11px]">deliveryEnvironment</span>{" "}
+                  angehängt.
+                </p>
+              </div>
             </div>
           ) : editorPanel === "json" ? (
             <div className="mx-auto max-w-4xl">

@@ -3,6 +3,11 @@
  * Worker/Webseite mit **demselben** `website`-Binding wie dieses Projekt.
  *
  * Keine Session nötig; nur **eure** Berechtigung am D1-Binding entscheidet.
+ *
+ * **Preview vs. Production:** In `cms_content_models.schema_json` enthält jedes
+ * gespeicherte Modell (über dieses Dashboard) das Feld `deliveryEnvironment`
+ * mit `"production"` oder `"preview"`. Fehlt es in älteren Zeilen, wie
+ * Production behandeln. Beispiel SQLite: `json_extract(schema_json, '$.deliveryEnvironment')`.
  */
 
 export const CMS_CONTENT_STATUS_PUBLISHED = "published" as const;

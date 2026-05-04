@@ -276,6 +276,57 @@ export const RICH_TEXT_MARK_LABELS: Record<string, string> = {
   table: "▦",
 };
 
+/** Wo Inhalte dieses Typs ausgespielt werden (steht immer in `schema_json` für die Webseite). */
+export type CmsDeliveryEnvironment = "production" | "preview";
+
+export function normalizeDeliveryEnvironment(
+  raw: unknown,
+): CmsDeliveryEnvironment {
+  if (raw === "preview") return "preview";
+  return "production";
+}
+
+function normalizePreviewBaseUrlFromUnknown(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const t = raw.trim();
+  if (!t || t.length > 2048) return undefined;
+  try {
+    const u = new URL(t);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
+    return u.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Vorschau-Link für den Entry-Editor (`previewBaseUrl` aus dem Content-Modell).
+ * Liefert `null`, wenn die Basis-URL ungültig ist.
+ */
+export function buildCmsPreviewUrl(
+  base: string,
+  params: {
+    contentId: string;
+    contentModelId: string;
+    modelKey: string;
+    locale: string;
+    deliveryEnvironment: CmsDeliveryEnvironment;
+  },
+): string | null {
+  try {
+    const u = new URL(base.trim());
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    u.searchParams.set("contentId", params.contentId);
+    u.searchParams.set("contentModelId", params.contentModelId);
+    u.searchParams.set("modelKey", params.modelKey);
+    u.searchParams.set("locale", params.locale);
+    u.searchParams.set("deliveryEnvironment", params.deliveryEnvironment);
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 export type CmsFieldDefinition = {
   /** API-Feld-ID (camelCase), z. B. `heroTitle` */
   id: string;
@@ -321,10 +372,20 @@ export type CmsContentModelSchema = {
   fields: CmsFieldDefinition[];
   /** Welches Feld in Listen als Titel dient */
   displayField?: string;
+  /**
+   * Auslieferung: `production` = Live-Webseite; `preview` = Staging/Vorschau.
+   * Wird beim Speichern immer in `schema_json` geschrieben.
+   */
+  deliveryEnvironment: CmsDeliveryEnvironment;
+  /**
+   * Optional: Ziel-URL für „Vorschau öffnen“ im Entry-Editor (nur http/https).
+   * Query-Parameter: contentId, contentModelId, modelKey, locale, deliveryEnvironment.
+   */
+  previewBaseUrl?: string;
 };
 
 export function emptyContentModelSchema(): CmsContentModelSchema {
-  return { fields: [] };
+  return { fields: [], deliveryEnvironment: "production" };
 }
 
 // ---------- Contentful Content Type JSON (Export → internes Schema) ----------
@@ -1124,17 +1185,26 @@ export function parseContentModelSchema(raw: unknown): CmsContentModelSchema {
     typeof o.displayField === "string" && o.displayField.trim()
       ? o.displayField.trim()
       : undefined;
+  const deliveryEnvironment = normalizeDeliveryEnvironment(o.deliveryEnvironment);
+  const previewBaseUrl = normalizePreviewBaseUrlFromUnknown(o.previewBaseUrl);
   return {
     fields,
     ...(displayField &&
     fields.some((f) => f.id === displayField) && { displayField }),
+    deliveryEnvironment,
+    ...(previewBaseUrl ? { previewBaseUrl } : {}),
   };
 }
 
 export function serializeContentModelSchema(
   schema: CmsContentModelSchema,
 ): Record<string, unknown> {
+  const previewStored = normalizePreviewBaseUrlFromUnknown(
+    schema.previewBaseUrl,
+  );
   const out: Record<string, unknown> = {
+    deliveryEnvironment:
+      schema.deliveryEnvironment === "preview" ? "preview" : "production",
     fields: schema.fields.map((f) => {
       const validations = f.validations
         ? pruneValidations(f.type, f.validations)
@@ -1203,6 +1273,7 @@ export function serializeContentModelSchema(
   ) {
     out.displayField = schema.displayField;
   }
+  if (previewStored) out.previewBaseUrl = previewStored;
   return out;
 }
 

@@ -4,11 +4,11 @@ import { Link } from "react-router-dom";
 import { CMS_ROOT } from "../../lib/cmsAccess";
 import {
   CMS_CONTENT_MODELS_API,
-  countSchemaFields,
   parseSchemaJson,
   type CmsContentModelRow,
   type CmsContentModelsListResponse,
 } from "../../lib/cmsApi";
+import { parseContentModelSchema } from "../../lib/cmsSchemaTypes";
 import { useApi } from "../../lib/customerApi";
 
 function prettySchemaJson(raw: string): string {
@@ -26,12 +26,14 @@ export default function CmsContentModelsPage() {
   const rows = useMemo(() => {
     const list = data?.rows ?? [];
     return list.map((m: CmsContentModelRow) => {
-      const schema = parseSchemaJson(m.schema_json);
-      const n = countSchemaFields(schema);
+      const parsed = parseContentModelSchema(
+        parseSchemaJson(m.schema_json) ?? {},
+      );
       return {
         id: m.id,
         key: m.key,
-        fields: n,
+        fields: parsed.fields.length,
+        deliveryEnvironment: parsed.deliveryEnvironment,
         desc: m.description?.trim() || "",
         schema_json: m.schema_json,
       };
@@ -74,7 +76,18 @@ export default function CmsContentModelsPage() {
                 className="flex w-full items-center justify-between gap-4 p-5 text-left transition hover:border-ink-200 hover:bg-ink-50/30"
               >
                 <div className="min-w-0">
-                  <p className="font-medium text-ink-900">{m.key}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-ink-900">{m.key}</p>
+                    {m.deliveryEnvironment === "preview" ? (
+                      <span className="rounded-md bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-900">
+                        Preview
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-900">
+                        Production
+                      </span>
+                    )}
+                  </div>
                   {m.desc ? (
                     <p className="mt-0.5 text-[12px] text-ink-500">{m.desc}</p>
                   ) : null}
