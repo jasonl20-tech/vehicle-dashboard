@@ -5,9 +5,6 @@ export default function CmsSettingsPage() {
         <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
           Space-Einstellungen
         </h1>
-        <p className="mt-1 text-[13px] text-ink-500">
-          Name, Umgebungen und Zugriff — noch Platzhalter.
-        </p>
       </header>
 
       <div className="space-y-6 rounded-xl border border-hair bg-white p-6">
@@ -21,8 +18,8 @@ export default function CmsSettingsPage() {
           <input
             id="cms-space-name"
             type="text"
-            defaultValue="Produktion"
             readOnly
+            value=""
             className="w-full rounded-lg border border-hair bg-ink-50/50 px-3 py-2 text-[13px] text-ink-600"
           />
         </div>
@@ -37,8 +34,8 @@ export default function CmsSettingsPage() {
             id="cms-space-id"
             type="text"
             readOnly
-            placeholder="wird mit API vergeben"
-            className="w-full rounded-lg border border-hair bg-white px-3 py-2 font-mono text-[13px] text-ink-500 placeholder:text-ink-400"
+            value=""
+            className="w-full rounded-lg border border-hair bg-white px-3 py-2 font-mono text-[13px] text-ink-600"
           />
         </div>
       </div>

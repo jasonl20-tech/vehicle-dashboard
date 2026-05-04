@@ -8,10 +8,7 @@ import {
   type CmsContentModelsListResponse,
   statusLabelDe,
 } from "../../lib/cmsApi";
-import {
-  fmtRelative,
-  useApi,
-} from "../../lib/customerApi";
+import { fmtRelative, useApi } from "../../lib/customerApi";
 
 export default function CmsEntriesPage() {
   const [q, setQ] = useState("");
@@ -48,7 +45,9 @@ export default function CmsEntriesPage() {
       return {
         id: r.id,
         title: extractContentTitle(payload),
-        type: modelKeyById.get(r.content_model_id) ?? r.content_model_id.slice(0, 8),
+        type:
+          modelKeyById.get(r.content_model_id) ??
+          r.content_model_id.slice(0, 8),
         locale: r.locale,
         updated: fmtRelative(r.updated_at),
         state: statusLabelDe(r.status),
@@ -57,7 +56,12 @@ export default function CmsEntriesPage() {
   }, [contents.data?.rows, modelKeyById]);
 
   const loading = models.loading || contents.loading;
-  const err = models.error ?? contents.error;
+  const errMsg = useMemo(() => {
+    const parts = [models.error, contents.error].filter(
+      (x): x is string => Boolean(x && String(x).trim()),
+    );
+    return parts.length ? parts.join("\n") : null;
+  }, [models.error, contents.error]);
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -66,10 +70,6 @@ export default function CmsEntriesPage() {
           <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
             Content
           </h1>
-          <p className="mt-1 text-[13px] text-ink-500">
-            Einträge aus der Website-D1 (`cms_contents`). Suche filtert über die
-            API.
-          </p>
         </div>
         <button
           type="button"
@@ -80,10 +80,10 @@ export default function CmsEntriesPage() {
         </button>
       </header>
 
-      {err ? (
-        <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 text-[13px] text-rose-900">
-          {err}
-        </p>
+      {errMsg ? (
+        <pre className="mb-4 whitespace-pre-wrap rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-2 font-sans text-[13px] text-rose-900">
+          {errMsg}
+        </pre>
       ) : null}
 
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -93,12 +93,13 @@ export default function CmsEntriesPage() {
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Titel, Payload oder ID suchen …"
-            className="w-full rounded-lg border border-hair bg-white py-2 pl-9 pr-3 text-[13px] text-ink-800 placeholder:text-ink-400 focus:border-ink-500 focus:outline-none focus:ring-1 focus:ring-ink-500/20"
+            placeholder="Suche …"
+            disabled={Boolean(errMsg)}
+            className="w-full rounded-lg border border-hair bg-white py-2 pl-9 pr-3 text-[13px] text-ink-800 placeholder:text-ink-400 focus:border-ink-500 focus:outline-none focus:ring-1 focus:ring-ink-500/20 disabled:opacity-50"
           />
         </div>
         <p className="text-[12px] text-ink-400">
-          {loading ? "Lade …" : `${rows.length} ${rows.length === 1 ? "Eintrag" : "Einträge"}`}
+          {loading ? "—" : `${rows.length}`}
         </p>
       </div>
 
@@ -114,20 +115,14 @@ export default function CmsEntriesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-hair">
-            {!loading && rows.length === 0 ? (
-              <tr>
-                <td className="px-4 py-8 text-ink-500" colSpan={5}>
-                  Noch keine Einträge in der Datenbank. Lege zuerst Content-Modelle
-                  an, dann Inhalte per API oder kommendem Editor.
-                </td>
-              </tr>
-            ) : null}
             {rows.map((r) => (
               <tr
                 key={r.id}
-                className="cursor-pointer transition hover:bg-night-900/[0.02]"
-             >
-                <td className="px-4 py-3 font-medium text-ink-900">{r.title}</td>
+                className="transition hover:bg-night-900/[0.02]"
+              >
+                <td className="px-4 py-3 font-medium text-ink-900">
+                  {r.title}
+                </td>
                 <td className="px-4 py-3 text-ink-600">{r.type}</td>
                 <td className="hidden px-4 py-3 text-ink-500 sm:table-cell">
                   {r.locale}

@@ -6,27 +6,23 @@ const cards = [
   {
     title: "Content-Modelle",
     description:
-      "Felder, Validierung und Beziehungen — ähnlich wie in Contentful.",
+      "Felder, Validierung und Beziehungen — Contentful-ähnliche Modelle.",
     to: `${CMS_ROOT}/models`,
     icon: Sparkles,
-    stat: "Schemas folgen",
     tone: "from-accent-rose/15 to-brand-500/10",
   },
   {
     title: "Content",
-    description:
-      "Strukturierte Inhalte nach Content-Modell bearbeiten und veröffentlichen.",
+    description: "Strukturierte Einträge nach Content-Modell.",
     to: `${CMS_ROOT}/entries`,
     icon: Box,
-    stat: "Noch keine API",
     tone: "from-brand-500/20 to-accent-mint/15",
   },
   {
     title: "Medien",
-    description: "Assets zentral verwalten und in Content einbinden.",
+    description: "Assets und Referenzen in Inhalten.",
     to: `${CMS_ROOT}/media`,
     icon: ImageIcon,
-    stat: "Bibliothek",
     tone: "from-accent-mint/20 to-brand-500/15",
   },
 ];
@@ -39,10 +35,7 @@ export default function CmsOverviewPage() {
           Content Management
         </h1>
         <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-ink-500">
-          Dies ist die Oberfläche für strukturierte Inhalte: Spaces,
-          Content-Modelle, Einträge und Medien — orientiert an Headless-CMS
-          wie Contentful. Anbindung an Datenhaltung und API kommt als
-          nächster Schritt.
+          Headless-CMS-Bereich: Modelle, Inhalte und Medien.
         </p>
       </div>
 
@@ -59,13 +52,8 @@ export default function CmsOverviewPage() {
                 aria-hidden
                 className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${c.tone}`}
               />
-              <div className="flex items-start justify-between gap-3">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-900 text-white">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <span className="rounded-full border border-hair bg-ink-50/80 px-2 py-0.5 text-[10.5px] font-medium text-ink-600">
-                  {c.stat}
-                </span>
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-ink-900 text-white">
+                <Icon className="h-5 w-5" />
               </div>
               <h2 className="mt-4 font-display text-lg font-semibold tracking-tight text-ink-900">
                 {c.title}
@@ -81,17 +69,6 @@ export default function CmsOverviewPage() {
           );
         })}
       </div>
-
-      <section className="mt-12 rounded-2xl border border-dashed border-hair bg-white/60 p-6">
-        <h3 className="text-[13px] font-semibold text-ink-800">
-          Nächste Ausbaustufe
-        </h3>
-        <ul className="mt-3 list-inside list-disc space-y-1.5 text-[13px] text-ink-500">
-          <li>D1 / API für Spaces, Modelle und Einträge</li>
-          <li>Entwurf / Veröffentlichung und Verlauf</li>
-          <li>Medien-Upload mit Referenzen in JSON-Feldern</li>
-        </ul>
-      </section>
     </div>
   );
 }

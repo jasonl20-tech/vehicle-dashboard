@@ -6,9 +6,6 @@ export default function CmsMediaPage() {
           <h1 className="font-display text-[26px] font-semibold tracking-tighter2 text-ink-900">
             Medien
           </h1>
-          <p className="mt-1 text-[13px] text-ink-500">
-            Zentrale Asset-Bibliothek — Upload und CDN-Anbindung später.
-          </p>
         </div>
         <button
           type="button"
@@ -19,12 +16,10 @@ export default function CmsMediaPage() {
         </button>
       </header>
 
-      <div className="grid place-items-center rounded-2xl border border-dashed border-hair bg-white/70 py-24 text-center">
-        <p className="max-w-sm text-[13px] text-ink-500">
-          Noch keine Medien. Sobald die API steht, erscheinen hier Vorschau,
-          Metadaten und Filter.
-        </p>
-      </div>
+      <div
+        className="min-h-[12rem] rounded-xl border border-hair bg-white"
+        aria-label="Medienliste"
+      />
     </div>
   );
 }
