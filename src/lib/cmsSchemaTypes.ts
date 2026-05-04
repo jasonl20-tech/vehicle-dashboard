@@ -19,13 +19,27 @@ export const CMS_FIELD_TYPES = [
 
 export type CmsFieldType = (typeof CMS_FIELD_TYPES)[number];
 
+/** Contentful „Short text“ vs. „Long text“ (max. Zeichen). */
+export const TEXT_SHORT_MAX = 256;
+export const TEXT_LONG_MAX = 50_000;
+
+export type TextFieldVariant = "short" | "long";
+
 export type CmsFieldValidations = {
   maxLength?: number;
+  /** Text: Mindestlänge in Zeichen */
+  minLength?: number;
   min?: number;
   max?: number;
   unique?: boolean;
   /** Reference: erlaubte Content-Model-Keys */
   linkContentType?: string[];
+  /** Text: benutzerdefinierte Regex (wenn kein Preset) */
+  pattern?: string;
+  patternPreset?: "email" | "uri";
+  prohibitPattern?: string;
+  /** Text: erlaubte Werte (Enum) */
+  allowedValues?: string[];
 };
 
 /** Rich Text — detaillierte Editor-/Validierungs-Optionen (Contentful-nah). */
@@ -141,6 +155,12 @@ export type CmsFieldDefinition = {
   validations?: CmsFieldValidations;
   /** Nur bei type === "RichText" */
   richText?: RichTextFieldConfig;
+  /** Nur Text: Kurz- vs. Langtext — nach Anlegen in der UI fixiert */
+  textShape?: { variant: TextFieldVariant };
+  /** Nur Text: Liste mehrerer Werte — nach Anlegen fixiert */
+  list?: boolean;
+  /** Nur Text: Vorgabewert für neue Einträge */
+  defaultValue?: string;
 };
 
 export type CmsContentModelSchema = {
@@ -171,6 +191,9 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     if (typeof v.maxLength === "number" && v.maxLength >= 0) {
       validations.maxLength = Math.floor(v.maxLength);
     }
+    if (typeof v.minLength === "number" && v.minLength >= 0) {
+      validations.minLength = Math.floor(v.minLength);
+    }
     if (typeof v.min === "number") validations.min = v.min;
     if (typeof v.max === "number") validations.max = v.max;
     if (v.unique === true) validations.unique = true;
@@ -178,6 +201,21 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
       validations.linkContentType = v.linkContentType.filter(
         (x): x is string => typeof x === "string" && x.length > 0,
       );
+    }
+    if (typeof v.pattern === "string" && v.pattern.trim()) {
+      validations.pattern = v.pattern.trim();
+    }
+    if (v.patternPreset === "email" || v.patternPreset === "uri") {
+      validations.patternPreset = v.patternPreset;
+    }
+    if (typeof v.prohibitPattern === "string" && v.prohibitPattern.trim()) {
+      validations.prohibitPattern = v.prohibitPattern.trim();
+    }
+    if (Array.isArray(v.allowedValues)) {
+      const av = v.allowedValues.filter(
+        (x): x is string => typeof x === "string" && x.length > 0,
+      );
+      if (av.length > 0) validations.allowedValues = av;
     }
     if (Object.keys(validations).length === 0) validations = undefined;
   }
@@ -188,6 +226,30 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
         ? normalizeRichTextConfig(o.richText as Record<string, unknown>)
         : defaultRichTextFieldConfig();
   }
+
+  let textShape: { variant: TextFieldVariant } | undefined;
+  let list: boolean | undefined;
+  let defaultValue: string | undefined;
+  if (type === "Text") {
+    const ts = o.textShape;
+    if (ts && typeof ts === "object") {
+      const tv = (ts as Record<string, unknown>).variant;
+      if (tv === "short" || tv === "long") textShape = { variant: tv };
+    }
+    if (!textShape) {
+      const ml = validations?.maxLength;
+      textShape = {
+        variant:
+          ml !== undefined && ml > TEXT_SHORT_MAX ? "long" : "short",
+      };
+    }
+    if (o.list === true) list = true;
+    if (typeof o.defaultValue === "string") {
+      const dv = o.defaultValue.trim();
+      if (dv !== "") defaultValue = dv;
+    }
+  }
+
   return {
     id,
     name,
@@ -197,6 +259,9 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     ...(helpText ? { helpText } : {}),
     ...(validations ? { validations } : {}),
     ...(richText ? { richText } : {}),
+    ...(textShape ? { textShape } : {}),
+    ...(list ? { list: true } : {}),
+    ...(defaultValue !== undefined ? { defaultValue } : {}),
   };
 }
 
@@ -372,6 +437,13 @@ export function serializeContentModelSchema(
       if (validations && Object.keys(validations).length > 0) {
         row.validations = validations;
       }
+      if (f.type === "Text") {
+        if (f.textShape) row.textShape = f.textShape;
+        if (f.list) row.list = true;
+        if (f.defaultValue != null && f.defaultValue !== "") {
+          row.defaultValue = f.defaultValue;
+        }
+      }
       if (f.type === "RichText" && f.richText) {
         row.richText = serializeRichTextForStorage(f.richText);
       }
@@ -392,19 +464,30 @@ function pruneValidations(
   v: CmsFieldValidations,
 ): Record<string, unknown> {
   const o: Record<string, unknown> = {};
-  if (
-    type === "Text" &&
-    typeof v.maxLength === "number" &&
-    v.maxLength > 0
-  ) {
-    o.maxLength = Math.floor(v.maxLength);
+  if (type === "Text") {
+    if (typeof v.maxLength === "number" && v.maxLength > 0) {
+      o.maxLength = Math.floor(v.maxLength);
+    }
+    if (typeof v.minLength === "number" && v.minLength >= 0) {
+      o.minLength = Math.floor(v.minLength);
+    }
+    if (v.unique === true) o.unique = true;
+    if (v.patternPreset === "email" || v.patternPreset === "uri") {
+      o.patternPreset = v.patternPreset;
+    }
+    if (typeof v.pattern === "string" && v.pattern.trim()) {
+      o.pattern = v.pattern.trim();
+    }
+    if (typeof v.prohibitPattern === "string" && v.prohibitPattern.trim()) {
+      o.prohibitPattern = v.prohibitPattern.trim();
+    }
+    if (Array.isArray(v.allowedValues) && v.allowedValues.length > 0) {
+      o.allowedValues = [...v.allowedValues];
+    }
   }
   if (type === "Number") {
     if (typeof v.min === "number") o.min = v.min;
     if (typeof v.max === "number") o.max = v.max;
-  }
-  if (type === "Text" && v.unique === true) {
-    o.unique = true;
   }
   if (
     type === "Reference" &&
@@ -430,6 +513,25 @@ const FIELD_ID_PREFIX: Record<CmsFieldType, string> = {
 
 export function defaultFieldIdForType(type: CmsFieldType, index: number): string {
   return `${FIELD_ID_PREFIX[type]}${index + 1}`;
+}
+
+/** Neues Text-Feld nach Contentful-„Add field“-Wizard (Kurz-/Langtext, Liste). */
+export function newTextFieldFromWizard(args: {
+  id: string;
+  name: string;
+  variant: TextFieldVariant;
+  list: boolean;
+}): CmsFieldDefinition {
+  const cap = args.variant === "short" ? TEXT_SHORT_MAX : TEXT_LONG_MAX;
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "Text",
+    required: false,
+    textShape: { variant: args.variant },
+    ...(args.list ? { list: true } : {}),
+    validations: { maxLength: cap },
+  };
 }
 
 export const FIELD_TYPE_LABELS: Record<CmsFieldType, string> = {

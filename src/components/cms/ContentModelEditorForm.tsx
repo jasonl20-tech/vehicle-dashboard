@@ -2,7 +2,9 @@ import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AddFieldModal from "./AddFieldModal";
+import AddTextFieldModal from "./AddTextFieldModal";
 import RichTextFieldModal from "./RichTextFieldModal";
+import TextFieldModal from "./TextFieldModal";
 import { CMS_CONTENT_MODELS_API } from "../../lib/cmsApi";
 import { CMS_ROOT } from "../../lib/cmsAccess";
 import type {
@@ -16,6 +18,7 @@ import {
   defaultFieldIdForType,
   defaultRichTextFieldConfig,
   FIELD_TYPE_LABELS,
+  TEXT_SHORT_MAX,
   serializeContentModelSchema,
 } from "../../lib/cmsSchemaTypes";
 
@@ -42,7 +45,9 @@ export default function ContentModelEditorForm({
   const [description, setDescription] = useState(initialDescription);
   const [schema, setSchema] = useState<CmsContentModelSchema>(initialSchema);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addTextModalOpen, setAddTextModalOpen] = useState(false);
   const [richModalIndex, setRichModalIndex] = useState<number | null>(null);
+  const [textModalIndex, setTextModalIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +92,12 @@ export default function ContentModelEditorForm({
   }
 
   function removeField(index: number) {
+    setRichModalIndex((cur) =>
+      cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
+    );
+    setTextModalIndex((cur) =>
+      cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
+    );
     setSchema((s) => ({
       ...s,
       fields: s.fields.filter((_, i) => i !== index),
@@ -99,6 +110,10 @@ export default function ContentModelEditorForm({
   }
 
   function addField(type: CmsFieldType) {
+    if (type === "Text") {
+      setAddTextModalOpen(true);
+      return;
+    }
     setSchema((s) => {
       const idx = s.fields.length;
       const id = defaultFieldIdForType(type, idx);
@@ -117,6 +132,13 @@ export default function ContentModelEditorForm({
       }
       return { ...s, fields: [...s.fields, field] };
     });
+  }
+
+  function appendTextField(field: CmsFieldDefinition) {
+    const idx = schema.fields.length;
+    setSchema((s) => ({ ...s, fields: [...s.fields, field] }));
+    setAddTextModalOpen(false);
+    setTextModalIndex(idx);
   }
 
   async function handleSave() {
@@ -314,6 +336,50 @@ export default function ContentModelEditorForm({
                       </button>
                     </div>
                   </li>
+                ) : f.type === "Text" ? (
+                  <li
+                    key={`${f.id}-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium text-ink-900">{f.name}</span>
+                      <code className="ml-2 text-[12px] text-ink-500">
+                        {f.id}
+                      </code>
+                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
+                        {FIELD_TYPE_LABELS.Text}
+                      </span>
+                      <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5f6368]">
+                        {f.textShape?.variant === "long" ||
+                        (f.validations?.maxLength ?? 0) > TEXT_SHORT_MAX
+                          ? "Long text"
+                          : "Short text"}
+                      </span>
+                      {f.list ? (
+                        <span className="ml-1.5 rounded border border-[#0366d6] bg-[#e8f0fe] px-2 py-0.5 text-[10px] font-medium text-[#174ea6]">
+                          List
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTextModalIndex(i)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        Konfigurieren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeField(i)}
+                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
+                        aria-label="Feld entfernen"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
                 ) : (
                 <li
                   key={`${f.id}-${i}`}
@@ -400,48 +466,6 @@ export default function ContentModelEditorForm({
                       className="w-full rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px]"
                     />
                   </div>
-
-                  {(f.type === "Text") && (
-                    <div className="grid gap-3 border-t border-hair pt-3 sm:grid-cols-2">
-                      <div>
-                        <label className="mb-1 block text-[11px] font-medium text-ink-600">
-                          Max. Länge (optional)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={f.validations?.maxLength ?? ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            updateField(i, {
-                              validations: {
-                                ...f.validations,
-                                maxLength:
-                                  v === "" ? undefined : Math.max(0, Number(v)),
-                              },
-                            });
-                          }}
-                          className="w-full rounded-md border border-hair bg-white px-2.5 py-1.5 text-[13px]"
-                        />
-                      </div>
-                      <label className="flex items-center gap-2 pt-6 text-[12px]">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(f.validations?.unique)}
-                          onChange={(e) =>
-                            updateField(i, {
-                              validations: {
-                                ...f.validations,
-                                unique: e.target.checked || undefined,
-                              },
-                            })
-                          }
-                          className="rounded border-hair"
-                        />
-                        Eindeutig
-                      </label>
-                    </div>
-                  )}
 
                   {f.type === "Number" && (
                     <div className="grid gap-3 border-t border-hair pt-3 sm:grid-cols-2">
@@ -573,6 +597,18 @@ export default function ContentModelEditorForm({
         onPick={addField}
       />
 
+      <AddTextFieldModal
+        open={addTextModalOpen}
+        suggestedName={FIELD_TYPE_LABELS.Text}
+        suggestedId={defaultFieldIdForType("Text", schema.fields.length)}
+        onClose={() => setAddTextModalOpen(false)}
+        onChangeFieldType={() => {
+          setAddTextModalOpen(false);
+          setAddModalOpen(true);
+        }}
+        onAddAndConfigure={appendTextField}
+      />
+
       {richModalIndex !== null &&
         schema.fields[richModalIndex]?.type === "RichText" && (
           <RichTextFieldModal
@@ -584,6 +620,37 @@ export default function ContentModelEditorForm({
               setRichModalIndex(null);
             }}
             otherModelKeys={linkTargets}
+          />
+        )}
+
+      {textModalIndex !== null &&
+        schema.fields[textModalIndex]?.type === "Text" && (
+          <TextFieldModal
+            open
+            field={schema.fields[textModalIndex]!}
+            displayFieldIsThis={
+              schema.displayField === schema.fields[textModalIndex]!.id
+            }
+            onClose={() => setTextModalIndex(null)}
+            onApply={(next, entryTitle) => {
+              const idx = textModalIndex;
+              const oldId = schema.fields[idx]!.id;
+              setSchema((s) => {
+                const fields = s.fields.map((f, i) =>
+                  i === idx ? { ...f, ...next } : f,
+                );
+                let displayField = s.displayField;
+                if (entryTitle) displayField = next.id;
+                else if (
+                  oldId &&
+                  (displayField === oldId || displayField === next.id)
+                ) {
+                  displayField = undefined;
+                }
+                return { ...s, fields, displayField };
+              });
+              setTextModalIndex(null);
+            }}
           />
         )}
     </div>
