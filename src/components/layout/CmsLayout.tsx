@@ -4,6 +4,8 @@ import {
   Clock,
   LayoutGrid,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
 } from "lucide-react";
@@ -30,6 +32,14 @@ import {
   type CmsContentModelsListResponse,
 } from "../../lib/cmsApi";
 import { useApi } from "../../lib/customerApi";
+
+function cmsSidebarEditFocusPath(pathname: string): boolean {
+  if (pathname === `${CMS_ROOT}/models/new`) return true;
+  if (pathname === `${CMS_ROOT}/entries/new`) return true;
+  if (/^\/cms\/models\/[^/]+\/edit$/.test(pathname)) return true;
+  if (/^\/cms\/entries\/[^/]+\/edit$/.test(pathname)) return true;
+  return false;
+}
 
 function useEntriesNavActive() {
   const { pathname } = useLocation();
@@ -154,6 +164,14 @@ export default function CmsLayout() {
   const { onEntries, modelFilter, allEntries, isZuletztView, zuletztEntries } =
     useEntriesNavActive();
 
+  const isFocusEdit = useMemo(() => cmsSidebarEditFocusPath(path), [path]);
+  const [navPinnedOpen, setNavPinnedOpen] = useState(false);
+  useEffect(() => {
+    setNavPinnedOpen(false);
+  }, [path]);
+
+  const sidebarCollapsed = isFocusEdit && !navPinnedOpen;
+
   const isModels = path.startsWith(`${CMS_ROOT}/models`);
   const isEntries = path.startsWith(`${CMS_ROOT}/entries`);
   const isMedia = path.startsWith(`${CMS_ROOT}/media`);
@@ -185,7 +203,14 @@ export default function CmsLayout() {
   return (
     <div className="flex min-h-screen bg-[#f4f5f7] text-ink-900">
       <aside
-        className="sticky top-0 flex h-screen w-[268px] shrink-0 flex-col border-r border-[#e8eaed] bg-white"
+        id="cms-sidebar-primary"
+        className={[
+          "sticky top-0 flex h-screen shrink-0 flex-col border-r border-[#e8eaed] bg-white transition-[width,opacity] duration-200 ease-out",
+          sidebarCollapsed
+            ? "pointer-events-none w-0 min-w-0 overflow-hidden border-r-0 opacity-0"
+            : "w-[268px] opacity-100",
+        ].join(" ")}
+        aria-hidden={sidebarCollapsed}
         aria-label="CMS Navigation"
       >
         <div className="flex h-14 items-center border-b border-[#e8eaed] px-4">
@@ -302,6 +327,29 @@ export default function CmsLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 shrink-0 border-b border-[#e8eaed] bg-white">
           <div className="flex h-14 items-center gap-3 overflow-x-auto px-4 lg:gap-4 lg:px-6">
+            {isFocusEdit ? (
+              <button
+                type="button"
+                onClick={() => setNavPinnedOpen((v) => !v)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-2.5 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-[#f8f9fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8]/35"
+                aria-expanded={!sidebarCollapsed}
+                aria-controls="cms-sidebar-primary"
+                title={
+                  sidebarCollapsed
+                    ? "Navigation einblenden"
+                    : "Navigation ausblenden"
+                }
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeftOpen className="h-4 w-4" aria-hidden />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" aria-hidden />
+                )}
+                <span className="hidden sm:inline">
+                  {sidebarCollapsed ? "Navigation" : "Seitenleiste"}
+                </span>
+              </button>
+            ) : null}
             <nav
               className="flex min-w-0 shrink-0 items-center gap-0.5 rounded-xl border border-[#e8eaed] bg-[#f1f3f4] p-1"
               aria-label="CMS Bereiche"
