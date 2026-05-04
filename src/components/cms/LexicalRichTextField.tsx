@@ -44,6 +44,7 @@ import {
   FORMAT_TEXT_COMMAND,
   REDO_COMMAND,
   UNDO_COMMAND,
+  type LexicalCommand,
 } from "lexical";
 import {
   Bold,
@@ -71,26 +72,26 @@ import {
 } from "../../lib/lexicalRichText";
 
 const LEXICAL_THEME = {
-  paragraph: "mb-1 text-[14px] leading-relaxed text-ink-900",
+  paragraph: "mb-1 text-[14px] leading-relaxed font-normal text-ink-900",
   quote:
-    "border-l-4 border-ink-200 pl-3 my-2 text-ink-700 bg-ink-50/50 py-2 rounded-r",
+    "border-l-4 border-ink-200 pl-3 my-2 text-[14px] leading-relaxed text-ink-700 bg-ink-50/50 py-2 rounded-r",
   heading: {
-    h1: "text-2xl font-bold mb-2 text-ink-900",
-    h2: "text-xl font-semibold mb-2 text-ink-900",
-    h3: "text-lg font-semibold mb-1 text-ink-900",
+    h1: "!text-2xl !font-bold mb-2 text-ink-900",
+    h2: "!text-xl !font-semibold mb-2 text-ink-900",
+    h3: "!text-lg !font-semibold mb-1 text-ink-900",
     h4: "text-base font-semibold mb-1 text-ink-900",
     h5: "text-sm font-semibold mb-1 text-ink-900",
     h6: "text-xs font-semibold mb-1 text-ink-900",
   },
   list: {
-    ul: "list-disc ml-6 my-1",
-    ol: "list-decimal ml-6 my-1",
-    listitem: "my-0.5",
+    ul: "list-disc ml-6 my-1 text-[14px] leading-relaxed text-ink-900",
+    ol: "list-decimal ml-6 my-1 text-[14px] leading-relaxed text-ink-900",
+    listitem: "my-0.5 text-[14px] leading-relaxed",
     nested: {
       listitem: "list-none",
     },
   },
-  link: "text-[#0366d6] underline cursor-pointer",
+  link: "text-[14px] text-[#0366d6] underline cursor-pointer",
   text: {
     bold: "font-bold",
     italic: "italic",
@@ -192,7 +193,7 @@ export default function LexicalRichTextField({
         <div className="relative">
           <RichTextPlugin
             contentEditable={
-              <ContentEditable className="cms-lexical-input min-h-[220px] w-full resize-y px-3 py-2 text-[14px] text-ink-900 outline-none focus:ring-0" />
+              <ContentEditable className="cms-lexical-input min-h-[220px] w-full resize-y px-3 py-2 text-ink-900 outline-none focus:ring-0" />
             }
             placeholder={
               <div className="pointer-events-none absolute left-3 top-2 text-[13px] text-ink-400">
@@ -236,8 +237,17 @@ function CodeHighlightPlugin() {
 function ToolbarPlugin() {
   const [editor] = useLexicalComposerContext();
 
+  /** Nach Toolbar-Klick Auswahl/Fokus zuverlässig zurück auf den Editor (Lexical-Pattern). */
   const run = (fn: () => void) => {
-    editor.update(fn);
+    editor.focus(() => {
+      editor.update(fn);
+    });
+  };
+
+  const dispatchCmd = <P,>(command: LexicalCommand<P>, payload: P) => {
+    editor.focus(() => {
+      editor.dispatchCommand(command, payload);
+    });
   };
 
   const setHeading = (tag: "h1" | "h2" | "h3") => {
@@ -288,10 +298,12 @@ function ToolbarPlugin() {
     const c = window.prompt("Anzahl Spalten (1–12)", "3");
     const rows = Math.min(20, Math.max(1, Number.parseInt(r || "3", 10) || 3));
     const cols = Math.min(12, Math.max(1, Number.parseInt(c || "3", 10) || 3));
-    editor.dispatchCommand(INSERT_TABLE_COMMAND, {
-      rows: String(rows),
-      columns: String(cols),
-      includeHeaders: { rows: true, columns: false },
+    editor.focus(() => {
+      editor.dispatchCommand(INSERT_TABLE_COMMAND, {
+        rows: String(rows),
+        columns: String(cols),
+        includeHeaders: { rows: true, columns: false },
+      });
     });
   };
 
@@ -303,57 +315,53 @@ function ToolbarPlugin() {
     >
       <ToolBtn
         label="Rückgängig"
-        onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)}
+        onClick={() => dispatchCmd(UNDO_COMMAND, undefined)}
         icon={<Undo2 className="h-3.5 w-3.5" />}
       />
       <ToolBtn
         label="Wiederholen"
-        onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)}
+        onClick={() => dispatchCmd(REDO_COMMAND, undefined)}
         icon={<Redo2 className="h-3.5 w-3.5" />}
       />
       <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
       <ToolBtn
         label="Fett"
-        onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold")}
+        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "bold")}
         icon={<Bold className="h-3.5 w-3.5" />}
       />
       <ToolBtn
         label="Kursiv"
-        onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "italic")}
+        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "italic")}
         icon={<Italic className="h-3.5 w-3.5" />}
       />
       <ToolBtn
         label="Unterstrichen"
-        onClick={() =>
-          editor.dispatchCommand(FORMAT_TEXT_COMMAND, "underline")
-        }
+        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "underline")}
         icon={<Underline className="h-3.5 w-3.5" />}
       />
       <ToolBtn
         label="Durchgestrichen"
-        onClick={() =>
-          editor.dispatchCommand(FORMAT_TEXT_COMMAND, "strikethrough")
-        }
+        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "strikethrough")}
         icon={<Strikethrough className="h-3.5 w-3.5" />}
       />
       <ToolBtn
         label="Code (inline)"
-        onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, "code")}
+        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "code")}
         icon={<Code className="h-3.5 w-3.5" />}
       />
       <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
       <ToolBtn
-        label="Überschrift 1"
+        label="Überschrift 1 — nur der Absatz mit Cursor (Enter = neuer Absatz)"
         onClick={() => setHeading("h1")}
         icon={<Heading1 className="h-3.5 w-3.5" />}
       />
       <ToolBtn
-        label="Überschrift 2"
+        label="Überschrift 2 — nur der Absatz mit Cursor (Enter = neuer Absatz)"
         onClick={() => setHeading("h2")}
         icon={<Heading2 className="h-3.5 w-3.5" />}
       />
       <ToolBtn
-        label="Überschrift 3"
+        label="Überschrift 3 — nur der Absatz mit Cursor (Enter = neuer Absatz)"
         onClick={() => setHeading("h3")}
         icon={<Heading3 className="h-3.5 w-3.5" />}
       />
@@ -382,16 +390,12 @@ function ToolbarPlugin() {
       <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
       <ToolBtn
         label="Aufzählung"
-        onClick={() =>
-          editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)
-        }
+        onClick={() => dispatchCmd(INSERT_UNORDERED_LIST_COMMAND, undefined)}
         icon={<List className="h-3.5 w-3.5" />}
       />
       <ToolBtn
         label="Nummerierung"
-        onClick={() =>
-          editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)
-        }
+        onClick={() => dispatchCmd(INSERT_ORDERED_LIST_COMMAND, undefined)}
         icon={<ListOrdered className="h-3.5 w-3.5" />}
       />
       <ToolBtn
@@ -407,7 +411,7 @@ function ToolbarPlugin() {
           if (url === null) return;
           const trimmed = url.trim();
           if (!trimmed) {
-            editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+            dispatchCmd(TOGGLE_LINK_COMMAND, null);
             return;
           }
           let href = trimmed;
@@ -419,7 +423,7 @@ function ToolbarPlugin() {
           ) {
             href = `https://${href}`;
           }
-          editor.dispatchCommand(TOGGLE_LINK_COMMAND, href);
+          dispatchCmd(TOGGLE_LINK_COMMAND, href);
         }}
         icon={<Link2 className="h-3.5 w-3.5" />}
       />
