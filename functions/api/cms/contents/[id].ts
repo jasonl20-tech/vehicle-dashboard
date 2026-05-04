@@ -46,6 +46,8 @@ function tableHint(e: unknown): string | null {
 }
 
 function lastUpdater(user: SessionUser): string {
+  const n = user.benutzername?.trim();
+  if (n) return n.slice(0, 256);
   return String(user.id);
 }
 

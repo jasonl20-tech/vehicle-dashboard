@@ -5,7 +5,7 @@
  *   POST /api/cms/contents
  *        { id?, content_model_id, payload_json, status?, locale?, scheduled_publish_at? }
  *
- * `last_updated_by` setzt die API aus der Session (User-ID).
+ * `last_updated_by` setzt die API aus der Session (Benutzername, sonst User-ID).
  */
 import {
   getCurrentUser,
@@ -56,6 +56,8 @@ function normalizeScheduledPublishAt(
 }
 
 function lastUpdater(user: SessionUser): string {
+  const n = user.benutzername?.trim();
+  if (n) return n.slice(0, 256);
   return String(user.id);
 }
 

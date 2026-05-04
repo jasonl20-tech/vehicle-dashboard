@@ -125,7 +125,8 @@ export default function CmsContentEntryPage() {
 
   const loading =
     Boolean(contentUrl && contentRes.loading) ||
-    Boolean(modelUrl && modelRes.loading);
+    Boolean(modelUrl && modelRes.loading) ||
+    Boolean(contentIdForEdit && modelsForPicker.loading);
 
   const modelsListUrl =
     isNewRoute && !modelIdFromQuery

@@ -250,7 +250,7 @@ export default function ContentEntryEditor({
               </div>
             </div>
 
-            {contentId && modelOptions.length > 0 ? (
+            {contentId ? (
               <div>
                 <label
                   htmlFor="cms-entry-model"
@@ -262,18 +262,22 @@ export default function ContentEntryEditor({
                   id="cms-entry-model"
                   value={selectedModelId}
                   onChange={(e) => onSelectedModelIdChange(e.target.value)}
-                  disabled={saving}
+                  disabled={saving || modelOptions.length === 0}
                   className="w-full rounded-lg border border-[#dadce0] bg-white px-3 py-2 text-[13px] text-ink-900 outline-none focus:border-[#0366d6] disabled:opacity-50"
                 >
-                  {modelOptions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.key}
-                    </option>
-                  ))}
+                  {modelOptions.length === 0 ? (
+                    <option value={selectedModelId}>—</option>
+                  ) : (
+                    modelOptions.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.key}
+                      </option>
+                    ))
+                  )}
                 </select>
                 <p className="mt-1 text-[10.5px] leading-snug text-ink-500">
-                  Auch bei veröffentlichten Einträgen änderbar; Felder werden ans
-                  neue Modell angepasst (Speichern nicht vergessen).
+                  Unabhängig vom Status (Entwurf oder veröffentlicht) änderbar.
+                  Nach dem Wechsel Felder prüfen und speichern.
                 </p>
               </div>
             ) : null}
