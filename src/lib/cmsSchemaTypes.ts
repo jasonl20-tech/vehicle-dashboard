@@ -138,6 +138,25 @@ export function defaultJsonObjectFieldConfig(): JsonObjectFieldConfig {
   return { validation: {} };
 }
 
+/** Reference: eine Verknüpfung vs. viele (nach Anlegen fixiert). */
+export type ReferenceFieldVariant = "one" | "many";
+
+export type ReferenceFieldWidget = "entryLink" | "entryCard";
+
+export type ReferenceFieldConfig = {
+  widget: ReferenceFieldWidget;
+  allowCreateNew: boolean;
+  allowLinkExisting: boolean;
+};
+
+export function defaultReferenceFieldConfig(): ReferenceFieldConfig {
+  return {
+    widget: "entryLink",
+    allowCreateNew: true,
+    allowLinkExisting: true,
+  };
+}
+
 export type CmsFieldValidations = {
   maxLength?: number;
   /** Text: Mindestlänge in Zeichen */
@@ -292,6 +311,10 @@ export type CmsFieldDefinition = {
   defaultBoolean?: boolean;
   /** Nur JsonObject */
   jsonObject?: JsonObjectFieldConfig;
+  /** Nur Reference: One vs. Many — nach Anlegen fixiert */
+  referenceShape?: { variant: ReferenceFieldVariant };
+  /** Nur Reference: Editor-Optionen */
+  reference?: ReferenceFieldConfig;
 };
 
 export type CmsContentModelSchema = {
@@ -457,6 +480,34 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
         : defaultJsonObjectFieldConfig();
   }
 
+  let referenceShape: { variant: ReferenceFieldVariant } | undefined;
+  let referenceCfg: ReferenceFieldConfig | undefined;
+  if (type === "Reference") {
+    const refRaw =
+      o.reference && typeof o.reference === "object"
+        ? (o.reference as Record<string, unknown>)
+        : undefined;
+    const rs = o.referenceShape;
+    if (rs && typeof rs === "object") {
+      const rv = (rs as Record<string, unknown>).variant;
+      if (rv === "one" || rv === "many") referenceShape = { variant: rv };
+    }
+    if (!referenceShape && refRaw) {
+      const rv = refRaw.variant;
+      if (rv === "one" || rv === "many") referenceShape = { variant: rv };
+    }
+    if (!referenceShape) {
+      if (o.list === true || o.multiple === true || o.many === true) {
+        referenceShape = { variant: "many" };
+      } else {
+        referenceShape = { variant: "one" };
+      }
+    }
+    referenceCfg = refRaw
+      ? normalizeReferenceConfig(refRaw)
+      : defaultReferenceFieldConfig();
+  }
+
   return {
     id,
     name,
@@ -477,6 +528,8 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     ...(booleanCfg ? { boolean: booleanCfg } : {}),
     ...(defaultBoolean !== undefined ? { defaultBoolean } : {}),
     ...(jsonObjectCfg ? { jsonObject: jsonObjectCfg } : {}),
+    ...(referenceShape ? { referenceShape } : {}),
+    ...(referenceCfg ? { reference: referenceCfg } : {}),
   };
 }
 
@@ -521,6 +574,27 @@ export function serializeJsonObjectForStorage(
   }
   if (Object.keys(validation).length > 0) out.validation = validation;
   return out;
+}
+
+function normalizeReferenceConfig(raw: Record<string, unknown>): ReferenceFieldConfig {
+  const def = defaultReferenceFieldConfig();
+  const w = raw.widget;
+  if (w === "entryLink" || w === "entryCard") {
+    def.widget = w;
+  }
+  if (raw.allowCreateNew === false) def.allowCreateNew = false;
+  if (raw.allowLinkExisting === false) def.allowLinkExisting = false;
+  return def;
+}
+
+export function serializeReferenceForStorage(
+  cfg: ReferenceFieldConfig,
+): Record<string, unknown> {
+  return {
+    widget: cfg.widget,
+    allowCreateNew: cfg.allowCreateNew,
+    allowLinkExisting: cfg.allowLinkExisting,
+  };
 }
 
 function normalizeBooleanConfig(raw: Record<string, unknown>): BooleanFieldConfig {
@@ -912,6 +986,13 @@ export function serializeContentModelSchema(
           f.jsonObject ?? defaultJsonObjectFieldConfig(),
         );
       }
+      if (f.type === "Reference") {
+        const variant = f.referenceShape?.variant ?? "one";
+        row.referenceShape = { variant };
+        row.reference = serializeReferenceForStorage(
+          f.reference ?? defaultReferenceFieldConfig(),
+        );
+      }
       return row;
     }),
   };
@@ -1080,6 +1161,21 @@ export function newJsonObjectFieldFromWizard(args: {
     type: "JsonObject",
     required: false,
     jsonObject: defaultJsonObjectFieldConfig(),
+  };
+}
+
+export function newReferenceFieldFromWizard(args: {
+  id: string;
+  name: string;
+  variant: ReferenceFieldVariant;
+}): CmsFieldDefinition {
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "Reference",
+    required: false,
+    referenceShape: { variant: args.variant },
+    reference: defaultReferenceFieldConfig(),
   };
 }
 

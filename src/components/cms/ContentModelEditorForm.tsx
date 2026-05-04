@@ -8,6 +8,7 @@ import AddJsonObjectFieldModal from "./AddJsonObjectFieldModal";
 import AddLocationFieldModal from "./AddLocationFieldModal";
 import AddMediaFieldModal from "./AddMediaFieldModal";
 import AddNumberFieldModal from "./AddNumberFieldModal";
+import AddReferenceFieldModal from "./AddReferenceFieldModal";
 import AddTextFieldModal from "./AddTextFieldModal";
 import BooleanFieldModal from "./BooleanFieldModal";
 import DateTimeFieldModal from "./DateTimeFieldModal";
@@ -15,6 +16,7 @@ import JsonObjectFieldModal from "./JsonObjectFieldModal";
 import LocationFieldModal from "./LocationFieldModal";
 import MediaFieldModal from "./MediaFieldModal";
 import NumberFieldModal from "./NumberFieldModal";
+import ReferenceFieldModal from "./ReferenceFieldModal";
 import RichTextFieldModal from "./RichTextFieldModal";
 import TextFieldModal from "./TextFieldModal";
 import { CMS_CONTENT_MODELS_API } from "../../lib/cmsApi";
@@ -64,6 +66,7 @@ export default function ContentModelEditorForm({
   const [addMediaModalOpen, setAddMediaModalOpen] = useState(false);
   const [addBooleanModalOpen, setAddBooleanModalOpen] = useState(false);
   const [addJsonObjectModalOpen, setAddJsonObjectModalOpen] = useState(false);
+  const [addReferenceModalOpen, setAddReferenceModalOpen] = useState(false);
   const [richModalIndex, setRichModalIndex] = useState<number | null>(null);
   const [textModalIndex, setTextModalIndex] = useState<number | null>(null);
   const [numberModalIndex, setNumberModalIndex] = useState<number | null>(
@@ -82,6 +85,9 @@ export default function ContentModelEditorForm({
   const [jsonObjectModalIndex, setJsonObjectModalIndex] = useState<
     number | null
   >(null);
+  const [referenceModalIndex, setReferenceModalIndex] = useState<number | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,6 +156,9 @@ export default function ContentModelEditorForm({
     setJsonObjectModalIndex((cur) =>
       cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
     );
+    setReferenceModalIndex((cur) =>
+      cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
+    );
     setSchema((s) => ({
       ...s,
       fields: s.fields.filter((_, i) => i !== index),
@@ -188,6 +197,10 @@ export default function ContentModelEditorForm({
     }
     if (type === "JsonObject") {
       setAddJsonObjectModalOpen(true);
+      return;
+    }
+    if (type === "Reference") {
+      setAddReferenceModalOpen(true);
       return;
     }
     setSchema((s) => {
@@ -257,6 +270,13 @@ export default function ContentModelEditorForm({
     setSchema((s) => ({ ...s, fields: [...s.fields, field] }));
     setAddJsonObjectModalOpen(false);
     setJsonObjectModalIndex(idx);
+  }
+
+  function appendReferenceField(field: CmsFieldDefinition) {
+    const idx = schema.fields.length;
+    setSchema((s) => ({ ...s, fields: [...s.fields, field] }));
+    setAddReferenceModalOpen(false);
+    setReferenceModalIndex(idx);
   }
 
   async function handleSave() {
@@ -713,6 +733,44 @@ export default function ContentModelEditorForm({
                       </button>
                     </div>
                   </li>
+                ) : f.type === "Reference" ? (
+                  <li
+                    key={`${f.id}-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium text-ink-900">{f.name}</span>
+                      <code className="ml-2 text-[12px] text-ink-500">
+                        {f.id}
+                      </code>
+                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
+                        {FIELD_TYPE_LABELS.Reference}
+                      </span>
+                      <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium text-[#5f6368]">
+                        {f.referenceShape?.variant === "many"
+                          ? "Many references"
+                          : "One reference"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setReferenceModalIndex(i)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        Konfigurieren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeField(i)}
+                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
+                        aria-label="Feld entfernen"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
                 ) : (
                 <li
                   key={`${f.id}-${i}`}
@@ -799,55 +857,6 @@ export default function ContentModelEditorForm({
                       className="w-full rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px]"
                     />
                   </div>
-
-                  {f.type === "Reference" && linkTargets.length > 0 && (
-                    <div className="border-t border-hair pt-3">
-                      <p className="mb-2 text-[11px] font-medium text-ink-600">
-                        Erlaubte Verknüpfungen (Content-Typen)
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {linkTargets.map((mk) => {
-                          const set = new Set(f.validations?.linkContentType);
-                          const checked = set.has(mk);
-                          return (
-                            <label
-                              key={mk}
-                              className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2 py-1 text-[11px]"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  const next = new Set(
-                                    f.validations?.linkContentType ?? [],
-                                  );
-                                  if (next.has(mk)) next.delete(mk);
-                                  else next.add(mk);
-                                  const arr = [...next];
-                                  updateField(i, {
-                                    validations: {
-                                      ...f.validations,
-                                      linkContentType:
-                                        arr.length > 0 ? arr : undefined,
-                                    },
-                                  });
-                                }}
-                                className="rounded border-hair"
-                              />
-                              <code>{mk}</code>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {f.type === "Reference" && linkTargets.length === 0 && (
-                    <p className="border-t border-hair pt-3 text-[11px] text-ink-400">
-                      Keine anderen Modelle — Reference-Ziele nach weiteren
-                      Content-Typen möglich.
-                    </p>
-                  )}
                 </li>
                 ),
               )}
@@ -966,6 +975,17 @@ export default function ContentModelEditorForm({
           setAddModalOpen(true);
         }}
         onAddAndConfigure={appendJsonObjectField}
+      />
+      <AddReferenceFieldModal
+        open={addReferenceModalOpen}
+        suggestedName={FIELD_TYPE_LABELS.Reference}
+        suggestedId={defaultFieldIdForType("Reference", schema.fields.length)}
+        onClose={() => setAddReferenceModalOpen(false)}
+        onChangeFieldType={() => {
+          setAddReferenceModalOpen(false);
+          setAddModalOpen(true);
+        }}
+        onAddAndConfigure={appendReferenceField}
       />
 
       {richModalIndex !== null &&
@@ -1121,6 +1141,26 @@ export default function ContentModelEditorForm({
                 ),
               }));
               setJsonObjectModalIndex(null);
+            }}
+          />
+        )}
+
+      {referenceModalIndex !== null &&
+        schema.fields[referenceModalIndex]?.type === "Reference" && (
+          <ReferenceFieldModal
+            open
+            field={schema.fields[referenceModalIndex]!}
+            otherModelKeys={linkTargets}
+            onClose={() => setReferenceModalIndex(null)}
+            onApply={(next) => {
+              const idx = referenceModalIndex;
+              setSchema((s) => ({
+                ...s,
+                fields: s.fields.map((f, i) =>
+                  i === idx ? { ...f, ...next } : f,
+                ),
+              }));
+              setReferenceModalIndex(null);
             }}
           />
         )}
