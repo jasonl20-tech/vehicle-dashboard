@@ -77,14 +77,45 @@ export function parseSchemaJson(schema_json: string): unknown {
 export function extractContentTitle(payload: unknown): string {
   if (!payload || typeof payload !== "object") return "—";
   const o = payload as Record<string, unknown>;
-  for (const k of ["title", "name", "headline", "slug", "internalTitle"]) {
+  const primary = [
+    "title",
+    "name",
+    "headline",
+    "slug",
+    "internalTitle",
+    "content",
+    "body",
+    "text",
+    "description",
+    "summary",
+    "excerpt",
+    "intro",
+    "teaser",
+  ] as const;
+  for (const k of primary) {
     const v = o[k];
     if (typeof v === "string" && v.trim()) {
       const plain = extractPlainFromLexicalOrText(v).trim();
       if (plain) return plain.slice(0, 200);
     }
   }
+  const keys = Object.keys(o).sort();
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v !== "string" || !v.trim()) continue;
+    const plain = extractPlainFromLexicalOrText(v).trim();
+    if (plain.length >= 3) return plain.slice(0, 200);
+  }
   return "—";
+}
+
+/** Listen-Darstellung: nie nur ein Minuszeichen als reiner Link-Text. */
+export function contentEntryListLabel(title: string, entryId: string): string {
+  const t = title.trim();
+  if (t && t !== "—") return t;
+  const hint =
+    entryId.length > 10 ? `${entryId.slice(0, 8)}…` : entryId;
+  return hint ? `Ohne Titel (${hint})` : "Eintrag bearbeiten";
 }
 
 export function statusLabelDe(status: string): string {

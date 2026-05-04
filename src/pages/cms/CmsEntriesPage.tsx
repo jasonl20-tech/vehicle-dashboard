@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   Filter,
+  Pencil,
   Plus,
   Search,
 } from "lucide-react";
@@ -10,6 +11,7 @@ import { CMS_ROOT } from "../../lib/cmsAccess";
 import {
   CMS_CONTENT_MODELS_API,
   CMS_CONTENTS_API,
+  contentEntryListLabel,
   extractContentTitle,
   type CmsContentsListResponse,
   type CmsContentModelsListResponse,
@@ -134,9 +136,11 @@ export default function CmsEntriesPage() {
       } catch {
         payload = null;
       }
+      const title = extractContentTitle(payload);
       return {
         id: r.id,
-        title: extractContentTitle(payload),
+        title,
+        listLabel: contentEntryListLabel(title, r.id),
         type:
           modelKeyById.get(r.content_model_id) ??
           r.content_model_id.slice(0, 8),
@@ -306,6 +310,9 @@ export default function CmsEntriesPage() {
                   <span className="sr-only">Auswahl</span>
                 </th>
                 <th className="px-3 py-3">Name</th>
+                <th className="hidden w-[7rem] px-3 py-3 text-right sm:table-cell">
+                  Aktion
+                </th>
                 <th className="hidden px-3 py-3 sm:table-cell">Content-Typ</th>
                 <th className="hidden px-3 py-3 md:table-cell">Aktualisiert</th>
                 <th className="hidden px-3 py-3 lg:table-cell">
@@ -329,13 +336,28 @@ export default function CmsEntriesPage() {
                   <td className="max-w-[240px] px-3 py-3 align-middle">
                     <Link
                       to={`${CMS_ROOT}/entries/${r.id}/edit`}
-                      className="font-medium text-[#1a73e8] hover:underline"
+                      className="group inline-flex max-w-full flex-col gap-0.5 rounded-md py-0.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1a73e8]"
                     >
-                      {r.title}
+                      <span className="inline-flex min-h-[1.25rem] items-center gap-1.5 break-words text-[13px] font-medium text-[#1a73e8] group-hover:underline">
+                        <Pencil
+                          className="h-3.5 w-3.5 shrink-0 opacity-70 group-hover:opacity-100"
+                          aria-hidden
+                        />
+                        {r.listLabel}
+                      </span>
+                      <span className="block text-[11px] text-ink-400 sm:hidden">
+                        {r.type} · {r.locale}
+                      </span>
                     </Link>
-                    <span className="mt-0.5 block text-[11px] text-ink-400 sm:hidden">
-                      {r.type} · {r.locale}
-                    </span>
+                  </td>
+                  <td className="hidden px-3 py-3 align-middle sm:table-cell">
+                    <Link
+                      to={`${CMS_ROOT}/entries/${r.id}/edit`}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[12px] font-medium text-[#1a73e8] hover:bg-[#e8f0fe] hover:underline"
+                    >
+                      <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      Bearbeiten
+                    </Link>
                   </td>
                   <td className="hidden px-3 py-3 align-middle text-ink-700 sm:table-cell">
                     <span title={r.locale}>{r.type}</span>
