@@ -1,12 +1,14 @@
 import { ArrowLeft, Plus, Settings2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import AddBooleanFieldModal from "./AddBooleanFieldModal";
 import AddDateTimeFieldModal from "./AddDateTimeFieldModal";
 import AddFieldModal from "./AddFieldModal";
 import AddLocationFieldModal from "./AddLocationFieldModal";
 import AddMediaFieldModal from "./AddMediaFieldModal";
 import AddNumberFieldModal from "./AddNumberFieldModal";
 import AddTextFieldModal from "./AddTextFieldModal";
+import BooleanFieldModal from "./BooleanFieldModal";
 import DateTimeFieldModal from "./DateTimeFieldModal";
 import LocationFieldModal from "./LocationFieldModal";
 import MediaFieldModal from "./MediaFieldModal";
@@ -58,6 +60,7 @@ export default function ContentModelEditorForm({
   const [addDateTimeModalOpen, setAddDateTimeModalOpen] = useState(false);
   const [addLocationModalOpen, setAddLocationModalOpen] = useState(false);
   const [addMediaModalOpen, setAddMediaModalOpen] = useState(false);
+  const [addBooleanModalOpen, setAddBooleanModalOpen] = useState(false);
   const [richModalIndex, setRichModalIndex] = useState<number | null>(null);
   const [textModalIndex, setTextModalIndex] = useState<number | null>(null);
   const [numberModalIndex, setNumberModalIndex] = useState<number | null>(
@@ -70,6 +73,9 @@ export default function ContentModelEditorForm({
     null,
   );
   const [mediaModalIndex, setMediaModalIndex] = useState<number | null>(null);
+  const [booleanModalIndex, setBooleanModalIndex] = useState<number | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,6 +138,9 @@ export default function ContentModelEditorForm({
     setMediaModalIndex((cur) =>
       cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
     );
+    setBooleanModalIndex((cur) =>
+      cur === null ? null : cur === index ? null : cur > index ? cur - 1 : cur,
+    );
     setSchema((s) => ({
       ...s,
       fields: s.fields.filter((_, i) => i !== index),
@@ -162,6 +171,10 @@ export default function ContentModelEditorForm({
     }
     if (type === "Media") {
       setAddMediaModalOpen(true);
+      return;
+    }
+    if (type === "Boolean") {
+      setAddBooleanModalOpen(true);
       return;
     }
     setSchema((s) => {
@@ -217,6 +230,13 @@ export default function ContentModelEditorForm({
     setSchema((s) => ({ ...s, fields: [...s.fields, field] }));
     setAddMediaModalOpen(false);
     setMediaModalIndex(idx);
+  }
+
+  function appendBooleanField(field: CmsFieldDefinition) {
+    const idx = schema.fields.length;
+    setSchema((s) => ({ ...s, fields: [...s.fields, field] }));
+    setAddBooleanModalOpen(false);
+    setBooleanModalIndex(idx);
   }
 
   async function handleSave() {
@@ -600,6 +620,46 @@ export default function ContentModelEditorForm({
                       </button>
                     </div>
                   </li>
+                ) : f.type === "Boolean" ? (
+                  <li
+                    key={`${f.id}-${i}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hair bg-ink-50/30 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <span className="font-medium text-ink-900">{f.name}</span>
+                      <code className="ml-2 text-[12px] text-ink-500">
+                        {f.id}
+                      </code>
+                      <span className="ml-2 rounded bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-white">
+                        {FIELD_TYPE_LABELS.Boolean}
+                      </span>
+                      {f.boolean?.widget ? (
+                        <span className="ml-1.5 rounded border border-[#dadce0] bg-white px-2 py-0.5 text-[10px] font-medium capitalize text-[#5f6368]">
+                          {f.boolean.widget === "toggle"
+                            ? "Toggle"
+                            : f.boolean.widget}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBooleanModalIndex(i)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#dadce0] bg-white px-3 py-1.5 text-[12px] font-medium text-[#0366d6] hover:bg-[#f8f9fa]"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                        Konfigurieren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeField(i)}
+                        className="rounded-md p-2 text-ink-400 hover:bg-rose-50 hover:text-rose-700"
+                        aria-label="Feld entfernen"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
                 ) : (
                 <li
                   key={`${f.id}-${i}`}
@@ -832,6 +892,17 @@ export default function ContentModelEditorForm({
         }}
         onAddAndConfigure={appendMediaField}
       />
+      <AddBooleanFieldModal
+        open={addBooleanModalOpen}
+        suggestedName={FIELD_TYPE_LABELS.Boolean}
+        suggestedId={defaultFieldIdForType("Boolean", schema.fields.length)}
+        onClose={() => setAddBooleanModalOpen(false)}
+        onChangeFieldType={() => {
+          setAddBooleanModalOpen(false);
+          setAddModalOpen(true);
+        }}
+        onAddAndConfigure={appendBooleanField}
+      />
 
       {richModalIndex !== null &&
         schema.fields[richModalIndex]?.type === "RichText" && (
@@ -948,6 +1019,25 @@ export default function ContentModelEditorForm({
                 ),
               }));
               setMediaModalIndex(null);
+            }}
+          />
+        )}
+
+      {booleanModalIndex !== null &&
+        schema.fields[booleanModalIndex]?.type === "Boolean" && (
+          <BooleanFieldModal
+            open
+            field={schema.fields[booleanModalIndex]!}
+            onClose={() => setBooleanModalIndex(null)}
+            onApply={(next) => {
+              const idx = booleanModalIndex;
+              setSchema((s) => ({
+                ...s,
+                fields: s.fields.map((f, i) =>
+                  i === idx ? { ...f, ...next } : f,
+                ),
+              }));
+              setBooleanModalIndex(null);
             }}
           />
         )}

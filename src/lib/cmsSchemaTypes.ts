@@ -104,6 +104,23 @@ export function defaultMediaFieldConfig(): MediaFieldConfig {
   };
 }
 
+/** Boolean: Darstellung im Entry-Editor (Contentful-nah). */
+export type BooleanFieldWidget = "radio" | "dropdown" | "toggle";
+
+export type BooleanFieldConfig = {
+  widget: BooleanFieldWidget;
+  trueLabel: string;
+  falseLabel: string;
+};
+
+export function defaultBooleanFieldConfig(): BooleanFieldConfig {
+  return {
+    widget: "radio",
+    trueLabel: "Yes",
+    falseLabel: "No",
+  };
+}
+
 export type CmsFieldValidations = {
   maxLength?: number;
   /** Text: Mindestlänge in Zeichen */
@@ -252,6 +269,10 @@ export type CmsFieldDefinition = {
   mediaShape?: { variant: MediaFieldVariant };
   /** Nur Media */
   media?: MediaFieldConfig;
+  /** Nur Boolean: Editor-Optionen (Widget, Labels) */
+  boolean?: BooleanFieldConfig;
+  /** Nur Boolean: Standardwert für neue Einträge */
+  defaultBoolean?: boolean;
 };
 
 export type CmsContentModelSchema = {
@@ -397,6 +418,18 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
       : defaultMediaFieldConfig();
   }
 
+  let booleanCfg: BooleanFieldConfig | undefined;
+  let defaultBoolean: boolean | undefined;
+  if (type === "Boolean") {
+    if (typeof o.defaultBoolean === "boolean") {
+      defaultBoolean = o.defaultBoolean;
+    }
+    booleanCfg =
+      o.boolean && typeof o.boolean === "object"
+        ? normalizeBooleanConfig(o.boolean as Record<string, unknown>)
+        : defaultBooleanFieldConfig();
+  }
+
   return {
     id,
     name,
@@ -414,6 +447,35 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     ...(dateTime ? { dateTime } : {}),
     ...(mediaShape ? { mediaShape } : {}),
     ...(media ? { media } : {}),
+    ...(booleanCfg ? { boolean: booleanCfg } : {}),
+    ...(defaultBoolean !== undefined ? { defaultBoolean } : {}),
+  };
+}
+
+function normalizeBooleanConfig(raw: Record<string, unknown>): BooleanFieldConfig {
+  const def = defaultBooleanFieldConfig();
+  const w = raw.widget;
+  if (w === "radio" || w === "dropdown" || w === "toggle") {
+    def.widget = w;
+  }
+  if (typeof raw.trueLabel === "string") {
+    const t = raw.trueLabel.slice(0, 255).trim();
+    if (t) def.trueLabel = t;
+  }
+  if (typeof raw.falseLabel === "string") {
+    const t = raw.falseLabel.slice(0, 255).trim();
+    if (t) def.falseLabel = t;
+  }
+  return def;
+}
+
+export function serializeBooleanForStorage(
+  cfg: BooleanFieldConfig,
+): Record<string, unknown> {
+  return {
+    widget: cfg.widget,
+    trueLabel: cfg.trueLabel,
+    falseLabel: cfg.falseLabel,
   };
 }
 
@@ -766,6 +828,14 @@ export function serializeContentModelSchema(
         row.mediaShape = { variant };
         row.media = serializeMediaForStorage(f.media ?? defaultMediaFieldConfig());
       }
+      if (f.type === "Boolean") {
+        row.boolean = serializeBooleanForStorage(
+          f.boolean ?? defaultBooleanFieldConfig(),
+        );
+        if (typeof f.defaultBoolean === "boolean") {
+          row.defaultBoolean = f.defaultBoolean;
+        }
+      }
       return row;
     }),
   };
@@ -908,6 +978,19 @@ export function newMediaFieldFromWizard(args: {
     required: false,
     mediaShape: { variant: args.variant },
     media: defaultMediaFieldConfig(),
+  };
+}
+
+export function newBooleanFieldFromWizard(args: {
+  id: string;
+  name: string;
+}): CmsFieldDefinition {
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "Boolean",
+    required: false,
+    boolean: defaultBooleanFieldConfig(),
   };
 }
 
