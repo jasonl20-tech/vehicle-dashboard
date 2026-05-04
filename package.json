@@ -20,7 +20,6 @@
     "@lexical/react": "^0.27.2",
     "@lexical/rich-text": "^0.27.2",
     "@lexical/selection": "^0.27.2",
-    "@lexical/utils": "^0.27.2",
     "globe.gl": "^2.45.3",
     "leaflet": "^1.9.4",
     "lexical": "^0.27.2",

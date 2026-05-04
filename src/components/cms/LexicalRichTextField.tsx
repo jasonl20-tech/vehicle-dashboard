@@ -24,7 +24,6 @@ import {
   QuoteNode,
 } from "@lexical/rich-text";
 import { $setBlocksType } from "@lexical/selection";
-import { sanitizeUrl } from "@lexical/utils";
 import {
   $createParagraphNode,
   $getSelection,
@@ -260,8 +259,16 @@ function ToolbarPlugin() {
             editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
             return;
           }
-          const safe = sanitizeUrl(trimmed);
-          editor.dispatchCommand(TOGGLE_LINK_COMMAND, safe || null);
+          let href = trimmed;
+          if (
+            !/^https?:\/\//i.test(href) &&
+            !href.startsWith("mailto:") &&
+            !href.startsWith("/") &&
+            !href.startsWith("#")
+          ) {
+            href = `https://${href}`;
+          }
+          editor.dispatchCommand(TOGGLE_LINK_COMMAND, href);
         }}
         icon={<Link2 className="h-3.5 w-3.5" />}
       />
