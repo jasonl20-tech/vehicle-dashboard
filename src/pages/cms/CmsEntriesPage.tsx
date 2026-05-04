@@ -37,6 +37,7 @@ export default function CmsEntriesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const modelFromUrl = (searchParams.get("content_model_id") || "").trim();
   const qFromUrl = (searchParams.get("q") || "").trim();
+  const isZuletztView = searchParams.get("view") === "zuletzt";
 
   const [qInput, setQInput] = useState(() => searchParams.get("q") || "");
   const [viewOpen, setViewOpen] = useState(false);
@@ -114,8 +115,9 @@ export default function CmsEntriesPage() {
     const p = new URLSearchParams({ limit: "200" });
     if (qFromUrl) p.set("q", qFromUrl);
     if (modelFromUrl) p.set("content_model_id", modelFromUrl);
+    if (isZuletztView) p.set("updated_by_me", "1");
     return `${CMS_CONTENTS_API}?${p}`;
-  }, [qFromUrl, modelFromUrl]);
+  }, [qFromUrl, modelFromUrl, isZuletztView]);
 
   const contents = useApi<CmsContentsListResponse>(contentsUrl);
 
@@ -165,9 +167,16 @@ export default function CmsEntriesPage() {
   return (
     <div className="w-full">
       <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink-900 lg:text-[26px]">
-          Alle Inhalte
-        </h1>
+        <div>
+          <h1 className="text-[22px] font-semibold tracking-tight text-ink-900 lg:text-[26px]">
+            {isZuletztView ? "Zuletzt bearbeitet" : "Alle Inhalte"}
+          </h1>
+          {isZuletztView ? (
+            <p className="mt-1 text-[13px] text-ink-500">
+              Einträge, die du zuletzt gespeichert hast.
+            </p>
+          ) : null}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative" ref={viewRef}>
             <button
@@ -398,7 +407,9 @@ export default function CmsEntriesPage() {
         </div>
         {!loading && rows.length === 0 && !errMsg ? (
           <p className="px-4 py-10 text-center text-[13px] text-ink-500">
-            Keine Einträge für die aktuelle Auswahl.
+            {isZuletztView
+              ? "Keine Einträge, die du zuletzt bearbeitet hast — oder sie erscheinen hier erst nach dem nächsten Speichern."
+              : "Keine Einträge für die aktuelle Auswahl."}
           </p>
         ) : null}
       </div>

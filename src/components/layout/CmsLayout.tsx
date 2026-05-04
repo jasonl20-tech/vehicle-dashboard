@@ -23,7 +23,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { Logo } from "../brand/Logo";
-import { useAuth } from "../../lib/auth";
+import { useAuth, type SessionUser } from "../../lib/auth";
 import { CMS_ROOT } from "../../lib/cmsAccess";
 import {
   CMS_CONTENT_MODELS_API,
@@ -36,7 +36,49 @@ function useEntriesNavActive() {
   const [searchParams] = useSearchParams();
   const onEntries = pathname === `${CMS_ROOT}/entries`;
   const modelFilter = searchParams.get("content_model_id") || "";
-  return { onEntries, modelFilter, allEntries: onEntries && !modelFilter };
+  const isZuletztView = searchParams.get("view") === "zuletzt";
+  const allEntries = onEntries && !modelFilter && !isZuletztView;
+  const zuletztEntries = onEntries && isZuletztView;
+  return { onEntries, modelFilter, allEntries, isZuletztView, zuletztEntries };
+}
+
+function cmsHeaderUserInitials(user: SessionUser): string {
+  return (user.benutzername || "??")
+    .split(/[\s._-]+/)
+    .map((s) => s[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
+function CmsHeaderUserChip({ user }: { user: SessionUser }) {
+  const initials = cmsHeaderUserInitials(user);
+  const label = user.titel?.trim() || user.benutzername;
+  return (
+    <div
+      className="flex min-w-0 max-w-[11rem] items-center gap-2"
+      title={user.benutzername}
+    >
+      <div className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-[#e8eaed] ring-2 ring-white shadow-sm ring-inset">
+        {user.profilbild ? (
+          <img
+            src={user.profilbild}
+            alt=""
+            className="h-full w-full object-cover"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="grid h-full w-full place-items-center bg-gradient-to-br from-[#1a73e8] to-[#1557b0] text-[10px] font-semibold text-white">
+            {initials}
+          </div>
+        )}
+      </div>
+      <span className="hidden min-w-0 truncate text-[12px] font-medium text-ink-800 sm:block">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 function CmsHeaderSearch() {
@@ -60,6 +102,7 @@ function CmsHeaderSearch() {
       if (location.pathname.startsWith(`${CMS_ROOT}/entries`)) {
         const cid = searchParams.get("content_model_id");
         if (cid) p.set("content_model_id", cid);
+        if (searchParams.get("view") === "zuletzt") p.set("view", "zuletzt");
       }
       const t = q.trim();
       if (t) p.set("q", t);
@@ -108,7 +151,8 @@ function CmsHeaderSearch() {
 export default function CmsLayout() {
   const { pathname: path } = useLocation();
   const { user, logout } = useAuth();
-  const { onEntries, modelFilter, allEntries } = useEntriesNavActive();
+  const { onEntries, modelFilter, allEntries, isZuletztView, zuletztEntries } =
+    useEntriesNavActive();
 
   const isModels = path.startsWith(`${CMS_ROOT}/models`);
   const isEntries = path.startsWith(`${CMS_ROOT}/entries`);
@@ -117,10 +161,10 @@ export default function CmsLayout() {
 
   const tabClassFor = (active: boolean) =>
     [
-      "relative shrink-0 border-b-2 px-1 pb-3 pt-1 text-[13px] font-medium transition-colors",
+      "shrink-0 rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#1a73e8]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-white",
       active
-        ? "border-brand-500 text-brand-600"
-        : "border-transparent text-ink-500 hover:text-ink-800",
+        ? "bg-white text-ink-900 shadow-sm ring-1 ring-black/[0.06]"
+        : "text-ink-600 hover:bg-white/70 hover:text-ink-900",
     ].join(" ");
 
   const modelsUrl = `${CMS_CONTENT_MODELS_API}?limit=500`;
@@ -165,15 +209,16 @@ export default function CmsLayout() {
             <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
             Alle Inhalte
           </Link>
-          <button
-            type="button"
-            disabled
-            title="Demnächst"
-            className={`${sideItemBase} w-full cursor-not-allowed text-left text-ink-400`}
+          <Link
+            to={`${CMS_ROOT}/entries?view=zuletzt`}
+            className={[
+              sideItemBase,
+              zuletztEntries ? sideItemActive : sideItemIdle,
+            ].join(" ")}
           >
-            <Clock className="h-4 w-4 shrink-0" />
+            <Clock className="h-4 w-4 shrink-0 opacity-90" />
             Zuletzt
-          </button>
+          </Link>
           <Link
             to={`${CMS_ROOT}/scheduled`}
             className={[
@@ -205,10 +250,13 @@ export default function CmsLayout() {
             ) : (
               sortedModels.map((m) => {
                 const active = onEntries && modelFilter === m.id;
+                const qs = new URLSearchParams();
+                qs.set("content_model_id", m.id);
+                if (isZuletztView) qs.set("view", "zuletzt");
                 return (
                   <Link
                     key={m.id}
-                    to={`${CMS_ROOT}/entries?content_model_id=${encodeURIComponent(m.id)}`}
+                    to={`${CMS_ROOT}/entries?${qs}`}
                     className={[
                       sideItemBase,
                       active ? sideItemActive : sideItemIdle,
@@ -262,7 +310,7 @@ export default function CmsLayout() {
         <header className="sticky top-0 z-10 shrink-0 border-b border-[#e8eaed] bg-white">
           <div className="flex h-14 items-center gap-3 overflow-x-auto px-4 lg:gap-4 lg:px-6">
             <nav
-              className="flex min-w-0 shrink-0 items-center gap-5 lg:gap-7"
+              className="flex min-w-0 shrink-0 items-center gap-0.5 rounded-xl border border-[#e8eaed] bg-[#f1f3f4] p-1"
               aria-label="CMS Bereiche"
             >
               <Link
@@ -287,16 +335,8 @@ export default function CmsLayout() {
 
             <CmsHeaderSearch />
 
-            <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wide text-ink-400 sm:inline">
-              production
-            </span>
-
             <div className="ml-auto flex shrink-0 items-center gap-2 border-l border-[#e8eaed] pl-3">
-              {user ? (
-                <span className="hidden max-w-[7rem] truncate text-[12px] text-ink-500 md:inline">
-                  {user.titel || user.benutzername}
-                </span>
-              ) : null}
+              {user ? <CmsHeaderUserChip user={user} /> : null}
               <button
                 type="button"
                 onClick={() => void logout()}

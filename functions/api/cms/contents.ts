@@ -1,7 +1,7 @@
 /**
  * CMS — Content-Einträge (D1 `website` → `cms_contents`).
  *
- *   GET  /api/cms/contents?content_model_id=&status=&locale=&q=&scheduled_month=YYYY-MM&limit=&offset=
+ *   GET  /api/cms/contents?content_model_id=&status=&locale=&q=&scheduled_month=YYYY-MM&updated_by_me=1&limit=&offset=
  *   POST /api/cms/contents
  *        { id?, content_model_id, payload_json, status?, locale?, scheduled_publish_at? }
  *
@@ -103,6 +103,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const locale = (url.searchParams.get("locale") || "").trim();
   const q = (url.searchParams.get("q") || "").trim();
   const scheduledMonth = (url.searchParams.get("scheduled_month") || "").trim();
+  const updatedByMeRaw = (url.searchParams.get("updated_by_me") || "").trim();
+  const updatedByMe = ["1", "true", "yes"].includes(
+    updatedByMeRaw.toLowerCase(),
+  );
 
   const limit = Math.min(
     MAX_LIMIT,
@@ -162,6 +166,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       "(scheduled_publish_at IS NOT NULL AND substr(scheduled_publish_at, 1, 10) >= ? AND substr(scheduled_publish_at, 1, 10) < ?)",
     );
     binds.push(start, endExclusive);
+  }
+  if (updatedByMe) {
+    const me = user.benutzername?.trim() || String(user.id);
+    where.push("ifnull(last_updated_by,'') = ?");
+    binds.push(me);
   }
 
   const whereSql = ` WHERE ${where.join(" AND ")}`;
