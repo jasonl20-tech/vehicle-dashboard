@@ -25,6 +25,8 @@ export const TEXT_LONG_MAX = 50_000;
 
 export type TextFieldVariant = "short" | "long";
 
+export type NumberFieldVariant = "integer" | "decimal";
+
 export type CmsFieldValidations = {
   maxLength?: number;
   /** Text: Mindestlänge in Zeichen */
@@ -40,6 +42,8 @@ export type CmsFieldValidations = {
   prohibitPattern?: string;
   /** Text: erlaubte Werte (Enum) */
   allowedValues?: string[];
+  /** Number: erlaubte Werte (Enum) */
+  allowedNumberValues?: number[];
 };
 
 /** Rich Text — detaillierte Editor-/Validierungs-Optionen (Contentful-nah). */
@@ -161,6 +165,10 @@ export type CmsFieldDefinition = {
   list?: boolean;
   /** Nur Text: Vorgabewert für neue Einträge */
   defaultValue?: string;
+  /** Nur Number: Integer vs. Decimal — nach Anlegen in der UI fixiert */
+  numberShape?: { variant: NumberFieldVariant };
+  /** Nur Number: Vorgabewert */
+  defaultNumber?: number;
 };
 
 export type CmsContentModelSchema = {
@@ -217,6 +225,12 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
       );
       if (av.length > 0) validations.allowedValues = av;
     }
+    if (Array.isArray(v.allowedNumberValues)) {
+      const nums = v.allowedNumberValues.filter(
+        (x): x is number => typeof x === "number" && !Number.isNaN(x),
+      );
+      if (nums.length > 0) validations.allowedNumberValues = nums;
+    }
     if (Object.keys(validations).length === 0) validations = undefined;
   }
   let richText: RichTextFieldConfig | undefined;
@@ -250,6 +264,20 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     }
   }
 
+  let numberShape: { variant: NumberFieldVariant } | undefined;
+  let defaultNumber: number | undefined;
+  if (type === "Number") {
+    const ns = o.numberShape;
+    if (ns && typeof ns === "object") {
+      const nv = (ns as Record<string, unknown>).variant;
+      if (nv === "integer" || nv === "decimal") numberShape = { variant: nv };
+    }
+    if (!numberShape) numberShape = { variant: "integer" };
+    if (typeof o.defaultNumber === "number" && !Number.isNaN(o.defaultNumber)) {
+      defaultNumber = o.defaultNumber;
+    }
+  }
+
   return {
     id,
     name,
@@ -262,6 +290,8 @@ function normalizeField(raw: unknown): CmsFieldDefinition | null {
     ...(textShape ? { textShape } : {}),
     ...(list ? { list: true } : {}),
     ...(defaultValue !== undefined ? { defaultValue } : {}),
+    ...(numberShape ? { numberShape } : {}),
+    ...(defaultNumber !== undefined ? { defaultNumber } : {}),
   };
 }
 
@@ -444,6 +474,12 @@ export function serializeContentModelSchema(
           row.defaultValue = f.defaultValue;
         }
       }
+      if (f.type === "Number") {
+        if (f.numberShape) row.numberShape = f.numberShape;
+        if (f.defaultNumber !== undefined && !Number.isNaN(f.defaultNumber)) {
+          row.defaultNumber = f.defaultNumber;
+        }
+      }
       if (f.type === "RichText" && f.richText) {
         row.richText = serializeRichTextForStorage(f.richText);
       }
@@ -488,6 +524,10 @@ function pruneValidations(
   if (type === "Number") {
     if (typeof v.min === "number") o.min = v.min;
     if (typeof v.max === "number") o.max = v.max;
+    if (v.unique === true) o.unique = true;
+    if (Array.isArray(v.allowedNumberValues) && v.allowedNumberValues.length > 0) {
+      o.allowedNumberValues = [...v.allowedNumberValues];
+    }
   }
   if (
     type === "Reference" &&
@@ -531,6 +571,20 @@ export function newTextFieldFromWizard(args: {
     textShape: { variant: args.variant },
     ...(args.list ? { list: true } : {}),
     validations: { maxLength: cap },
+  };
+}
+
+export function newNumberFieldFromWizard(args: {
+  id: string;
+  name: string;
+  variant: NumberFieldVariant;
+}): CmsFieldDefinition {
+  return {
+    id: args.id.trim(),
+    name: args.name.trim(),
+    type: "Number",
+    required: false,
+    numberShape: { variant: args.variant },
   };
 }
 
