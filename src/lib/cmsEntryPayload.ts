@@ -7,6 +7,86 @@ import {
   richTextToApiString,
 } from "./lexicalRichText";
 
+/**
+ * Medien-Feld in `payload_json`: R2-Key oder Objekt mit Metadaten-Snapshot
+ * (beim Verknüpfen aus der Mediathek).
+ */
+export type CmsMediaFieldStoredValue =
+  | string
+  | {
+      key: string;
+      title?: string | null;
+      altText?: string | null;
+      description?: string | null;
+    };
+
+export function cmsMediaFieldKey(raw: unknown): string {
+  if (raw == null || raw === "") return "";
+  if (typeof raw === "string") return raw.trim();
+  if (typeof raw === "object" && raw !== null && "key" in raw) {
+    return String((raw as Record<string, unknown>).key ?? "").trim();
+  }
+  return String(raw).trim();
+}
+
+function normalizeMediaFieldEntry(v: unknown): CmsMediaFieldStoredValue {
+  if (v == null || v === "") return "";
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "object" && v !== null && "key" in v) {
+    const o = v as Record<string, unknown>;
+    const key = String(o.key ?? "").trim();
+    if (!key) return "";
+    const title =
+      o.title != null && String(o.title).trim()
+        ? String(o.title).trim()
+        : undefined;
+    const altRaw = o.altText ?? o.alt_text;
+    const altText =
+      altRaw != null && String(altRaw).trim()
+        ? String(altRaw).trim()
+        : undefined;
+    const description =
+      o.description != null && String(o.description).trim()
+        ? String(o.description).trim()
+        : undefined;
+    if (!title && !altText && !description) return key;
+    return { key, title, altText, description };
+  }
+  return String(v).trim();
+}
+
+/** Aus Asset-Zeile für Payload (Felder `title` / `alt_text` aus API). */
+export function cmsMediaValueFromAsset(a: {
+  key: string;
+  title?: string | null;
+  alt_text?: string | null;
+  description?: string | null;
+}): CmsMediaFieldStoredValue {
+  return normalizeMediaFieldEntry({
+    key: a.key,
+    title: a.title,
+    altText: a.alt_text,
+    description: a.description,
+  });
+}
+
+function serializeMediaFieldForApi(
+  raw: unknown,
+): string | Record<string, unknown> {
+  const n = normalizeMediaFieldEntry(raw);
+  if (n === "") return "";
+  if (typeof n === "string") return n;
+  const o: Record<string, unknown> = { key: n.key };
+  if (n.title) o.title = n.title;
+  if (n.altText) o.altText = n.altText;
+  if (n.description) o.description = n.description;
+  return o;
+}
+
+function mediaFieldItemNonEmpty(v: unknown): boolean {
+  return cmsMediaFieldKey(v).length > 0;
+}
+
 export function textMaxLength(f: CmsFieldDefinition): number | undefined {
   if (f.type !== "Text") return undefined;
   const v = f.validations?.maxLength;
@@ -56,10 +136,6 @@ function normalizeMergedValue(
   if (f.type === "Text" && f.list) {
     if (Array.isArray(v)) return v.map((x) => String(x));
     if (typeof v === "string" && v.trim()) return [v.trim()];
-    return [];
-  }
-  if (f.type === "Media" && f.mediaShape?.variant === "many") {
-    if (Array.isArray(v)) return v.map((x) => String(x));
     return [];
   }
   if (f.type === "Reference" && f.referenceShape?.variant === "many") {
@@ -114,9 +190,16 @@ function normalizeMergedValue(
   if (f.type === "Text" || f.type === "DateTime") {
     return v == null ? "" : String(v);
   }
+  if (f.type === "Media") {
+    if (f.mediaShape?.variant === "many") {
+      if (Array.isArray(v)) return v.map((x) => normalizeMediaFieldEntry(x));
+      return [];
+    }
+    return normalizeMediaFieldEntry(v);
+  }
   if (
-    f.type === "Media" ||
-    (f.type === "Reference" && f.referenceShape?.variant === "one")
+    f.type === "Reference" &&
+    (f.referenceShape?.variant ?? "one") === "one"
   ) {
     return v == null ? "" : String(v);
   }
@@ -156,8 +239,14 @@ export function validateEntryPayload(
     }
     if (f.type === "Media" && f.mediaShape?.variant === "many") {
       const arr = Array.isArray(v) ? v : [];
-      const nonempty = arr.filter((x) => String(x).trim() !== "");
+      const nonempty = arr.filter((x) => mediaFieldItemNonEmpty(x));
       if (nonempty.length === 0) errors.push(`${f.name} ist erforderlich.`);
+      continue;
+    }
+    if (f.type === "Media" && f.mediaShape?.variant !== "many") {
+      if (!mediaFieldItemNonEmpty(v)) {
+        errors.push(`${f.name} ist erforderlich.`);
+      }
       continue;
     }
     if (f.type === "Reference" && f.referenceShape?.variant === "many") {
@@ -247,9 +336,11 @@ export function serializeEntryPayloadForApi(
       case "Media":
         if (f.mediaShape?.variant === "many") {
           const arr = Array.isArray(raw) ? raw : [];
-          out[f.id] = arr.map((x) => String(x).trim()).filter(Boolean);
+          out[f.id] = arr
+            .map((x) => serializeMediaFieldForApi(x))
+            .filter((x) => x !== "");
         } else {
-          out[f.id] = raw == null ? "" : String(raw).trim();
+          out[f.id] = serializeMediaFieldForApi(raw);
         }
         break;
       case "Boolean":

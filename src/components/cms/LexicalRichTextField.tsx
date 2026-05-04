@@ -330,10 +330,11 @@ function ToolbarPlugin() {
 
   const insertImageFromAsset = (asset: Asset) => {
     const alt =
-      asset.title?.trim() ||
       asset.alt_text?.trim() ||
+      asset.title?.trim() ||
       asset.name ||
       "";
+    const imageTitle = asset.title?.trim() || "";
     run(() => {
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) return;
@@ -341,6 +342,7 @@ function ToolbarPlugin() {
         asset.url,
         alt,
         asset.key,
+        imageTitle,
         asset.cms_status,
       );
       selection.insertNodes([imageNode]);

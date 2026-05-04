@@ -10,6 +10,8 @@ type Props = {
   src: string;
   altText: string;
   assetKey: string;
+  /** CMS-Anzeigetitel (Figcaption / Payload-Snapshot). */
+  title?: string;
   /** Aus dem gespeicherten Lexical-JSON; wird bei Bedarf per API aktualisiert. */
   cmsStatus: "draft" | "published";
 };
@@ -18,6 +20,7 @@ export default function CmsLexicalImageBlock({
   src,
   altText,
   assetKey,
+  title = "",
   cmsStatus,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -137,9 +140,14 @@ export default function CmsLexicalImageBlock({
             draggable={false}
           />
         </div>
-        {altText ? (
-          <figcaption className="mt-2 line-clamp-2 px-0.5 text-center text-[11px] leading-snug text-[#5f6368]">
-            {altText}
+        {title.trim() ? (
+          <figcaption className="mt-2 px-0.5 text-center text-[13px] font-medium leading-snug text-[#3c4043]">
+            {title.trim()}
+          </figcaption>
+        ) : null}
+        {altText.trim() && altText.trim() !== title.trim() ? (
+          <figcaption className="mt-1 line-clamp-2 px-0.5 text-center text-[11px] leading-snug text-[#5f6368]">
+            Alt: {altText}
           </figcaption>
         ) : null}
       </div>

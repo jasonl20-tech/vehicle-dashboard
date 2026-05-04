@@ -15,6 +15,8 @@ import {
   statusLabelDe,
 } from "../../lib/cmsApi";
 import {
+  cmsMediaFieldKey,
+  cmsMediaValueFromAsset,
   mergePayloadWithSchema,
   serializeEntryPayloadForApi,
   textMaxLength,
@@ -27,7 +29,7 @@ import type {
 import { FIELD_TYPE_LABELS } from "../../lib/cmsSchemaTypes";
 import { extractPlainFromLexicalOrText } from "../../lib/lexicalRichText";
 import { fmtRelative } from "../../lib/customerApi";
-import { isImage, publicAssetUrl } from "../../lib/assetsApi";
+import { isImage, publicAssetUrl, type Asset } from "../../lib/assetsApi";
 import LexicalRichTextField from "./LexicalRichTextField";
 
 const SIDE_TAB_ACTIVE =
@@ -389,8 +391,38 @@ export default function ContentEntryEditor({
   );
 }
 
-/** Medien: Wert = R2-Object-Key unter {@link CMS_ASSETS_FOLDER}/ (Bucket `env.assets`). */
-function CmsMediaFieldInput({
+/** Zeigt im Medien-Feld gespeicherte Metadaten-Snapshots aus dem Payload. */
+function MediaFieldPayloadMeta({ raw }: { raw: unknown }) {
+  if (raw == null || typeof raw !== "object" || !("key" in (raw as object))) {
+    return null;
+  }
+  const o = raw as Record<string, unknown>;
+  const title = o.title != null ? String(o.title).trim() : "";
+  const altRaw = o.altText ?? o.alt_text;
+  const alt = altRaw != null ? String(altRaw).trim() : "";
+  const desc = o.description != null ? String(o.description).trim() : "";
+  if (!title && !alt && !desc) return null;
+  return (
+    <div className="mt-2 rounded-lg border border-[#e8eaed] bg-[#fafbfc] px-3 py-2 text-[11px] text-[#5f6368]">
+      {title ? (
+        <div>
+          <span className="font-semibold text-[#3c4043]">Titel:</span> {title}
+        </div>
+      ) : null}
+      {alt ? (
+        <div>
+          <span className="font-semibold text-[#3c4043]">Alt:</span> {alt}
+        </div>
+      ) : null}
+      {desc ? (
+        <div className="line-clamp-3">
+          <span className="font-semibold text-[#3c4043]">Beschreibung:</span>{" "}
+          {desc}
+        </div>
+      ) : null}
+    </div>
+  );
+}
   variant,
   raw,
   label,
@@ -408,24 +440,25 @@ function CmsMediaFieldInput({
     null,
   );
 
-  function applyPick(key: string) {
+  function applyPick(asset: Asset) {
+    const v = cmsMediaValueFromAsset(asset);
     if (variant === "one") {
-      onChange(key);
+      onChange(v);
       return;
     }
-    const arr = Array.isArray(raw) ? (raw as unknown[]).map(String) : [];
+    const arr = Array.isArray(raw) ? [...(raw as unknown[])] : [];
     if (pickerTargetIndex !== null && pickerTargetIndex >= 0) {
       const next = [...arr];
-      next[pickerTargetIndex] = key;
+      next[pickerTargetIndex] = v;
       onChange(next);
     } else {
-      onChange([...arr, key]);
+      onChange([...arr, v]);
     }
     setPickerTargetIndex(null);
   }
 
   if (variant === "many") {
-    const arr = Array.isArray(raw) ? (raw as unknown[]).map(String) : [];
+    const arr = Array.isArray(raw) ? [...(raw as unknown[])] : [];
     return (
       <>
         {label}
@@ -437,13 +470,16 @@ function CmsMediaFieldInput({
           . Über die Mediathek wählen oder Keys manuell eintragen.
         </p>
         <div className="space-y-2">
-          {arr.map((key, i) => (
+          {arr.map((item, i) => {
+            const keyVal = cmsMediaFieldKey(item);
+            return (
             <div
               key={i}
-              className="flex flex-wrap items-center gap-2 rounded-lg border border-[#e8eaed] bg-[#fafbfc] p-2"
+              className="flex flex-col gap-2 rounded-lg border border-[#e8eaed] bg-[#fafbfc] p-2"
             >
+            <div className="flex flex-wrap items-center gap-2">
               <input
-                value={key}
+                value={keyVal}
                 onChange={(e) => {
                   const next = [...arr];
                   next[i] = e.target.value;
@@ -471,7 +507,10 @@ function CmsMediaFieldInput({
                 Entfernen
               </button>
             </div>
-          ))}
+            <MediaFieldPayloadMeta raw={item} />
+            </div>
+            );
+          })}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
@@ -501,7 +540,7 @@ function CmsMediaFieldInput({
           initialFolder={CMS_ASSETS_FOLDER}
           rootFolder={CMS_ASSETS_FOLDER}
           title="CMS-Medium wählen"
-          onPick={(a) => applyPick(a.key)}
+          onPick={(a) => applyPick(a)}
           onClose={() => {
             setPickerOpen(false);
             setPickerTargetIndex(null);
@@ -511,9 +550,19 @@ function CmsMediaFieldInput({
     );
   }
 
-  const s = raw == null ? "" : String(raw);
+  const s = cmsMediaFieldKey(raw);
   const previewUrl = s ? publicAssetUrl(s) : "";
   const showPreview = Boolean(s && isImage({ content_type: "", name: s }));
+  const imgAlt =
+    raw != null &&
+    typeof raw === "object" &&
+    ("altText" in raw || "alt_text" in raw)
+      ? String(
+          (raw as Record<string, unknown>).altText ??
+            (raw as Record<string, unknown>).alt_text ??
+            "",
+        ).trim()
+      : "";
 
   return (
     <>
@@ -523,7 +572,8 @@ function CmsMediaFieldInput({
         <code className="rounded bg-[#f1f3f4] px-1 font-mono text-[11px]">
           {CMS_ASSETS_FOLDER}/datei.png
         </code>
-        ).
+        ). Über die Mediathek werden Titel, Alt und Beschreibung im Eintrag
+        mitgespeichert.
       </p>
       <div className="flex flex-wrap items-start gap-2">
         <input
@@ -540,6 +590,7 @@ function CmsMediaFieldInput({
           Mediathek
         </button>
       </div>
+      <MediaFieldPayloadMeta raw={raw} />
       {showPreview ? (
         <a
           href={previewUrl}
@@ -549,7 +600,7 @@ function CmsMediaFieldInput({
         >
           <img
             src={previewUrl}
-            alt=""
+            alt={imgAlt}
             className="max-h-48 max-w-full rounded-lg border border-[#e8eaed] object-contain"
           />
         </a>
@@ -573,7 +624,7 @@ function CmsMediaFieldInput({
         initialFolder={CMS_ASSETS_FOLDER}
         rootFolder={CMS_ASSETS_FOLDER}
         title="CMS-Medium wählen"
-        onPick={(a) => applyPick(a.key)}
+        onPick={(a) => applyPick(a)}
         onClose={() => setPickerOpen(false)}
       />
     </>

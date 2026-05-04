@@ -38,9 +38,17 @@ export function lexicalJsonToPlainString(node: unknown): string {
   if (n.type === "tab") return "\t";
   if (n.type === "text" && typeof n.text === "string") return n.text;
   if (n.type === "cms-hr") return "\n";
-  if (n.type === "cms-image" && typeof n.altText === "string" && n.altText)
-    return `\n[${n.altText}]\n`;
-  if (n.type === "cms-image") return "\n";
+  if (n.type === "cms-image") {
+    const parts: string[] = [];
+    if (typeof n.title === "string" && n.title.trim()) {
+      parts.push(n.title.trim());
+    }
+    if (typeof n.altText === "string" && n.altText.trim()) {
+      parts.push(n.altText.trim());
+    }
+    if (parts.length) return `\n[${parts.join(" · ")}]\n`;
+    return "\n";
+  }
   if (Array.isArray(n.children)) {
     return n.children.map((c) => lexicalJsonToPlainString(c)).join("");
   }

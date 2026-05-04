@@ -23,6 +23,8 @@ export type SerializedCmsImageNode = Spread<
     src: string;
     altText: string;
     assetKey: string;
+    /** CMS-Anzeigetitel (Snapshot beim Einfügen), optional. */
+    title?: string;
     cmsStatus?: "draft" | "published";
   },
   SerializedLexicalNode
@@ -32,6 +34,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
   __src: string;
   __altText: string;
   __assetKey: string;
+  __title: string;
   __cmsStatus: "draft" | "published";
 
   static getType(): string {
@@ -43,6 +46,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
       node.__src,
       node.__altText,
       node.__assetKey,
+      node.__title,
       node.__cmsStatus,
       node.__key,
     );
@@ -52,6 +56,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
     src: string,
     altText: string,
     assetKey: string,
+    title: string = "",
     cmsStatus: "draft" | "published" = "published",
     key?: NodeKey,
   ) {
@@ -59,11 +64,12 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
     this.__src = src;
     this.__altText = altText;
     this.__assetKey = assetKey;
+    this.__title = title;
     this.__cmsStatus = cmsStatus;
   }
 
   exportJSON(): SerializedCmsImageNode {
-    return {
+    const row: SerializedCmsImageNode = {
       altText: this.__altText,
       assetKey: this.__assetKey,
       cmsStatus: this.__cmsStatus,
@@ -71,6 +77,8 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
       type: "cms-image",
       version: 1,
     };
+    if (this.__title.trim()) row.title = this.__title.trim();
+    return row;
   }
 
   static importJSON(serialized: SerializedCmsImageNode): CmsImageNode {
@@ -78,6 +86,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
       serialized.src,
       serialized.altText,
       serialized.assetKey,
+      typeof serialized.title === "string" ? serialized.title : "",
       normalizedCmsStatus(serialized.cmsStatus),
     );
   }
@@ -96,6 +105,7 @@ export class CmsImageNode extends DecoratorNode<JSX.Element> {
         src={this.__src}
         altText={this.__altText}
         assetKey={this.__assetKey}
+        title={this.__title}
         cmsStatus={this.__cmsStatus}
       />
     );
@@ -114,10 +124,11 @@ export function $createCmsImageNode(
   src: string,
   altText: string,
   assetKey: string,
+  title: string = "",
   cmsStatus: "draft" | "published" = "published",
 ): CmsImageNode {
   return $applyNodeReplacement(
-    new CmsImageNode(src, altText, assetKey, cmsStatus),
+    new CmsImageNode(src, altText, assetKey, title, cmsStatus),
   );
 }
 
