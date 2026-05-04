@@ -140,6 +140,7 @@ export const DASHBOARD_API_PATH_PREFIXES: readonly string[] = [
   "/api/website/submissions",
   "/api/website/submissions-by-country",
   "/api/website/trial-submissions",
+  "/api/cms",
 ];
 
 /**
@@ -159,13 +160,17 @@ export const USER_ANALYTICS_API_PATH_PREFIXES: readonly string[] = [
   "/api/intern-analytics/user-analytics",
 ];
 
+/** CMS (`/cms`) — D1 `website`. */
+export const CMS_API_PATH_PREFIXES: readonly string[] = ["/api/cms"];
+
 /** Intern: Kombination SPA-Wurzel + zugehörige API-Prefixe. */
 const SPA_ROUTE_API_BUNDLES: ReadonlyArray<{
   spaRoot:
     | "/dashboard"
     | "/control-platform"
     | "/admin-settings"
-    | "/user-analytics";
+    | "/user-analytics"
+    | "/cms";
   apiPrefixes: readonly string[];
 }> = [
   { spaRoot: "/control-platform", apiPrefixes: CONTROL_PLATFORM_API_PATH_PREFIXES },
@@ -178,6 +183,7 @@ const SPA_ROUTE_API_BUNDLES: ReadonlyArray<{
     spaRoot: "/user-analytics",
     apiPrefixes: USER_ANALYTICS_API_PATH_PREFIXES,
   },
+  { spaRoot: "/cms", apiPrefixes: CMS_API_PATH_PREFIXES },
 ];
 
 /**
