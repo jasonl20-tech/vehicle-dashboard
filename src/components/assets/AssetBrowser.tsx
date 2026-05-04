@@ -1098,7 +1098,7 @@ function AssetCard({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={asset.url}
-              alt={asset.alt_text || asset.name}
+              alt={asset.title || asset.alt_text || asset.name}
               loading="lazy"
               onError={() => setImgErr(true)}
               className="h-full w-full object-contain"
@@ -1282,21 +1282,25 @@ function DetailPanel({
   onDelete: () => void;
   onUpdated: (a: Asset) => void;
 }) {
+  const [title, setTitle] = useState(asset.title ?? "");
   const [altText, setAltText] = useState(asset.alt_text ?? "");
   const [description, setDescription] = useState(asset.description ?? "");
   const [savedFlash, setSavedFlash] = useState(false);
   useEffect(() => {
+    setTitle(asset.title ?? "");
     setAltText(asset.alt_text ?? "");
     setDescription(asset.description ?? "");
-  }, [asset.id, asset.alt_text, asset.description]);
+  }, [asset.id, asset.title, asset.alt_text, asset.description]);
 
   const dirty =
+    title !== (asset.title ?? "") ||
     altText !== (asset.alt_text ?? "") ||
     description !== (asset.description ?? "");
 
   const onSave = useCallback(async () => {
     try {
       const updated = await updateAsset(asset.id, {
+        title: title || null,
         alt_text: altText || null,
         description: description || null,
       });
@@ -1306,7 +1310,7 @@ function DetailPanel({
     } catch (e) {
       alert((e as Error).message);
     }
-  }, [asset.id, altText, description, onUpdated]);
+  }, [asset.id, title, altText, description, onUpdated]);
 
   return (
     <aside className="hidden w-80 shrink-0 flex-col border-l border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900 md:flex">
@@ -1326,7 +1330,7 @@ function DetailPanel({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={asset.url}
-              alt={asset.alt_text || asset.name}
+              alt={asset.title || asset.alt_text || asset.name}
               className="h-full w-full object-contain"
             />
           ) : isVideo(asset) ? (
@@ -1381,7 +1385,18 @@ function DetailPanel({
         <div className="mt-4 space-y-2 border-t border-neutral-200 pt-4 dark:border-neutral-800">
           <label className="block">
             <span className="mb-1 block text-[10px] uppercase tracking-wider text-neutral-500">
-              Alt-Text (für Mails)
+              Titel (CMS)
+            </span>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded border border-neutral-300 px-2 py-1 text-xs focus:border-neutral-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900"
+              placeholder="Kurzer Anzeigename"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[10px] uppercase tracking-wider text-neutral-500">
+              Alt-Text (Barrierefreiheit / E-Mail)
             </span>
             <input
               value={altText}

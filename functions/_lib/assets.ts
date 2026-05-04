@@ -142,6 +142,7 @@ export function requireAssetsBucket(env: AuthEnv): R2Bucket | Response {
 // `decodeURIComponent` angewendet.
 
 const META_KEYS = {
+  title: "title",
   altText: "alttext",
   description: "description",
   uploadedBy: "uploadedby",
@@ -150,6 +151,7 @@ const META_KEYS = {
 } as const;
 
 export type MetaInput = {
+  title?: string | null;
   altText?: string | null;
   description?: string | null;
   uploadedBy?: string | number | null;
@@ -186,6 +188,10 @@ export function buildCustomMetadata(
   base?: Record<string, string>,
 ): Record<string, string> {
   const m: Record<string, string> = { ...(base ?? {}) };
+  if (input.title !== undefined) {
+    if (input.title) m[META_KEYS.title] = encodeMetaValue(input.title);
+    else delete m[META_KEYS.title];
+  }
   if (input.altText !== undefined) {
     if (input.altText) m[META_KEYS.altText] = encodeMetaValue(input.altText);
     else delete m[META_KEYS.altText];
@@ -291,6 +297,8 @@ export type AssetRow = {
   content_type: string;
   kind: "file" | "folder";
   alt_text: string | null;
+  /** Anzeige-Titel (CMS), in R2 customMetadata. */
+  title: string | null;
   description: string | null;
   uploaded_by: string | null;
   uploaded_at: string;
@@ -327,6 +335,7 @@ export function r2ObjectToAsset(env: AuthEnv, obj: R2Object): AssetRow {
     size: obj.size,
     content_type: contentType,
     kind: isFolderMarker ? "folder" : "file",
+    title: decodeMetaValue(meta[META_KEYS.title]),
     alt_text: decodeMetaValue(meta[META_KEYS.altText]),
     description: decodeMetaValue(meta[META_KEYS.description]),
     uploaded_by: meta[META_KEYS.uploadedBy] ?? null,
@@ -356,6 +365,7 @@ export function syntheticFolder(
     size: 0,
     content_type: "inode/directory",
     kind: "folder",
+    title: null,
     alt_text: null,
     description: null,
     uploaded_by: null,

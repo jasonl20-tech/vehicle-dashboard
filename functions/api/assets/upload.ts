@@ -6,6 +6,7 @@
  *       - file        (Pflicht)
  *       - folder      (optional, default "")
  *       - name        (optional, sonst aus file.name abgeleitet)
+ *       - title        (optional → customMetadata, CMS-Anzeigename)
  *       - alt_text    (optional → customMetadata)
  *       - description (optional → customMetadata)
  *       - overwrite   (optional, "1" überschreibt einen existierenden Key)
@@ -79,6 +80,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   const overrideName = (form.get("name") as string | null) ?? "";
+  const title = ((form.get("title") as string | null) ?? "").trim();
   const altText = ((form.get("alt_text") as string | null) ?? "").trim();
   const description = ((form.get("description") as string | null) ?? "").trim();
   const overwrite = (form.get("overwrite") as string | null) === "1";
@@ -109,6 +111,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     }
 
     const customMetadata = buildCustomMetadata({
+      title: title || undefined,
       altText: altText || undefined,
       description: description || undefined,
       uploadedBy: user.id,

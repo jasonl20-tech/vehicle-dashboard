@@ -37,6 +37,10 @@ export function lexicalJsonToPlainString(node: unknown): string {
   if (n.type === "linebreak") return "\n";
   if (n.type === "tab") return "\t";
   if (n.type === "text" && typeof n.text === "string") return n.text;
+  if (n.type === "cms-hr") return "\n";
+  if (n.type === "cms-image" && typeof n.altText === "string" && n.altText)
+    return `\n[${n.altText}]\n`;
+  if (n.type === "cms-image") return "\n";
   if (Array.isArray(n.children)) {
     return n.children.map((c) => lexicalJsonToPlainString(c)).join("");
   }

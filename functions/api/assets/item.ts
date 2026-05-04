@@ -5,7 +5,7 @@
  *
  *   GET    /api/assets/item?key=email/banner.png         → Asset-Zeile
  *   PATCH  /api/assets/item?key=email/banner.png
- *          { name?, folder?, alt_text?, description? }    → 200 mit neuem Asset
+ *          { name?, folder?, title?, alt_text?, description? }    → 200 mit neuem Asset
  *          (Bei `name`/`folder`-Änderung wird in R2 per copy+delete
  *          umgezogen.)
  *   DELETE /api/assets/item?key=email/banner.png         → 204
@@ -61,6 +61,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 type PatchBody = {
   name?: string;
   folder?: string;
+  title?: string | null;
   alt_text?: string | null;
   description?: string | null;
 };
@@ -131,6 +132,7 @@ export const onRequestPatch: PagesFunction<AuthEnv> = async ({
     const baseMeta = cur.customMetadata ?? {};
     const updatedMeta = buildCustomMetadata(
       {
+        title: body.title === undefined ? undefined : body.title,
         altText: body.alt_text === undefined ? undefined : body.alt_text,
         description:
           body.description === undefined ? undefined : body.description,

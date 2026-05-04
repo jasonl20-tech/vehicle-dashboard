@@ -49,13 +49,12 @@ import {
 import {
   Bold,
   Code,
-  Heading1,
-  Heading2,
-  Heading3,
+  ImagePlus,
   Italic,
   Link2,
   List,
   ListOrdered,
+  Minus,
   Pilcrow,
   Quote,
   Redo2,
@@ -66,10 +65,19 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
+import AssetPicker from "../assets/AssetPicker";
 import {
   richTextInitialSerialized,
   richTextPlainTextLength,
 } from "../../lib/lexicalRichText";
+import { CMS_ASSETS_FOLDER } from "../../lib/cmsAccess";
+import type { Asset } from "../../lib/assetsApi";
+import {
+  $createCmsHrNode,
+  $createCmsImageNode,
+  CmsHrNode,
+  CmsImageNode,
+} from "./lexical/CmsLexicalNodes";
 
 const LEXICAL_THEME = {
   paragraph: "mb-1 text-[14px] leading-relaxed font-normal text-ink-900",
@@ -161,6 +169,8 @@ const LEXICAL_NODES = [
   TableRowNode,
   CodeNode,
   CodeHighlightNode,
+  CmsImageNode,
+  CmsHrNode,
 ];
 
 export default function LexicalRichTextField({
@@ -236,6 +246,7 @@ function CodeHighlightPlugin() {
 
 function ToolbarPlugin() {
   const [editor] = useLexicalComposerContext();
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
   /** Nach Toolbar-Klick Auswahl/Fokus zuverlässig zurück auf den Editor (Lexical-Pattern). */
   const run = (fn: () => void) => {
@@ -250,10 +261,29 @@ function ToolbarPlugin() {
     });
   };
 
-  const setHeading = (tag: "h1" | "h2" | "h3") => {
+  type BlockKind =
+    | "paragraph"
+    | "h1"
+    | "h2"
+    | "h3"
+    | "h4"
+    | "h5"
+    | "h6"
+    | "quote";
+
+  const setBlockType = (kind: BlockKind) => {
     run(() => {
       const selection = $getSelection();
       if (!$isRangeSelection(selection)) return;
+      if (kind === "paragraph") {
+        $setBlocksType(selection, () => $createParagraphNode());
+        return;
+      }
+      if (kind === "quote") {
+        $setBlocksType(selection, () => $createQuoteNode());
+        return;
+      }
+      const tag = kind;
       try {
         const top = selection.anchor.getNode().getTopLevelElementOrThrow();
         if ($isHeadingNode(top) && top.getTag() === tag) {
@@ -263,15 +293,6 @@ function ToolbarPlugin() {
         }
       } catch {
         $setBlocksType(selection, () => $createHeadingNode(tag));
-      }
-    });
-  };
-
-  const setParagraph = () => {
-    run(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        $setBlocksType(selection, () => $createParagraphNode());
       }
     });
   };
@@ -307,127 +328,209 @@ function ToolbarPlugin() {
     });
   };
 
+  const insertImageFromAsset = (asset: Asset) => {
+    const alt =
+      asset.title?.trim() ||
+      asset.alt_text?.trim() ||
+      asset.name ||
+      "";
+    run(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      const imageNode = $createCmsImageNode(asset.url, alt, asset.key);
+      selection.insertNodes([imageNode]);
+      const paragraph = $createParagraphNode();
+      imageNode.insertAfter(paragraph);
+      paragraph.selectStart();
+    });
+  };
+
+  const insertHorizontalRule = () => {
+    run(() => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection)) return;
+      const hr = $createCmsHrNode();
+      selection.insertNodes([hr]);
+      const paragraph = $createParagraphNode();
+      hr.insertAfter(paragraph);
+      paragraph.selectStart();
+    });
+  };
+
   return (
-    <div
-      className="flex flex-wrap gap-0.5 border-b border-[#dadce0] bg-[#f8f9fa] px-2 py-1.5"
-      role="toolbar"
-      aria-label="Textformatierung"
-    >
-      <ToolBtn
-        label="Rückgängig"
-        onClick={() => dispatchCmd(UNDO_COMMAND, undefined)}
-        icon={<Undo2 className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Wiederholen"
-        onClick={() => dispatchCmd(REDO_COMMAND, undefined)}
-        icon={<Redo2 className="h-3.5 w-3.5" />}
-      />
-      <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
-      <ToolBtn
-        label="Fett"
-        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "bold")}
-        icon={<Bold className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Kursiv"
-        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "italic")}
-        icon={<Italic className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Unterstrichen"
-        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "underline")}
-        icon={<Underline className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Durchgestrichen"
-        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "strikethrough")}
-        icon={<Strikethrough className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Code (inline)"
-        onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "code")}
-        icon={<Code className="h-3.5 w-3.5" />}
-      />
-      <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
-      <ToolBtn
-        label="Überschrift 1 — nur der Absatz mit Cursor (Enter = neuer Absatz)"
-        onClick={() => setHeading("h1")}
-        icon={<Heading1 className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Überschrift 2 — nur der Absatz mit Cursor (Enter = neuer Absatz)"
-        onClick={() => setHeading("h2")}
-        icon={<Heading2 className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Überschrift 3 — nur der Absatz mit Cursor (Enter = neuer Absatz)"
-        onClick={() => setHeading("h3")}
-        icon={<Heading3 className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Absatz"
-        onClick={() => setParagraph()}
-        icon={<Pilcrow className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Zitat"
-        onClick={() =>
-          run(() => {
-            const selection = $getSelection();
-            if ($isRangeSelection(selection)) {
-              $setBlocksType(selection, () => $createQuoteNode());
+    <>
+      <div
+        className="flex flex-wrap items-center gap-1 border-b border-[#dadce0] bg-[#f8f9fa] px-2 py-1.5"
+        role="toolbar"
+        aria-label="Textformatierung"
+      >
+        <label className="sr-only" htmlFor={`cms-rt-block-${editor.getKey()}`}>
+          Absatzformat
+        </label>
+        <select
+          id={`cms-rt-block-${editor.getKey()}`}
+          className="h-8 max-w-[11rem] rounded border border-[#dadce0] bg-white px-2 text-[12px] text-ink-800"
+          defaultValue=""
+          onChange={(e) => {
+            const v = e.target.value as BlockKind | "";
+            e.target.value = "";
+            if (!v) return;
+            setBlockType(v);
+          }}
+        >
+          <option value="">Textstil…</option>
+          <option value="paragraph">Normaler Text</option>
+          <option value="h1">Überschrift 1</option>
+          <option value="h2">Überschrift 2</option>
+          <option value="h3">Überschrift 3</option>
+          <option value="h4">Überschrift 4</option>
+          <option value="h5">Überschrift 5</option>
+          <option value="h6">Überschrift 6</option>
+          <option value="quote">Zitat</option>
+        </select>
+
+        <span className="mx-0.5 w-px self-stretch bg-[#dadce0]" aria-hidden />
+
+        <ToolBtn
+          label="Rückgängig"
+          onClick={() => dispatchCmd(UNDO_COMMAND, undefined)}
+          icon={<Undo2 className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Wiederholen"
+          onClick={() => dispatchCmd(REDO_COMMAND, undefined)}
+          icon={<Redo2 className="h-3.5 w-3.5" />}
+        />
+
+        <span className="mx-0.5 w-px self-stretch bg-[#dadce0]" aria-hidden />
+
+        <ToolBtn
+          label="Fett"
+          onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "bold")}
+          icon={<Bold className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Kursiv"
+          onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "italic")}
+          icon={<Italic className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Unterstrichen"
+          onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "underline")}
+          icon={<Underline className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Durchgestrichen"
+          onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "strikethrough")}
+          icon={<Strikethrough className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Code (inline)"
+          onClick={() => dispatchCmd(FORMAT_TEXT_COMMAND, "code")}
+          icon={<Code className="h-3.5 w-3.5" />}
+        />
+
+        <span className="mx-0.5 w-px self-stretch bg-[#dadce0]" aria-hidden />
+
+        <ToolBtn
+          label="Absatz"
+          onClick={() => setBlockType("paragraph")}
+          icon={<Pilcrow className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Code-Block"
+          onClick={() => toggleCodeBlock()}
+          icon={<span className="font-mono text-[11px] font-bold">{"{ }"}</span>}
+        />
+        <ToolBtn
+          label="Aufzählung"
+          onClick={() => dispatchCmd(INSERT_UNORDERED_LIST_COMMAND, undefined)}
+          icon={<List className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Nummerierung"
+          onClick={() => dispatchCmd(INSERT_ORDERED_LIST_COMMAND, undefined)}
+          icon={<ListOrdered className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Zitat"
+          onClick={() => setBlockType("quote")}
+          icon={<Quote className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Tabelle einfügen"
+          onClick={() => insertTable()}
+          icon={<Table2 className="h-3.5 w-3.5" />}
+        />
+
+        <span className="mx-0.5 w-px self-stretch bg-[#dadce0]" aria-hidden />
+
+        <label className="sr-only" htmlFor={`cms-rt-embed-${editor.getKey()}`}>
+          Einbetten
+        </label>
+        <select
+          id={`cms-rt-embed-${editor.getKey()}`}
+          className="h-8 max-w-[10rem] rounded border border-[#0366d6]/40 bg-white px-2 text-[12px] font-medium text-[#0366d6]"
+          defaultValue=""
+          onChange={(e) => {
+            const v = e.target.value;
+            e.target.value = "";
+            if (v === "image") setImagePickerOpen(true);
+            if (v === "hr") insertHorizontalRule();
+          }}
+        >
+          <option value="">+ Einbetten</option>
+          <option value="image">Bild (Mediathek)</option>
+          <option value="hr">Trennlinie</option>
+        </select>
+        <ToolBtn
+          label="Bild aus Mediathek einfügen"
+          onClick={() => setImagePickerOpen(true)}
+          icon={<ImagePlus className="h-3.5 w-3.5" />}
+        />
+        <ToolBtn
+          label="Horizontale Trennlinie"
+          onClick={() => insertHorizontalRule()}
+          icon={<Minus className="h-3.5 w-3.5" />}
+        />
+
+        <span className="mx-0.5 w-px self-stretch bg-[#dadce0]" aria-hidden />
+
+        <ToolBtn
+          label="Link"
+          onClick={() => {
+            const url = window.prompt("Link-URL", "https://");
+            if (url === null) return;
+            const trimmed = url.trim();
+            if (!trimmed) {
+              dispatchCmd(TOGGLE_LINK_COMMAND, null);
+              return;
             }
-          })
-        }
-        icon={<Quote className="h-3.5 w-3.5" />}
+            let href = trimmed;
+            if (
+              !/^https?:\/\//i.test(href) &&
+              !href.startsWith("mailto:") &&
+              !href.startsWith("/") &&
+              !href.startsWith("#")
+            ) {
+              href = `https://${href}`;
+            }
+            dispatchCmd(TOGGLE_LINK_COMMAND, href);
+          }}
+          icon={<Link2 className="h-3.5 w-3.5" />}
+        />
+      </div>
+
+      <AssetPicker
+        open={imagePickerOpen}
+        accept={["image/"]}
+        initialFolder={CMS_ASSETS_FOLDER}
+        rootFolder={CMS_ASSETS_FOLDER}
+        title="Bild in den Text einfügen"
+        onPick={(a) => insertImageFromAsset(a)}
+        onClose={() => setImagePickerOpen(false)}
       />
-      <ToolBtn
-        label="Code-Block"
-        onClick={() => toggleCodeBlock()}
-        icon={<span className="font-mono text-[11px] font-bold">{"{ }"}</span>}
-      />
-      <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
-      <ToolBtn
-        label="Aufzählung"
-        onClick={() => dispatchCmd(INSERT_UNORDERED_LIST_COMMAND, undefined)}
-        icon={<List className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Nummerierung"
-        onClick={() => dispatchCmd(INSERT_ORDERED_LIST_COMMAND, undefined)}
-        icon={<ListOrdered className="h-3.5 w-3.5" />}
-      />
-      <ToolBtn
-        label="Tabelle einfügen"
-        onClick={() => insertTable()}
-        icon={<Table2 className="h-3.5 w-3.5" />}
-      />
-      <span className="mx-1 w-px self-stretch bg-[#dadce0]" aria-hidden />
-      <ToolBtn
-        label="Link"
-        onClick={() => {
-          const url = window.prompt("Link-URL", "https://");
-          if (url === null) return;
-          const trimmed = url.trim();
-          if (!trimmed) {
-            dispatchCmd(TOGGLE_LINK_COMMAND, null);
-            return;
-          }
-          let href = trimmed;
-          if (
-            !/^https?:\/\//i.test(href) &&
-            !href.startsWith("mailto:") &&
-            !href.startsWith("/") &&
-            !href.startsWith("#")
-          ) {
-            href = `https://${href}`;
-          }
-          dispatchCmd(TOGGLE_LINK_COMMAND, href);
-        }}
-        icon={<Link2 className="h-3.5 w-3.5" />}
-      />
-    </div>
+    </>
   );
 }
 

@@ -33,6 +33,8 @@ export type Asset = {
   size: number;
   content_type: string;
   kind: "file" | "folder";
+  /** CMS-/Anzeige-Titel; R2 customMetadata */
+  title: string | null;
   alt_text: string | null;
   description: string | null;
   uploaded_by: string | null;
@@ -153,6 +155,7 @@ export async function uploadAsset(input: {
   file: File;
   folder?: string;
   name?: string;
+  title?: string;
   alt_text?: string;
   description?: string;
   overwrite?: boolean;
@@ -164,6 +167,7 @@ export async function uploadAsset(input: {
   if (input.folder !== undefined) fd.append("folder", input.folder);
   if (input.name) fd.append("name", input.name);
   if (input.alt_text) fd.append("alt_text", input.alt_text);
+  if (input.title) fd.append("title", input.title);
   if (input.description) fd.append("description", input.description);
   if (input.overwrite) fd.append("overwrite", "1");
 
@@ -235,6 +239,7 @@ export async function updateAsset(
   patch: {
     name?: string;
     folder?: string;
+    title?: string | null;
     alt_text?: string | null;
     description?: string | null;
   },
