@@ -17,13 +17,22 @@
  *   { action: "delete_in_progress", vehicleId: number, viewToken: string, mode: … }
  *
  * Antwort: { deleted: true } · 404 (nicht gefunden) · 409 (nicht löschbar, z. B. Freigabe)
+ *
+ * **`delete_all_for_vehicle`**: löscht **alle** `controll_status`-Zeilen für
+ * eine `vehicle_id`.
+ *
+ * Body: `{ action: "delete_all_for_vehicle", vehicleId: number }`
+ *
+ * Antwort: `{ deleted: number }` — Anzahl gelöschter Zeilen (kann 0 sein).
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 import {
+  CONTROLL_STATUS_DELETE_ALL_FOR_VEHICLE_ACTION,
   CONTROLL_STATUS_DELETE_IN_PROGRESS_ACTION,
   SELECT_CONTROLL_STATUS_ONE,
   UPSERT_CONTROLL_STATUS_SQL,
   validateControllStatusBody,
+  validateControllStatusDeleteAllForVehicleBody,
   validateControllStatusDeleteInProgressBody,
   type ControllStatusRow,
 } from "../../_lib/controllStatus";
@@ -112,6 +121,35 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       return jsonResponse(
         {
           error: "controll_status: Löschen fehlgeschlagen.",
+          detail: err instanceof Error ? err.message : String(err),
+        },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (
+    raw &&
+    typeof raw === "object" &&
+    (raw as Record<string, unknown>).action ===
+      CONTROLL_STATUS_DELETE_ALL_FOR_VEHICLE_ACTION
+  ) {
+    const av = validateControllStatusDeleteAllForVehicleBody(raw);
+    if (!av.ok) {
+      return jsonResponse({ error: av.error }, { status: 400 });
+    }
+    const { vehicleId: vidAll } = av.value;
+    try {
+      const delAll = await db
+        .prepare(`DELETE FROM controll_status WHERE vehicle_id = ?`)
+        .bind(vidAll)
+        .run();
+      const n = Number(delAll.meta?.changes ?? 0);
+      return jsonResponse({ deleted: n }, { status: 200 });
+    } catch (err) {
+      return jsonResponse(
+        {
+          error: "controll_status: Massen-Löschen fehlgeschlagen.",
           detail: err instanceof Error ? err.message : String(err),
         },
         { status: 500 },

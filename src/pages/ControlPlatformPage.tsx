@@ -11,6 +11,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Settings2,
   X,
 } from "lucide-react";
 import {
@@ -37,6 +38,7 @@ import {
 } from "../lib/controllButtonsConfig";
 import {
   postControllStatus,
+  postDeleteAllControllStatusForVehicle,
   postDeleteControllStatusInProgress,
   r2KeyFromAnyVehicleImageUrl,
   type ControllStatusMode,
@@ -1085,6 +1087,9 @@ export default function ControlPlatformPage() {
   const [deletingInProgressKey, setDeletingInProgressKey] = useState<
     string | null
   >(null);
+  const [clearingVehicleControllId, setClearingVehicleControllId] = useState<
+    number | null
+  >(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastActionToken, setLastActionToken] = useState<{
     raw: string;
@@ -1268,6 +1273,31 @@ export default function ControlPlatformPage() {
   const detailApi = useApi<VehicleImageryOneResponse>(detailUrl, {
     pollMs: livePollMs,
   });
+
+  const clearControllStatusesForVehicle = useCallback(
+    async (vehicleId: number) => {
+      const confirmed = window.confirm(
+        `Alle Control-Status-Einträge für Fahrzeug #${vehicleId} aus der Datenbank löschen? Dies betrifft nur dieses Fahrzeug und kann nicht rückgängig gemacht werden.`,
+      );
+      if (!confirmed) return;
+      setClearingVehicleControllId(vehicleId);
+      setActionError(null);
+      try {
+        await postDeleteAllControllStatusForVehicle(vehicleId);
+        listApi.reload();
+        if (selectedId === vehicleId) {
+          detailApi.reload();
+        }
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setClearingVehicleControllId((cur) =>
+          cur === vehicleId ? null : cur,
+        );
+      }
+    },
+    [detailApi, listApi, selectedId],
+  );
 
   useEffect(() => {
     if (selectedId == null) return;
@@ -2444,16 +2474,19 @@ done ${counts.done} · errored ${counts.errored} · übertragen ${counts.transfe
 in Bearbeitung ${counts.inProgress} · lock ${counts.pending}
 ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut views-Feld: ${nViewsForMode}${counts.total > nViewsForMode ? " · es läuft u. U. noch eine Generierung ohne Eintrag im views-Feld" : ""})`;
             return (
-              <li key={r.id}>
+              <li
+                key={r.id}
+                className={`flex border-b border-hair text-[12px] transition-colors ${
+                  selected ? "bg-ink-50" : aggStyle.tint
+                } hover:bg-ink-50/80`}
+              >
                 <button
                   type="button"
                   role="option"
                   aria-selected={selected}
                   onClick={() => setSelectedId(r.id)}
                   title={tooltip}
-                  className={`relative flex w-full items-center gap-1 border-b border-hair py-2 pl-1.5 pr-1.5 text-left text-[12px] transition-colors hover:bg-ink-50/80 ${
-                    selected ? "bg-ink-50" : aggStyle.tint
-                  }`}
+                  className="relative flex min-w-0 flex-1 items-center gap-1 py-2 pl-1.5 pr-1 text-left"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium leading-tight text-ink-900">
@@ -2496,6 +2529,24 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                       selected ? "text-ink-800" : ""
                     }`}
                   />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Control-Status für Fahrzeug #${r.id} zurücksetzen`}
+                  title="Alle Control-Status-Einträge für dieses Fahrzeug löschen"
+                  disabled={
+                    clearingVehicleControllId === r.id || listApi.loading
+                  }
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void clearControllStatusesForVehicle(r.id);
+                  }}
+                  className="flex shrink-0 flex-col items-center justify-center border-l border-hair/70 px-1 text-ink-500 transition hover:bg-ink-100/80 hover:text-ink-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {clearingVehicleControllId === r.id ?
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Settings2 className="h-3.5 w-3.5" />}
                 </button>
               </li>
             );

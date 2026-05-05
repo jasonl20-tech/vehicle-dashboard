@@ -104,3 +104,27 @@ export async function postDeleteControllStatusInProgress(
     throw new Error(parts.join(" • "));
   }
 }
+
+/** Löscht alle Zeilen in `controll_status` für genau diese `vehicle_id`. */
+export async function postDeleteAllControllStatusForVehicle(
+  vehicleId: number,
+): Promise<{ deleted: number }> {
+  const res = await fetch(CONTROLL_STATUS_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      action: "delete_all_for_vehicle",
+      vehicleId,
+    }),
+  });
+  const j = (await res.json().catch(() => ({}))) as
+    | { deleted?: number; error?: string; detail?: string };
+  if (!res.ok || typeof j.deleted !== "number") {
+    const parts: string[] = [];
+    parts.push(j.error || `HTTP ${res.status}`);
+    if (j.detail) parts.push(j.detail);
+    throw new Error(parts.join(" • "));
+  }
+  return { deleted: j.deleted };
+}

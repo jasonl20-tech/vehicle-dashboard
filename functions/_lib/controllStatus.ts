@@ -178,6 +178,30 @@ export function validateControllStatusDeleteInProgressBody(
   };
 }
 
+export const CONTROLL_STATUS_DELETE_ALL_FOR_VEHICLE_ACTION =
+  "delete_all_for_vehicle" as const;
+
+export type ControllStatusDeleteAllForVehicleValidation =
+  | { ok: true; value: { vehicleId: number } }
+  | { ok: false; error: string };
+
+export function validateControllStatusDeleteAllForVehicleBody(
+  raw: unknown,
+): ControllStatusDeleteAllForVehicleValidation {
+  if (!raw || typeof raw !== "object") {
+    return { ok: false, error: "Body muss ein JSON-Objekt sein." };
+  }
+  const b = raw as Record<string, unknown>;
+  if (b.action !== CONTROLL_STATUS_DELETE_ALL_FOR_VEHICLE_ACTION) {
+    return { ok: false, error: "Ungültige Aktion." };
+  }
+  const vehicleId = Number(b.vehicleId);
+  if (!Number.isInteger(vehicleId) || vehicleId < 1) {
+    return { ok: false, error: "vehicleId muss eine positive Ganzzahl sein." };
+  }
+  return { ok: true, value: { vehicleId } };
+}
+
 export type ControllStatusRow = {
   id: number;
   vehicle_id: number;

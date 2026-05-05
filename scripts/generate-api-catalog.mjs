@@ -50,7 +50,7 @@ const MANUAL_DESCRIPTIONS = {
   "functions/api/admin/settings.ts":
     "Admin: listet alle Zeilen der Tabelle `settings` im D1-Binding `configs` (GET) bzw. upsert einer Zeile mit id, config (JSON), optional description (PUT). Zugriff nur mit freigegebenem `/admin-settings` in der Sicherheitsstufe.",
   "functions/api/configs/controll-status.ts":
-    "POST /api/configs/controll-status — D1 `vehicledatabase` → `controll_status`. Upsert … Sonderaktion delete_in_progress löscht bei check=1 oder bei nicht freigegebener correction-Zeile; 404 / 409.",
+    "POST /api/configs/controll-status — D1 `vehicledatabase` → `controll_status`. Upsert … Sonderaktion delete_in_progress löscht bei check=1 oder bei nicht freigegebener correction-Zeile (404 / 409). Sonderaktion delete_all_for_vehicle löscht alle Einträge zu einer vehicle_id ({ deleted }).",
 };
 
 function walkTsFiles(dir, relBase = "") {
