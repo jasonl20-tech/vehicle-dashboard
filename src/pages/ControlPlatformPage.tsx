@@ -9,6 +9,7 @@ import {
   Loader2,
   Lock,
   Plus,
+  RotateCcw,
   Search,
   X,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import {
 import {
   postControllStatus,
   r2KeyFromAnyVehicleImageUrl,
+  type ControllStatusMode,
 } from "../lib/controllStatusApi";
 import { buildControlPlatformDisplayImageUrl } from "../lib/controlPlatformImageDelivery";
 import { fmtNumber, useApi } from "../lib/customerApi";
@@ -597,6 +599,20 @@ function buildStatusMap(
   return m;
 }
 
+function toControllStatusModeForApi(mode: string): ControllStatusMode | null {
+  const m = mode.trim().toLowerCase();
+  if (
+    m === "correction" ||
+    m === "inside" ||
+    m === "scaling" ||
+    m === "shadow" ||
+    m === "transparency"
+  ) {
+    return m;
+  }
+  return null;
+}
+
 /** UI-Flag-Satz wie im Lightbox-Strip / Raster (inkl. inside vs. Korrektur). */
 type ControllStripVisualFlags = {
   hasStatus: boolean;
@@ -1016,6 +1032,9 @@ export default function ControlPlatformPage() {
   const activePreviewThumbRef = useRef<HTMLButtonElement | null>(null);
   const [submittingAction, setSubmittingAction] =
     useState<ControllActionStub | null>(null);
+  const [resettingErroredKey, setResettingErroredKey] = useState<string | null>(
+    null,
+  );
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastActionToken, setLastActionToken] = useState<{
     raw: string;
@@ -1799,6 +1818,52 @@ export default function ControlPlatformPage() {
       navigateToSiblingVehicle,
       viewsMode,
       insideViewsSet,
+    ],
+  );
+
+  /** Erneuter Upsert derselben Zeile — Server setzt `check` auf 0 (aus Fehler zurück). */
+  const submitResetErroredStatus = useCallback(
+    async (rawToken: string) => {
+      if (selectedId == null) return;
+      if (viewsMode !== "korrektur") return;
+      const resolved = resolveStatusRowForToken(
+        viewsMode,
+        rawToken,
+        insideViewsSet,
+        statusMap,
+        controllMode,
+      );
+      if (!resolved) return;
+      if (!controllStripFlagsFromRow(resolved, viewsMode).isErrored) return;
+      const mode = toControllStatusModeForApi(resolved.mode);
+      if (!mode) return;
+      const busyKey = `${selectedId}-${statusKey(resolved.view_token, resolved.mode)}`;
+      setResettingErroredKey(busyKey);
+      setActionError(null);
+      try {
+        await postControllStatus({
+          vehicleId: selectedId,
+          viewToken: resolved.view_token,
+          mode,
+          status: resolved.status,
+          key: resolved.key,
+        });
+        detailApi.reload();
+        listApi.reload();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setResettingErroredKey(null);
+      }
+    },
+    [
+      selectedId,
+      viewsMode,
+      insideViewsSet,
+      statusMap,
+      controllMode,
+      detailApi,
+      listApi,
     ],
   );
 
@@ -2845,33 +2910,81 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                               </>
                             : null}
                           </button>
-                          <div className="flex min-h-[2rem] items-center gap-1 border-t border-hair px-1 py-0.5">
-                            <span className="min-w-0 flex-1 truncate font-mono text-[9px] leading-tight text-ink-500">
-                              {hrefS && imageFileLabelS ?
-                                `${imageFileLabel} · ${imageFileLabelS}`
-                              : imageFileLabel}
-                            </span>
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="shrink-0 text-ink-400 transition hover:text-ink-700"
-                              aria-label="Bild #skaliert in neuem Tab"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                            {hrefS ?
+                          <div className="flex min-h-[2rem] flex-col gap-0.5 border-t border-hair px-1 py-0.5">
+                            <div className="flex min-h-0 items-center gap-1">
+                              <span className="min-w-0 flex-1 truncate font-mono text-[9px] leading-tight text-ink-500">
+                                {hrefS && imageFileLabelS ?
+                                  `${imageFileLabel} · ${imageFileLabelS}`
+                                : imageFileLabel}
+                              </span>
                               <a
-                                href={hrefS}
+                                href={href}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="shrink-0 text-ink-400 transition hover:text-ink-700"
-                                aria-label="Bild #skaliert_weiß in neuem Tab"
+                                aria-label="Bild #skaliert in neuem Tab"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <ExternalLink className="h-3 w-3" />
                               </a>
+                              {hrefS ?
+                                <a
+                                  href={hrefS}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="shrink-0 text-ink-400 transition hover:text-ink-700"
+                                  aria-label="Bild #skaliert_weiß in neuem Tab"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              : null}
+                            </div>
+                            {viewsMode === "korrektur" &&
+                            !isFirstViewsLocked &&
+                            (isErroredP || isErroredS) ?
+                              <div className="flex flex-wrap gap-0.5">
+                                {isErroredP && resolvedRowP ?
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void submitResetErroredStatus(slot.raw)
+                                    }
+                                    disabled={
+                                      resettingErroredKey !== null ||
+                                      submittingAction !== null
+                                    }
+                                    title="check auf 0 setzen (aus Fehler zurück)"
+                                    className="inline-flex items-center gap-0.5 rounded border border-amber-700/80 bg-amber-50 px-1 py-px font-mono text-[8px] font-semibold uppercase tracking-wide text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {resettingErroredKey ===
+                                    `${row.id}-${statusKey(resolvedRowP.view_token, resolvedRowP.mode)}` ?
+                                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                                    : <RotateCcw className="h-3 w-3 shrink-0" />}
+                                    zurücksetzen
+                                  </button>
+                                : null}
+                                {isErroredS && secTok && resolvedRowS ?
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void submitResetErroredStatus(secTok)
+                                    }
+                                    disabled={
+                                      resettingErroredKey !== null ||
+                                      submittingAction !== null
+                                    }
+                                    title="check auf 0 setzen (aus Fehler zurück)"
+                                    className="inline-flex items-center gap-0.5 rounded border border-amber-700/80 bg-amber-50 px-1 py-px font-mono text-[8px] font-semibold uppercase tracking-wide text-amber-950 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {resettingErroredKey ===
+                                    `${row.id}-${statusKey(resolvedRowS.view_token, resolvedRowS.mode)}` ?
+                                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                                    : <RotateCcw className="h-3 w-3 shrink-0" />}
+                                    zurücksetzen · 2
+                                  </button>
+                                : null}
+                              </div>
                             : null}
                           </div>
                         </article>
@@ -3309,6 +3422,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         const isBusy = submittingAction === def.stub;
                         const disabled =
                           submittingAction !== null ||
+                          resettingErroredKey !== null ||
                           (scalingActiveSide?.hasStatus ?? false) ||
                           currentPreviewItem.isFirstViewsLocked;
                         return (
@@ -3414,6 +3528,26 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         gespeichert: {lastActionToken.status} ·{" "}
                         {lastActionToken.raw}
                       </p>
+                    : null}
+                    {viewsMode === "korrektur" &&
+                    !currentPreviewItem.isFirstViewsLocked &&
+                    scalingActiveSide?.isErrored ?
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void submitResetErroredStatus(scalingActiveSide.raw)
+                        }
+                        disabled={
+                          resettingErroredKey !== null ||
+                          submittingAction !== null
+                        }
+                        className="inline-flex w-full max-w-sm items-center justify-center gap-1.5 rounded-lg border border-amber-400/80 bg-amber-950/40 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-900/55 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {resettingErroredKey !== null ?
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                        : <RotateCcw className="h-4 w-4 shrink-0" />}
+                        zurücksetzen (check → 0)
+                      </button>
                     : null}
                   </div>
                 </div>
