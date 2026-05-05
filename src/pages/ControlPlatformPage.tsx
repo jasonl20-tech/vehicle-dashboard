@@ -1258,6 +1258,7 @@ export default function ControlPlatformPage() {
 
   const rows = listApi.data?.rows ?? [];
   const total = listApi.data?.total ?? 0;
+  const listRemainingTotal = listApi.data?.remainingTotal;
   const limit = listApi.data?.limit ?? PAGE_SIZE;
 
   useEffect(() => {
@@ -2287,11 +2288,32 @@ export default function ControlPlatformPage() {
               ))}
             </select>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1">
-            <p className="text-[10px] tabular-nums text-ink-500">{pageLabel}</p>
-            {listApi.loading && (
-              <span className="text-[10px] text-ink-400">lädt…</span>
-            )}
+          <div className="mt-1 flex flex-col gap-0.5">
+            <div className="flex flex-wrap items-center gap-1">
+              <p className="text-[10px] tabular-nums text-ink-500">
+                {pageLabel}
+              </p>
+              {listApi.loading && (
+                <span className="text-[10px] text-ink-400">lädt…</span>
+              )}
+            </div>
+            {listRemainingTotal !== undefined ?
+              <p
+                className="text-[10px] leading-snug tabular-nums text-ink-500"
+                title="Nicht fertig im aktuellen Ansichts-Modus: mindestens eine erwartete Ansicht ist weder „done“ noch „übertragen“, oder es gibt einen Fehler-Status."
+              >
+                Übrig:{" "}
+                <span className="font-semibold text-ink-700">
+                  {fmtNumber(listRemainingTotal)}
+                </span>
+                {statusFilter === "all" && total > 0 ?
+                  <>
+                    {" "}
+                    von {fmtNumber(total)} mit gleicher Suche
+                  </>
+                : null}
+              </p>
+            : null}
           </div>
           {listApi.error && (
             <p className="mt-1 text-[10px] text-accent-rose">{listApi.error}</p>

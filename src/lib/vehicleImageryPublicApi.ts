@@ -52,6 +52,15 @@ export type VehicleImageryPublicRow = VehicleImageryRowLike & {
 export type VehicleImageryListResponse = {
   rows: VehicleImageryPublicRow[];
   total: number;
+  /**
+   * Nur **Controlling**-Liste (`/vehicle-imagery-controlling`): wie viele Einträge im
+   * aktuellen Ansichts-Modus **noch nicht fertig** sind (wie Filter „offen“:
+   * mindestens eine erwartete Ansicht weder done noch übertragen, oder ein Fehler).
+   * Bei `status_filter=all` gilt „Übrig“ bezogen auf dieselbe Basis-Suche ohne
+   * Status-Teilfilter; bei `open` gilt `remainingTotal === total`; bei `done`
+   * ist es `0`. Andere Datenbank-Endpoints setzen das Feld nicht.
+   */
+  remainingTotal?: number;
   offset: number;
   limit: number;
   cdnBase: string;

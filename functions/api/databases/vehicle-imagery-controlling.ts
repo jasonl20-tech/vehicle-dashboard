@@ -572,6 +572,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     for (let i = 0; i < BINDS_PER_TOKEN; i++) binds.push(pat);
   }
 
+  /** Kern-`WHERE`-Teile ohne Status-Filter (für Hilfs-Counts wie „Übrig“). */
+  const whereCore = where.slice();
+
   if (statusFilterSql) {
     where.push(`(${statusFilterSql})`);
   }
@@ -591,6 +594,24 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const countSql = `SELECT COUNT(*) as n ${fromJoin}${whereSql}`;
   const countRow = await db.prepare(countSql).bind(...binds).first<{ n: number }>();
   const total = countRow?.n ?? 0;
+
+  /** Fahrzeuge im aktuellen Modus ohne vollständig done/übertragen oder mit Fehler (wie Filter „offen“). */
+  let remainingTotal: number;
+  if (statusFilterRaw === "open") {
+    remainingTotal = total;
+  } else if (statusFilterRaw === "done") {
+    remainingTotal = 0;
+  } else {
+    const openSql = statusFiltersSql.open;
+    const whereRem = [...whereCore, `(${openSql})`];
+    const whereRemSql = ` WHERE ${whereRem.join(" AND ")}`;
+    const countRemSql = `SELECT COUNT(*) as n_rem ${fromJoin}${whereRemSql}`;
+    const remRow = await db
+      .prepare(countRemSql)
+      .bind(...binds)
+      .first<{ n_rem: number }>();
+    remainingTotal = remRow?.n_rem ?? 0;
+  }
 
   const listSql = `SELECT
 ${STORAGE_COLUMNS_VALIASED},
@@ -675,6 +696,7 @@ LIMIT ? OFFSET ?`;
     {
       rows,
       total,
+      remainingTotal,
       offset,
       limit,
       cdnBase,
