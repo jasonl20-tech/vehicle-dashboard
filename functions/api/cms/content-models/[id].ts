@@ -5,6 +5,7 @@
  *   PUT    /api/cms/content-models/:id  { key?, description?, schema_json? }
  *          (nur ab Sicherheitsstufe 8)
  *   DELETE /api/cms/content-models/:id (ab Sicherheitsstufe 9)
+ */
 import {
   assertCmsDestroyAllowed,
   assertCmsModelWriteAllowed,
