@@ -640,20 +640,35 @@ function emptyStripVisualFlags(): ControllStripVisualFlags {
   };
 }
 
-/** Priorität: `inside`-Zeile, sonst weiterhin Korrektur (z. B. Vertex-Job vor Freigabe). */
+/**
+ * Fehlgeschlagener Vertex-Job (`correction` / `regen_vertex` / check ≥ 3).
+ * Muss die angezeigte Zeile sein, statt einer evtl. noch grün wirkenden `inside`-Zeile.
+ */
+function isCorrectionRegenVertexErrorRow(
+  row: ControllStatusRow | undefined,
+): boolean {
+  if (!row) return false;
+  const md = (row.mode ?? "").trim().toLowerCase();
+  const sv = (row.status ?? "").trim().toLowerCase();
+  if (md !== "correction" || sv !== "regen_vertex") return false;
+  const c = Number(row.check);
+  return Number.isFinite(c) && c >= 3;
+}
+
+/** Priorität: fehlgeschlagener Vertex-Job (`correction`), sonst `inside`, sonst Korrektur. */
 function korrekturStatusRowForToken(
   raw: string,
   insideViewsSet: Set<string>,
   statusMap: Map<string, ControllStatusRow>,
 ): ControllStatusRow | undefined {
   const slug = normalizeSlug(parseViewSlot(raw).slug);
+  const corr = statusMap.get(statusKey(raw, "correction"));
   if (!insideViewsSet.has(slug)) {
-    return statusMap.get(statusKey(raw, "correction"));
+    return corr;
   }
-  return (
-    statusMap.get(statusKey(raw, "inside")) ??
-    statusMap.get(statusKey(raw, "correction"))
-  );
+  const ins = statusMap.get(statusKey(raw, "inside"));
+  if (isCorrectionRegenVertexErrorRow(corr)) return corr;
+  return ins ?? corr;
 }
 
 function resolveStatusRowForToken(
