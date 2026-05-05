@@ -614,6 +614,28 @@ function toControllStatusModeForApi(mode: string): ControllStatusMode | null {
   return null;
 }
 
+/** Rohdaten für Bild-Cache-Busting (ändert sich mit Server-Feldern, auch nach Reload). */
+function controlPlatformImageCacheFingerprintParts(
+  vehicleLastUpdated: string | null | undefined,
+  statusRow: ControllStatusRow | undefined,
+): string {
+  return [
+    vehicleLastUpdated ?? "",
+    statusRow?.updated_at ?? "",
+    String(statusRow?.check ?? ""),
+    statusRow?.status ?? "",
+  ].join("\u001f");
+}
+
+function controlPlatformImageCacheHash(fingerprint: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < fingerprint.length; i++) {
+    h ^= fingerprint.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
 /** UI-Flag-Satz wie im Lightbox-Strip / Raster (inkl. inside vs. Korrektur). */
 type ControllStripVisualFlags = {
   hasStatus: boolean;
@@ -1165,24 +1187,22 @@ export default function ControlPlatformPage() {
   const pendingPreviewSlotRef = useRef<"first" | "last" | null>(null);
 
   /**
-   * Cache-Buster pro `(vehicleId, view_token, mode)`. Wird inkrementiert,
-   * sobald sich der zugehörige `controll_status` ändert oder ganz
-   * verschwindet — das ist das Signal, dass der Worker im Hintergrund
-   * ein neues Bild unter dem gleichen R2-Key abgelegt hat. Wir hängen
-   * den Counter als zusätzlichen Query-Parameter an die Bild-URL, damit
-   * der Browser-/CDN-Cache umgangen wird.
+   * Zusätzlicher Bump pro `(vehicleId, view_token, mode)`, wenn sich der
+   * gleiche Status-Eintrag ohne Änderung von `updated_at`/Feldern weiterentwickelt
+   * (Randfall). Für normales Cache-Busting reicht der Hash aus Fahrzeug-
+   * `last_updated` + Status-Zeile (`_cp`), der immer angehängt wird.
    */
   const [imageReloadByKey, setImageReloadByKey] = useState<
     Record<string, number>
   >({});
-  /** Letzter gesehener Hash pro `(vehicleId, view_token, mode)`. */
+  /** Letzter gesehener Hash pro `(vehicle_id, view_token, mode)`. */
   const lastStatusHashRef = useRef<Map<string, string>>(new Map());
 
   /**
-   * Hängt einen `&_v=N`-Cache-Buster an eine Bild-URL an, falls für die
-   * Kombination `(vehicleId, view_token, mode)` mindestens ein Reload-
-   * Event registriert wurde. Der CDN-/Browser-Cache wird so frischen
-   * Inhalt holen, ohne dass die Seite neu geladen werden muss.
+   * Cache-Busting: immer `&_cp=…` aus Server-Metadaten (`last_updated`,
+   * `controll_status`), plus optional `&_cb` nach Status-Änderungen.
+   * Damit zeigen Browser/CDN nach Worker-Updates und nach hartem Reload keine
+   * veralteten Bilder mehr unter demselben Pfad.
    */
   const buildImageSrcWithReload = useCallback(
     (
@@ -1190,12 +1210,13 @@ export default function ControlPlatformPage() {
       vehicleId: number,
       viewToken: string,
       mode: string,
+      fingerprintParts: string,
     ): string => {
-      const key = `${vehicleId}__${viewToken}__${mode}`;
-      const tok = imageReloadByKey[key];
-      if (!tok) return href;
+      const mapKey = `${vehicleId}__${viewToken}__${mode}`;
+      const bump = imageReloadByKey[mapKey] ?? 0;
       const sep = href.includes("?") ? "&" : "?";
-      return `${href}${sep}_v=${tok}`;
+      const cp = controlPlatformImageCacheHash(fingerprintParts);
+      return `${href}${sep}_cp=${encodeURIComponent(cp)}&_cb=${bump}`;
     },
     [imageReloadByKey],
   );
@@ -1532,17 +1553,6 @@ export default function ControlPlatformPage() {
       statusValueSecondary: string | null;
     };
 
-    const flagsFor = (raw: string) => {
-      const resolvedRow = resolveStatusRowForToken(
-        viewsMode,
-        raw,
-        insideViewsSet,
-        statusMap,
-        controllMode,
-      );
-      return controllStripFlagsFromRow(resolvedRow, viewsMode);
-    };
-
     const internal: Row[] = [];
     for (let idx = 0; idx < viewGridEntries.length; idx++) {
       const entry = viewGridEntries[idx];
@@ -1552,15 +1562,41 @@ export default function ControlPlatformPage() {
       const slot = parseViewSlot(primaryRaw);
       const slugLabel = normalizeSlug(entry.slotSlug);
 
+      const resolvedPrimary = resolveStatusRowForToken(
+        viewsMode,
+        primaryRaw,
+        insideViewsSet,
+        statusMap,
+        controllMode,
+      );
+      const fp = controllStripFlagsFromRow(resolvedPrimary, viewsMode);
+      const resolvedSec =
+        secRaw ?
+          resolveStatusRowForToken(
+            viewsMode,
+            secRaw,
+            insideViewsSet,
+            statusMap,
+            controllMode,
+          )
+        : undefined;
+      const secFlags =
+        resolvedSec ?
+          controllStripFlagsFromRow(resolvedSec, viewsMode)
+        : null;
+
+      const fpPartsP = controlPlatformImageCacheFingerprintParts(
+        row.last_updated,
+        resolvedPrimary,
+      );
       const baseHrefP = buildDisplayVehicleHref(row, primaryRaw);
       const srcP = buildImageSrcWithReload(
         baseHrefP,
         row.id,
         primaryRaw,
         controllMode,
+        fpPartsP,
       );
-      const fp = flagsFor(primaryRaw);
-      const secFlags = secRaw ? flagsFor(secRaw) : null;
       const srcS =
         secRaw ?
           buildImageSrcWithReload(
@@ -1568,6 +1604,10 @@ export default function ControlPlatformPage() {
             row.id,
             secRaw,
             controllMode,
+            controlPlatformImageCacheFingerprintParts(
+              row.last_updated,
+              resolvedSec,
+            ),
           )
         : null;
 
@@ -2726,13 +2766,6 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     const token = entry.token;
                     const slot = parseViewSlot(token);
                     const secTok = entry.tokenSecondary ?? null;
-                    const baseHref = buildDisplayVehicleHref(row, slot.raw);
-                    const href = buildImageSrcWithReload(
-                      baseHref,
-                      row.id,
-                      slot.raw,
-                      controllMode,
-                    );
                     const resolvedRowP = resolveStatusRowForToken(
                       viewsMode,
                       slot.raw,
@@ -2761,6 +2794,18 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                           viewsMode,
                         )
                       : null;
+
+                    const baseHref = buildDisplayVehicleHref(row, slot.raw);
+                    const href = buildImageSrcWithReload(
+                      baseHref,
+                      row.id,
+                      slot.raw,
+                      controllMode,
+                      controlPlatformImageCacheFingerprintParts(
+                        row.last_updated,
+                        resolvedRowP,
+                      ),
+                    );
 
                     const isApprovedP = fp.isApproved;
                     const isInProgressP = fp.isInProgress;
@@ -2801,6 +2846,10 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                           row.id,
                           secTok,
                           controllMode,
+                          controlPlatformImageCacheFingerprintParts(
+                            row.last_updated,
+                            resolvedRowS,
+                          ),
                         )
                       : null;
                     const imageFileLabelS =
