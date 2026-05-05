@@ -124,7 +124,7 @@ export function validateControllStatusBody(
   };
 }
 
-/** POST-Body-Zweig: Zeile mit `check = 1` entfernen (Control Platform). */
+/** POST-Body-Zweig: offene Korrektur-Jobs / in Bearbeitung entfernen (Control Platform). */
 export const CONTROLL_STATUS_DELETE_IN_PROGRESS_ACTION =
   "delete_in_progress" as const;
 

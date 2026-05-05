@@ -82,7 +82,7 @@ export async function postControllStatus(
   return j as ControllStatusResponse;
 }
 
-/** Löscht eine Zeile nur wenn **`check = 1`** (in Bearbeitung). */
+/** Löscht einen offenen Job: `check = 1` oder nicht freigegebenes `correction`. */
 export async function postDeleteControllStatusInProgress(
   input: ControllStatusDeleteInProgressInput,
 ): Promise<void> {

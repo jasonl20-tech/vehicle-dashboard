@@ -8,11 +8,15 @@
  * Antwort: { row: ControllStatusRow }
  *
  * Sonderaktion **`delete_in_progress`**: löscht genau eine Zeile, wenn
- * `vehicle_id` + `view_token` + `mode` übereinstimmen und **`"check" = 1`**.
+ * `vehicle_id` + `view_token` + `mode` übereinstimmen und mindestens eines gilt:
+ * - **`"check" = 1`** (in Bearbeitung, alle Modi), oder
+ * - **`mode = correction`** und die Zeile ist **noch nicht freigegeben**
+ *   (`NOT (check = 2 AND status = correct)`).
+ *
  * Body:
  *   { action: "delete_in_progress", vehicleId: number, viewToken: string, mode: … }
  *
- * Antwort: { deleted: true } · 404 (nicht gefunden) · 409 (`check` ≠ 1)
+ * Antwort: { deleted: true } · 404 (nicht gefunden) · 409 (nicht löschbar, z. B. Freigabe)
  */
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 import {
@@ -68,7 +72,16 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
           `DELETE FROM controll_status
            WHERE vehicle_id = ? AND view_token = ?
              AND lower(trim(mode)) = lower(trim(?))
-             AND "check" = 1`,
+             AND (
+               "check" = 1
+               OR (
+                 lower(trim(mode)) = 'correction'
+                 AND NOT (
+                   "check" = 2
+                   AND lower(trim(ifnull(status, ''))) = 'correct'
+                 )
+               )
+             )`,
         )
         .bind(vidDel, tokDel, modeDel)
         .run();
@@ -76,20 +89,20 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       if (changed < 1) {
         const exists = await db
           .prepare(
-            `SELECT "check" FROM controll_status
+            `SELECT "check", status, mode FROM controll_status
              WHERE vehicle_id = ? AND view_token = ?
                AND lower(trim(mode)) = lower(trim(?))
              LIMIT 1`,
           )
           .bind(vidDel, tokDel, modeDel)
-          .first<{ check: number }>();
+          .first<{ check: number; status: string; mode: string }>();
         if (!exists) {
           return jsonResponse({ error: "Eintrag nicht gefunden." }, { status: 404 });
         }
         return jsonResponse(
           {
             error:
-              "Nur Einträge mit check = 1 (in Bearbeitung) können gelöscht werden.",
+              "Diese Zeile ist nicht löschbar (z. B. bereits freigegebene Korrektur).",
           },
           { status: 409 },
         );
