@@ -116,10 +116,11 @@ const STORAGE_COLUMNS_VALIASED = `
  * Aggregat-Subquery für `controll_status` – `mode` ist Pflicht-Bind.
  * Liefert pro `vehicle_id` Counts (n_done/n_errored/...) und n_total.
  *
- * Sonderfall „übertragen": gilt **nur** im Skalierungs-Modus (`mode = scaling`)
- * und nur wenn `status = 'correct'` und `check = 6`. In allen anderen Modi
- * zählt `n_transferred = 0`. Ein `check = 6` mit anderem Kontext fällt unter
- * `n_errored` (alle `check >= 3` außer der spezifischen scaling/correct/6-Kombi).
+ * Sonderfall „übertragen":
+ * - Skalierung (`mode = scaling`): `correct` + `check = 6` (pro gekoppeltem Paar).
+ * - Korrektur-Aggregat (`correction` + `inside`): zusätzlich `inside` + `correct`
+ *   + `check = 6` zählt als `n_transferred` und nicht als `n_errored`.
+ * Sonst zählen alle `check >= 3`, die keine Übertragungs-Zeile sind, unter `n_errored`.
  *
  * Korrektur: Zeilen mit `mode = inside` sind eingeschlossen. „Done“ ist wahlweise
  * `correction`: `correct`/`check = 2` oder `inside`: `correct`/`check = 0`.
@@ -168,6 +169,10 @@ function controllStatusAggSubquery(statusMode: string): string {
   const transferredExpr = `0`;
   const erroredExpr = `SUM(CASE WHEN "check" >= 3 THEN 1 ELSE 0 END)`;
   if (statusMode === "correction") {
+    const transferredCorrectionExpr = `SUM(CASE WHEN lower(ifnull(mode, '')) = 'inside' AND "check" = 6 AND lower(ifnull(status, '')) = 'correct' THEN 1 ELSE 0 END)`;
+    const erroredCorrectionExpr = `SUM(CASE WHEN "check" >= 3 AND NOT (
+      lower(ifnull(mode, '')) = 'inside' AND lower(ifnull(status, '')) = 'correct' AND "check" = 6
+    ) THEN 1 ELSE 0 END)`;
     const modeWhere = `lower(ifnull(mode, '')) IN ('correction', 'inside')`;
     const doneExpr = `SUM(CASE WHEN (
         (lower(ifnull(mode, '')) = 'correction' AND "check" = 2 AND lower(ifnull(status, '')) = 'correct')
@@ -181,8 +186,8 @@ function controllStatusAggSubquery(statusMode: string): string {
   SELECT
     vehicle_id,
     ${doneExpr} AS n_done,
-    ${transferredExpr} AS n_transferred,
-    ${erroredExpr} AS n_errored,
+    ${transferredCorrectionExpr} AS n_transferred,
+    ${erroredCorrectionExpr} AS n_errored,
     ${inProgExpr} AS n_in_progress,
     ${pendingExpr} AS n_pending,
     COUNT(*) AS n_total

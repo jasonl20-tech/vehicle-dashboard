@@ -705,7 +705,10 @@ function controllStripFlagsFromRow(
   const isInProgress = checkVal === 1;
   const isCheckPending =
     checkVal === 0 && !(md === "inside" && sv === "correct");
-  const isTransferred = false;
+  const isTransferred =
+    checkVal === 6 &&
+    sv === "correct" &&
+    (md === "inside" || md === "scaling");
   const isErrored =
     checkVal != null && checkVal >= 3 && !isTransferred;
 
@@ -794,9 +797,9 @@ function hasBaseKorrekturViewForSlot(
 /**
  * Aggregierter „Schwerpunkt-Status" pro Fahrzeug (für Tag/Tint).
  * Reihenfolge der Priorität (von dominant zu schwach):
- *   1. `errored` – mind. ein `check >= 3` außer 6
- *   2. `transferred` – alle vorhandenen Statuses sind `check === 6`
- *   3. `done` – alle vorhandenen Statuses sind `check ∈ {2, 6}` (mind. 1 Status)
+ *   1. `errored` – mind. ein Status zählt als Fehler (API: `check >= 3` abzüglich Übertragungs-Sonderfällen)
+ *   2. `transferred` – alle vorhandenen Statuses sind übertragen (Skalierung: `scaling`/`correct`/6; Korrektur: u. a. `inside`/`correct`/6)
+ *   3. `done` – alle vorhandenen Statuses sind erledigt inkl. Übertragung (`done` + `transferred` = `total`)
  *   4. `inProgress` – mind. ein `check === 1`
  *   5. `pending` – mind. ein `check === 0`
  *   6. `none` – keine Statuses
