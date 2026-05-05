@@ -17,6 +17,12 @@ export type ControllStatusInput = {
   key: string | null;
 };
 
+export type ControllStatusDeleteInProgressInput = {
+  vehicleId: number;
+  viewToken: string;
+  mode: ControllStatusMode;
+};
+
 export type ControllStatusResponse = {
   row: ControllStatusRow;
 };
@@ -74,4 +80,27 @@ export async function postControllStatus(
     throw new Error(parts.join(" • "));
   }
   return j as ControllStatusResponse;
+}
+
+/** Löscht eine Zeile nur wenn **`check = 1`** (in Bearbeitung). */
+export async function postDeleteControllStatusInProgress(
+  input: ControllStatusDeleteInProgressInput,
+): Promise<void> {
+  const res = await fetch(CONTROLL_STATUS_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      action: "delete_in_progress",
+      ...input,
+    }),
+  });
+  const j = (await res.json().catch(() => ({}))) as
+    | { deleted?: boolean; error?: string; detail?: string };
+  if (!res.ok || !j.deleted) {
+    const parts: string[] = [];
+    parts.push(j.error || `HTTP ${res.status}`);
+    if (j.detail) parts.push(j.detail);
+    throw new Error(parts.join(" • "));
+  }
 }

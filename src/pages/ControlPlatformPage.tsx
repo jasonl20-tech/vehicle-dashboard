@@ -37,6 +37,7 @@ import {
 } from "../lib/controllButtonsConfig";
 import {
   postControllStatus,
+  postDeleteControllStatusInProgress,
   r2KeyFromAnyVehicleImageUrl,
   type ControllStatusMode,
 } from "../lib/controllStatusApi";
@@ -1050,6 +1051,9 @@ export default function ControlPlatformPage() {
   const [resettingErroredKey, setResettingErroredKey] = useState<string | null>(
     null,
   );
+  const [deletingInProgressKey, setDeletingInProgressKey] = useState<
+    string | null
+  >(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastActionToken, setLastActionToken] = useState<{
     raw: string;
@@ -1882,6 +1886,50 @@ export default function ControlPlatformPage() {
     ],
   );
 
+  /** Entfernt einen festgefahrenen Job (`check = 1`), indem die Zeile gelöscht wird. */
+  const submitDeleteInProgressStatus = useCallback(
+    async (rawToken: string) => {
+      if (selectedId == null) return;
+      const resolved = resolveStatusRowForToken(
+        viewsMode,
+        rawToken,
+        insideViewsSet,
+        statusMap,
+        controllMode,
+      );
+      if (!resolved) return;
+      const flags = controllStripFlagsFromRow(resolved, viewsMode);
+      if (!flags.isInProgress || flags.checkVal !== 1) return;
+      const mode = toControllStatusModeForApi(resolved.mode);
+      if (!mode) return;
+      const busyKey = `${selectedId}-${statusKey(resolved.view_token, resolved.mode)}`;
+      setDeletingInProgressKey(busyKey);
+      setActionError(null);
+      try {
+        await postDeleteControllStatusInProgress({
+          vehicleId: selectedId,
+          viewToken: resolved.view_token,
+          mode,
+        });
+        detailApi.reload();
+        listApi.reload();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setDeletingInProgressKey(null);
+      }
+    },
+    [
+      selectedId,
+      viewsMode,
+      insideViewsSet,
+      statusMap,
+      controllMode,
+      detailApi,
+      listApi,
+    ],
+  );
+
   /**
    * „+"-Button für fehlende Ansichten: schreibt einen `regen_vertex`-Job
    * mit `mode = "correction"` in die `controll_status`-Tabelle. Der `key`
@@ -1973,7 +2021,13 @@ export default function ControlPlatformPage() {
         if (!list) continue;
         if (matchesShortcutKey(e.key, list)) {
           e.preventDefault();
-          if (submittingAction) return;
+          if (
+            submittingAction ||
+            resettingErroredKey !== null ||
+            deletingInProgressKey !== null
+          ) {
+            return;
+          }
           if (!cur || !curEditable) return;
           void submitControllAction(def.stub, {
             rawToken: actRaw,
@@ -2021,6 +2075,8 @@ export default function ControlPlatformPage() {
     submitControllAction,
     navigateToSiblingVehicle,
     submittingAction,
+    resettingErroredKey,
+    deletingInProgressKey,
     viewsMode,
     controllButtonsResolved,
     scalingStripFocus,
@@ -2955,11 +3011,14 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                 </a>
                               : null}
                             </div>
-                            {viewsMode === "korrektur" &&
-                            !isFirstViewsLocked &&
-                            (isErroredP || isErroredS) ?
+                            {!isFirstViewsLocked &&
+                            ((viewsMode === "korrektur" &&
+                              (isErroredP || isErroredS)) ||
+                              isInProgressP ||
+                              isInProgressS) ?
                               <div className="flex flex-wrap gap-0.5">
-                                {isErroredP && resolvedRowP ?
+                                {viewsMode === "korrektur" && isErroredP &&
+                                resolvedRowP ?
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -2967,6 +3026,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                     }
                                     disabled={
                                       resettingErroredKey !== null ||
+                                      deletingInProgressKey !== null ||
                                       submittingAction !== null
                                     }
                                     title="check auf 0 setzen (aus Fehler zurück)"
@@ -2979,7 +3039,8 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                     zurücksetzen
                                   </button>
                                 : null}
-                                {isErroredS && secTok && resolvedRowS ?
+                                {viewsMode === "korrektur" && isErroredS &&
+                                secTok && resolvedRowS ?
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -2987,6 +3048,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                     }
                                     disabled={
                                       resettingErroredKey !== null ||
+                                      deletingInProgressKey !== null ||
                                       submittingAction !== null
                                     }
                                     title="check auf 0 setzen (aus Fehler zurück)"
@@ -2997,6 +3059,52 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                       <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
                                     : <RotateCcw className="h-3 w-3 shrink-0" />}
                                     zurücksetzen · 2
+                                  </button>
+                                : null}
+                                {isInProgressP && resolvedRowP ?
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void submitDeleteInProgressStatus(
+                                        slot.raw,
+                                      )
+                                    }
+                                    disabled={
+                                      resettingErroredKey !== null ||
+                                      deletingInProgressKey !== null ||
+                                      submittingAction !== null
+                                    }
+                                    title="Eintrag löschen (nur bei check 1)"
+                                    className="inline-flex items-center gap-0.5 rounded border border-sky-700/80 bg-sky-50 px-1 py-px font-mono text-[8px] font-semibold uppercase tracking-wide text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {deletingInProgressKey ===
+                                    `${row.id}-${statusKey(resolvedRowP.view_token, resolvedRowP.mode)}` ?
+                                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                                    : <RotateCcw className="h-3 w-3 shrink-0" />}
+                                    Bearbeitung zurücksetzen
+                                  </button>
+                                : null}
+                                {isInProgressS && secTok && resolvedRowS ?
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void submitDeleteInProgressStatus(
+                                        secTok,
+                                      )
+                                    }
+                                    disabled={
+                                      resettingErroredKey !== null ||
+                                      deletingInProgressKey !== null ||
+                                      submittingAction !== null
+                                    }
+                                    title="Eintrag löschen (nur bei check 1)"
+                                    className="inline-flex items-center gap-0.5 rounded border border-sky-700/80 bg-sky-50 px-1 py-px font-mono text-[8px] font-semibold uppercase tracking-wide text-sky-950 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {deletingInProgressKey ===
+                                    `${row.id}-${statusKey(resolvedRowS.view_token, resolvedRowS.mode)}` ?
+                                      <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                                    : <RotateCcw className="h-3 w-3 shrink-0" />}
+                                    Bearbeitung zurücksetzen · 2
                                   </button>
                                 : null}
                               </div>
@@ -3438,6 +3546,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         const disabled =
                           submittingAction !== null ||
                           resettingErroredKey !== null ||
+                          deletingInProgressKey !== null ||
                           (scalingActiveSide?.hasStatus ?? false) ||
                           currentPreviewItem.isFirstViewsLocked;
                         return (
@@ -3554,6 +3663,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         }
                         disabled={
                           resettingErroredKey !== null ||
+                          deletingInProgressKey !== null ||
                           submittingAction !== null
                         }
                         className="inline-flex w-full max-w-sm items-center justify-center gap-1.5 rounded-lg border border-amber-400/80 bg-amber-950/40 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-amber-100 transition hover:bg-amber-900/55 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3562,6 +3672,29 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                           <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
                         : <RotateCcw className="h-4 w-4 shrink-0" />}
                         zurücksetzen (check → 0)
+                      </button>
+                    : null}
+                    {!currentPreviewItem.isFirstViewsLocked &&
+                    scalingActiveSide?.isInProgress &&
+                    scalingActiveSide.checkVal === 1 ?
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void submitDeleteInProgressStatus(
+                            scalingActiveSide.raw,
+                          )
+                        }
+                        disabled={
+                          resettingErroredKey !== null ||
+                          deletingInProgressKey !== null ||
+                          submittingAction !== null
+                        }
+                        className="inline-flex w-full max-w-sm items-center justify-center gap-1.5 rounded-lg border border-sky-400/80 bg-sky-950/40 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-sky-100 transition hover:bg-sky-900/55 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {deletingInProgressKey !== null ?
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                        : <RotateCcw className="h-4 w-4 shrink-0" />}
+                        Bearbeitung zurücksetzen (Eintrag löschen)
                       </button>
                     : null}
                   </div>

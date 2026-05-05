@@ -124,6 +124,60 @@ export function validateControllStatusBody(
   };
 }
 
+/** POST-Body-Zweig: Zeile mit `check = 1` entfernen (Control Platform). */
+export const CONTROLL_STATUS_DELETE_IN_PROGRESS_ACTION =
+  "delete_in_progress" as const;
+
+export type ControllStatusDeleteInProgressInput = {
+  vehicleId: number;
+  viewToken: string;
+  mode: ControllStatusMode;
+};
+
+export type ControllStatusDeleteInProgressValidation =
+  | { ok: true; value: ControllStatusDeleteInProgressInput }
+  | { ok: false; error: string };
+
+export function validateControllStatusDeleteInProgressBody(
+  raw: unknown,
+): ControllStatusDeleteInProgressValidation {
+  if (!raw || typeof raw !== "object") {
+    return { ok: false, error: "Body muss ein JSON-Objekt sein." };
+  }
+  const b = raw as Record<string, unknown>;
+  if (b.action !== CONTROLL_STATUS_DELETE_IN_PROGRESS_ACTION) {
+    return { ok: false, error: "Ungültige Aktion." };
+  }
+
+  const vehicleId = Number(b.vehicleId);
+  if (!Number.isInteger(vehicleId) || vehicleId < 1) {
+    return { ok: false, error: "vehicleId muss eine positive Ganzzahl sein." };
+  }
+
+  const viewToken =
+    typeof b.viewToken === "string" ? b.viewToken.trim() : "";
+  if (!viewToken) return { ok: false, error: "viewToken fehlt." };
+  if (viewToken.length > VIEW_TOKEN_MAX) {
+    return {
+      ok: false,
+      error: `viewToken zu lang (max ${VIEW_TOKEN_MAX} Zeichen).`,
+    };
+  }
+
+  if (!isControllStatusMode(b.mode)) {
+    return {
+      ok: false,
+      error:
+        "mode muss correction | inside | scaling | shadow | transparency sein.",
+    };
+  }
+
+  return {
+    ok: true,
+    value: { vehicleId, viewToken, mode: b.mode },
+  };
+}
+
 export type ControllStatusRow = {
   id: number;
   vehicle_id: number;
