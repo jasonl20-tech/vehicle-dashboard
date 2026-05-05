@@ -167,6 +167,18 @@ function rowTitle(r: {
   return t || `Eintrag ${r.id}`;
 }
 
+/** Gleiche Daten wie `rowTitle`, plus Baujahr — nur für Großbild / Lightbox oben in der Kopfzeile. */
+function lightboxVehicleHeadline(r: {
+  marke: string | null;
+  modell: string | null;
+  jahr: number | null;
+  id: number;
+}): string {
+  const core = rowTitle(r);
+  if (r.jahr == null || !Number.isFinite(Number(r.jahr))) return core;
+  return `${core} · ${String(Math.trunc(Number(r.jahr)))}`;
+}
+
 function rowSubtitle(r: {
   jahr: number | null;
   body: string | null;
@@ -1658,8 +1670,8 @@ export default function ControlPlatformPage() {
         src: srcP,
         title:
           secRaw ?
-            `${rowTitle(row)} · ${entry.slotSlug} (#skaliert + #skaliert_weiß)`
-          : `${rowTitle(row)} · ${imageFileLabel}`,
+            `${lightboxVehicleHeadline(row)} · ${entry.slotSlug} (#skaliert + #skaliert_weiß)`
+          : `${lightboxVehicleHeadline(row)} · ${imageFileLabel}`,
         slotLabel: slugLabel,
         imageFileLabel,
         raw: primaryRaw,
