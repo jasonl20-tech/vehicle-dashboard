@@ -657,11 +657,13 @@ function resolveWriteControllMode(
   viewsMode: ControlPlatformViewsMode,
   rawToken: string,
   insideViewsSet: Set<string>,
+  controllStatus: string,
 ): "correction" | "inside" | "scaling" | "shadow" | "transparency" {
   const base = controllModeForViewsMode(viewsMode);
   if (viewsMode !== "korrektur") return base;
   const slug = normalizeSlug(parseViewSlot(rawToken).slug);
-  return insideViewsSet.has(slug) ? "inside" : "correction";
+  if (!insideViewsSet.has(slug)) return "correction";
+  return controllStatus === "correct" ? "inside" : "correction";
 }
 
 function controllStripFlagsFromRow(
@@ -1707,6 +1709,7 @@ export default function ControlPlatformPage() {
               viewsMode,
               ctx.rawToken,
               insideViewsSet,
+              status,
             ),
             status,
             key: r2Key,
