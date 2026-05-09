@@ -30,14 +30,20 @@ import {
 import { useAuth } from "../lib/auth";
 import { pathDirectlyAllowed } from "../lib/routeAccess";
 
+/** Contentful Web-App (Login/Spaces); Plattform-Kachel „CMS“. */
+export const CONTENTFUL_DASHBOARD_URL = "https://app.contentful.com" as const;
+
 type PlatformTile = {
   title: string;
   icon: LucideIcon;
   /**
    * Konkrete Zielroute (Pflicht). Sichtbarkeit entscheidet `to` direkt
    * außer `area` ist gesetzt – dann zählt mindestens ein erlaubter Pfad daraus.
+   * Bei `external: true` ist `to` eine absolute URL.
    */
   to: string;
+  /** Wenn true: normaler <a href>, z. B. Contentful (nicht React Router). */
+  external?: boolean;
   /** Wenn gesetzt → Kachel sichtbar, aber nicht klickbar. */
   status?: string;
   /**
@@ -64,7 +70,8 @@ const TILES: PlatformTile[] = [
   {
     title: "Content Management System",
     icon: Library,
-    to: "/cms",
+    to: CONTENTFUL_DASHBOARD_URL,
+    external: true,
   },
   {
     title: "Control Platform",
@@ -133,7 +140,7 @@ export default function PlatformHomePage() {
       // /account ist für jeden eingeloggten User immer erreichbar (eigene
       // Top-Level-Route, keine Sicherheitsstufen-Pflicht).
       if (t.to === "/account") return [t];
-      if (t.to === "/cms") {
+      if (t.external) {
         return mayAccessCms(erlaubtePfade) ? [t] : [];
       }
       return pathDirectlyAllowed(t.to, erlaubtePfade) ? [t] : [];
@@ -231,11 +238,28 @@ function PlatformCard({ tile }: { tile: PlatformTile }) {
   );
 
   if (isActive) {
+    const cardClass =
+      "group relative w-[min(100%,268px)] shrink-0 min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/75 p-5 shadow-[0_24px_70px_-45px_rgba(13,13,15,0.45)] backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-ink-200 hover:bg-white";
+
+    if (tile.external) {
+      return (
+        <a
+          href={tile.to}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cardClass}
+        >
+          <span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-500 via-accent-rose to-accent-mint"
+          />
+          {content}
+        </a>
+      );
+    }
+
     return (
-      <Link
-        to={tile.to}
-        className="group relative w-[min(100%,268px)] shrink-0 min-h-[175px] overflow-hidden rounded-2xl border border-hair bg-white/75 p-5 shadow-[0_24px_70px_-45px_rgba(13,13,15,0.45)] backdrop-blur transition duration-300 hover:-translate-y-1 hover:border-ink-200 hover:bg-white"
-      >
+      <Link to={tile.to} className={cardClass}>
         <span
           aria-hidden
           className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-500 via-accent-rose to-accent-mint"
