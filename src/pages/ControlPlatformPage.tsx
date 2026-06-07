@@ -1936,7 +1936,8 @@ export default function ControlPlatformPage() {
   const submitResetErroredStatus = useCallback(
     async (rawToken: string) => {
       if (selectedId == null) return;
-      if (viewsMode !== "korrektur") return;
+      // Retry („zurücksetzen“) für fehlgeschlagene Jobs: Korrektur UND Skalierung.
+      if (viewsMode !== "korrektur" && viewsMode !== "skalierung") return;
       const resolved = resolveStatusRowForToken(
         viewsMode,
         rawToken,
@@ -2911,6 +2912,10 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     const isTransferred =
                       isTransferredP && (!secTok || isTransferredS);
                     const isErrored = isErroredP || isErroredS;
+                    // Retry („zurücksetzen“) für errored-Jobs gibt es im
+                    // Korrektur- UND Skalierungs-Modus.
+                    const canRetryErrored =
+                      viewsMode === "korrektur" || viewsMode === "skalierung";
 
                     const supplemental = entry.supplemental === true;
                     const isFirstViewsLocked =
@@ -2951,11 +2956,11 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     const showDeleteJobP =
                       !!resolvedRowP &&
                       canDeleteControllJobRow(resolvedRowP) &&
-                      !(viewsMode === "korrektur" && isErroredP);
+                      !(canRetryErrored && isErroredP);
                     const showDeleteJobS =
                       !!resolvedRowS &&
                       canDeleteControllJobRow(resolvedRowS) &&
-                      !(viewsMode === "korrektur" && isErroredS);
+                      !(canRetryErrored && isErroredS);
                     return (
                       <li
                         key={`${row.id}-${idx}-${entry.slotSlug}-${slot.raw}${secTok ? `-${secTok}` : ""}`}
@@ -3173,12 +3178,12 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                               : null}
                             </div>
                             {!isFirstViewsLocked &&
-                            ((viewsMode === "korrektur" &&
+                            ((canRetryErrored &&
                               (isErroredP || isErroredS)) ||
                               showDeleteJobP ||
                               showDeleteJobS) ?
                               <div className="flex flex-wrap gap-0.5">
-                                {viewsMode === "korrektur" && isErroredP &&
+                                {canRetryErrored && isErroredP &&
                                 resolvedRowP ?
                                   <button
                                     type="button"
@@ -3200,7 +3205,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                                     zurücksetzen
                                   </button>
                                 : null}
-                                {viewsMode === "korrektur" && isErroredS &&
+                                {canRetryErrored && isErroredS &&
                                 secTok && resolvedRowS ?
                                   <button
                                     type="button"
@@ -3814,7 +3819,8 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                         {lastActionToken.raw}
                       </p>
                     : null}
-                    {viewsMode === "korrektur" &&
+                    {(viewsMode === "korrektur" ||
+                      viewsMode === "skalierung") &&
                     !currentPreviewItem.isFirstViewsLocked &&
                     scalingActiveSide?.isErrored ?
                       <button
@@ -3852,7 +3858,11 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                       );
                       if (!prv || !canDeleteControllJobRow(prv)) return null;
                       const pFlags = controllStripFlagsFromRow(prv, viewsMode);
-                      if (viewsMode === "korrektur" && pFlags.isErrored) {
+                      if (
+                        (viewsMode === "korrektur" ||
+                          viewsMode === "skalierung") &&
+                        pFlags.isErrored
+                      ) {
                         return null;
                       }
                       return (
