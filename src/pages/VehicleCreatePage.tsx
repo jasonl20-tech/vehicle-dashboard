@@ -26,6 +26,37 @@ const EXTERIOR_VIEWS = [
 ] as const;
 const INTERIOR_VIEWS = ["dashboard", "center_console"] as const;
 
+/**
+ * Parst eine Jahr-Eingabe in eine sortierte, deduplizierte Jahresliste.
+ * Erlaubt: „2024", „2020-2024" (Bereich), „2020, 2022" / „2020 2022" (Liste)
+ * und Mischungen wie „2018, 2020-2022, 2024".
+ */
+function parseYears(input: string): { years: number[]; error: string | null } {
+  const normalized = input.replace(/\s*-\s*/g, "-");
+  const tokens = normalized
+    .split(/[,\s]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const out = new Set<number>();
+  for (const tok of tokens) {
+    const range = tok.match(/^(\d{4})-(\d{4})$/);
+    if (range) {
+      let a = Number(range[1]);
+      let b = Number(range[2]);
+      if (a > b) [a, b] = [b, a];
+      if (b - a > 50) return { years: [], error: `Bereich zu groß: ${tok}` };
+      for (let y = a; y <= b; y++) out.add(y);
+    } else if (/^\d{4}$/.test(tok)) {
+      out.add(Number(tok));
+    } else {
+      return { years: [], error: `Ungültiger Eintrag: „${tok}"` };
+    }
+  }
+  const years = [...out].sort((a, b) => a - b);
+  if (years.length > 40) return { years, error: "Maximal 40 Jahrgänge." };
+  return { years, error: null };
+}
+
 type FieldMode = "text" | "select";
 
 export default function VehicleCreatePage() {
@@ -70,6 +101,8 @@ export default function VehicleCreatePage() {
     return [...new Set(Object.values(facets.modellsByMarke).flat())].sort();
   }, [facets, marke]);
 
+  const yearsParsed = useMemo(() => parseYears(jahr), [jahr]);
+
   const toggleView = (v: string) =>
     setViews((prev) => {
       const next = new Set(prev);
@@ -98,8 +131,12 @@ export default function VehicleCreatePage() {
       setError("Marke und Modell sind erforderlich.");
       return;
     }
-    if (!/^\d{4}$/.test(jahr.trim())) {
-      setError("Jahr muss vierstellig sein (z. B. 2024).");
+    if (yearsParsed.error) {
+      setError(`Jahr: ${yearsParsed.error}`);
+      return;
+    }
+    if (yearsParsed.years.length === 0) {
+      setError("Mindestens ein Jahr angeben (z. B. 2024 oder 2020-2024).");
       return;
     }
     if (views.size === 0) {
@@ -111,7 +148,7 @@ export default function VehicleCreatePage() {
       const res = await createVehicleImageryControlling({
         marke: marke.trim(),
         modell: modell.trim(),
-        jahr: jahr.trim(),
+        jahre: yearsParsed.years.map(String),
         body: body.trim() || "Basis",
         trim: trim.trim() || "base",
         farbe: farbe.trim() || "default",
@@ -183,14 +220,31 @@ export default function VehicleCreatePage() {
         <div className="max-w-xl rounded-lg border border-accent-mint/40 bg-accent-mint/5 p-5">
           <div className="mb-2 flex items-center gap-2 text-[14px] font-medium text-ink-900">
             <Check className="h-4 w-4 text-accent-mint" />
-            Auto angelegt
+            {result.created.length} Auto{result.created.length === 1 ? "" : "s"}{" "}
+            angelegt
+            {result.skipped.length > 0
+              ? `, ${result.skipped.length} übersprungen`
+              : ""}
           </div>
           <p className="text-[12.5px] text-ink-700">
-            id <span className="font-mono">{result.id}</span> ·{" "}
-            <span className="font-medium">{result.jobs}</span> Generierungs-Jobs
-            gestartet ({result.views.join(", ")}). Die Bilder werden in den
-            nächsten Minuten generiert.
+            <span className="font-medium">{result.totalJobs}</span>{" "}
+            Generierungs-Jobs gestartet ({result.views.join(", ")}). Die Bilder
+            werden in den nächsten Minuten generiert.
           </p>
+          {result.created.length > 0 ? (
+            <p className="mt-2 font-mono text-[11px] text-ink-600">
+              Angelegt:{" "}
+              {result.created.map((c) => `${c.jahr} → id ${c.id}`).join("  ·  ")}
+            </p>
+          ) : null}
+          {result.skipped.length > 0 ? (
+            <p className="mt-1 font-mono text-[11px] text-ink-400">
+              Übersprungen (existierten schon):{" "}
+              {result.skipped
+                .map((s) => `${s.jahr} (id ${s.existingId})`)
+                .join("  ·  ")}
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <Link
               to="/control-platform"
@@ -277,17 +331,33 @@ export default function VehicleCreatePage() {
                 )}
               </div>
 
-              {/* Jahr */}
+              {/* Jahr(e) */}
               <div>
-                <label className={LABEL}>Jahr *</label>
+                <label className={LABEL}>Jahr(e) *</label>
                 <input
                   type="text"
-                  inputMode="numeric"
                   className={TEXT_IN}
-                  placeholder="2024"
+                  placeholder="2024 · 2020-2024 · 2020, 2022"
                   value={jahr}
                   onChange={(e) => setJahr(e.target.value)}
                 />
+                {jahr.trim() ? (
+                  <p
+                    className={`mt-0.5 text-[10.5px] ${
+                      yearsParsed.error ? "text-accent-rose" : "text-ink-500"
+                    }`}
+                  >
+                    {yearsParsed.error
+                      ? yearsParsed.error
+                      : `→ ${yearsParsed.years.length} Auto${
+                          yearsParsed.years.length === 1 ? "" : "s"
+                        }: ${yearsParsed.years.join(", ")}`}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-[10.5px] text-ink-400">
+                    Einzeln, Bereich (2020-2024) oder Liste (2020, 2022) möglich.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -396,9 +466,11 @@ export default function VehicleCreatePage() {
                 )}
                 {submitting
                   ? "Wird angelegt…"
-                  : `Auto anlegen & ${views.size} Ansicht${
+                  : `${yearsParsed.years.length || 1} Auto${
+                      (yearsParsed.years.length || 1) === 1 ? "" : "s"
+                    } anlegen · ${views.size} Ansicht${
                       views.size === 1 ? "" : "en"
-                    } generieren`}
+                    } je Auto`}
               </button>
             </div>
           </section>

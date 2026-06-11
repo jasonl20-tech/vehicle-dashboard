@@ -287,7 +287,8 @@ export async function getVehicleImageryControllingFacets(): Promise<VehicleImage
 export type CreateVehicleInput = {
   marke: string;
   modell: string;
-  jahr: string;
+  /** Ein oder mehrere Jahrgänge — pro Jahr wird ein Auto angelegt. */
+  jahre: string[];
   body?: string;
   trim?: string;
   farbe?: string;
@@ -297,9 +298,10 @@ export type CreateVehicleInput = {
 };
 
 export type CreateVehicleResponse = {
-  id: number;
+  created: { id: number; jahr: number }[];
+  skipped: { jahr: number; existingId: number }[];
+  totalJobs: number;
   views: string[];
-  jobs: number;
 };
 
 /** Legt ein neues Fahrzeug im Controlling-Storage an + startet Generierungs-Jobs. */

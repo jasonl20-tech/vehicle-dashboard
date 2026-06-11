@@ -768,6 +768,7 @@ type CreateBody = {
   marke?: unknown;
   modell?: unknown;
   jahr?: unknown;
+  jahre?: unknown;
   body?: unknown;
   trim?: unknown;
   farbe?: unknown;
@@ -821,13 +822,41 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   if (!modell) {
     return jsonResponse({ error: "modell ist erforderlich" }, { status: 400 });
   }
-  if (!/^\d{4}$/.test(jahrRaw)) {
+  // Ein oder mehrere Jahrgänge: `jahre` (Array) bevorzugt, sonst `jahr` (einzeln).
+  const jahreRaw: string[] = Array.isArray(body.jahre)
+    ? (body.jahre as unknown[]).map((v) =>
+        typeof v === "number"
+          ? String(v)
+          : typeof v === "string"
+            ? v.trim()
+            : "",
+      )
+    : jahrRaw
+      ? [jahrRaw]
+      : [];
+  const jahreSet = new Set<number>();
+  for (const y of jahreRaw) {
+    if (!/^\d{4}$/.test(y)) {
+      return jsonResponse(
+        { error: `Ungültiges Jahr „${y}" — vierstellig erwartet (z. B. 2024).` },
+        { status: 400 },
+      );
+    }
+    jahreSet.add(Number(y));
+  }
+  const jahre = [...jahreSet].sort((a, b) => a - b);
+  if (jahre.length === 0) {
     return jsonResponse(
-      { error: "jahr muss vierstellig sein (z. B. 2024)" },
+      { error: "Mindestens ein Jahr erforderlich." },
       { status: 400 },
     );
   }
-  const jahr = Number(jahrRaw);
+  if (jahre.length > 40) {
+    return jsonResponse(
+      { error: "Maximal 40 Jahrgänge auf einmal." },
+      { status: 400 },
+    );
+  }
 
   const views = Array.isArray(body.views)
     ? [
@@ -846,71 +875,72 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     );
   }
 
-  const existing = await db
-    .prepare(
-      `SELECT id FROM ${STORAGE_TABLE}
-       WHERE marke = ? AND modell = ? AND jahr = ?
-         AND ifnull(body,'') = ? AND ifnull(trim,'') = ?
-         AND ifnull(farbe,'') = ? AND ifnull(resolution,'') = ?
-         AND ifnull(format,'') = ?`,
-    )
-    .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
-    .first<{ id: number }>();
-  if (existing) {
-    return jsonResponse(
-      {
-        error: `Fahrzeug existiert bereits (id ${existing.id}).`,
-        existingId: existing.id,
-      },
-      { status: 409 },
-    );
-  }
+  const created: { id: number; jahr: number }[] = [];
+  const skipped: { jahr: number; existingId: number }[] = [];
 
-  const ins = await db
-    .prepare(
-      `INSERT INTO ${STORAGE_TABLE}
-        (marke, modell, jahr, body, trim, farbe, resolution, format, views, active, last_updated)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, datetime('now'))`,
-    )
-    .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
-    .run();
-  const vehicleId = Number(
-    (ins as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? 0,
-  );
-  if (!vehicleId) {
-    return jsonResponse(
-      { error: "Anlegen fehlgeschlagen (keine id erhalten)." },
-      { status: 500 },
-    );
-  }
-
-  const rowForKey = {
-    format,
-    resolution,
-    marke,
-    modell,
-    jahr,
-    body: carBody,
-    trim: trimVal,
-    farbe,
-  };
-  const jobStmts = views.map((view) => {
-    const mode = (CREATE_INTERIOR_VIEWS as readonly string[]).includes(view)
-      ? "inside"
-      : "correction";
-    const key = controllingStorageR2KeyFromViewToken(rowForKey, view);
-    return db
+  for (const jahr of jahre) {
+    const existing = await db
       .prepare(
-        `INSERT OR IGNORE INTO controll_status
-          (vehicle_id, view_token, mode, status, key, updated_at, "check")
-         VALUES (?, ?, ?, 'regen_vertex', ?, datetime('now'), 0)`,
+        `SELECT id FROM ${STORAGE_TABLE}
+         WHERE marke = ? AND modell = ? AND jahr = ?
+           AND ifnull(body,'') = ? AND ifnull(trim,'') = ?
+           AND ifnull(farbe,'') = ? AND ifnull(resolution,'') = ?
+           AND ifnull(format,'') = ?`,
       )
-      .bind(vehicleId, view, mode, key);
-  });
-  await db.batch(jobStmts);
+      .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
+      .first<{ id: number }>();
+    if (existing) {
+      skipped.push({ jahr, existingId: existing.id });
+      continue;
+    }
+
+    const ins = await db
+      .prepare(
+        `INSERT INTO ${STORAGE_TABLE}
+          (marke, modell, jahr, body, trim, farbe, resolution, format, views, active, last_updated)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, datetime('now'))`,
+      )
+      .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
+      .run();
+    const vehicleId = Number(
+      (ins as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? 0,
+    );
+    if (!vehicleId) continue;
+
+    const rowForKey = {
+      format,
+      resolution,
+      marke,
+      modell,
+      jahr,
+      body: carBody,
+      trim: trimVal,
+      farbe,
+    };
+    const jobStmts = views.map((view) => {
+      const mode = (CREATE_INTERIOR_VIEWS as readonly string[]).includes(view)
+        ? "inside"
+        : "correction";
+      const key = controllingStorageR2KeyFromViewToken(rowForKey, view);
+      return db
+        .prepare(
+          `INSERT OR IGNORE INTO controll_status
+            (vehicle_id, view_token, mode, status, key, updated_at, "check")
+           VALUES (?, ?, ?, 'regen_vertex', ?, datetime('now'), 0)`,
+        )
+        .bind(vehicleId, view, mode, key);
+    });
+    await db.batch(jobStmts);
+    created.push({ id: vehicleId, jahr });
+  }
 
   return jsonResponse(
-    { id: vehicleId, views, jobs: views.length },
+    {
+      created,
+      skipped,
+      totalJobs: created.length * views.length,
+      views,
+    },
     { status: 200 },
   );
 };
