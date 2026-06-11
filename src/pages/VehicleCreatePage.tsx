@@ -70,9 +70,6 @@ export default function VehicleCreatePage() {
   const [jahr, setJahr] = useState("");
   const [body, setBody] = useState("Basis");
   const [trim, setTrim] = useState("base");
-  const [farbe, setFarbe] = useState("default");
-  const [resolution, setResolution] = useState("default");
-  const [format, setFormat] = useState("png");
 
   const [views, setViews] = useState<Set<string>>(
     () => new Set<string>(EXTERIOR_VIEWS),
@@ -119,9 +116,6 @@ export default function VehicleCreatePage() {
     setJahr("");
     setBody("Basis");
     setTrim("base");
-    setFarbe("default");
-    setResolution("default");
-    setFormat("png");
     setViews(new Set<string>(EXTERIOR_VIEWS));
   };
 
@@ -151,9 +145,6 @@ export default function VehicleCreatePage() {
         jahre: yearsParsed.years.map(String),
         body: body.trim() || "Basis",
         trim: trim.trim() || "base",
-        farbe: farbe.trim() || "default",
-        resolution: resolution.trim() || "default",
-        format: format.trim() || "png",
         views: [...views],
       });
       setResult(res);
@@ -374,30 +365,6 @@ export default function VehicleCreatePage() {
                   className={TEXT_IN}
                   value={trim}
                   onChange={(e) => setTrim(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={LABEL}>Farbe</label>
-                <input
-                  className={TEXT_IN}
-                  value={farbe}
-                  onChange={(e) => setFarbe(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={LABEL}>Resolution</label>
-                <input
-                  className={TEXT_IN}
-                  value={resolution}
-                  onChange={(e) => setResolution(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={LABEL}>Format</label>
-                <input
-                  className={TEXT_IN}
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
                 />
               </div>
             </div>
