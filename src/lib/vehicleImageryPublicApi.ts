@@ -144,6 +144,14 @@ export type VehicleImageryListParams = {
   farbe?: string;
   resolution?: string;
   format?: string;
+  /** Mehrere Farben, komma-separiert → `farbe IN (...)`. */
+  farben?: string;
+  /** Jahr-Bereich (inklusive), Ganzzahl als String. Zusätzlich zu `jahr` (exakt). */
+  jahr_from?: string;
+  jahr_to?: string;
+  /** Anzahl Ansichten (;-Tokens) Bereich (inklusive). */
+  views_min?: string;
+  views_max?: string;
   /** YYYY-MM-DD */
   updated_from?: string;
   /** YYYY-MM-DD */
@@ -181,6 +189,11 @@ export function vehicleImageryListUrl(
   setIf("farbe", p.farbe);
   setIf("resolution", p.resolution);
   setIf("format", p.format);
+  setIf("farben", p.farben);
+  setIf("jahr_from", p.jahr_from);
+  setIf("jahr_to", p.jahr_to);
+  setIf("views_min", p.views_min);
+  setIf("views_max", p.views_max);
   setIf("updated_from", p.updated_from);
   setIf("updated_to", p.updated_to);
   if (p.sort && p.sort !== "default") u.searchParams.set("sort", p.sort);

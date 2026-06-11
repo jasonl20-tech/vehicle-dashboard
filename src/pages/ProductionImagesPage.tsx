@@ -20,6 +20,16 @@ import { parseViewTokens } from "../lib/vehicleImageryUrl";
 
 const PAGE_SIZE = 40;
 
+/** Verfügbare Farben in `vehicleimagery_public_storage` (Mehrfachauswahl). */
+const FARBE_OPTIONS = [
+  "blue",
+  "black",
+  "orange",
+  "white",
+  "default",
+  "wine_red",
+] as const;
+
 const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const TH = "px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
@@ -50,6 +60,7 @@ export default function ProductionImagesPage() {
   const [offset, setOffset] = useState(0);
   const [active, setActive] = useState<"all" | "0" | "1">("all");
   const [genehmigt, setGenehmigt] = useState<"all" | "0" | "1">("0");
+  const [farben, setFarben] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(true);
 
   const [filterId, setFilterId] = useState("");
@@ -61,6 +72,10 @@ export default function ProductionImagesPage() {
   const [farbe, setFarbe] = useState("");
   const [resolution, setResolution] = useState("");
   const [format, setFormat] = useState("");
+  const [jahrFrom, setJahrFrom] = useState("");
+  const [jahrTo, setJahrTo] = useState("");
+  const [viewsMin, setViewsMin] = useState("");
+  const [viewsMax, setViewsMax] = useState("");
   const [updatedFrom, setUpdatedFrom] = useState("");
   const [updatedTo, setUpdatedTo] = useState("");
 
@@ -74,6 +89,10 @@ export default function ProductionImagesPage() {
     farbe: "",
     resolution: "",
     format: "",
+    jahrFrom: "",
+    jahrTo: "",
+    viewsMin: "",
+    viewsMax: "",
     updatedFrom: "",
     updatedTo: "",
   });
@@ -96,6 +115,10 @@ export default function ProductionImagesPage() {
           a.farbe === farbe &&
           a.resolution === resolution &&
           a.format === format &&
+          a.jahrFrom === jahrFrom &&
+          a.jahrTo === jahrTo &&
+          a.viewsMin === viewsMin &&
+          a.viewsMax === viewsMax &&
           a.updatedFrom === updatedFrom &&
           a.updatedTo === updatedTo
         ) {
@@ -111,6 +134,10 @@ export default function ProductionImagesPage() {
           farbe,
           resolution,
           format,
+          jahrFrom,
+          jahrTo,
+          viewsMin,
+          viewsMax,
           updatedFrom,
           updatedTo,
         };
@@ -127,13 +154,17 @@ export default function ProductionImagesPage() {
     farbe,
     resolution,
     format,
+    jahrFrom,
+    jahrTo,
+    viewsMin,
+    viewsMax,
     updatedFrom,
     updatedTo,
   ]);
 
   useEffect(() => {
     setOffset(0);
-  }, [q, active, genehmigt, applied]);
+  }, [q, active, genehmigt, farben, applied]);
 
   const listParams = useMemo((): VehicleImageryListParams => {
     const p: VehicleImageryListParams = {
@@ -152,10 +183,15 @@ export default function ProductionImagesPage() {
     if (applied.farbe.trim()) p.farbe = applied.farbe.trim();
     if (applied.resolution.trim()) p.resolution = applied.resolution.trim();
     if (applied.format.trim()) p.format = applied.format.trim();
+    if (farben.length > 0) p.farben = farben.join(",");
+    if (applied.jahrFrom.trim()) p.jahr_from = applied.jahrFrom.trim();
+    if (applied.jahrTo.trim()) p.jahr_to = applied.jahrTo.trim();
+    if (applied.viewsMin.trim()) p.views_min = applied.viewsMin.trim();
+    if (applied.viewsMax.trim()) p.views_max = applied.viewsMax.trim();
     if (applied.updatedFrom.trim()) p.updated_from = applied.updatedFrom.trim();
     if (applied.updatedTo.trim()) p.updated_to = applied.updatedTo.trim();
     return p;
-  }, [q, offset, active, genehmigt, applied]);
+  }, [q, offset, active, genehmigt, farben, applied]);
 
   const url = useMemo(() => vehicleImageryListUrl(listParams), [listParams]);
   const api = useApi<VehicleImageryListResponse>(url);
@@ -184,6 +220,11 @@ export default function ProductionImagesPage() {
     setFarbe("");
     setResolution("");
     setFormat("");
+    setFarben([]);
+    setJahrFrom("");
+    setJahrTo("");
+    setViewsMin("");
+    setViewsMax("");
     setUpdatedFrom("");
     setUpdatedTo("");
     setApplied({
@@ -196,6 +237,10 @@ export default function ProductionImagesPage() {
       farbe: "",
       resolution: "",
       format: "",
+      jahrFrom: "",
+      jahrTo: "",
+      viewsMin: "",
+      viewsMax: "",
       updatedFrom: "",
       updatedTo: "",
     });
@@ -316,6 +361,34 @@ export default function ProductionImagesPage() {
                 ))}
               </div>
             </div>
+            <div>
+              <label className={LABEL}>Farbe (Mehrfach)</label>
+              <div className="flex flex-wrap gap-1">
+                {FARBE_OPTIONS.map((c) => {
+                  const on = farben.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() =>
+                        setFarben((prev) =>
+                          prev.includes(c)
+                            ? prev.filter((x) => x !== c)
+                            : [...prev, c],
+                        )
+                      }
+                      className={`rounded-md border px-2.5 py-1.5 text-[12px] transition-colors ${
+                        on
+                          ? "border-ink-900 bg-ink-900 text-white"
+                          : "border-hair bg-white text-ink-600 hover:bg-ink-50"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <p className="mb-3 text-[11px] text-ink-500">
@@ -365,6 +438,50 @@ export default function ProductionImagesPage() {
                 placeholder="2010"
                 value={jahr}
                 onChange={(e) => setJahr(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Jahr ab</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 2010"
+                value={jahrFrom}
+                onChange={(e) => setJahrFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Jahr bis</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 2020"
+                value={jahrTo}
+                onChange={(e) => setJahrTo(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Ansichten min</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 8"
+                value={viewsMin}
+                onChange={(e) => setViewsMin(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Ansichten max</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 16"
+                value={viewsMax}
+                onChange={(e) => setViewsMax(e.target.value)}
               />
             </div>
             <div>

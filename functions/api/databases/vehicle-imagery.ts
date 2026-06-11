@@ -214,6 +214,33 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "jahr ungültig" }, { status: 400 });
   }
 
+  // Mehrfach-Farben: `farben=blue,black` → `lower(farbe) IN (...)`.
+  const farbenList = (url.searchParams.get("farben") || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 20);
+
+  // Jahr-Bereich (zusätzlich zum exakten `jahr`).
+  const jahrFrom = (url.searchParams.get("jahr_from") || "").trim();
+  const jahrTo = (url.searchParams.get("jahr_to") || "").trim();
+  if (jahrFrom && !/^-?\d+$/.test(jahrFrom)) {
+    return jsonResponse({ error: "jahr_from ungültig" }, { status: 400 });
+  }
+  if (jahrTo && !/^-?\d+$/.test(jahrTo)) {
+    return jsonResponse({ error: "jahr_to ungültig" }, { status: 400 });
+  }
+
+  // Anzahl Ansichten (;-Tokens) Bereich.
+  const viewsMin = (url.searchParams.get("views_min") || "").trim();
+  const viewsMax = (url.searchParams.get("views_max") || "").trim();
+  if (viewsMin && !/^\d+$/.test(viewsMin)) {
+    return jsonResponse({ error: "views_min ungültig" }, { status: 400 });
+  }
+  if (viewsMax && !/^\d+$/.test(viewsMax)) {
+    return jsonResponse({ error: "views_max ungültig" }, { status: 400 });
+  }
+
   const where: string[] = ["1=1"];
   const binds: (string | number)[] = [];
 
@@ -261,6 +288,33 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (filterJahr) {
     where.push("jahr = ?");
     binds.push(Number(filterJahr));
+  }
+
+  if (farbenList.length > 0) {
+    const placeholders = farbenList.map(() => "?").join(", ");
+    where.push(`lower(ifnull(farbe, '')) IN (${placeholders})`);
+    for (const f of farbenList) binds.push(f);
+  }
+
+  if (jahrFrom) {
+    where.push("jahr >= ?");
+    binds.push(Number(jahrFrom));
+  }
+  if (jahrTo) {
+    where.push("jahr <= ?");
+    binds.push(Number(jahrTo));
+  }
+
+  // Anzahl Ansichten = Anzahl `;`-getrennter Tokens (leere views = 0).
+  const VIEWS_COUNT_EXPR =
+    "(CASE WHEN ifnull(views, '') = '' THEN 0 ELSE (length(views) - length(replace(views, ';', '')) + 1) END)";
+  if (viewsMin) {
+    where.push(`${VIEWS_COUNT_EXPR} >= ?`);
+    binds.push(Number(viewsMin));
+  }
+  if (viewsMax) {
+    where.push(`${VIEWS_COUNT_EXPR} <= ?`);
+    binds.push(Number(viewsMax));
   }
 
   /*
