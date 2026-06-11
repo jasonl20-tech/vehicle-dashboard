@@ -1,9 +1,18 @@
-import { ChevronLeft, ChevronRight, ImageIcon, RefreshCw, Search } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ImageIcon,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
 import { fmtNumber, useApi } from "../lib/customerApi";
 import {
+  type VehicleImageryListParams,
   type VehicleImageryListResponse,
   vehicleImageryListUrl,
 } from "../lib/vehicleImageryPublicApi";
@@ -11,10 +20,22 @@ import { parseViewTokens } from "../lib/vehicleImageryUrl";
 
 const PAGE_SIZE = 40;
 
+/** Verfügbare Farben in `vehicleimagery_public_storage` (Mehrfachauswahl). */
+const FARBE_OPTIONS = [
+  "blue",
+  "black",
+  "orange",
+  "white",
+  "default",
+  "wine_red",
+] as const;
+
 const TEXT_IN =
   "w-full min-w-0 rounded border border-hair bg-white px-2 py-1.5 text-[12.5px] text-ink-800 focus:border-ink-400 focus:outline-none";
 const TH = "px-2 py-2 text-left text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400";
 const TD = "px-2 py-2 align-top text-[12.5px] text-ink-800";
+const LABEL =
+  "mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400";
 
 function fmtWhen(s: string | null | undefined): string {
   if (!s?.trim()) return "—";
@@ -38,6 +59,42 @@ export default function ProductionDatabasePage() {
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [active, setActive] = useState<"all" | "0" | "1">("all");
+  const [farben, setFarben] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(true);
+
+  const [filterId, setFilterId] = useState("");
+  const [marke, setMarke] = useState("");
+  const [modell, setModell] = useState("");
+  const [jahr, setJahr] = useState("");
+  const [body, setBody] = useState("");
+  const [trim, setTrim] = useState("");
+  const [farbe, setFarbe] = useState("");
+  const [resolution, setResolution] = useState("");
+  const [format, setFormat] = useState("");
+  const [jahrFrom, setJahrFrom] = useState("");
+  const [jahrTo, setJahrTo] = useState("");
+  const [viewsMin, setViewsMin] = useState("");
+  const [viewsMax, setViewsMax] = useState("");
+  const [updatedFrom, setUpdatedFrom] = useState("");
+  const [updatedTo, setUpdatedTo] = useState("");
+
+  const [applied, setApplied] = useState({
+    filterId: "",
+    marke: "",
+    modell: "",
+    jahr: "",
+    body: "",
+    trim: "",
+    farbe: "",
+    resolution: "",
+    format: "",
+    jahrFrom: "",
+    jahrTo: "",
+    viewsMin: "",
+    viewsMax: "",
+    updatedFrom: "",
+    updatedTo: "",
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
@@ -45,13 +102,96 @@ export default function ProductionDatabasePage() {
   }, [qIn]);
 
   useEffect(() => {
-    setOffset(0);
-  }, [q, active]);
+    const t = setTimeout(() => {
+      setApplied((a) => {
+        if (
+          a.filterId === filterId &&
+          a.marke === marke &&
+          a.modell === modell &&
+          a.jahr === jahr &&
+          a.body === body &&
+          a.trim === trim &&
+          a.farbe === farbe &&
+          a.resolution === resolution &&
+          a.format === format &&
+          a.jahrFrom === jahrFrom &&
+          a.jahrTo === jahrTo &&
+          a.viewsMin === viewsMin &&
+          a.viewsMax === viewsMax &&
+          a.updatedFrom === updatedFrom &&
+          a.updatedTo === updatedTo
+        ) {
+          return a;
+        }
+        return {
+          filterId,
+          marke,
+          modell,
+          jahr,
+          body,
+          trim,
+          farbe,
+          resolution,
+          format,
+          jahrFrom,
+          jahrTo,
+          viewsMin,
+          viewsMax,
+          updatedFrom,
+          updatedTo,
+        };
+      });
+    }, 450);
+    return () => clearTimeout(t);
+  }, [
+    filterId,
+    marke,
+    modell,
+    jahr,
+    body,
+    trim,
+    farbe,
+    resolution,
+    format,
+    jahrFrom,
+    jahrTo,
+    viewsMin,
+    viewsMax,
+    updatedFrom,
+    updatedTo,
+  ]);
 
-  const url = useMemo(
-    () => vehicleImageryListUrl({ q, limit: PAGE_SIZE, offset, active }),
-    [q, offset, active],
-  );
+  useEffect(() => {
+    setOffset(0);
+  }, [q, active, farben, applied]);
+
+  const listParams = useMemo((): VehicleImageryListParams => {
+    const p: VehicleImageryListParams = {
+      q,
+      limit: PAGE_SIZE,
+      offset,
+      active,
+    };
+    if (applied.filterId.trim()) p.filter_id = applied.filterId.trim();
+    if (applied.marke.trim()) p.marke = applied.marke.trim();
+    if (applied.modell.trim()) p.modell = applied.modell.trim();
+    if (applied.jahr.trim()) p.jahr = applied.jahr.trim();
+    if (applied.body.trim()) p.body = applied.body.trim();
+    if (applied.trim.trim()) p.trim = applied.trim.trim();
+    if (applied.farbe.trim()) p.farbe = applied.farbe.trim();
+    if (applied.resolution.trim()) p.resolution = applied.resolution.trim();
+    if (applied.format.trim()) p.format = applied.format.trim();
+    if (farben.length > 0) p.farben = farben.join(",");
+    if (applied.jahrFrom.trim()) p.jahr_from = applied.jahrFrom.trim();
+    if (applied.jahrTo.trim()) p.jahr_to = applied.jahrTo.trim();
+    if (applied.viewsMin.trim()) p.views_min = applied.viewsMin.trim();
+    if (applied.viewsMax.trim()) p.views_max = applied.viewsMax.trim();
+    if (applied.updatedFrom.trim()) p.updated_from = applied.updatedFrom.trim();
+    if (applied.updatedTo.trim()) p.updated_to = applied.updatedTo.trim();
+    return p;
+  }, [q, offset, active, farben, applied]);
+
+  const url = useMemo(() => vehicleImageryListUrl(listParams), [listParams]);
   const api = useApi<VehicleImageryListResponse>(url);
 
   const rows = api.data?.rows ?? [];
@@ -68,11 +208,48 @@ export default function ProductionDatabasePage() {
       ? "0 / 0"
       : `${offset + 1}–${offset + rows.length} / ${fmtNumber(total)}`;
 
+  const clearStructFilters = () => {
+    setFilterId("");
+    setMarke("");
+    setModell("");
+    setJahr("");
+    setBody("");
+    setTrim("");
+    setFarbe("");
+    setResolution("");
+    setFormat("");
+    setFarben([]);
+    setJahrFrom("");
+    setJahrTo("");
+    setViewsMin("");
+    setViewsMax("");
+    setUpdatedFrom("");
+    setUpdatedTo("");
+    setApplied({
+      filterId: "",
+      marke: "",
+      modell: "",
+      jahr: "",
+      body: "",
+      trim: "",
+      farbe: "",
+      resolution: "",
+      format: "",
+      jahrFrom: "",
+      jahrTo: "",
+      viewsMin: "",
+      viewsMax: "",
+      updatedFrom: "",
+      updatedTo: "",
+    });
+  };
+
   return (
     <div>
       <PageHeader
         eyebrow="Datenbanken"
         title="Produktions-Datenbank"
+        hideCalendarAndNotifications
         description={
           <span>
             Tabelle{" "}
@@ -88,62 +265,265 @@ export default function ProductionDatabasePage() {
             <span className="text-ink-600">) plus Query aus dem Worker.</span>
           </span>
         }
+        rightSlot={
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-700 hover:bg-ink-50"
+            >
+              {filtersOpen ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+              Filter
+            </button>
+            <button
+              type="button"
+              onClick={() => api.reload()}
+              title="Aktualisieren"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair text-ink-500 hover:bg-ink-50"
+            >
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
+              />
+            </button>
+          </div>
+        }
       />
 
-      <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="w-full min-w-[200px] max-w-[360px]">
-          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-            Suche
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-            <input
-              type="search"
-              className={`${TEXT_IN} pl-8`}
-              placeholder="z. B. chevrolet orange (alle Wörter, beliebige Spalte)"
-              value={qIn}
-              onChange={(e) => setQIn(e.target.value)}
-            />
-          </div>
-        </div>
-        <div>
-          <label className="mb-0.5 block text-[10.5px] font-medium uppercase tracking-wider text-ink-400">
-            Status
-          </label>
-          <div className="inline-flex overflow-hidden rounded-md border border-hair bg-white">
-            {(
-              [
-                { id: "all" as const, label: "Alle" },
-                { id: "1" as const, label: "Nur aktiv" },
-                { id: "0" as const, label: "Nur inaktiv" },
-              ] as const
-            ).map((o, i) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => setActive(o.id)}
-                className={`px-2.5 py-1.5 text-[12px] transition-colors ${
-                  active === o.id
-                    ? "bg-ink-900 text-white"
-                    : "text-ink-600 hover:bg-ink-50"
-                } ${i > 0 ? "border-l border-hair" : ""}`}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => api.reload()}
-          title="Aktualisieren"
-          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md border border-hair text-ink-500 hover:bg-ink-50"
+      {filtersOpen && (
+        <section
+          className="mb-5 rounded-lg border border-hair bg-paper/80 p-4 animate-fade-up"
+          aria-label="Filter"
         >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${api.loading ? "animate-spin" : ""}`}
-          />
-        </button>
-      </div>
+          <div className="mb-4 flex flex-wrap items-end gap-4">
+            <div className="w-full min-w-[200px] max-w-[360px]">
+              <label className={LABEL}>Freitext (alle Spalten)</label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+                <input
+                  type="search"
+                  className={`${TEXT_IN} pl-8`}
+                  placeholder="z. B. chevrolet orange"
+                  value={qIn}
+                  onChange={(e) => setQIn(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <label className={LABEL}>Aktiv</label>
+              <div className="inline-flex overflow-hidden rounded-md border border-hair bg-white">
+                {(
+                  [
+                    { id: "all" as const, label: "Alle" },
+                    { id: "1" as const, label: "Nur aktiv" },
+                    { id: "0" as const, label: "Nur inaktiv" },
+                  ] as const
+                ).map((o, i) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    onClick={() => setActive(o.id)}
+                    className={`px-2.5 py-1.5 text-[12px] transition-colors ${
+                      active === o.id
+                        ? "bg-ink-900 text-white"
+                        : "text-ink-600 hover:bg-ink-50"
+                    } ${i > 0 ? "border-l border-hair" : ""}`}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className={LABEL}>Farbe (Mehrfach)</label>
+              <div className="flex flex-wrap gap-1">
+                {FARBE_OPTIONS.map((c) => {
+                  const on = farben.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() =>
+                        setFarben((prev) =>
+                          prev.includes(c)
+                            ? prev.filter((x) => x !== c)
+                            : [...prev, c],
+                        )
+                      }
+                      className={`rounded-md border px-2.5 py-1.5 text-[12px] transition-colors ${
+                        on
+                          ? "border-ink-900 bg-ink-900 text-white"
+                          : "border-hair bg-white text-ink-600 hover:bg-ink-50"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <p className="mb-3 text-[11px] text-ink-500">
+            Strukturierte Felder nutzen{" "}
+            <code className="rounded bg-ink-100 px-1 font-mono text-[10px]">LIKE %…%</code>{" "}
+            (Wildcards <code className="font-mono">%</code> und{" "}
+            <code className="font-mono">_</code> in der Eingabe werden ignoriert). Jahr-Bereich
+            und Ansichten-Anzahl sind Zahlen-Bereiche; Datum bezieht sich auf{" "}
+            <code className="font-mono">date(last_updated)</code> (UTC-Speicherung).
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            <div>
+              <label className={LABEL}>ID</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 42"
+                value={filterId}
+                onChange={(e) => setFilterId(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Marke</label>
+              <input
+                className={TEXT_IN}
+                placeholder="Chevrolet"
+                value={marke}
+                onChange={(e) => setMarke(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Modell</label>
+              <input
+                className={TEXT_IN}
+                placeholder="Camaro"
+                value={modell}
+                onChange={(e) => setModell(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Jahr (exakt)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="2010"
+                value={jahr}
+                onChange={(e) => setJahr(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Jahr ab</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 2010"
+                value={jahrFrom}
+                onChange={(e) => setJahrFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Jahr bis</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 2020"
+                value={jahrTo}
+                onChange={(e) => setJahrTo(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Ansichten min</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 8"
+                value={viewsMin}
+                onChange={(e) => setViewsMin(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Ansichten max</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className={TEXT_IN}
+                placeholder="z. B. 16"
+                value={viewsMax}
+                onChange={(e) => setViewsMax(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Body</label>
+              <input className={TEXT_IN} value={body} onChange={(e) => setBody(e.target.value)} />
+            </div>
+            <div>
+              <label className={LABEL}>Trim</label>
+              <input className={TEXT_IN} value={trim} onChange={(e) => setTrim(e.target.value)} />
+            </div>
+            <div>
+              <label className={LABEL}>Farbe (Text)</label>
+              <input
+                className={TEXT_IN}
+                value={farbe}
+                onChange={(e) => setFarbe(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Resolution</label>
+              <input
+                className={TEXT_IN}
+                value={resolution}
+                onChange={(e) => setResolution(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Format</label>
+              <input
+                className={TEXT_IN}
+                value={format}
+                onChange={(e) => setFormat(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Stand ab (Datum)</label>
+              <input
+                type="date"
+                className={TEXT_IN}
+                value={updatedFrom}
+                onChange={(e) => setUpdatedFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Stand bis (Datum)</label>
+              <input
+                type="date"
+                className={TEXT_IN}
+                value={updatedTo}
+                onChange={(e) => setUpdatedTo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={clearStructFilters}
+              className="rounded-md border border-hair bg-white px-3 py-1.5 text-[12px] text-ink-700 hover:bg-ink-50"
+            >
+              Strukturierte Filter zurücksetzen
+            </button>
+          </div>
+        </section>
+      )}
 
       {api.error && (
         <p className="mb-4 rounded border border-accent-rose/30 bg-accent-rose/5 px-3 py-2 text-[12.5px] text-accent-rose">
