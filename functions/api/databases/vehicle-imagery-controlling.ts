@@ -18,6 +18,7 @@ import {
   correctionExpectedViewCountFromViews,
   scalingPairExpectedCountFromViews,
 } from "../../_lib/controllStorageViewCounts";
+import { controllingStorageR2KeyFromViewToken } from "../../_lib/vehicleImageryR2Key";
 
 const STORAGE_TABLE = "vehicleimagery_controlling_storage";
 
@@ -407,6 +408,31 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (db instanceof Response) return db;
 
   const url = new URL(request.url);
+
+  // Facets für die „Auto erstellen"-Dropdowns: distinct Marken + Modelle.
+  if (url.searchParams.get("facets")) {
+    const r = await db
+      .prepare(
+        `SELECT DISTINCT marke, modell FROM ${STORAGE_TABLE}
+         WHERE marke IS NOT NULL AND trim(marke) <> ''
+         ORDER BY marke, modell`,
+      )
+      .all<{ marke: string; modell: string | null }>();
+    const markes = new Set<string>();
+    const modellsByMarke: Record<string, string[]> = {};
+    for (const row of r.results ?? []) {
+      if (!row.marke) continue;
+      markes.add(row.marke);
+      if (row.modell && row.modell.trim()) {
+        (modellsByMarke[row.marke] ??= []).push(row.modell);
+      }
+    }
+    return jsonResponse(
+      { markes: [...markes].sort(), modellsByMarke },
+      { status: 200 },
+    );
+  }
+
   const idParam = (url.searchParams.get("id") || "").trim();
   if (idParam) {
     const oneId = Number(idParam);
@@ -723,6 +749,171 @@ function searchOrSqlAliased(): string {
   OR ifnull(v.last_updated, '') LIKE ?
 )`;
 }
+
+/** Außenansichten → mode `correction`, Innenansichten → mode `inside`. */
+const CREATE_INTERIOR_VIEWS = ["dashboard", "center_console"] as const;
+const CREATE_ALLOWED_VIEWS = new Set<string>([
+  "front",
+  "rear",
+  "left",
+  "right",
+  "front_left",
+  "front_right",
+  "rear_left",
+  "rear_right",
+  ...CREATE_INTERIOR_VIEWS,
+]);
+
+type CreateBody = {
+  marke?: unknown;
+  modell?: unknown;
+  jahr?: unknown;
+  body?: unknown;
+  trim?: unknown;
+  farbe?: unknown;
+  resolution?: unknown;
+  format?: unknown;
+  views?: unknown;
+};
+
+/**
+ * POST /api/databases/vehicle-imagery-controlling
+ *
+ * Legt ein NEUES Fahrzeug im Controlling-Storage an (reine Text-zu-Bild-
+ * Generierung, kein Upload):
+ *  1. Insert in `vehicleimagery_controlling_storage` (views leer, active=1).
+ *  2. Pro gewählter Ansicht ein `controll_status`-Job (status `regen_vertex`,
+ *     check 0): Außen → mode `correction`, Innen → mode `inside`.
+ * Der Cron-/Worker generiert dann automatisch; das Auto erscheint in der
+ * Kontroll-Plattform und geht erst nach „correct/übertragen" live.
+ */
+export const onRequestPost: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  const db = requireVehicleDb(env);
+  if (db instanceof Response) return db;
+
+  let body: CreateBody;
+  try {
+    body = (await request.json()) as CreateBody;
+  } catch {
+    return jsonResponse({ error: "Ungültige JSON-Anfrage" }, { status: 400 });
+  }
+
+  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const marke = str(body.marke);
+  const modell = str(body.modell);
+  const jahrRaw = str(body.jahr);
+  const carBody = str(body.body) || "Basis";
+  const trimVal = str(body.trim) || "base";
+  const farbe = str(body.farbe) || "default";
+  const resolution = str(body.resolution) || "default";
+  const format = (str(body.format) || "png").toLowerCase();
+
+  if (!marke) {
+    return jsonResponse({ error: "marke ist erforderlich" }, { status: 400 });
+  }
+  if (!modell) {
+    return jsonResponse({ error: "modell ist erforderlich" }, { status: 400 });
+  }
+  if (!/^\d{4}$/.test(jahrRaw)) {
+    return jsonResponse(
+      { error: "jahr muss vierstellig sein (z. B. 2024)" },
+      { status: 400 },
+    );
+  }
+  const jahr = Number(jahrRaw);
+
+  const views = Array.isArray(body.views)
+    ? [
+        ...new Set(
+          (body.views as unknown[])
+            .filter((v): v is string => typeof v === "string")
+            .map((v) => v.trim().toLowerCase())
+            .filter((v) => CREATE_ALLOWED_VIEWS.has(v)),
+        ),
+      ]
+    : [];
+  if (views.length === 0) {
+    return jsonResponse(
+      { error: "Mindestens eine gültige Ansicht wählen." },
+      { status: 400 },
+    );
+  }
+
+  const existing = await db
+    .prepare(
+      `SELECT id FROM ${STORAGE_TABLE}
+       WHERE marke = ? AND modell = ? AND jahr = ?
+         AND ifnull(body,'') = ? AND ifnull(trim,'') = ?
+         AND ifnull(farbe,'') = ? AND ifnull(resolution,'') = ?
+         AND ifnull(format,'') = ?`,
+    )
+    .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
+    .first<{ id: number }>();
+  if (existing) {
+    return jsonResponse(
+      {
+        error: `Fahrzeug existiert bereits (id ${existing.id}).`,
+        existingId: existing.id,
+      },
+      { status: 409 },
+    );
+  }
+
+  const ins = await db
+    .prepare(
+      `INSERT INTO ${STORAGE_TABLE}
+        (marke, modell, jahr, body, trim, farbe, resolution, format, views, active, last_updated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, datetime('now'))`,
+    )
+    .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
+    .run();
+  const vehicleId = Number(
+    (ins as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? 0,
+  );
+  if (!vehicleId) {
+    return jsonResponse(
+      { error: "Anlegen fehlgeschlagen (keine id erhalten)." },
+      { status: 500 },
+    );
+  }
+
+  const rowForKey = {
+    format,
+    resolution,
+    marke,
+    modell,
+    jahr,
+    body: carBody,
+    trim: trimVal,
+    farbe,
+  };
+  const jobStmts = views.map((view) => {
+    const mode = (CREATE_INTERIOR_VIEWS as readonly string[]).includes(view)
+      ? "inside"
+      : "correction";
+    const key = controllingStorageR2KeyFromViewToken(rowForKey, view);
+    return db
+      .prepare(
+        `INSERT OR IGNORE INTO controll_status
+          (vehicle_id, view_token, mode, status, key, updated_at, "check")
+         VALUES (?, ?, ?, 'regen_vertex', ?, datetime('now'), 0)`,
+      )
+      .bind(vehicleId, view, mode, key);
+  });
+  await db.batch(jobStmts);
+
+  return jsonResponse(
+    { id: vehicleId, views, jobs: views.length },
+    { status: 200 },
+  );
+};
 
 type PutBody = { id?: unknown; active?: unknown };
 

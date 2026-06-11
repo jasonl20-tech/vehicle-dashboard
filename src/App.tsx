@@ -45,6 +45,7 @@ import PlatformHomePage from "./pages/PlatformHomePage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ProductionImagesPage from "./pages/ProductionImagesPage";
 import ProductionVehicleDetailPage from "./pages/ProductionVehicleDetailPage";
+import VehicleCreatePage from "./pages/VehicleCreatePage";
 import SystemeBlockedVehiclesPage from "./pages/SystemeBlockedVehiclesPage";
 import SystemeMappingPage from "./pages/SystemeMappingPage";
 import SystemePromptsPage from "./pages/SystemePromptsPage";
@@ -257,6 +258,7 @@ export default function App() {
               path="databases/status"
               element={<VehicleDatabaseStatusPage />}
             />
+            <Route path="databases/create" element={<VehicleCreatePage />} />
             <Route
               path="databases"
               element={<Navigate to="production" replace />}

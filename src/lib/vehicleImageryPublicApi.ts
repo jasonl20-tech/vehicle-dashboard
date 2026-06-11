@@ -265,6 +265,62 @@ export async function deleteVehicleImagery(
   return j as VehicleImageryDeleteResponse;
 }
 
+export type VehicleImageryFacets = {
+  markes: string[];
+  modellsByMarke: Record<string, string[]>;
+};
+
+/** Distinct Marken + Modelle aus dem Controlling-Storage (für „Auto erstellen"). */
+export async function getVehicleImageryControllingFacets(): Promise<VehicleImageryFacets> {
+  const u = new URL(VEHICLE_IMAGERY_CONTROLLING_API, "https://x");
+  u.searchParams.set("facets", "1");
+  const res = await fetch(u.pathname + u.search, { credentials: "include" });
+  const j = (await res.json().catch(() => ({}))) as
+    | VehicleImageryFacets
+    | { error?: string };
+  if (!res.ok) {
+    throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
+  }
+  return j as VehicleImageryFacets;
+}
+
+export type CreateVehicleInput = {
+  marke: string;
+  modell: string;
+  jahr: string;
+  body?: string;
+  trim?: string;
+  farbe?: string;
+  resolution?: string;
+  format?: string;
+  views: string[];
+};
+
+export type CreateVehicleResponse = {
+  id: number;
+  views: string[];
+  jobs: number;
+};
+
+/** Legt ein neues Fahrzeug im Controlling-Storage an + startet Generierungs-Jobs. */
+export async function createVehicleImageryControlling(
+  input: CreateVehicleInput,
+): Promise<CreateVehicleResponse> {
+  const res = await fetch(VEHICLE_IMAGERY_CONTROLLING_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(input),
+  });
+  const j = (await res.json().catch(() => ({}))) as
+    | CreateVehicleResponse
+    | { error?: string; existingId?: number };
+  if (!res.ok) {
+    throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
+  }
+  return j as CreateVehicleResponse;
+}
+
 export type VehicleImageryStatusRow = {
   id: number;
   marke: string | null;
