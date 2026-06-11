@@ -1,9 +1,10 @@
-import { ArrowLeft, ExternalLink, ImageIcon } from "lucide-react";
+import { ArrowLeft, ExternalLink, ImageIcon, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
 import { useApi } from "../lib/customerApi";
 import {
+  deleteVehicleImagery,
   putVehicleImageryActive,
   type VehicleImageryOneResponse,
   vehicleImageryOneUrl,
@@ -28,6 +29,7 @@ function fmtWhen(s: string | null | undefined): string {
 
 export default function ProductionVehicleDetailPage() {
   const { id: raw } = useParams();
+  const navigate = useNavigate();
   const id = Number(raw);
   const oneUrl = useMemo(() => {
     if (!Number.isFinite(id) || id < 1) return null;
@@ -35,6 +37,7 @@ export default function ProductionVehicleDetailPage() {
   }, [id]);
   const api = useApi<VehicleImageryOneResponse>(oneUrl);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const row = api.data?.row;
@@ -57,6 +60,28 @@ export default function ProductionVehicleDetailPage() {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (busy || deleting || !row) return;
+    const label =
+      `${row.marke ?? ""} ${row.modell ?? ""}`.trim() || `Eintrag ${id}`;
+    const ok = window.confirm(
+      `Fahrzeug „${label}" (id ${id}) wirklich löschen?\n\n` +
+        `Alle Bilder werden aus dem Bucket (vehicleimagery-public) entfernt ` +
+        `und der Eintrag aus der Datenbank gelöscht. ` +
+        `Das kann nicht rückgängig gemacht werden.`,
+    );
+    if (!ok) return;
+    setErr(null);
+    setDeleting(true);
+    try {
+      await deleteVehicleImagery(id);
+      navigate("/dashboard/databases/production");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setDeleting(false);
     }
   };
 
@@ -150,6 +175,19 @@ export default function ProductionVehicleDetailPage() {
                 />
               </button>
             </div>
+          </div>
+
+          <div className="mb-6 -mt-2 flex justify-end">
+            <button
+              type="button"
+              disabled={deleting || busy}
+              onClick={handleDelete}
+              title="Löscht alle Bilder aus dem Bucket und den DB-Eintrag"
+              className="inline-flex items-center gap-1.5 rounded-md border border-accent-rose/40 bg-accent-rose/5 px-3 py-1.5 text-[12.5px] font-medium text-accent-rose transition hover:bg-accent-rose/10 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {deleting ? "Wird gelöscht…" : "Auto löschen"}
+            </button>
           </div>
 
           <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-400">

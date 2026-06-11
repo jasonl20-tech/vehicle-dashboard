@@ -159,6 +159,12 @@ export interface AuthEnv {
    */
   assets?: R2Bucket;
   /**
+   * R2-Bucket `vehicleimagery-public` (die ausgelieferten Fahrzeugbilder).
+   * Binding-Name im Pages-Dashboard: `publicbucket` → `env.publicbucket`.
+   * Wird zum vollständigen Löschen eines Fahrzeugs (alle Bilder) genutzt.
+   */
+  publicbucket?: R2Bucket;
+  /**
    * Optional: Basis-URL für öffentliche Asset-Links. Standard:
    * `https://assets.vehicleimagery.com`. Wird vom API zurückgegeben,
    * damit der Browser den Public-Link direkt verwendet.

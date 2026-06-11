@@ -436,3 +436,99 @@ WHERE id = ?`,
   const imageUrlQuery = imageUrlQueryFromEnv(env);
   return jsonResponse({ row, cdnBase, imageUrlQuery }, { status: 200 });
 };
+
+/**
+ * DELETE /api/databases/vehicle-imagery?id=…
+ *
+ * Löscht ein Fahrzeug vollständig:
+ *  1. Listet alle R2-Objekte unter dem Prefix `v1/{format}/…/{farbe}/` im
+ *     Bucket `vehicleimagery-public` (Binding `env.publicbucket`) und löscht sie.
+ *     Die DeleteObject-Events triggern den Sync-Worker `snyc-r2-buckets`, der
+ *     die Ansichten aus `views` entfernt.
+ *  2. Löscht zusätzlich die DB-Zeile direkt (sofortiges Feedback; der Worker
+ *     macht für die bereits gelöschte Zeile dann nur noch No-op).
+ *
+ * Hinweis: Public-Bucket-Keys sind dekodiert abgelegt → Roh-Felder als Prefix.
+ */
+export const onRequestDelete: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  const db = requireVehicleDb(env);
+  if (db instanceof Response) return db;
+
+  const bucket = env.publicbucket;
+  if (!bucket) {
+    return jsonResponse(
+      {
+        error:
+          "R2-Binding `publicbucket` (vehicleimagery-public) fehlt. Im Pages-Projekt → Settings → Functions → R2-Bindings als `publicbucket` (env.publicbucket) ergänzen.",
+      },
+      { status: 503 },
+    );
+  }
+
+  const url = new URL(request.url);
+  const id = Number((url.searchParams.get("id") || "").trim());
+  if (!Number.isInteger(id) || id < 1) {
+    return jsonResponse({ error: "id ungültig" }, { status: 400 });
+  }
+
+  const row = await db
+    .prepare(
+      `SELECT id, marke, modell, jahr, body, trim, farbe, resolution, format
+       FROM vehicleimagery_public_storage WHERE id = ?`,
+    )
+    .bind(id)
+    .first<{
+      id: number;
+      marke: string | null;
+      modell: string | null;
+      jahr: number | null;
+      body: string | null;
+      trim: string | null;
+      farbe: string | null;
+      resolution: string | null;
+      format: string | null;
+    }>();
+  if (!row) {
+    return jsonResponse({ error: "Nicht gefunden" }, { status: 404 });
+  }
+
+  const seg = (s: string | number | null | undefined) =>
+    String(s ?? "").trim();
+  const prefix = `v1/${seg(row.format)}/${seg(row.resolution)}/${seg(row.marke)}/${seg(row.modell)}/${seg(row.jahr)}/${seg(row.body)}/${seg(row.trim)}/${seg(row.farbe)}/`;
+
+  let deleted = 0;
+  let cursor: string | undefined;
+  try {
+    do {
+      const listing = await bucket.list({ prefix, cursor, limit: 1000 });
+      const keys = listing.objects.map((o) => o.key);
+      if (keys.length > 0) {
+        await bucket.delete(keys);
+        deleted += keys.length;
+      }
+      cursor = listing.truncated ? listing.cursor : undefined;
+    } while (cursor);
+  } catch (err) {
+    return jsonResponse(
+      {
+        error: "R2-Löschen fehlgeschlagen.",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 },
+    );
+  }
+
+  await db
+    .prepare(`DELETE FROM vehicleimagery_public_storage WHERE id = ?`)
+    .bind(id)
+    .run();
+
+  return jsonResponse({ deleted, id, prefix }, { status: 200 });
+};

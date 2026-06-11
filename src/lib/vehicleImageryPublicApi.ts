@@ -236,6 +236,35 @@ export async function putVehicleImageryActive(
   return j as VehicleImageryOneResponse;
 }
 
+export type VehicleImageryDeleteResponse = {
+  deleted: number;
+  id: number;
+  prefix?: string;
+};
+
+/**
+ * Löscht ein Fahrzeug vollständig: alle Bilder aus dem `vehicleimagery-public`-
+ * Bucket und die DB-Zeile. `deleted` = Anzahl entfernter R2-Objekte.
+ */
+export async function deleteVehicleImagery(
+  id: number,
+): Promise<VehicleImageryDeleteResponse> {
+  const res = await fetch(vehicleImageryOneUrl(id), {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const j = (await res.json().catch(() => ({}))) as
+    | VehicleImageryDeleteResponse
+    | { error?: string; detail?: string };
+  if (!res.ok) {
+    const e = j as { error?: string; detail?: string };
+    throw new Error(
+      [e.error || `HTTP ${res.status}`, e.detail].filter(Boolean).join(" • "),
+    );
+  }
+  return j as VehicleImageryDeleteResponse;
+}
+
 export type VehicleImageryStatusRow = {
   id: number;
   marke: string | null;
