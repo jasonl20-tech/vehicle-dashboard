@@ -74,6 +74,17 @@ export default function ProductionVehicleDetailPage() {
         `Das kann nicht rückgängig gemacht werden.`,
     );
     if (!ok) return;
+    // Zweite, genauere Bestätigung: die exakte ID muss eingetippt werden.
+    const typed = window.prompt(
+      `Letzte Bestätigung.\n\nZum endgültigen Löschen von „${label}" bitte die ID exakt eingeben:\n\n${id}`,
+    );
+    if (typed == null) return;
+    if (typed.trim() !== String(id)) {
+      setErr(
+        `Löschen abgebrochen — „${typed.trim()}" stimmt nicht mit der ID ${id} überein.`,
+      );
+      return;
+    }
     setErr(null);
     setDeleting(true);
     try {
