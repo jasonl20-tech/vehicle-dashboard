@@ -750,13 +750,16 @@ LIMIT ? OFFSET ?`;
       .all<ListRowRaw>();
     results = r.results ?? [];
   } catch (err) {
-    // Fallback ohne JOIN, falls `controll_status` (noch) nicht existiert
-    const fallbackWhere = where
-      .map((w) => w.replace(/\(cs\.[^)]*\)/g, "1=1"))
-      .filter((w) => !w.startsWith("(cs."));
+    // Fallback ohne JOIN, falls `controll_status` (noch) nicht existiert:
+    // alle `cs.*`-abhängigen Bedingungen ganz weglassen (ohne JOIN nicht
+    // auswertbar; diese Klauseln tragen keine Bind-Parameter). Leer → 1=1.
+    const fallbackWhere = where.filter((w) => !w.includes("cs."));
+    const fallbackWhereSql = fallbackWhere.length
+      ? fallbackWhere.join(" AND ")
+      : "1=1";
     const fallbackSql = `SELECT ${STORAGE_COLUMNS_VALIASED}
 FROM ${STORAGE_TABLE} v
-WHERE ${fallbackWhere.join(" AND ")}
+WHERE ${fallbackWhereSql}
 ORDER BY v.last_updated DESC, v.id DESC
 LIMIT ? OFFSET ?`;
     const r = await db
