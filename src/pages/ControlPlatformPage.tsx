@@ -3490,6 +3490,14 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                   Easy Mode
                 </button>
                 {(() => {
+                  // Google-Bildersuche: nur Marke/Modell/Jahr/Body/Trim — ohne
+                  // Ansichts-Token. Ausnahme: Rear-Ansicht → zusätzlich „hinten".
+                  const viewRaw =
+                    scalingActiveSide?.raw ?? currentPreviewItem.raw ?? "";
+                  const viewBase = String(viewRaw)
+                    .split("#")[0]
+                    .trim()
+                    .toLowerCase();
                   const q = buildGoogleImageSearchQuery(googleSearchTemplate, {
                     marke: row?.marke,
                     modell: row?.modell,
@@ -3497,7 +3505,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     body: row?.body,
                     trim: row?.trim,
                     farbe: row?.farbe,
-                    ansicht: scalingActiveSide?.raw ?? currentPreviewItem.raw,
+                    ansicht: viewBase === "rear" ? "hinten" : "",
                   });
                   const disabled = !q;
                   const href = q ? googleImageSearchUrl(q) : undefined;
