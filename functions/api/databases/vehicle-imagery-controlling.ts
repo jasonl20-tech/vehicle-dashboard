@@ -134,6 +134,14 @@ const PUBLIC_ID_SQL = `(
 const IS_RUNNING_SQL = `CASE WHEN EXISTS (
   SELECT 1 FROM controll_status cr WHERE cr.vehicle_id = v.id AND cr."check" IN (0, 1, 7, 8)
 ) THEN 1 ELSE 0 END`;
+/** 1, wenn die Innenansichten bereits kontrolliert sind (mode=inside, status=correct). */
+const INSIDE_CONTROLLED_SQL = `CASE WHEN EXISTS (
+  SELECT 1 FROM controll_status cr WHERE cr.vehicle_id = v.id AND cr.mode = 'inside' AND cr.status = 'correct'
+) THEN 1 ELSE 0 END`;
+/** 1, wenn überhaupt irgendeine Ansicht kontrolliert ist (status=correct). */
+const ANY_CONTROLLED_SQL = `CASE WHEN EXISTS (
+  SELECT 1 FROM controll_status cr WHERE cr.vehicle_id = v.id AND cr.status = 'correct'
+) THEN 1 ELSE 0 END`;
 
 /**
  * Aggregat-Subquery für `controll_status` – `mode` ist Pflicht-Bind.
@@ -242,7 +250,9 @@ const SELECT_LIST_BY_ID = `SELECT
   v.id, v.marke, v.modell, v.jahr, v.body, v.trim, v.farbe, v.resolution, v.format, v.views, v.sonstiges, v.active, v.last_updated,
   ${ALREADY_PUBLIC_SQL} AS already_public,
   ${PUBLIC_ID_SQL} AS public_id,
-  ${IS_RUNNING_SQL} AS is_running
+  ${IS_RUNNING_SQL} AS is_running,
+  ${INSIDE_CONTROLLED_SQL} AS inside_controlled,
+  ${ANY_CONTROLLED_SQL} AS any_controlled
 FROM ${STORAGE_TABLE} v`;
 
 function likeContainsUserInput(raw: string): string | null {
@@ -472,6 +482,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
           already_public: number;
           public_id: number | null;
           is_running: number;
+          inside_controlled: number;
+          any_controlled: number;
         }
       >();
     if (!row) {
@@ -680,7 +692,9 @@ ${STORAGE_COLUMNS_VALIASED},
   ifnull(cs.n_total, 0) AS n_total,
   ${ALREADY_PUBLIC_SQL} AS already_public,
   ${PUBLIC_ID_SQL} AS public_id,
-  ${IS_RUNNING_SQL} AS is_running
+  ${IS_RUNNING_SQL} AS is_running,
+  ${INSIDE_CONTROLLED_SQL} AS inside_controlled,
+  ${ANY_CONTROLLED_SQL} AS any_controlled
 ${fromJoin}
 ${whereSql}
 ORDER BY ${orderBySql}
@@ -696,6 +710,8 @@ LIMIT ? OFFSET ?`;
     already_public: number;
     public_id: number | null;
     is_running: number;
+    inside_controlled: number;
+    any_controlled: number;
   };
 
   let results: ListRowRaw[] = [];
@@ -730,6 +746,8 @@ LIMIT ? OFFSET ?`;
       already_public: 0,
       public_id: null,
       is_running: 0,
+      inside_controlled: 0,
+      any_controlled: 0,
     }));
     void err;
   }
@@ -748,6 +766,8 @@ LIMIT ? OFFSET ?`;
       already_public,
       public_id,
       is_running,
+      inside_controlled,
+      any_controlled,
       ...storageCols
     } = r;
     const controllStatusCounts: ControllStatusCountsForRow = {
@@ -764,6 +784,8 @@ LIMIT ? OFFSET ?`;
       already_public: Number(already_public) || 0,
       public_id: public_id ?? null,
       is_running: Number(is_running) || 0,
+      inside_controlled: Number(inside_controlled) || 0,
+      any_controlled: Number(any_controlled) || 0,
     };
   });
 
@@ -1335,6 +1357,26 @@ export const onRequestDelete: PagesFunction<AuthEnv> = async ({
   if (running) {
     return jsonResponse(
       { error: "Es läuft noch eine Generierung — nicht löschbar." },
+      { status: 409 },
+    );
+  }
+
+  // Sicherheit (3): „Innen fehlt"-Auto (außen kontrolliert + live, Innenansicht
+  // aber noch NICHT kontrolliert) ist kein Geist → nicht löschbar.
+  const ctrl = await db
+    .prepare(
+      `SELECT
+         (CASE WHEN EXISTS (SELECT 1 FROM controll_status WHERE vehicle_id = ? AND mode = 'inside' AND status = 'correct') THEN 1 ELSE 0 END) AS inside_ctrl,
+         (CASE WHEN EXISTS (SELECT 1 FROM controll_status WHERE vehicle_id = ? AND status = 'correct') THEN 1 ELSE 0 END) AS any_ctrl`,
+    )
+    .bind(id, id)
+    .first<{ inside_ctrl: number; any_ctrl: number }>();
+  if (ctrl && ctrl.any_ctrl === 1 && ctrl.inside_ctrl === 0) {
+    return jsonResponse(
+      {
+        error:
+          "Innenansicht noch offen (außen live, innen fehlt) — kein Geist, nicht löschbar.",
+      },
       { status: 409 },
     );
   }

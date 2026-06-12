@@ -53,6 +53,10 @@ export type VehicleImageryPublicRow = VehicleImageryRowLike & {
   public_id?: number | null;
   /** Nur Controlling: 1, wenn aktuell noch eine Generierung läuft (check IN 0,1,7,8). */
   is_running?: number | null;
+  /** Nur Controlling: 1, wenn die Innenansichten kontrolliert sind (mode=inside, correct). */
+  inside_controlled?: number | null;
+  /** Nur Controlling: 1, wenn überhaupt eine Ansicht kontrolliert ist (status=correct). */
+  any_controlled?: number | null;
 };
 
 export type VehicleImageryListResponse = {

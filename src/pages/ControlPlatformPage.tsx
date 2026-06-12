@@ -14,6 +14,7 @@ import {
   Search,
   Settings2,
   Trash2,
+  Wrench,
   X,
 } from "lucide-react";
 import {
@@ -198,6 +199,30 @@ function rowSubtitle(r: {
       : null,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "—";
+}
+
+type GhostState = "ghost" | "interior_pending" | null;
+/**
+ * Klassifiziert ein bereits-live Controlling-Auto:
+ * - `ghost`: vollständig redundant (Innen kontrolliert ODER gar nichts
+ *   kontrolliert, aber live) → löschbar.
+ * - `interior_pending`: außen kontrolliert + live, Innenansicht aber noch nicht
+ *   kontrolliert → „Innen fehlt", NICHT löschbar (wird noch fürs Innen gebraucht).
+ * - `null`: kein Geist (nicht live, oder es läuft noch eine Generierung).
+ */
+function ghostState(r: {
+  already_public?: number | null;
+  is_running?: number | null;
+  inside_controlled?: number | null;
+  any_controlled?: number | null;
+}): GhostState {
+  const isLive = (r.already_public ?? 0) === 1;
+  const running = (r.is_running ?? 0) === 1;
+  if (!isLive || running) return null;
+  const insideOk = (r.inside_controlled ?? 0) === 1;
+  const anyOk = (r.any_controlled ?? 0) === 1;
+  if (insideOk || !anyOk) return "ghost";
+  return "interior_pending";
 }
 
 /**
@@ -2574,14 +2599,21 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                           {aggStyle.label}
                         </span>
                       ) : null}
-                      {(r.already_public ?? 0) === 1 &&
-                      (r.is_running ?? 0) !== 1 ? (
+                      {ghostState(r) === "ghost" ? (
                         <span
                           className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase leading-none text-amber-700"
-                          title="Bereits live in der öffentlichen API — als Geist aus Controlling löschbar"
+                          title="Bereits live + kontrolliert — Geist, aus Controlling löschbar"
                         >
                           <Ghost className="h-2.5 w-2.5" />
-                          live
+                          Geist
+                        </span>
+                      ) : ghostState(r) === "interior_pending" ? (
+                        <span
+                          className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-px text-[9px] font-semibold uppercase leading-none text-sky-700"
+                          title="Außen live, Innenansicht noch offen — kein Geist, nicht löschen"
+                        >
+                          <Wrench className="h-2.5 w-2.5" />
+                          Innen fehlt
                         </span>
                       ) : null}
                     </span>
@@ -2626,8 +2658,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <Settings2 className="h-3.5 w-3.5" />}
                 </button>
-                {(r.already_public ?? 0) === 1 &&
-                (r.is_running ?? 0) !== 1 ? (
+                {ghostState(r) === "ghost" ? (
                   <button
                     type="button"
                     aria-label={`Geist-Fahrzeug #${r.id} aus Controlling löschen`}
@@ -2674,11 +2705,15 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                   <p className="mt-0.5 font-mono text-[10px] text-ink-500">
                     #{row.id} · {rowSubtitle(row)}
                   </p>
-                  {(row.already_public ?? 0) === 1 &&
-                  (row.is_running ?? 0) !== 1 ? (
+                  {ghostState(row) === "ghost" ? (
                     <p className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
                       <Ghost className="h-3 w-3" />
-                      Bereits live in der API — Geist im Controlling
+                      Bereits live + kontrolliert — Geist im Controlling
+                    </p>
+                  ) : ghostState(row) === "interior_pending" ? (
+                    <p className="mt-1 inline-flex items-center gap-1 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                      <Wrench className="h-3 w-3" />
+                      Außen live — Innenansicht noch offen (kein Geist)
                     </p>
                   ) : null}
                   <p className="mt-1 text-[10px] text-ink-500">
@@ -2695,8 +2730,7 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {(row.already_public ?? 0) === 1 &&
-                  (row.is_running ?? 0) !== 1 ? (
+                  {ghostState(row) === "ghost" ? (
                     <button
                       type="button"
                       disabled={deletingGhostId === row.id}
