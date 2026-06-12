@@ -47,6 +47,12 @@ export type VehicleImageryPublicRow = VehicleImageryRowLike & {
   genehmigt?: number | null;
   /** Nur Controlling-Liste; Aggregat über `controll_status` für aktuellen `views_mode`. */
   controllStatusCounts?: ControllStatusCountsForRow;
+  /** Nur Controlling: 1, wenn ein identisches Auto bereits live in der Public-API existiert. */
+  already_public?: number | null;
+  /** Nur Controlling: id des Live-Zwillings in `vehicleimagery_public_storage` (falls vorhanden). */
+  public_id?: number | null;
+  /** Nur Controlling: 1, wenn aktuell noch eine Generierung läuft (check IN 0,1,7,8). */
+  is_running?: number | null;
 };
 
 export type VehicleImageryListResponse = {
@@ -329,6 +335,38 @@ export async function createVehicleImageryControlling(
     throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
   }
   return j as CreateVehicleResponse;
+}
+
+export type DeleteControllingResponse = {
+  deleted: boolean;
+  id: number;
+  deletedObjects: number;
+  publicId?: number | null;
+};
+
+/**
+ * Löscht ein „Geister"-Auto aus dem **Controlling**-Storage (R2-Objekte im
+ * Controlling-Bucket + `controll_status` + Controlling-Zeile). Die öffentliche
+ * Live-Version bleibt unberührt. Server erlaubt das nur, wenn ein Live-Zwilling
+ * existiert und keine Generierung mehr läuft.
+ */
+export async function deleteVehicleImageryControlling(
+  id: number,
+): Promise<DeleteControllingResponse> {
+  const res = await fetch(
+    `${VEHICLE_IMAGERY_CONTROLLING_API}?id=${encodeURIComponent(String(id))}`,
+    { method: "DELETE", credentials: "include" },
+  );
+  const j = (await res.json().catch(() => ({}))) as
+    | DeleteControllingResponse
+    | { error?: string; detail?: string };
+  if (!res.ok) {
+    const e = j as { error?: string; detail?: string };
+    throw new Error(
+      [e.error || `HTTP ${res.status}`, e.detail].filter(Boolean).join(" • "),
+    );
+  }
+  return j as DeleteControllingResponse;
 }
 
 export type VehicleImageryStatusRow = {

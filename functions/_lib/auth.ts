@@ -165,6 +165,12 @@ export interface AuthEnv {
    */
   publicbucket?: R2Bucket;
   /**
+   * R2-Bucket `vehicleimagery-controlling` (Controlling-Kopien der Bilder).
+   * Binding-Name im Pages-Dashboard: `controllbucket` → `env.controllbucket`.
+   * Wird zum Entfernen von „Geister"-Autos aus dem Controlling genutzt.
+   */
+  controllbucket?: R2Bucket;
+  /**
    * Optional: Basis-URL für öffentliche Asset-Links. Standard:
    * `https://assets.vehicleimagery.com`. Wird vom API zurückgegeben,
    * damit der Browser den Public-Link direkt verwendet.

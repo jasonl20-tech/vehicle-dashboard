@@ -5,6 +5,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Ghost,
   Image as ImageIcon,
   Loader2,
   Lock,
@@ -12,6 +13,7 @@ import {
   RotateCcw,
   Search,
   Settings2,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -80,6 +82,7 @@ import {
   CONTROLL_LIST_SORT_OPTIONS,
   CONTROLL_LIST_STATUS_FILTERS,
   type ControllStatusRow,
+  deleteVehicleImageryControlling,
   VEHICLE_IMAGERY_CONTROLLING_API,
   VEHICLE_IMAGERY_CONTROLLING_CDN_FALLBACK,
   type VehicleImageryListResponse,
@@ -1102,6 +1105,7 @@ export default function ControlPlatformPage() {
   const [clearingVehicleControllId, setClearingVehicleControllId] = useState<
     number | null
   >(null);
+  const [deletingGhostId, setDeletingGhostId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastActionToken, setLastActionToken] = useState<{
     raw: string;
@@ -1310,6 +1314,35 @@ export default function ControlPlatformPage() {
       }
     },
     [detailApi, listApi, selectedId],
+  );
+
+  /**
+   * Entfernt ein „Geister"-Auto (bereits live in der Public-API, nichts läuft
+   * mehr) aus dem Controlling: Controlling-Bilder (R2) + controll_status +
+   * Controlling-Zeile. Die Live-Version bleibt unberührt.
+   */
+  const deleteGhostVehicleFromControlling = useCallback(
+    async (vehicleId: number) => {
+      const confirmed = window.confirm(
+        `Fahrzeug #${vehicleId} aus dem Controlling entfernen?\n\n` +
+          `Es existiert bereits live in der öffentlichen API — die Live-Version ` +
+          `bleibt erhalten. Hier werden nur die Controlling-Bilder + Status ` +
+          `gelöscht. Nicht rückgängig machbar.`,
+      );
+      if (!confirmed) return;
+      setDeletingGhostId(vehicleId);
+      setActionError(null);
+      try {
+        await deleteVehicleImageryControlling(vehicleId);
+        if (selectedId === vehicleId) setSelectedId(null);
+        listApi.reload();
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setDeletingGhostId((cur) => (cur === vehicleId ? null : cur));
+      }
+    },
+    [listApi, selectedId],
   );
 
   useEffect(() => {
@@ -2541,6 +2574,16 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                           {aggStyle.label}
                         </span>
                       ) : null}
+                      {(r.already_public ?? 0) === 1 &&
+                      (r.is_running ?? 0) !== 1 ? (
+                        <span
+                          className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 py-px text-[9px] font-semibold uppercase leading-none text-amber-700"
+                          title="Bereits live in der öffentlichen API — als Geist aus Controlling löschbar"
+                        >
+                          <Ghost className="h-2.5 w-2.5" />
+                          live
+                        </span>
+                      ) : null}
                     </span>
                     <span
                       aria-hidden
@@ -2583,6 +2626,25 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <Settings2 className="h-3.5 w-3.5" />}
                 </button>
+                {(r.already_public ?? 0) === 1 &&
+                (r.is_running ?? 0) !== 1 ? (
+                  <button
+                    type="button"
+                    aria-label={`Geist-Fahrzeug #${r.id} aus Controlling löschen`}
+                    title="Aus Controlling löschen — existiert bereits live in der API"
+                    disabled={deletingGhostId === r.id || listApi.loading}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void deleteGhostVehicleFromControlling(r.id);
+                    }}
+                    className="flex shrink-0 flex-col items-center justify-center border-l border-hair/70 px-1 text-amber-600 transition hover:bg-amber-50 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {deletingGhostId === r.id ?
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <Trash2 className="h-3.5 w-3.5" />}
+                  </button>
+                ) : null}
               </li>
             );
           })}
@@ -2612,6 +2674,13 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                   <p className="mt-0.5 font-mono text-[10px] text-ink-500">
                     #{row.id} · {rowSubtitle(row)}
                   </p>
+                  {(row.already_public ?? 0) === 1 &&
+                  (row.is_running ?? 0) !== 1 ? (
+                    <p className="mt-1 inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                      <Ghost className="h-3 w-3" />
+                      Bereits live in der API — Geist im Controlling
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-[10px] text-ink-500">
                     Aktualisiert {fmtWhen(row.last_updated)}
                     {"genehmigt" in row && row.genehmigt !== undefined ? (
@@ -2625,13 +2694,32 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     ) : null}
                   </p>
                 </div>
-                <Link
-                  to={`/dashboard/databases/production/${row.id}`}
-                  className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-brand-600 hover:underline"
-                >
-                  DB
-                  <ExternalLink className="h-2.5 w-2.5" />
-                </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  {(row.already_public ?? 0) === 1 &&
+                  (row.is_running ?? 0) !== 1 ? (
+                    <button
+                      type="button"
+                      disabled={deletingGhostId === row.id}
+                      onClick={() =>
+                        void deleteGhostVehicleFromControlling(row.id)
+                      }
+                      title="Aus Controlling löschen — existiert bereits live in der API"
+                      className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {deletingGhostId === row.id ?
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      : <Trash2 className="h-3 w-3" />}
+                      Aus Controlling löschen
+                    </button>
+                  ) : null}
+                  <Link
+                    to={`/dashboard/databases/production/${row.id}`}
+                    className="inline-flex items-center gap-0.5 text-[11px] text-brand-600 hover:underline"
+                  >
+                    DB
+                    <ExternalLink className="h-2.5 w-2.5" />
+                  </Link>
+                </div>
               </div>
             </div>
 

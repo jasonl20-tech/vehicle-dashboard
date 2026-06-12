@@ -113,6 +113,28 @@ const STORAGE_COLUMNS_VALIASED = `
   v.format, v.views, v.sonstiges, v.active, v.last_updated
 `;
 
+// --- „Geister"-Erkennung (nutzen `v.`-Alias der Storage-Tabelle) ---
+/** 1, wenn ein identisches Auto bereits live in der Public-API existiert. */
+const ALREADY_PUBLIC_SQL = `CASE WHEN EXISTS (
+  SELECT 1 FROM vehicleimagery_public_storage p
+  WHERE p.marke = v.marke AND p.modell = v.modell AND p.jahr = v.jahr
+    AND ifnull(p.body,'') = ifnull(v.body,'') AND ifnull(p.trim,'') = ifnull(v.trim,'')
+    AND ifnull(p.farbe,'') = ifnull(v.farbe,'') AND ifnull(p.resolution,'') = ifnull(v.resolution,'')
+    AND ifnull(p.format,'') = ifnull(v.format,'')
+) THEN 1 ELSE 0 END`;
+/** id des Live-Zwillings (oder NULL). */
+const PUBLIC_ID_SQL = `(
+  SELECT p.id FROM vehicleimagery_public_storage p
+  WHERE p.marke = v.marke AND p.modell = v.modell AND p.jahr = v.jahr
+    AND ifnull(p.body,'') = ifnull(v.body,'') AND ifnull(p.trim,'') = ifnull(v.trim,'')
+    AND ifnull(p.farbe,'') = ifnull(v.farbe,'') AND ifnull(p.resolution,'') = ifnull(v.resolution,'')
+    AND ifnull(p.format,'') = ifnull(v.format,'') LIMIT 1
+)`;
+/** 1, wenn aktuell noch eine Generierung läuft/wartet (check IN 0,1,7,8). */
+const IS_RUNNING_SQL = `CASE WHEN EXISTS (
+  SELECT 1 FROM controll_status cr WHERE cr.vehicle_id = v.id AND cr."check" IN (0, 1, 7, 8)
+) THEN 1 ELSE 0 END`;
+
 /**
  * Aggregat-Subquery für `controll_status` – `mode` ist Pflicht-Bind.
  * Liefert pro `vehicle_id` Counts (n_done/n_errored/...) und n_total.
@@ -215,10 +237,13 @@ function controllStatusAggSubquery(statusMode: string): string {
 ) cs`;
 }
 
-/** Detail-Lookup (ohne JOIN, ohne Counts). */
+/** Detail-Lookup (ohne JOIN-Aggregat, aber mit Geister-Flags). */
 const SELECT_LIST_BY_ID = `SELECT
-  id, marke, modell, jahr, body, trim, farbe, resolution, format, views, sonstiges, active, last_updated
-FROM ${STORAGE_TABLE}`;
+  v.id, v.marke, v.modell, v.jahr, v.body, v.trim, v.farbe, v.resolution, v.format, v.views, v.sonstiges, v.active, v.last_updated,
+  ${ALREADY_PUBLIC_SQL} AS already_public,
+  ${PUBLIC_ID_SQL} AS public_id,
+  ${IS_RUNNING_SQL} AS is_running
+FROM ${STORAGE_TABLE} v`;
 
 function likeContainsUserInput(raw: string): string | null {
   const esc = raw.replace(/[%_]/g, "").trim();
@@ -440,9 +465,15 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       return jsonResponse({ error: "id ungültig" }, { status: 400 });
     }
     const row = await db
-      .prepare(`${SELECT_LIST_BY_ID} WHERE id = ?`)
+      .prepare(`${SELECT_LIST_BY_ID} WHERE v.id = ?`)
       .bind(oneId)
-      .first<VehicleImageryControllingRow>();
+      .first<
+        VehicleImageryControllingRow & {
+          already_public: number;
+          public_id: number | null;
+          is_running: number;
+        }
+      >();
     if (!row) {
       return jsonResponse({ error: "Nicht gefunden" }, { status: 404 });
     }
@@ -646,7 +677,10 @@ ${STORAGE_COLUMNS_VALIASED},
   ifnull(cs.n_transferred, 0) AS n_transferred,
   ifnull(cs.n_in_progress, 0) AS n_in_progress,
   ifnull(cs.n_pending, 0) AS n_pending,
-  ifnull(cs.n_total, 0) AS n_total
+  ifnull(cs.n_total, 0) AS n_total,
+  ${ALREADY_PUBLIC_SQL} AS already_public,
+  ${PUBLIC_ID_SQL} AS public_id,
+  ${IS_RUNNING_SQL} AS is_running
 ${fromJoin}
 ${whereSql}
 ORDER BY ${orderBySql}
@@ -659,6 +693,9 @@ LIMIT ? OFFSET ?`;
     n_in_progress: number;
     n_pending: number;
     n_total: number;
+    already_public: number;
+    public_id: number | null;
+    is_running: number;
   };
 
   let results: ListRowRaw[] = [];
@@ -690,6 +727,9 @@ LIMIT ? OFFSET ?`;
       n_in_progress: 0,
       n_pending: 0,
       n_total: 0,
+      already_public: 0,
+      public_id: null,
+      is_running: 0,
     }));
     void err;
   }
@@ -705,6 +745,9 @@ LIMIT ? OFFSET ?`;
       n_in_progress,
       n_pending,
       n_total,
+      already_public,
+      public_id,
+      is_running,
       ...storageCols
     } = r;
     const controllStatusCounts: ControllStatusCountsForRow = {
@@ -715,7 +758,13 @@ LIMIT ? OFFSET ?`;
       pending: Number(n_pending) || 0,
       total: Number(n_total) || 0,
     };
-    return { ...storageCols, controllStatusCounts };
+    return {
+      ...storageCols,
+      controllStatusCounts,
+      already_public: Number(already_public) || 0,
+      public_id: public_id ?? null,
+      is_running: Number(is_running) || 0,
+    };
   });
 
   return jsonResponse(
@@ -1181,3 +1230,149 @@ async function loadControllStatuses(
     return [];
   }
 }
+
+type DeleteRow = {
+  id: number;
+  marke: string | null;
+  modell: string | null;
+  jahr: number | null;
+  body: string | null;
+  trim: string | null;
+  farbe: string | null;
+  resolution: string | null;
+  format: string | null;
+};
+
+/**
+ * DELETE /api/databases/vehicle-imagery-controlling?id=<id>
+ *
+ * Entfernt ein „Geister"-Auto aus dem Controlling: R2-Objekte im
+ * Controlling-Bucket + alle `controll_status`-Zeilen + die Controlling-Zeile.
+ * Die öffentliche Live-Version (andere Tabelle/anderer Bucket) bleibt unberührt.
+ *
+ * Sicherheit: Nur erlaubt, wenn ein identisches Auto bereits LIVE in der
+ * Public-API existiert UND keine Generierung mehr läuft (check IN 0,1,7,8).
+ */
+export const onRequestDelete: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+}) => {
+  const user = await getCurrentUser(env, request);
+  if (!user) {
+    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+  }
+  const db = requireVehicleDb(env);
+  if (db instanceof Response) return db;
+
+  const url = new URL(request.url);
+  const id = Number((url.searchParams.get("id") || "").trim());
+  if (!Number.isInteger(id) || id < 1) {
+    return jsonResponse({ error: "id ungültig" }, { status: 400 });
+  }
+
+  const bucket = env.controllbucket;
+  if (!bucket) {
+    return jsonResponse(
+      {
+        error:
+          "R2-Binding `controllbucket` (vehicleimagery-controlling) fehlt. Im Pages-Projekt → Settings → Functions → R2-Bindings als `controllbucket` ergänzen.",
+      },
+      { status: 500 },
+    );
+  }
+
+  const row = await db
+    .prepare(
+      `SELECT id, marke, modell, jahr, body, trim, farbe, resolution, format
+       FROM ${STORAGE_TABLE} WHERE id = ?`,
+    )
+    .bind(id)
+    .first<DeleteRow>();
+  if (!row) {
+    return jsonResponse(
+      { error: "Nicht im Controlling gefunden." },
+      { status: 404 },
+    );
+  }
+
+  // Sicherheit (1): Live-Zwilling muss existieren.
+  const live = await db
+    .prepare(
+      `SELECT id FROM vehicleimagery_public_storage
+       WHERE marke = ? AND modell = ? AND jahr = ?
+         AND ifnull(body,'') = ? AND ifnull(trim,'') = ?
+         AND ifnull(farbe,'') = ? AND ifnull(resolution,'') = ?
+         AND ifnull(format,'') = ?`,
+    )
+    .bind(
+      row.marke,
+      row.modell,
+      row.jahr,
+      row.body ?? "",
+      row.trim ?? "",
+      row.farbe ?? "",
+      row.resolution ?? "",
+      row.format ?? "",
+    )
+    .first<{ id: number }>();
+  if (!live) {
+    return jsonResponse(
+      {
+        error:
+          "Kein Live-Zwilling in der Public-API — als Geist nicht löschbar.",
+      },
+      { status: 409 },
+    );
+  }
+
+  // Sicherheit (2): keine laufende Generierung.
+  const running = await db
+    .prepare(
+      `SELECT 1 AS x FROM controll_status WHERE vehicle_id = ? AND "check" IN (0,1,7,8) LIMIT 1`,
+    )
+    .bind(id)
+    .first<{ x: number }>();
+  if (running) {
+    return jsonResponse(
+      { error: "Es läuft noch eine Generierung — nicht löschbar." },
+      { status: 409 },
+    );
+  }
+
+  // R2-Objekte im Controlling-Bucket löschen.
+  const seg = (s: string | number | null | undefined) => String(s ?? "").trim();
+  const prefix = `v1/${seg(row.format)}/${seg(row.resolution)}/${seg(row.marke)}/${seg(row.modell)}/${seg(row.jahr)}/${seg(row.body)}/${seg(row.trim)}/${seg(row.farbe)}/`;
+  let deletedObjects = 0;
+  let cursor: string | undefined;
+  try {
+    do {
+      const listing = await bucket.list({ prefix, cursor, limit: 1000 });
+      const keys = listing.objects.map((o) => o.key);
+      if (keys.length > 0) {
+        await bucket.delete(keys);
+        deletedObjects += keys.length;
+      }
+      cursor = listing.truncated ? listing.cursor : undefined;
+    } while (cursor);
+  } catch (err) {
+    return jsonResponse(
+      {
+        error: "R2-Löschen (Controlling) fehlgeschlagen.",
+        detail: err instanceof Error ? err.message : String(err),
+      },
+      { status: 500 },
+    );
+  }
+
+  // controll_status + Controlling-Zeile löschen.
+  await db
+    .prepare(`DELETE FROM controll_status WHERE vehicle_id = ?`)
+    .bind(id)
+    .run();
+  await db.prepare(`DELETE FROM ${STORAGE_TABLE} WHERE id = ?`).bind(id).run();
+
+  return jsonResponse(
+    { deleted: true, id, deletedObjects, publicId: live.id, prefix },
+    { status: 200 },
+  );
+};
