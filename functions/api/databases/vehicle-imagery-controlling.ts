@@ -894,6 +894,8 @@ type CreateBody = {
   views?: unknown;
   /** `true` → bereits in Controlling vorhandene Jahrgänge überschreiben. */
   overwrite?: unknown;
+  /** Optionaler Prompt-Jahrgang-Override (4-stellig) – nur für den Prompt. */
+  prompt_jahr?: unknown;
 };
 
 /**
@@ -935,6 +937,9 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const resolution = str(body.resolution) || "default";
   const format = (str(body.format) || "png").toLowerCase();
   const overwrite = body.overwrite === true;
+  // Optionaler Prompt-Jahrgang: nur 4-stellig akzeptieren, sonst kein Override.
+  const promptJahrRaw = str(body.prompt_jahr);
+  const promptJahr = /^\d{4}$/.test(promptJahrRaw) ? Number(promptJahrRaw) : null;
 
   if (!marke) {
     return jsonResponse({ error: "marke ist erforderlich" }, { status: 400 });
@@ -1047,10 +1052,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       await db
         .prepare(
           `UPDATE ${STORAGE_TABLE}
-             SET views = '', active = 1, last_updated = datetime('now')
+             SET views = '', active = 1, last_updated = datetime('now'), prompt_jahr = ?
            WHERE id = ?`,
         )
-        .bind(vehicleId)
+        .bind(promptJahr, vehicleId)
         .run();
       await db
         .prepare(`DELETE FROM controll_status WHERE vehicle_id = ?`)
@@ -1060,10 +1065,20 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       const ins = await db
         .prepare(
           `INSERT INTO ${STORAGE_TABLE}
-            (marke, modell, jahr, body, trim, farbe, resolution, format, views, active, last_updated)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, datetime('now'))`,
+            (marke, modell, jahr, body, trim, farbe, resolution, format, views, active, last_updated, prompt_jahr)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, datetime('now'), ?)`,
         )
-        .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
+        .bind(
+          marke,
+          modell,
+          jahr,
+          carBody,
+          trimVal,
+          farbe,
+          resolution,
+          format,
+          promptJahr,
+        )
         .run();
       vehicleId = Number(
         (ins as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? 0,

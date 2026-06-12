@@ -316,6 +316,11 @@ export type CreateVehicleInput = {
    * überschrieben (neu generiert). Ohne Flag landen sie in `needsConfirm`.
    */
   overwrite?: boolean;
+  /**
+   * Optionaler Prompt-Jahrgang: ersetzt im KI-Prompt das Jahr (nicht das
+   * gespeicherte Jahr). Leer/weggelassen = echtes Jahr verwenden.
+   */
+  prompt_jahr?: string;
 };
 
 export type CreateVehicleResponse = {

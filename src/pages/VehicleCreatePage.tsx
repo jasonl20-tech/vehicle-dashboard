@@ -70,6 +70,8 @@ export default function VehicleCreatePage() {
   const [jahr, setJahr] = useState("");
   const [body, setBody] = useState("Basis");
   const [trim, setTrim] = useState("base");
+  /** Optionaler Prompt-Jahrgang-Override: leer = echtes Jahr. */
+  const [promptJahr, setPromptJahr] = useState("");
 
   const [views, setViews] = useState<Set<string>>(
     () => new Set<string>(EXTERIOR_VIEWS),
@@ -116,6 +118,7 @@ export default function VehicleCreatePage() {
     setJahr("");
     setBody("Basis");
     setTrim("base");
+    setPromptJahr("");
     setViews(new Set<string>(EXTERIOR_VIEWS));
   };
 
@@ -137,6 +140,11 @@ export default function VehicleCreatePage() {
       setError("Mindestens eine Ansicht wählen.");
       return;
     }
+    const promptJahrTrim = promptJahr.trim();
+    if (promptJahrTrim && !/^\d{4}$/.test(promptJahrTrim)) {
+      setError("Prompt-Jahrgang muss vierstellig sein (z. B. 2023) oder leer.");
+      return;
+    }
     setSubmitting(true);
     try {
       const base = {
@@ -145,6 +153,7 @@ export default function VehicleCreatePage() {
         body: body.trim() || "Basis",
         trim: trim.trim() || "base",
         views: [...views],
+        ...(promptJahrTrim ? { prompt_jahr: promptJahrTrim } : {}),
       };
       let res = await createVehicleImageryControlling({
         ...base,
@@ -402,6 +411,21 @@ export default function VehicleCreatePage() {
                   value={trim}
                   onChange={(e) => setTrim(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className={LABEL}>Prompt-Jahrgang (optional)</label>
+                <input
+                  type="text"
+                  className={TEXT_IN}
+                  placeholder="leer = echtes Jahr · z. B. 2023"
+                  value={promptJahr}
+                  onChange={(e) => setPromptJahr(e.target.value)}
+                />
+                <p className="mt-0.5 text-[10.5px] text-ink-400">
+                  Ersetzt nur im KI-Prompt das Jahr (z. B. 2023 statt 2022),
+                  damit das neue Modell generiert wird. Gespeichert wird weiterhin
+                  das echte Jahr.
+                </p>
               </div>
             </div>
 
