@@ -346,7 +346,13 @@ function buildSortOptionsSql(
  * - `done`: alle erwarteten Views des aktuellen Modus sind erledigt
  *   (`done`/`übertragen`) und kein `errored` mehr aktiv.
  */
-const STATUS_FILTER_KEYS = ["open", "all", "done"] as const;
+const STATUS_FILTER_KEYS = [
+  "open",
+  "open_ext_only",
+  "open_int",
+  "all",
+  "done",
+] as const;
 type StatusFilter = (typeof STATUS_FILTER_KEYS)[number];
 function isStatusFilter(s: string): s is StatusFilter {
   return (STATUS_FILTER_KEYS as readonly string[]).includes(s);
@@ -415,9 +421,27 @@ function buildStatusFiltersSql(
   statusMode: string,
 ): Record<StatusFilter, string> {
   const nExp = expectedViewsExpr(statusMode);
+  const openSql = `(${nExp} > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) < ${nExp}) OR ifnull(cs.n_errored, 0) > 0`;
+  // „Innen offen": es existiert ein offener/fehlerhafter Innen-Job
+  // (dashboard / center_console, inkl. Varianten) – also Status ≠ correct.
+  const interiorOpen = `EXISTS (
+    SELECT 1 FROM controll_status ci
+    WHERE ci.vehicle_id = v.id
+      AND lower(ci.status) <> 'correct'
+      AND (
+        lower(ci.view_token) = 'dashboard'
+        OR lower(ci.view_token) GLOB 'dashboard#*'
+        OR lower(ci.view_token) = 'center_console'
+        OR lower(ci.view_token) GLOB 'center_console#*'
+      )
+  )`;
   return {
     all: "",
-    open: `(${nExp} > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) < ${nExp}) OR ifnull(cs.n_errored, 0) > 0`,
+    open: openSql,
+    // „Nur außen offen": etwas offen, aber Innenansicht nicht offen.
+    open_ext_only: `(${openSql}) AND NOT ${interiorOpen}`,
+    // „Nur innen offen": etwas offen UND Innenansicht offen.
+    open_int: `(${openSql}) AND ${interiorOpen}`,
     done: `${nExp} > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) = ${nExp}`,
   };
 }

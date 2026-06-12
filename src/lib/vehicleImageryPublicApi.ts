@@ -104,7 +104,13 @@ export type ControllListSortOption =
  * - `done`: nur Fahrzeuge, bei denen im aktuellen Modus ALLE erwarteten
  *   Views fertig sind und kein `errored`-Status existiert.
  */
-export const CONTROLL_LIST_STATUS_FILTERS = ["open", "all", "done"] as const;
+export const CONTROLL_LIST_STATUS_FILTERS = [
+  "open",
+  "open_ext_only",
+  "open_int",
+  "all",
+  "done",
+] as const;
 export type ControllListStatusFilter =
   (typeof CONTROLL_LIST_STATUS_FILTERS)[number];
 

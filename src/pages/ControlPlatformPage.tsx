@@ -991,6 +991,8 @@ const SORT_LABELS: Record<ControllListSortOption, string> = {
 /** UI-Labels für Status-Filter. */
 const STATUS_FILTER_LABELS: Record<ControllListStatusFilter, string> = {
   open: "Offen",
+  open_ext_only: "Nur außen offen",
+  open_int: "Nur innen offen",
   all: "Alle",
   done: "Komplett done",
 };
