@@ -139,14 +139,40 @@ export default function VehicleCreatePage() {
     }
     setSubmitting(true);
     try {
-      const res = await createVehicleImageryControlling({
+      const base = {
         marke: marke.trim(),
         modell: modell.trim(),
-        jahre: yearsParsed.years.map(String),
         body: body.trim() || "Basis",
         trim: trim.trim() || "base",
         views: [...views],
+      };
+      let res = await createVehicleImageryControlling({
+        ...base,
+        jahre: yearsParsed.years.map(String),
       });
+
+      // Bereits in Controlling vorhanden → Rückfrage, ob überschrieben werden soll.
+      if (res.needsConfirm.length > 0) {
+        const yrs = res.needsConfirm.map((n) => n.jahr);
+        const ok = window.confirm(
+          `Diese Jahrgänge existieren bereits in Controlling: ${yrs.join(", ")}.\n\n` +
+            `Wirklich neu generieren? Die vorhandene Controlling-Version wird dabei überschrieben.`,
+        );
+        if (ok) {
+          const res2 = await createVehicleImageryControlling({
+            ...base,
+            jahre: yrs.map(String),
+            overwrite: true,
+          });
+          res = {
+            created: [...res.created, ...res2.created],
+            blockedLive: [...res.blockedLive, ...res2.blockedLive],
+            needsConfirm: res2.needsConfirm,
+            totalJobs: res.totalJobs + res2.totalJobs,
+            views: res.views,
+          };
+        }
+      }
       setResult(res);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -213,8 +239,8 @@ export default function VehicleCreatePage() {
             <Check className="h-4 w-4 text-accent-mint" />
             {result.created.length} Auto{result.created.length === 1 ? "" : "s"}{" "}
             angelegt
-            {result.skipped.length > 0
-              ? `, ${result.skipped.length} übersprungen`
+            {result.blockedLive.length + result.needsConfirm.length > 0
+              ? `, ${result.blockedLive.length + result.needsConfirm.length} übersprungen`
               : ""}
           </div>
           <p className="text-[12.5px] text-ink-700">
@@ -228,10 +254,20 @@ export default function VehicleCreatePage() {
               {result.created.map((c) => `${c.jahr} → id ${c.id}`).join("  ·  ")}
             </p>
           ) : null}
-          {result.skipped.length > 0 ? (
+          {result.blockedLive.length > 0 ? (
+            <p className="mt-1 text-[11.5px] font-medium text-rose-600">
+              ⛔ Bereits live in der API – nicht generierbar:{" "}
+              <span className="font-mono font-normal">
+                {result.blockedLive
+                  .map((s) => `${s.jahr} (public id ${s.publicId})`)
+                  .join("  ·  ")}
+              </span>
+            </p>
+          ) : null}
+          {result.needsConfirm.length > 0 ? (
             <p className="mt-1 font-mono text-[11px] text-ink-400">
-              Übersprungen (existierten schon):{" "}
-              {result.skipped
+              Bereits in Controlling – nicht überschrieben:{" "}
+              {result.needsConfirm
                 .map((s) => `${s.jahr} (id ${s.existingId})`)
                 .join("  ·  ")}
             </p>

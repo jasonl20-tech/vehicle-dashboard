@@ -295,11 +295,19 @@ export type CreateVehicleInput = {
   resolution?: string;
   format?: string;
   views: string[];
+  /**
+   * Wenn `true`, werden bereits in Controlling vorhandene Jahrgänge
+   * überschrieben (neu generiert). Ohne Flag landen sie in `needsConfirm`.
+   */
+  overwrite?: boolean;
 };
 
 export type CreateVehicleResponse = {
   created: { id: number; jahr: number }[];
-  skipped: { jahr: number; existingId: number }[];
+  /** Jahrgänge, die bereits LIVE in der öffentlichen API existieren → blockiert. */
+  blockedLive: { jahr: number; publicId: number }[];
+  /** Jahrgänge, die bereits in Controlling existieren → Rückfrage nötig (overwrite). */
+  needsConfirm: { jahr: number; existingId: number }[];
   totalJobs: number;
   views: string[];
 };

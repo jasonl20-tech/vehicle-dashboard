@@ -764,6 +764,24 @@ const CREATE_ALLOWED_VIEWS = new Set<string>([
   ...CREATE_INTERIOR_VIEWS,
 ]);
 
+/**
+ * Generierungs-Reihenfolge für die Sequenz: erst ein guter Anker (`front`),
+ * dann Seiten/Heck (die der job-abarbeiter als Referenz bevorzugt), dann
+ * Diagonalen, zuletzt Innen. Jede View referenziert die zuvor fertigen.
+ */
+const CREATE_VIEW_ORDER = [
+  "front",
+  "left",
+  "right",
+  "rear",
+  "front_left",
+  "front_right",
+  "rear_left",
+  "rear_right",
+  "dashboard",
+  "center_console",
+];
+
 type CreateBody = {
   marke?: unknown;
   modell?: unknown;
@@ -775,6 +793,8 @@ type CreateBody = {
   resolution?: unknown;
   format?: unknown;
   views?: unknown;
+  /** `true` → bereits in Controlling vorhandene Jahrgänge überschreiben. */
+  overwrite?: unknown;
 };
 
 /**
@@ -815,6 +835,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const farbe = str(body.farbe) || "default";
   const resolution = str(body.resolution) || "default";
   const format = (str(body.format) || "png").toLowerCase();
+  const overwrite = body.overwrite === true;
 
   if (!marke) {
     return jsonResponse({ error: "marke ist erforderlich" }, { status: 400 });
@@ -876,9 +897,34 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   const created: { id: number; jahr: number }[] = [];
-  const skipped: { jahr: number; existingId: number }[] = [];
+  const blockedLive: { jahr: number; publicId: number }[] = [];
+  const needsConfirm: { jahr: number; existingId: number }[] = [];
+
+  // Sequenz-Reihenfolge der gewählten Ansichten (Anker zuerst).
+  const orderedViews = [...views].sort((a, b) => {
+    const ia = CREATE_VIEW_ORDER.indexOf(a);
+    const ib = CREATE_VIEW_ORDER.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
 
   for (const jahr of jahre) {
+    // (A) Bereits LIVE in der öffentlichen API? → blockieren, nicht generieren.
+    const live = await db
+      .prepare(
+        `SELECT id FROM vehicleimagery_public_storage
+         WHERE marke = ? AND modell = ? AND jahr = ?
+           AND ifnull(body,'') = ? AND ifnull(trim,'') = ?
+           AND ifnull(farbe,'') = ? AND ifnull(resolution,'') = ?
+           AND ifnull(format,'') = ?`,
+      )
+      .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
+      .first<{ id: number }>();
+    if (live) {
+      blockedLive.push({ jahr, publicId: live.id });
+      continue;
+    }
+
+    // (B) Bereits in Controlling? → ohne overwrite Rückfrage, mit overwrite neu.
     const existing = await db
       .prepare(
         `SELECT id FROM ${STORAGE_TABLE}
@@ -889,23 +935,42 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       )
       .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
       .first<{ id: number }>();
-    if (existing) {
-      skipped.push({ jahr, existingId: existing.id });
-      continue;
-    }
 
-    const ins = await db
-      .prepare(
-        `INSERT INTO ${STORAGE_TABLE}
-          (marke, modell, jahr, body, trim, farbe, resolution, format, views, active, last_updated)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, datetime('now'))`,
-      )
-      .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
-      .run();
-    const vehicleId = Number(
-      (ins as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? 0,
-    );
-    if (!vehicleId) continue;
+    let vehicleId: number;
+    if (existing) {
+      if (!overwrite) {
+        needsConfirm.push({ jahr, existingId: existing.id });
+        continue;
+      }
+      // Überschreiben: Zeile wiederverwenden, Views leeren, offene Jobs entfernen.
+      // Die Generierung überschreibt anschließend die R2-Objekte am selben Key.
+      vehicleId = existing.id;
+      await db
+        .prepare(
+          `UPDATE ${STORAGE_TABLE}
+             SET views = '', active = 1, last_updated = datetime('now')
+           WHERE id = ?`,
+        )
+        .bind(vehicleId)
+        .run();
+      await db
+        .prepare(`DELETE FROM controll_status WHERE vehicle_id = ?`)
+        .bind(vehicleId)
+        .run();
+    } else {
+      const ins = await db
+        .prepare(
+          `INSERT INTO ${STORAGE_TABLE}
+            (marke, modell, jahr, body, trim, farbe, resolution, format, views, active, last_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', 1, datetime('now'))`,
+        )
+        .bind(marke, modell, jahr, carBody, trimVal, farbe, resolution, format)
+        .run();
+      vehicleId = Number(
+        (ins as { meta?: { last_row_id?: number } }).meta?.last_row_id ?? 0,
+      );
+      if (!vehicleId) continue;
+    }
 
     const rowForKey = {
       format,
@@ -917,18 +982,23 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       trim: trimVal,
       farbe,
     };
-    const jobStmts = views.map((view) => {
+    // Sequenzielle Generierung mit Referenz-Kette: nur die erste Ansicht ist
+    // sofort bereit (check 0), der Rest wartet (check 7) und wird vom
+    // job-abarbeiter nach Fertigstellung der jeweils vorigen verkettet
+    // (status `regen_vertex_seq`).
+    const jobStmts = orderedViews.map((view, idx) => {
       const mode = (CREATE_INTERIOR_VIEWS as readonly string[]).includes(view)
         ? "inside"
         : "correction";
       const key = controllingStorageR2KeyFromViewToken(rowForKey, view);
+      const checkVal = idx === 0 ? 0 : 7;
       return db
         .prepare(
           `INSERT OR IGNORE INTO controll_status
             (vehicle_id, view_token, mode, status, key, updated_at, "check")
-           VALUES (?, ?, ?, 'regen_vertex', ?, datetime('now'), 0)`,
+           VALUES (?, ?, ?, 'regen_vertex_seq', ?, datetime('now'), ?)`,
         )
-        .bind(vehicleId, view, mode, key);
+        .bind(vehicleId, view, mode, key, checkVal);
     });
     await db.batch(jobStmts);
     created.push({ id: vehicleId, jahr });
@@ -937,9 +1007,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   return jsonResponse(
     {
       created,
-      skipped,
-      totalJobs: created.length * views.length,
-      views,
+      blockedLive,
+      needsConfirm,
+      totalJobs: created.length * orderedViews.length,
+      views: orderedViews,
     },
     { status: 200 },
   );
