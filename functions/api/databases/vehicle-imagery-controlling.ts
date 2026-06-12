@@ -421,28 +421,32 @@ function buildStatusFiltersSql(
   statusMode: string,
 ): Record<StatusFilter, string> {
   const nExp = expectedViewsExpr(statusMode);
+  // Außen/„vorhandene Views" fertig (klassisch über die Counts).
   const openSql = `(${nExp} > 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) < ${nExp}) OR ifnull(cs.n_errored, 0) > 0`;
-  // „Innen offen": es existiert ein offener/fehlerhafter Innen-Job
-  // (dashboard / center_console, inkl. Varianten) – also Status ≠ correct.
-  const interiorOpen = `EXISTS (
-    SELECT 1 FROM controll_status ci
-    WHERE ci.vehicle_id = v.id
-      AND lower(ci.status) <> 'correct'
-      AND (
-        lower(ci.view_token) = 'dashboard'
-        OR lower(ci.view_token) GLOB 'dashboard#*'
-        OR lower(ci.view_token) = 'center_console'
-        OR lower(ci.view_token) GLOB 'center_console#*'
-      )
-  )`;
+  const doneSql = `${nExp} > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) = ${nExp}`;
+  // „Innen kontrolliert": dashboard UND center_console (inkl. Varianten) haben
+  // je eine `correct`-Zeile. Nur im Korrektur-Modus relevant – in anderen Modi
+  // gibt es keine Innen-Views, dort entfällt die Anforderung (= immer erfüllt).
+  const interiorDone =
+    statusMode === "correction"
+      ? `(
+    EXISTS (SELECT 1 FROM controll_status ci WHERE ci.vehicle_id = v.id AND lower(ci.status) = 'correct' AND (lower(ci.view_token) = 'dashboard' OR lower(ci.view_token) GLOB 'dashboard#*'))
+    AND EXISTS (SELECT 1 FROM controll_status ci WHERE ci.vehicle_id = v.id AND lower(ci.status) = 'correct' AND (lower(ci.view_token) = 'center_console' OR lower(ci.view_token) GLOB 'center_console#*'))
+  )`
+      : "1=1";
+  // „Innen offen/fehlt": Auto hat erwartete Views, aber Innen ist nicht
+  // vollständig kontrolliert (offen ODER gar nicht vorhanden).
+  const interiorOpen = `(${nExp} > 0 AND NOT ${interiorDone})`;
   return {
     all: "",
-    open: openSql,
-    // „Nur außen offen": etwas offen, aber Innenansicht nicht offen.
-    open_ext_only: `(${openSql}) AND NOT ${interiorOpen}`,
-    // „Nur innen offen": etwas offen UND Innenansicht offen.
-    open_int: `(${openSql}) AND ${interiorOpen}`,
-    done: `${nExp} > 0 AND ifnull(cs.n_errored, 0) = 0 AND ifnull(cs.n_done, 0) + ifnull(cs.n_transferred, 0) = ${nExp}`,
+    // Default: irgendetwas offen ODER Innen noch nicht kontrolliert.
+    open: `(${openSql}) OR ${interiorOpen}`,
+    // „Nur außen offen": außen offen, Innen aber fertig kontrolliert.
+    open_ext_only: `(${openSql}) AND ${interiorDone}`,
+    // „Innen offen": Innen noch nicht kontrolliert.
+    open_int: interiorOpen,
+    // „Komplett done": außen fertig UND Innen kontrolliert.
+    done: `(${doneSql}) AND ${interiorDone}`,
   };
 }
 
