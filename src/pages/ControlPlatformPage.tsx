@@ -1795,8 +1795,13 @@ export default function ControlPlatformPage() {
         : null;
 
       const supplemental = entry.supplemental === true;
+      // `first_views` ist ein Generierungs-/Korrektur-Konzept (Eck-Ansichten
+      // referenzieren die Pflicht-Ansichten beim Generieren). In anderen Modi —
+      // v. a. Skalierung — wird jede Ansicht unabhängig verarbeitet, dort darf die
+      // Sperre NICHT greifen.
       const isFirstViewsLocked =
         !supplemental &&
+        viewsMode === "korrektur" &&
         isSlotBlockedByFirstViews(
           firstViewsSet,
           firstViewsReady,
@@ -3130,8 +3135,12 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                       viewsMode === "korrektur" || viewsMode === "skalierung";
 
                     const supplemental = entry.supplemental === true;
+                    // `first_views` ist ein Korrektur-/Generierungs-Konzept; in
+                    // Skalierung (und anderen Modi) wird jede Ansicht unabhängig
+                    // verarbeitet → keine „nur Ansehen"-Sperre.
                     const isFirstViewsLocked =
                       !supplemental &&
+                      viewsMode === "korrektur" &&
                       isSlotBlockedByFirstViews(
                         firstViewsSet,
                         firstViewsReady,
