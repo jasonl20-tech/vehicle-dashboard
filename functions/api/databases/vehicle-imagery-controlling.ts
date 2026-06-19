@@ -437,12 +437,28 @@ function buildStatusFiltersSql(
   // „Innen offen/fehlt": Auto hat erwartete Views, aber Innen ist nicht
   // vollständig kontrolliert (offen ODER gar nicht vorhanden).
   const interiorOpen = `(${nExp} > 0 AND NOT ${interiorDone})`;
+  // „Außen offen" (Innen-unabhängig): es fehlt mindestens eine erwartete AUßEN-
+  // Ansicht (noch nicht `correct`/`check = 2`) ODER ein `correction`-Job ist
+  // fehlerhaft. Außen-Erwartung = erwartete Views OHNE die Innen-Tokens
+  // (dashboard/center_console). In anderen Modi gibt es keine Innen-Trennung →
+  // dort entspricht „außen offen" dem allgemeinen `open`.
+  const interiorTokensInViews = `(
+    (CASE WHEN (';' || lower(ifnull(v.views, '')) || ';') LIKE '%;dashboard;%' THEN 1 ELSE 0 END)
+    + (CASE WHEN (';' || lower(ifnull(v.views, '')) || ';') LIKE '%;center_console;%' THEN 1 ELSE 0 END)
+  )`;
+  const nExpExterior = `MAX(0, ${nExp} - ${interiorTokensInViews})`;
+  const exteriorDone = `(SELECT COUNT(*) FROM controll_status ce WHERE ce.vehicle_id = v.id AND lower(ce.mode) = 'correction' AND ce."check" = 2 AND lower(ce.status) = 'correct')`;
+  const exteriorErrored = `(SELECT COUNT(*) FROM controll_status ce WHERE ce.vehicle_id = v.id AND lower(ce.mode) = 'correction' AND ce."check" >= 3)`;
+  const exteriorOpen =
+    statusMode === "correction"
+      ? `((${nExpExterior}) > 0 AND (${exteriorDone}) < (${nExpExterior})) OR (${exteriorErrored}) > 0`
+      : openSql;
   return {
     all: "",
     // Default: irgendetwas offen ODER Innen noch nicht kontrolliert.
     open: `(${openSql}) OR ${interiorOpen}`,
-    // „Nur außen offen": außen offen, Innen aber fertig kontrolliert.
-    open_ext_only: `(${openSql}) AND ${interiorDone}`,
+    // „Nur außen offen": eine AUßEN-Ansicht ist offen/fehlerhaft – Innen egal.
+    open_ext_only: `(${exteriorOpen})`,
     // „Innen offen": Innen noch nicht kontrolliert.
     open_int: interiorOpen,
     // „Komplett done": außen fertig UND Innen kontrolliert.
