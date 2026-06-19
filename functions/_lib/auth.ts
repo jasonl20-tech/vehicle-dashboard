@@ -124,6 +124,11 @@ export interface AuthEnv {
    */
   vehicledatabase?: D1Database;
   /**
+   * D1: NEUE Fahrzeug-Datenbank (`fahrzeugliste`) — eine Zeile je Bild-Variante.
+   * Binding-Name im Pages-Dashboard: `cardb` → `env.cardb`.
+   */
+  cardb?: D1Database;
+  /**
    * D1: Konfiguration (`settings`-Tabelle, u. a. `controll_buttons`). Binding `configs` → `env.configs`.
    */
   configs?: D1Database;

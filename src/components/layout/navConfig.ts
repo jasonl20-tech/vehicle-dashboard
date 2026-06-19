@@ -100,6 +100,7 @@ export const NAV_PRIMARY: NavItem[] = [
     label: "Datenbanken",
     icon: Database,
     children: [
+      { label: "Car Database", to: "/dashboard/databases/car-database" },
       { label: "Auto erstellen", to: "/dashboard/databases/create" },
       { label: "Produktions Datenbank", to: "/dashboard/databases/production" },
       { label: "Produktions Images", to: "/dashboard/databases/production-images" },

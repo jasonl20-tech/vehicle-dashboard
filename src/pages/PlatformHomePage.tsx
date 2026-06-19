@@ -1,6 +1,7 @@
 import {
   ArrowRight,
   Briefcase,
+  Car,
   Code2,
   FileText,
   Gauge,
@@ -77,6 +78,11 @@ const TILES: PlatformTile[] = [
     title: "Control Platform",
     icon: Gauge,
     to: "/control-platform",
+  },
+  {
+    title: "Car Database",
+    icon: Car,
+    to: "/dashboard/databases/car-database",
   },
   {
     title: "Job Manager",
