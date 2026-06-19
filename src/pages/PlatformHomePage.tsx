@@ -82,7 +82,7 @@ const TILES: PlatformTile[] = [
   {
     title: "Car Database",
     icon: Car,
-    to: "/dashboard/databases/car-database",
+    to: "/car-database",
   },
   {
     title: "Job Manager",

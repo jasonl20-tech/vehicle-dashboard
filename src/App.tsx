@@ -3,6 +3,7 @@ import MfaForcedSetupGate from "./components/auth/MfaForcedSetupGate";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import AccountLayout from "./components/layout/AccountLayout";
 import CmsLayout from "./components/layout/CmsLayout";
+import CarDatabaseLayout from "./components/layout/CarDatabaseLayout";
 import ControlPlatformLayout from "./components/layout/ControlPlatformLayout";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AccountPage from "./pages/AccountPage";
@@ -107,6 +108,10 @@ export default function App() {
               path="/control-platform"
               element={<ControlPlatformPage />}
             />
+          </Route>
+
+          <Route element={<CarDatabaseLayout />}>
+            <Route path="/car-database" element={<CarDatabasePage />} />
           </Route>
 
           <Route
@@ -245,10 +250,6 @@ export default function App() {
             <Route
               path="databases/production/:id"
               element={<ProductionVehicleDetailPage />}
-            />
-            <Route
-              path="databases/car-database"
-              element={<CarDatabasePage />}
             />
             <Route
               path="databases/production"
