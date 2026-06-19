@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, ImageIcon, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, ImageIcon, Ruler, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PageHeader from "../components/ui/PageHeader";
@@ -6,6 +6,7 @@ import { useApi } from "../lib/customerApi";
 import {
   deleteVehicleImagery,
   putVehicleImageryActive,
+  rescaleVehicleImagery,
   type VehicleImageryOneResponse,
   vehicleImageryOneUrl,
 } from "../lib/vehicleImageryPublicApi";
@@ -39,6 +40,13 @@ export default function ProductionVehicleDetailPage() {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [hoehe, setHoehe] = useState("1550");
+  const [rescaling, setRescaling] = useState(false);
+  const [rescaleMsg, setRescaleMsg] = useState<{
+    kind: "ok" | "err";
+    text: string;
+  } | null>(null);
 
   const row = api.data?.row;
   const cdnBase = (api.data?.cdnBase || "https://bildurl.vehicleimagery.com").replace(
@@ -93,6 +101,39 @@ export default function ProductionVehicleDetailPage() {
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
       setDeleting(false);
+    }
+  };
+
+  const handleRescale = async () => {
+    if (rescaling || !row) return;
+    const h = Math.round(Number(hoehe.trim()));
+    if (!Number.isFinite(h) || h < 1000 || h > 3000) {
+      setRescaleMsg({
+        kind: "err",
+        text: "Bitte eine Höhe zwischen 1000 und 3000 (mm) eingeben.",
+      });
+      return;
+    }
+    setRescaleMsg(null);
+    setRescaling(true);
+    try {
+      const r = await rescaleVehicleImagery(id, h);
+      const skipNote =
+        r.skipped.length > 0 ? ` (${r.skipped.length} ohne Quellbild übersprungen)` : "";
+      setRescaleMsg({
+        kind: "ok",
+        text:
+          `${r.scheduled.length} Ansicht(en) werden mit Höhe ${r.hohe} neu skaliert${skipNote}. ` +
+          `Sie erscheinen gleich in Kontrolle → Skalierung und müssen dort erst freigegeben werden, ` +
+          `bevor sie die Produktionsbilder überschreiben.`,
+      });
+    } catch (e) {
+      setRescaleMsg({
+        kind: "err",
+        text: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setRescaling(false);
     }
   };
 
@@ -188,7 +229,7 @@ export default function ProductionVehicleDetailPage() {
             </div>
           </div>
 
-          <div className="mb-6 -mt-2 flex justify-end">
+          <div className="mb-6 -mt-2 flex flex-col items-end gap-2">
             <button
               type="button"
               disabled={deleting || busy}
@@ -199,7 +240,72 @@ export default function ProductionVehicleDetailPage() {
               <Trash2 className="h-3.5 w-3.5" />
               {deleting ? "Wird gelöscht…" : "Auto löschen"}
             </button>
+            <button
+              type="button"
+              disabled={deleting || busy}
+              onClick={() => setEditing((v) => !v)}
+              aria-expanded={editing}
+              title="Bilder neu skalieren mit eigener Höhe"
+              className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-paper px-3 py-1.5 text-[12.5px] font-medium text-ink-700 transition hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Ruler className="h-3.5 w-3.5" />
+              Bilder bearbeiten
+            </button>
           </div>
+
+          {editing && (
+            <div className="mb-6 rounded-lg border border-hair bg-paper p-4">
+              <h3 className="text-[13px] font-medium text-ink-800">
+                Neu skalieren + Höhe
+              </h3>
+              <p className="mt-1 max-w-prose text-[12px] leading-relaxed text-ink-500">
+                Skaliert die Außen-Ansichten mit einer eigenen Höhe neu (falls
+                das Auto im Verhältnis zu groß/klein ist). Faustregel:{" "}
+                <span className="font-medium text-ink-700">
+                  kleinere Zahl = kleiner im Bild, größere Zahl = größer
+                </span>{" "}
+                (Standard 1550, Fahrzeughöhe in mm). Die neuen Bilder landen
+                in <span className="font-medium text-ink-700">Kontrolle → Skalierung</span>{" "}
+                und überschreiben die Produktion erst nach deiner Freigabe.
+              </p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1 text-[11px] text-ink-500">
+                  Höhe (mm)
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1000}
+                    max={3000}
+                    step={10}
+                    value={hoehe}
+                    onChange={(e) => setHoehe(e.target.value)}
+                    disabled={rescaling}
+                    className="w-32 rounded-md border border-hair bg-paper px-2 py-1.5 text-[13px] text-ink-900 focus:border-ink-600 focus:outline-none disabled:opacity-50"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={rescaling}
+                  onClick={handleRescale}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-brand-500/40 bg-brand-500/10 px-3 py-1.5 text-[12.5px] font-medium text-brand-700 transition hover:bg-brand-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Ruler className="h-3.5 w-3.5" />
+                  {rescaling ? "Wird skaliert…" : "Neu skalieren"}
+                </button>
+              </div>
+              {rescaleMsg && (
+                <p
+                  className={`mt-3 rounded border px-3 py-2 text-[12px] ${
+                    rescaleMsg.kind === "ok"
+                      ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700"
+                      : "border-accent-rose/30 bg-accent-rose/5 text-accent-rose"
+                  }`}
+                >
+                  {rescaleMsg.text}
+                </p>
+              )}
+            </div>
+          )}
 
           <h2 className="mb-3 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-400">
             Bilder

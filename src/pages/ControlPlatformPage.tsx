@@ -1064,6 +1064,86 @@ function readFilterFromStorage(): ControllListStatusFilter {
   return fallback;
 }
 
+/**
+ * Vorher/Nachher-Vergleich für über „Neu skalieren + Höhe" erzeugte Ansichten.
+ * Zeigt den `#vorher`-Schnappschuss (bisher) neben dem `#skaliert` (neu). Rein
+ * additiv — keine Interaktion mit der Freigabe-Mechanik. Rendert nichts, wenn es
+ * keine `#vorher`-Schnappschüsse gibt.
+ */
+function ScalingBeforeAfter({
+  row,
+  cdnBase,
+  imageUrlQuery,
+}: {
+  row: NonNullable<VehicleImageryOneResponse["row"]>;
+  cdnBase: string;
+  imageUrlQuery: string;
+}) {
+  const tokens = parseViewTokens(row.views);
+  const byLower = new Map<string, string>();
+  for (const t of tokens) byLower.set(t.toLowerCase(), t);
+  const pairs: { slug: string; before: string; after: string }[] = [];
+  for (const t of tokens) {
+    if (!t.toLowerCase().endsWith("#vorher")) continue;
+    const slug = t.split("#")[0];
+    const after = byLower.get(`${slug.toLowerCase()}#skaliert`);
+    if (after) pairs.push({ slug, before: t, after });
+  }
+  if (pairs.length === 0) return null;
+
+  const bust = encodeURIComponent(String(row.last_updated ?? ""));
+  const href = (token: string) => {
+    const u = buildVehicleImageUrl(cdnBase, row, token, imageUrlQuery);
+    return bust ? `${u}${u.includes("?") ? "&" : "?"}v=${bust}` : u;
+  };
+
+  return (
+    <div className="mb-3 rounded-lg border border-hair bg-paper p-3">
+      <h4 className="mb-1 text-[11px] font-medium uppercase tracking-[0.12em] text-ink-400">
+        Vorher / Nachher — Neu-Skalierung
+      </h4>
+      <p className="mb-2 text-[11px] leading-snug text-ink-500">
+        Links das bisherige, rechts das neu skalierte Bild. Das „Nachher"
+        aktualisiert sich, sobald die Neu-Skalierung durchgelaufen ist (ggf. kurz
+        warten und neu laden).
+      </p>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {pairs.map((p) => (
+          <li key={p.slug} className="rounded border border-hair p-2">
+            <div className="mb-1 font-mono text-[10.5px] text-ink-500">
+              {p.slug}
+            </div>
+            <div className="grid grid-cols-2 gap-1">
+              <figure className="m-0">
+                <img
+                  src={href(p.before)}
+                  alt={`${p.slug} vorher`}
+                  loading="lazy"
+                  className="h-28 w-full rounded bg-ink-50/40 object-contain"
+                />
+                <figcaption className="mt-0.5 text-center text-[10px] text-ink-500">
+                  Vorher
+                </figcaption>
+              </figure>
+              <figure className="m-0">
+                <img
+                  src={href(p.after)}
+                  alt={`${p.slug} nachher`}
+                  loading="lazy"
+                  className="h-28 w-full rounded bg-ink-50/40 object-contain"
+                />
+                <figcaption className="mt-0.5 text-center text-[10px] text-ink-500">
+                  Nachher
+                </figcaption>
+              </figure>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function ControlPlatformPage() {
   const {
     viewsMode,
@@ -2784,6 +2864,14 @@ ${counts.total} / ${sidebarCountTotal} im aktuellen Modus (erwartete Bilder laut
                     ×
                   </button>
                 </div>
+              : null}
+
+              {viewsMode === "skalierung" ?
+                <ScalingBeforeAfter
+                  row={row}
+                  cdnBase={cdnBase}
+                  imageUrlQuery={imageUrlQuery}
+                />
               : null}
 
               {filteredViewTokens.length === 0 ?

@@ -281,6 +281,46 @@ export async function deleteVehicleImagery(
   return j as VehicleImageryDeleteResponse;
 }
 
+export const VEHICLE_IMAGERY_RESCALE_API =
+  "/api/databases/vehicle-imagery-rescale";
+
+export type VehicleImageryRescaleResponse = {
+  ok: true;
+  controllingId: number;
+  hohe: number;
+  /** Erfolgreich neu angestoßene Außen-Ansichten. */
+  scheduled: string[];
+  /** Übersprungene Ansichten (kein Quellbild gefunden). */
+  skipped: string[];
+  /** Anzahl Quellbilder, die aus Public nach Controlling kopiert wurden. */
+  copied: number;
+  hint?: string;
+};
+
+/**
+ * Skaliert die Außen-Ansichten eines Produktions-Autos mit einer eigenen Höhe
+ * neu. Die Ergebnisse landen in Kontrolle → Skalierung und müssen dort erst
+ * freigegeben werden, bevor sie die Produktionsbilder überschreiben.
+ */
+export async function rescaleVehicleImagery(
+  id: number,
+  hohe: number,
+): Promise<VehicleImageryRescaleResponse> {
+  const res = await fetch(VEHICLE_IMAGERY_RESCALE_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ id, hohe }),
+  });
+  const j = (await res.json().catch(() => ({}))) as
+    | VehicleImageryRescaleResponse
+    | { error?: string };
+  if (!res.ok) {
+    throw new Error((j as { error?: string }).error || `HTTP ${res.status}`);
+  }
+  return j as VehicleImageryRescaleResponse;
+}
+
 export type VehicleImageryFacets = {
   markes: string[];
   modellsByMarke: Record<string, string[]>;
