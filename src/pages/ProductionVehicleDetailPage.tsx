@@ -318,12 +318,23 @@ export default function ProductionVehicleDetailPage() {
           ) : (
             <ul className="grid gap-4 sm:grid-cols-2">
               {views.map((v) => {
-                const href = buildVehicleImageUrl(
+                const baseHref = buildVehicleImageUrl(
                   cdnBase,
                   row,
                   v,
                   imageUrlQuery,
                 );
+                // Cache-Buster anhand `last_updated`: nach einem Überschreiben
+                // (Neu-Skalieren → Freigabe) ändert sich `last_updated` → neue
+                // URL → der Browser lädt beim normalen Reload das frische Bild
+                // statt der 1-Jahr-Cache-Version. Nur das Dashboard, Kunden-/API-
+                // URLs bleiben unverändert.
+                const bust = row.last_updated
+                  ? encodeURIComponent(String(row.last_updated))
+                  : "";
+                const href = bust
+                  ? `${baseHref}${baseHref.includes("?") ? "&" : "?"}v=${bust}`
+                  : baseHref;
                 return (
                   <li
                     key={v}
