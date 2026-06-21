@@ -103,50 +103,52 @@ const EMPTY_OVERVIEW = {
 };
 
 async function handleOverview(db: D1Database): Promise<Response> {
-  const kpiRow = await db
-    .prepare(
-      `SELECT
-         COUNT(*) AS images,
-         COUNT(DISTINCT marke||'|'||modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS vehicles,
-         ifnull(SUM(aktiv), 0) AS aktiv,
-         ifnull(SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END), 0) AS offen,
-         ifnull(SUM(kontrolliert), 0) AS kontrolliert,
-         ifnull(SUM(ausgeschnitten), 0) AS ausgeschnitten,
-         ifnull(SUM(skaliert), 0) AS skaliert,
-         ifnull(SUM(fehler), 0) AS fehler,
-         ifnull(SUM(hold), 0) AS hold,
-         ifnull(SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END), 0) AS nicht_gerendert
-       FROM fahrzeugliste`,
-    )
-    .first<Record<string, number>>();
+  // Drei Voll-Scans (KPIs, offene Ansichten, Top-Marken) PARALLEL statt seriell —
+  // auf der großen Tabelle (>500k Zeilen) spart das ~⅔ der Wartezeit.
+  const [kpiRow, openByView, topBrands] = await Promise.all([
+    db
+      .prepare(
+        `SELECT
+           COUNT(*) AS images,
+           COUNT(DISTINCT marke||'|'||modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS vehicles,
+           ifnull(SUM(aktiv), 0) AS aktiv,
+           ifnull(SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END), 0) AS offen,
+           ifnull(SUM(kontrolliert), 0) AS kontrolliert,
+           ifnull(SUM(ausgeschnitten), 0) AS ausgeschnitten,
+           ifnull(SUM(skaliert), 0) AS skaliert,
+           ifnull(SUM(fehler), 0) AS fehler,
+           ifnull(SUM(hold), 0) AS hold,
+           ifnull(SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END), 0) AS nicht_gerendert
+         FROM fahrzeugliste`,
+      )
+      .first<Record<string, number>>(),
+    db
+      .prepare(
+        `SELECT "view" AS view,
+           ifnull(SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END), 0) AS offen,
+           COUNT(*) AS gesamt
+         FROM fahrzeugliste
+         GROUP BY "view"
+         ORDER BY offen DESC, gesamt DESC, view
+         LIMIT 30`,
+      )
+      .all(),
+    db
+      .prepare(
+        `SELECT marke,
+           COUNT(*) AS images,
+           COUNT(DISTINCT modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS vehicles,
+           ifnull(SUM(aktiv), 0) AS aktiv
+         FROM fahrzeugliste
+         GROUP BY marke
+         ORDER BY images DESC, marke
+         LIMIT 10`,
+      )
+      .all(),
+  ]);
 
   const k = kpiRow ?? {};
   const num = (v: unknown) => Number(v ?? 0);
-
-  const openByView = await db
-    .prepare(
-      `SELECT "view" AS view,
-         ifnull(SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END), 0) AS offen,
-         COUNT(*) AS gesamt
-       FROM fahrzeugliste
-       GROUP BY "view"
-       ORDER BY offen DESC, gesamt DESC, view
-       LIMIT 30`,
-    )
-    .all();
-
-  const topBrands = await db
-    .prepare(
-      `SELECT marke,
-         COUNT(*) AS images,
-         COUNT(DISTINCT modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS vehicles,
-         ifnull(SUM(aktiv), 0) AS aktiv
-       FROM fahrzeugliste
-       GROUP BY marke
-       ORDER BY images DESC, marke
-       LIMIT 10`,
-    )
-    .all();
 
   return jsonResponse({
     empty: num(k.images) === 0,
@@ -236,12 +238,6 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
     SELECT 1 FROM fahrzeugliste${whereSql}
     GROUP BY marke, modell, jahr, body, trim, farbe${havingSql}
   )`;
-  const countRow = await db
-    .prepare(countSql)
-    .bind(...binds, ...havingBinds)
-    .first<{ n: number }>();
-  const total = Number(countRow?.n ?? 0);
-
   const listSql = `SELECT
       marke, modell, jahr, body, trim, farbe,
       COUNT(*) AS images,
@@ -258,10 +254,16 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
     GROUP BY marke, modell, jahr, body, trim, farbe${havingSql}
     ORDER BY views_offen DESC, fehler DESC, marke, modell, jahr
     LIMIT ? OFFSET ?`;
-  const listRes = await db
-    .prepare(listSql)
-    .bind(...binds, ...havingBinds, limit, offset)
-    .all();
+
+  // Zählung (für Pagination) + Liste PARALLEL.
+  const [countRow, listRes] = await Promise.all([
+    db.prepare(countSql).bind(...binds, ...havingBinds).first<{ n: number }>(),
+    db
+      .prepare(listSql)
+      .bind(...binds, ...havingBinds, limit, offset)
+      .all(),
+  ]);
+  const total = Number(countRow?.n ?? 0);
 
   const rows = (listRes.results ?? []).map((r) => {
     const o = r as Record<string, unknown>;

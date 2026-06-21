@@ -5,25 +5,30 @@
 export const CAR_DATABASE_API = "/api/databases/car-database";
 
 /**
- * CDN-Basis für die Bilder des NEUEN Systems. Noch nicht final (Migration
- * steht aus) — hier zentral anpassbar. Sobald der finale Bild-Host feststeht,
- * nur diese Konstante ändern.
+ * Öffentlicher Bild-Host für die `r2_key`s des NEUEN Systems (z. B. `source/01K…`).
+ *
+ * NOCH NICHT GESETZT: Die neuen Bilder liegen hinter einer gated Auslieferung
+ * (`images.vehicleimagery.com` antwortet öffentlich mit 403); es gibt aktuell
+ * keine öffentliche URL, über die man ein `source/<id>` direkt laden kann.
+ * Sobald der korrekte Host/Zugang feststeht (von Jason), hier eintragen — dann
+ * erscheinen die Thumbnails automatisch. Bis dahin: sauberer Platzhalter.
  */
-export const CAR_DB_IMAGE_CDN = "https://bildurl.vehicleimagery.com";
+export const CAR_DB_IMAGE_CDN: string = "";
 
 /**
- * Stark verkleinertes Thumbnail aus dem `r2_key` (schnelles Laden). Nutzt
- * Cloudflare Image Resizing; greift nur, wenn auf der Zone aktiv — sonst
- * fällt das <img> per onError auf einen Platzhalter zurück.
+ * Stark verkleinertes Thumbnail aus dem `r2_key` (schnelles Laden, via
+ * Cloudflare Image Resizing). Liefert `null`, solange kein Bild-Host gesetzt
+ * ist → die UI zeigt dann einen Platzhalter statt fehlschlagender Anfragen.
  */
 export function carThumbUrl(
   r2Key: string | null | undefined,
   width = 96,
 ): string | null {
-  if (!r2Key) return null;
+  if (!r2Key || !CAR_DB_IMAGE_CDN) return null;
+  const base = CAR_DB_IMAGE_CDN.replace(/\/$/, "");
   const key = String(r2Key).replace(/^\/+/, "");
-  const src = `${CAR_DB_IMAGE_CDN}/${key}`;
-  return `${CAR_DB_IMAGE_CDN}/cdn-cgi/image/width=${width},quality=55,format=auto,fit=contain/${encodeURI(src)}`;
+  const src = `${base}/${key}`;
+  return `${base}/cdn-cgi/image/width=${width},quality=55,format=auto,fit=contain/${encodeURI(src)}`;
 }
 
 export type CarDatabaseOverview = {
