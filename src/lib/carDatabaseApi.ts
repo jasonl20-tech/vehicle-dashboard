@@ -45,13 +45,16 @@ export type CarDatabaseOverview = {
   empty: boolean;
   reason?: string;
   kpis: {
-    vehicles: number;
+    cars: number;
+    variants: number;
     images: number;
     aktiv: number;
     offen: number;
     fehler: number;
     hold: number;
     nicht_gerendert: number;
+    aussen_komplett: number;
+    aussen_unvollstaendig: number;
   };
   stages: {
     gesamt: number;
@@ -60,7 +63,8 @@ export type CarDatabaseOverview = {
     skaliert: number;
     aktiv: number;
   };
-  openByView: { view: string; offen: number; gesamt: number }[];
+  exteriorCars: number;
+  missingByView: { view: string; fehlt: number; have: number }[];
   topBrands: {
     marke: string;
     images: number;
@@ -76,9 +80,11 @@ export type CarRow = {
   body: string;
   trim: string;
   farbe: string;
+  farben: number;
   images: number;
   aktiv: number;
   viewsTotal: number;
+  aussen: number;
   viewsOffen: number;
   offeneViews: string[];
   fehler: number;
@@ -164,6 +170,7 @@ export function carDatabaseDetailUrl(params: CarDetailParams): string {
 
 export const CAR_STATUS_FILTERS = [
   "all",
+  "incomplete_ext",
   "open",
   "done",
   "error",
@@ -174,6 +181,7 @@ export type CarStatusFilter = (typeof CAR_STATUS_FILTERS)[number];
 
 export const CAR_STATUS_LABELS: Record<CarStatusFilter, string> = {
   all: "Alle",
+  incomplete_ext: "Außen unvollständig (<8)",
   open: "Offen",
   done: "Fertig",
   error: "Fehler",

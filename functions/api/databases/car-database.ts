@@ -27,6 +27,7 @@ const STATUS_KEYS = [
   "error",
   "hold",
   "not_rendered",
+  "incomplete_ext",
 ] as const;
 type StatusKey = (typeof STATUS_KEYS)[number];
 
@@ -39,6 +40,22 @@ function likePattern(raw: string): string | null {
 
 /** `aktiv`-Ausdruck (generierte Spalte existiert, aber wir bleiben robust). */
 const NOT_RENDERED = "(r2_key IS NULL OR r2_key = '')";
+
+/** Die 8 Außen-Ansichten (Basis der Vollständigkeits-Prüfung). */
+const EXTERIOR_VIEWS_SQL = `lower("view") IN ('front','rear','left','right','front_left','front_right','rear_left','rear_right')`;
+/** Anzahl vorhandener Außen-Ansichten je Gruppe (0–8). */
+const AUSSEN_COUNT_SQL = `COUNT(DISTINCT CASE WHEN ${EXTERIOR_VIEWS_SQL} THEN lower("view") END)`;
+/** Anzeige-Reihenfolge der Außen-Ansichten (im Uhrzeigersinn). */
+const EXTERIOR_ORDER = [
+  "front",
+  "front_right",
+  "right",
+  "rear_right",
+  "rear",
+  "rear_left",
+  "left",
+  "front_left",
+];
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -88,13 +105,16 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
 
 const EMPTY_OVERVIEW = {
   kpis: {
-    vehicles: 0,
+    cars: 0,
+    variants: 0,
     images: 0,
     aktiv: 0,
     offen: 0,
     fehler: 0,
     hold: 0,
     nicht_gerendert: 0,
+    aussen_komplett: 0,
+    aussen_unvollstaendig: 0,
   },
   stages: {
     gesamt: 0,
@@ -103,19 +123,20 @@ const EMPTY_OVERVIEW = {
     skaliert: 0,
     aktiv: 0,
   },
-  openByView: [] as unknown[],
+  exteriorCars: 0,
+  missingByView: [] as unknown[],
   topBrands: [] as unknown[],
 };
 
 async function handleOverview(db: D1Database): Promise<Response> {
-  // Drei Voll-Scans (KPIs, offene Ansichten, Top-Marken) PARALLEL statt seriell —
-  // auf der großen Tabelle (>500k Zeilen) spart das ~⅔ der Wartezeit.
-  const [kpiRow, openByView, topBrands] = await Promise.all([
+  // Voll-Scans PARALLEL (KPIs, Vollständigkeit pro Auto, vorhandene Außen-
+  // Ansichten, Top-Marken) — auf der großen Tabelle spart das viel Wartezeit.
+  const [kpiRow, carRow, haveByView, topBrands] = await Promise.all([
     db
       .prepare(
         `SELECT
            COUNT(*) AS images,
-           COUNT(DISTINCT marke||'|'||modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS vehicles,
+           COUNT(DISTINCT marke||'|'||modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS variants,
            ifnull(SUM(aktiv), 0) AS aktiv,
            ifnull(SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END), 0) AS offen,
            ifnull(SUM(kontrolliert), 0) AS kontrolliert,
@@ -127,22 +148,35 @@ async function handleOverview(db: D1Database): Promise<Response> {
          FROM fahrzeugliste`,
       )
       .first<Record<string, number>>(),
+    // Pro AUTO (ohne Farbe): Außen-Ansichten → komplett (8) vs. unvollständig (1–7).
     db
       .prepare(
-        `SELECT "view" AS view,
-           ifnull(SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END), 0) AS offen,
-           COUNT(*) AS gesamt
+        `SELECT
+           COUNT(*) AS cars,
+           ifnull(SUM(CASE WHEN aussen >= 8 THEN 1 ELSE 0 END), 0) AS aussen_komplett,
+           ifnull(SUM(CASE WHEN aussen < 8 THEN 1 ELSE 0 END), 0) AS aussen_unvollstaendig
+         FROM (
+           SELECT ${AUSSEN_COUNT_SQL} AS aussen
+           FROM fahrzeugliste
+           GROUP BY marke, modell, jahr, body, trim
+         )`,
+      )
+      .first<Record<string, number>>(),
+    // Wie viele AUTOS haben jede einzelne Außen-Ansicht (für „fehlt"-Grafik).
+    db
+      .prepare(
+        `SELECT lower("view") AS view,
+           COUNT(DISTINCT marke||'|'||modell||'|'||jahr||'|'||body||'|'||trim) AS have
          FROM fahrzeugliste
-         GROUP BY "view"
-         ORDER BY offen DESC, gesamt DESC, view
-         LIMIT 30`,
+         WHERE ${EXTERIOR_VIEWS_SQL}
+         GROUP BY lower("view")`,
       )
       .all(),
     db
       .prepare(
         `SELECT marke,
            COUNT(*) AS images,
-           COUNT(DISTINCT modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS vehicles,
+           COUNT(DISTINCT modell||'|'||jahr||'|'||body||'|'||trim) AS vehicles,
            ifnull(SUM(aktiv), 0) AS aktiv
          FROM fahrzeugliste
          GROUP BY marke
@@ -153,18 +187,32 @@ async function handleOverview(db: D1Database): Promise<Response> {
   ]);
 
   const k = kpiRow ?? {};
+  const c = carRow ?? {};
   const num = (v: unknown) => Number(v ?? 0);
+  const exteriorCars = num(c.cars);
+  const haveMap = new Map<string, number>();
+  for (const r of haveByView.results ?? []) {
+    const o = r as Record<string, unknown>;
+    haveMap.set(String(o.view ?? "").toLowerCase(), Number(o.have ?? 0));
+  }
+  const missingByView = EXTERIOR_ORDER.map((v) => {
+    const have = haveMap.get(v) ?? 0;
+    return { view: v, have, fehlt: Math.max(0, exteriorCars - have) };
+  });
 
   return jsonResponse({
     empty: num(k.images) === 0,
     kpis: {
-      vehicles: num(k.vehicles),
+      cars: num(c.cars),
+      variants: num(k.variants),
       images: num(k.images),
       aktiv: num(k.aktiv),
       offen: num(k.offen),
       fehler: num(k.fehler),
       hold: num(k.hold),
       nicht_gerendert: num(k.nicht_gerendert),
+      aussen_komplett: num(c.aussen_komplett),
+      aussen_unvollstaendig: num(c.aussen_unvollstaendig),
     },
     stages: {
       gesamt: num(k.images),
@@ -173,11 +221,8 @@ async function handleOverview(db: D1Database): Promise<Response> {
       skaliert: num(k.skaliert),
       aktiv: num(k.aktiv),
     },
-    openByView: (openByView.results ?? []).map((r) => ({
-      view: String((r as Record<string, unknown>).view ?? ""),
-      offen: Number((r as Record<string, unknown>).offen ?? 0),
-      gesamt: Number((r as Record<string, unknown>).gesamt ?? 0),
-    })),
+    exteriorCars,
+    missingByView,
     topBrands: (topBrands.results ?? []).map((r) => ({
       marke: String((r as Record<string, unknown>).marke ?? ""),
       images: Number((r as Record<string, unknown>).images ?? 0),
@@ -221,13 +266,12 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
   else if (status === "hold") having.push("SUM(hold) > 0");
   else if (status === "not_rendered")
     having.push(`SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END) > 0`);
+  else if (status === "incomplete_ext") having.push(`${AUSSEN_COUNT_SQL} < 8`);
 
-  // View-Filter → nur Autos, bei denen diese Ansicht offen ist.
+  // View-Filter → nur Autos, denen diese Ansicht ganz FEHLT.
   const view = (p.get("view") || "").trim().toLowerCase();
   if (view) {
-    having.push(
-      "SUM(CASE WHEN lower(\"view\") = ? AND aktiv = 0 THEN 1 ELSE 0 END) > 0",
-    );
+    having.push('COUNT(DISTINCT CASE WHEN lower("view") = ? THEN 1 END) = 0');
   }
 
   const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
@@ -241,13 +285,19 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
   // Gesamtzahl der Gruppen (für Pagination).
   const countSql = `SELECT COUNT(*) AS n FROM (
     SELECT 1 FROM fahrzeugliste${whereSql}
-    GROUP BY marke, modell, jahr, body, trim, farbe${havingSql}
+    GROUP BY marke, modell, jahr, body, trim${havingSql}
   )`;
+  // EINE Zeile pro Auto (ohne Farbe). farbe = repräsentative Farbe fürs Thumbnail
+  // (bevorzugt „default"); farben = Anzahl Farb-Varianten; aussen = vorhandene
+  // Außen-Ansichten (0–8).
   const listSql = `SELECT
-      marke, modell, jahr, body, trim, farbe,
+      marke, modell, jahr, body, trim,
+      COALESCE(MAX(CASE WHEN lower(farbe) = 'default' THEN farbe END), MIN(farbe)) AS farbe,
+      COUNT(DISTINCT farbe) AS farben,
       COUNT(*) AS images,
       ifnull(SUM(aktiv), 0) AS aktiv,
       COUNT(DISTINCT "view") AS views_total,
+      ${AUSSEN_COUNT_SQL} AS aussen,
       COUNT(DISTINCT CASE WHEN aktiv = 0 THEN "view" END) AS views_offen,
       GROUP_CONCAT(DISTINCT CASE WHEN aktiv = 0 THEN "view" END) AS offene_views,
       ifnull(SUM(fehler), 0) AS fehler,
@@ -255,8 +305,8 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
       ifnull(SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END), 0) AS nicht_gerendert,
       MAX(last_updated) AS last_updated
     FROM fahrzeugliste${whereSql}
-    GROUP BY marke, modell, jahr, body, trim, farbe${havingSql}
-    ORDER BY views_offen DESC, fehler DESC, marke, modell, jahr
+    GROUP BY marke, modell, jahr, body, trim${havingSql}
+    ORDER BY marke, modell, jahr
     LIMIT ? OFFSET ?`;
 
   // Zählung (für Pagination) + Liste PARALLEL.
@@ -278,9 +328,11 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
       body: String(o.body ?? ""),
       trim: String(o.trim ?? ""),
       farbe: String(o.farbe ?? ""),
+      farben: Number(o.farben ?? 0),
       images: Number(o.images ?? 0),
       aktiv: Number(o.aktiv ?? 0),
       viewsTotal: Number(o.views_total ?? 0),
+      aussen: Number(o.aussen ?? 0),
       viewsOffen: Number(o.views_offen ?? 0),
       offeneViews: String(o.offene_views ?? "")
         .split(",")

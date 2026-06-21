@@ -138,7 +138,7 @@ export default function CarDatabasePage() {
       <PageHeader
         eyebrow="Datenbanken"
         title="Car Database"
-        description="Überblick über den Fahrzeug-Bestand der neuen Datenbank — Kennzahlen, offene Ansichten und gefilterte Suche pro Auto."
+        description="Überblick über den Fahrzeug-Bestand der neuen Datenbank — Kennzahlen, Vollständigkeit der Außen-Ansichten und Suche pro Auto (eine Zeile je Fahrzeug)."
       />
 
       <div className="mb-4 flex items-center justify-between">
@@ -169,17 +169,24 @@ export default function CarDatabasePage() {
 
       {/* KPI-Karten */}
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Kpi label="Fahrzeuge" value={ov?.kpis.vehicles} />
+        <Kpi label="Fahrzeuge" value={ov?.kpis.cars} />
+        <Kpi label="Farb-Varianten" value={ov?.kpis.variants} />
         <Kpi label="Bilder gesamt" value={ov?.kpis.images} />
         <Kpi
-          label="Fertig"
-          value={ov?.kpis.aktiv}
-          sub={ov ? `${pct(ov.kpis.aktiv, ov.kpis.images)}%` : undefined}
+          label="Außen 8/8"
+          value={ov?.kpis.aussen_komplett}
+          sub={ov ? `${pct(ov.kpis.aussen_komplett, ov.kpis.cars)}%` : undefined}
           tone="done"
         />
-        <Kpi label="Offen" value={ov?.kpis.offen} tone="open" />
+        <Kpi
+          label="Außen unvollständig"
+          value={ov?.kpis.aussen_unvollstaendig}
+          sub={
+            ov ? `${pct(ov.kpis.aussen_unvollstaendig, ov.kpis.cars)}%` : undefined
+          }
+          tone="hold"
+        />
         <Kpi label="Fehler" value={ov?.kpis.fehler} tone="error" />
-        <Kpi label="On Hold" value={ov?.kpis.hold} tone="hold" />
       </div>
 
       {/* Grafiken */}
@@ -229,16 +236,16 @@ export default function CarDatabasePage() {
 
         <div className={CARD}>
           <h3 className="mb-1 text-[12px] font-medium uppercase tracking-[0.1em] text-ink-400">
-            Offene Ansichten nach View
+            Autos ohne diese Außen-Ansicht
           </h3>
           <p className="mb-2 text-[11px] text-ink-500">
-            Wie oft eine Ansicht noch nicht fertig ist
+            Wie vielen Autos die jeweilige Außen-Ansicht fehlt
           </p>
           <div className="h-44">
-            {ov && ov.openByView.some((d) => d.offen > 0) ? (
+            {ov && ov.missingByView.some((d) => d.fehlt > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={ov.openByView.filter((d) => d.offen > 0).slice(0, 12)}
+                  data={ov.missingByView}
                   margin={{ top: 4, right: 8, bottom: 4, left: -16 }}
                 >
                   <XAxis
@@ -258,10 +265,10 @@ export default function CarDatabasePage() {
                     allowDecimals={false}
                   />
                   <Tooltip
-                    formatter={(v: number) => [fmtNumber(v), "offen"]}
+                    formatter={(v: number) => [fmtNumber(v), "Autos ohne"]}
                     contentStyle={{ fontSize: 12, borderRadius: 8 }}
                   />
-                  <Bar dataKey="offen" fill={C.open} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="fehlt" fill={C.hold} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -329,7 +336,7 @@ export default function CarDatabasePage() {
         <input
           value={view}
           onChange={(e) => setView(e.target.value)}
-          placeholder="Ansicht offen (z. B. front_right)"
+          placeholder="Ansicht fehlt (z. B. front_right)"
           className={TEXT_IN}
         />
         <select
@@ -352,9 +359,9 @@ export default function CarDatabasePage() {
             <tr>
               <th className={TH}>Bild</th>
               <th className={TH}>Fahrzeug</th>
-              <th className={TH}>Farbe</th>
-              <th className={TH}>Ansichten</th>
-              <th className={TH}>Offen</th>
+              <th className={TH}>Farben</th>
+              <th className={TH}>Außen</th>
+              <th className={TH}>Bilder</th>
               <th className={TH}>Status</th>
               <th className={TH}>Aktualisiert</th>
             </tr>
@@ -385,41 +392,20 @@ export default function CarDatabasePage() {
                       {r.jahr} · {r.body} · {r.trim}
                     </div>
                   </td>
-                  <td className={`${TD} text-ink-600`}>{r.farbe}</td>
                   <td className={TD}>
                     <span className="font-medium text-ink-900">
-                      {fmtNumber(r.aktiv)}
+                      {fmtNumber(r.farben)}
                     </span>
                     <span className="text-ink-400">
                       {" "}
-                      / {fmtNumber(r.images)} fertig
+                      {r.farben === 1 ? "Farbe" : "Farben"}
                     </span>
-                    <div className="text-[11px] text-ink-400">
-                      {fmtNumber(r.viewsTotal)} Ansichten
-                    </div>
                   </td>
                   <td className={TD}>
-                    {r.viewsOffen > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {r.offeneViews.slice(0, 6).map((v) => (
-                          <span
-                            key={v}
-                            className="rounded bg-brand-500/10 px-1.5 py-0.5 font-mono text-[10px] text-brand-700"
-                          >
-                            {v}
-                          </span>
-                        ))}
-                        {r.offeneViews.length > 6 && (
-                          <span className="text-[10px] text-ink-400">
-                            +{r.offeneViews.length - 6}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-[11px] text-emerald-600">
-                        alle fertig
-                      </span>
-                    )}
+                    <AussenBadge n={r.aussen} />
+                  </td>
+                  <td className={`${TD} tabular-nums text-ink-700`}>
+                    {fmtNumber(r.images)}
                   </td>
                   <td className={TD}>
                     <div className="flex flex-wrap gap-1">
@@ -565,6 +551,29 @@ function Badge({
       className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium ${cls}`}
     >
       {children}
+    </span>
+  );
+}
+
+function AussenBadge({ n }: { n: number }) {
+  const complete = n >= 8;
+  const none = n <= 0;
+  const cls = complete
+    ? "bg-emerald-500/10 text-emerald-700"
+    : none
+      ? "bg-ink-100 text-ink-500"
+      : "bg-amber-500/10 text-amber-700";
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums ${cls}`}
+      title={
+        complete
+          ? "Alle 8 Außen-Ansichten vorhanden"
+          : `${n} von 8 Außen-Ansichten vorhanden`
+      }
+    >
+      {!complete && <AlertTriangle className="h-3 w-3" />}
+      {n}/8
     </span>
   );
 }
