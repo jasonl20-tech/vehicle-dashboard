@@ -22,12 +22,13 @@ import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
 const STATUS_KEYS = [
   "all",
-  "open",
-  "done",
+  "incomplete_ext",
+  "incomplete_int",
+  "no_transparent",
+  "no_shadow",
   "error",
   "hold",
   "not_rendered",
-  "incomplete_ext",
 ] as const;
 type StatusKey = (typeof STATUS_KEYS)[number];
 
@@ -56,6 +57,13 @@ const EXTERIOR_ORDER = [
   "left",
   "front_left",
 ];
+/** Innen-Ansichten (aktuell genau diese zwei). */
+const INTERIOR_VIEWS_SQL = `lower("view") IN ('dashboard','center_console')`;
+/** Anzahl vorhandener Innen-Ansichten je Gruppe (0–2). */
+const INNEN_COUNT_SQL = `COUNT(DISTINCT CASE WHEN ${INTERIOR_VIEWS_SQL} THEN lower("view") END)`;
+/** Hat die Gruppe mind. eine transparente / eine Schatten-Variante? */
+const HAS_TRP_SQL = `MAX(transparent)`;
+const HAS_SHADOW_SQL = `MAX(shadow)`;
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
   request,
@@ -108,13 +116,22 @@ const EMPTY_OVERVIEW = {
     cars: 0,
     variants: 0,
     images: 0,
+    marken: 0,
     aktiv: 0,
-    offen: 0,
     fehler: 0,
     hold: 0,
     nicht_gerendert: 0,
+  },
+  completeness: {
     aussen_komplett: 0,
     aussen_unvollstaendig: 0,
+    innen_komplett: 0,
+    innen_teilweise: 0,
+    innen_keine: 0,
+    mit_transparenz: 0,
+    ohne_transparenz: 0,
+    mit_schatten: 0,
+    ohne_schatten: 0,
   },
   stages: {
     gesamt: 0,
@@ -136,6 +153,7 @@ async function handleOverview(db: D1Database): Promise<Response> {
       .prepare(
         `SELECT
            COUNT(*) AS images,
+           COUNT(DISTINCT marke) AS marken,
            COUNT(DISTINCT marke||'|'||modell||'|'||jahr||'|'||body||'|'||trim||'|'||farbe) AS variants,
            ifnull(SUM(aktiv), 0) AS aktiv,
            ifnull(SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END), 0) AS offen,
@@ -148,15 +166,23 @@ async function handleOverview(db: D1Database): Promise<Response> {
          FROM fahrzeugliste`,
       )
       .first<Record<string, number>>(),
-    // Pro AUTO (ohne Farbe): Außen-Ansichten → komplett (8) vs. unvollständig (1–7).
+    // Pro AUTO (ohne Farbe): Vollständigkeit Außen/Innen + Transparenz/Schatten.
     db
       .prepare(
         `SELECT
            COUNT(*) AS cars,
            ifnull(SUM(CASE WHEN aussen >= 8 THEN 1 ELSE 0 END), 0) AS aussen_komplett,
-           ifnull(SUM(CASE WHEN aussen < 8 THEN 1 ELSE 0 END), 0) AS aussen_unvollstaendig
+           ifnull(SUM(CASE WHEN aussen < 8 THEN 1 ELSE 0 END), 0) AS aussen_unvollstaendig,
+           ifnull(SUM(CASE WHEN innen >= 2 THEN 1 ELSE 0 END), 0) AS innen_komplett,
+           ifnull(SUM(CASE WHEN innen = 1 THEN 1 ELSE 0 END), 0) AS innen_teilweise,
+           ifnull(SUM(CASE WHEN innen = 0 THEN 1 ELSE 0 END), 0) AS innen_keine,
+           ifnull(SUM(CASE WHEN has_trp = 0 THEN 1 ELSE 0 END), 0) AS ohne_transparenz,
+           ifnull(SUM(CASE WHEN has_shadow = 0 THEN 1 ELSE 0 END), 0) AS ohne_schatten
          FROM (
-           SELECT ${AUSSEN_COUNT_SQL} AS aussen
+           SELECT ${AUSSEN_COUNT_SQL} AS aussen,
+                  ${INNEN_COUNT_SQL} AS innen,
+                  ${HAS_TRP_SQL} AS has_trp,
+                  ${HAS_SHADOW_SQL} AS has_shadow
            FROM fahrzeugliste
            GROUP BY marke, modell, jahr, body, trim
          )`,
@@ -200,19 +226,29 @@ async function handleOverview(db: D1Database): Promise<Response> {
     return { view: v, have, fehlt: Math.max(0, exteriorCars - have) };
   });
 
+  const cars = num(c.cars);
   return jsonResponse({
     empty: num(k.images) === 0,
     kpis: {
-      cars: num(c.cars),
+      cars,
       variants: num(k.variants),
       images: num(k.images),
+      marken: num(k.marken),
       aktiv: num(k.aktiv),
-      offen: num(k.offen),
       fehler: num(k.fehler),
       hold: num(k.hold),
       nicht_gerendert: num(k.nicht_gerendert),
+    },
+    completeness: {
       aussen_komplett: num(c.aussen_komplett),
       aussen_unvollstaendig: num(c.aussen_unvollstaendig),
+      innen_komplett: num(c.innen_komplett),
+      innen_teilweise: num(c.innen_teilweise),
+      innen_keine: num(c.innen_keine),
+      mit_transparenz: cars - num(c.ohne_transparenz),
+      ohne_transparenz: num(c.ohne_transparenz),
+      mit_schatten: cars - num(c.ohne_schatten),
+      ohne_schatten: num(c.ohne_schatten),
     },
     stages: {
       gesamt: num(k.images),
@@ -251,6 +287,17 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
       binds.push(raw.toLowerCase());
     }
   }
+  // Jahr-Bereich (von/bis).
+  const jahrMin = Number((p.get("jahr_min") || "").trim());
+  if (Number.isFinite(jahrMin) && jahrMin > 0) {
+    where.push("jahr >= ?");
+    binds.push(jahrMin);
+  }
+  const jahrMax = Number((p.get("jahr_max") || "").trim());
+  if (Number.isFinite(jahrMax) && jahrMax > 0) {
+    where.push("jahr <= ?");
+    binds.push(jahrMax);
+  }
 
   // Status-Filter → HAVING auf den Aggregaten.
   const statusRaw = (p.get("status") || "all").toLowerCase();
@@ -260,13 +307,14 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
     ? (statusRaw as StatusKey)
     : "all";
   const having: string[] = [];
-  if (status === "open") having.push("SUM(CASE WHEN aktiv = 0 THEN 1 ELSE 0 END) > 0");
-  else if (status === "done") having.push("SUM(aktiv) = COUNT(*)");
+  if (status === "incomplete_ext") having.push(`${AUSSEN_COUNT_SQL} < 8`);
+  else if (status === "incomplete_int") having.push(`${INNEN_COUNT_SQL} = 1`);
+  else if (status === "no_transparent") having.push(`${HAS_TRP_SQL} = 0`);
+  else if (status === "no_shadow") having.push(`${HAS_SHADOW_SQL} = 0`);
   else if (status === "error") having.push("SUM(fehler) > 0");
   else if (status === "hold") having.push("SUM(hold) > 0");
   else if (status === "not_rendered")
     having.push(`SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END) > 0`);
-  else if (status === "incomplete_ext") having.push(`${AUSSEN_COUNT_SQL} < 8`);
 
   // View-Filter → nur Autos, denen diese Ansicht ganz FEHLT.
   const view = (p.get("view") || "").trim().toLowerCase();
@@ -282,31 +330,42 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
   const limit = Math.min(100, Math.max(1, Number(p.get("limit") || 30)));
   const offset = Math.max(0, Number(p.get("offset") || 0));
 
+  // Sortierung (Whitelist gegen Injection; Spalten-Aliase erlaubt).
+  const SORTS: Record<string, string> = {
+    marke: "marke, modell, jahr",
+    jahr_desc: "jahr DESC, marke, modell",
+    jahr_asc: "jahr ASC, marke, modell",
+    aussen_asc: "aussen ASC, marke, modell, jahr",
+    bilder_desc: "images DESC, marke, modell",
+    updated_desc: "last_updated DESC, marke, modell",
+  };
+  const orderBy = SORTS[(p.get("sort") || "marke").toLowerCase()] || SORTS.marke;
+
   // Gesamtzahl der Gruppen (für Pagination).
   const countSql = `SELECT COUNT(*) AS n FROM (
     SELECT 1 FROM fahrzeugliste${whereSql}
     GROUP BY marke, modell, jahr, body, trim${havingSql}
   )`;
   // EINE Zeile pro Auto (ohne Farbe). farbe = repräsentative Farbe fürs Thumbnail
-  // (bevorzugt „default"); farben = Anzahl Farb-Varianten; aussen = vorhandene
-  // Außen-Ansichten (0–8).
+  // (bevorzugt „default"); farben = Anzahl Varianten; aussen/innen = vorhandene
+  // Außen-/Innen-Ansichten; has_trp/has_shadow = Transparenz/Schatten vorhanden.
   const listSql = `SELECT
       marke, modell, jahr, body, trim,
       COALESCE(MAX(CASE WHEN lower(farbe) = 'default' THEN farbe END), MIN(farbe)) AS farbe,
       COUNT(DISTINCT farbe) AS farben,
       COUNT(*) AS images,
-      ifnull(SUM(aktiv), 0) AS aktiv,
       COUNT(DISTINCT "view") AS views_total,
       ${AUSSEN_COUNT_SQL} AS aussen,
-      COUNT(DISTINCT CASE WHEN aktiv = 0 THEN "view" END) AS views_offen,
-      GROUP_CONCAT(DISTINCT CASE WHEN aktiv = 0 THEN "view" END) AS offene_views,
+      ${INNEN_COUNT_SQL} AS innen,
+      ${HAS_TRP_SQL} AS has_trp,
+      ${HAS_SHADOW_SQL} AS has_shadow,
       ifnull(SUM(fehler), 0) AS fehler,
       ifnull(SUM(hold), 0) AS hold,
       ifnull(SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END), 0) AS nicht_gerendert,
       MAX(last_updated) AS last_updated
     FROM fahrzeugliste${whereSql}
     GROUP BY marke, modell, jahr, body, trim${havingSql}
-    ORDER BY marke, modell, jahr
+    ORDER BY ${orderBy}
     LIMIT ? OFFSET ?`;
 
   // Zählung (für Pagination) + Liste PARALLEL.
@@ -330,14 +389,11 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
       farbe: String(o.farbe ?? ""),
       farben: Number(o.farben ?? 0),
       images: Number(o.images ?? 0),
-      aktiv: Number(o.aktiv ?? 0),
       viewsTotal: Number(o.views_total ?? 0),
       aussen: Number(o.aussen ?? 0),
-      viewsOffen: Number(o.views_offen ?? 0),
-      offeneViews: String(o.offene_views ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      innen: Number(o.innen ?? 0),
+      hasTrp: Number(o.has_trp ?? 0) > 0,
+      hasShadow: Number(o.has_shadow ?? 0) > 0,
       fehler: Number(o.fehler ?? 0),
       hold: Number(o.hold ?? 0),
       nichtGerendert: Number(o.nicht_gerendert ?? 0),

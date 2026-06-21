@@ -48,13 +48,22 @@ export type CarDatabaseOverview = {
     cars: number;
     variants: number;
     images: number;
+    marken: number;
     aktiv: number;
-    offen: number;
     fehler: number;
     hold: number;
     nicht_gerendert: number;
+  };
+  completeness: {
     aussen_komplett: number;
     aussen_unvollstaendig: number;
+    innen_komplett: number;
+    innen_teilweise: number;
+    innen_keine: number;
+    mit_transparenz: number;
+    ohne_transparenz: number;
+    mit_schatten: number;
+    ohne_schatten: number;
   };
   stages: {
     gesamt: number;
@@ -82,11 +91,11 @@ export type CarRow = {
   farbe: string;
   farben: number;
   images: number;
-  aktiv: number;
   viewsTotal: number;
   aussen: number;
-  viewsOffen: number;
-  offeneViews: string[];
+  innen: number;
+  hasTrp: boolean;
+  hasShadow: boolean;
   fehler: number;
   hold: number;
   nichtGerendert: number;
@@ -171,8 +180,9 @@ export function carDatabaseDetailUrl(params: CarDetailParams): string {
 export const CAR_STATUS_FILTERS = [
   "all",
   "incomplete_ext",
-  "open",
-  "done",
+  "incomplete_int",
+  "no_transparent",
+  "no_shadow",
   "error",
   "hold",
   "not_rendered",
@@ -182,11 +192,32 @@ export type CarStatusFilter = (typeof CAR_STATUS_FILTERS)[number];
 export const CAR_STATUS_LABELS: Record<CarStatusFilter, string> = {
   all: "Alle",
   incomplete_ext: "Außen unvollständig (<8)",
-  open: "Offen",
-  done: "Fertig",
+  incomplete_int: "Innen teilweise (1/2)",
+  no_transparent: "Ohne Transparenz",
+  no_shadow: "Ohne Schatten",
   error: "Fehler",
   hold: "On Hold",
   not_rendered: "Nicht gerendert",
+};
+
+/** Sortier-Optionen für die Liste. */
+export const CAR_SORTS = [
+  "marke",
+  "jahr_desc",
+  "jahr_asc",
+  "aussen_asc",
+  "bilder_desc",
+  "updated_desc",
+] as const;
+export type CarSort = (typeof CAR_SORTS)[number];
+
+export const CAR_SORT_LABELS: Record<CarSort, string> = {
+  marke: "Marke (A–Z)",
+  jahr_desc: "Jahr (neueste)",
+  jahr_asc: "Jahr (älteste)",
+  aussen_asc: "Außen (unvollständige zuerst)",
+  bilder_desc: "Bilder (meiste)",
+  updated_desc: "Zuletzt aktualisiert",
 };
 
 export type CarListParams = {
@@ -196,6 +227,9 @@ export type CarListParams = {
   format?: string;
   view?: string;
   status?: CarStatusFilter;
+  jahrMin?: number | string;
+  jahrMax?: number | string;
+  sort?: CarSort;
   limit?: number;
   offset?: number;
 };
@@ -217,6 +251,9 @@ export function carDatabaseListUrl(params: CarListParams): string {
   set("format", params.format);
   set("view", params.view);
   if (params.status && params.status !== "all") set("status", params.status);
+  set("jahr_min", params.jahrMin);
+  set("jahr_max", params.jahrMax);
+  if (params.sort && params.sort !== "marke") set("sort", params.sort);
   set("limit", params.limit);
   set("offset", params.offset);
   return u.pathname + u.search;

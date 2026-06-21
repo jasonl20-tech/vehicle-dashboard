@@ -1,7 +1,14 @@
 import { LogOut } from "lucide-react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { Logo } from "../brand/Logo";
 import { useAuth } from "../../lib/auth";
+
+const navCls = ({ isActive }: { isActive: boolean }) =>
+  `inline-flex h-8 items-center rounded-full px-3 text-[12px] transition-colors ${
+    isActive
+      ? "bg-ink-900 text-white"
+      : "text-ink-500 hover:bg-ink-50 hover:text-ink-900"
+  }`;
 
 /**
  * Eigenständige Hülle für die „Car Database" — ohne Dashboard-Navigation.
@@ -25,13 +32,13 @@ export default function CarDatabaseLayout() {
             Car Database
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Link
-            to="/"
-            className="text-[12px] text-ink-500 transition-colors hover:text-ink-900"
-          >
+        <div className="flex shrink-0 items-center gap-1">
+          <NavLink to="/car-database" end className={navCls}>
             Übersicht
-          </Link>
+          </NavLink>
+          <NavLink to="/car-database/eintraege" className={navCls}>
+            Datenbank
+          </NavLink>
           <button
             type="button"
             onClick={() => void logout()}

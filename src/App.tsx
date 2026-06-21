@@ -43,6 +43,7 @@ import OneautoApiPage from "./pages/OneautoApiPage";
 import OneautoReportsPage from "./pages/OneautoReportsPage";
 import OverviewPage from "./pages/OverviewPage";
 import CarDatabasePage from "./pages/CarDatabasePage";
+import CarDatabaseListPage from "./pages/CarDatabaseListPage";
 import PlatformHomePage from "./pages/PlatformHomePage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ProductionImagesPage from "./pages/ProductionImagesPage";
@@ -112,6 +113,10 @@ export default function App() {
 
           <Route element={<CarDatabaseLayout />}>
             <Route path="/car-database" element={<CarDatabasePage />} />
+            <Route
+              path="/car-database/eintraege"
+              element={<CarDatabaseListPage />}
+            />
           </Route>
 
           <Route
