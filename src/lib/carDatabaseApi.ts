@@ -4,31 +4,41 @@
 
 export const CAR_DATABASE_API = "/api/databases/car-database";
 
-/**
- * Öffentlicher Bild-Host für die `r2_key`s des NEUEN Systems (z. B. `source/01K…`).
- *
- * NOCH NICHT GESETZT: Die neuen Bilder liegen hinter einer gated Auslieferung
- * (`images.vehicleimagery.com` antwortet öffentlich mit 403); es gibt aktuell
- * keine öffentliche URL, über die man ein `source/<id>` direkt laden kann.
- * Sobald der korrekte Host/Zugang feststeht (von Jason), hier eintragen — dann
- * erscheinen die Thumbnails automatisch. Bis dahin: sauberer Platzhalter.
- */
-export const CAR_DB_IMAGE_CDN: string = "";
+/** Server-Proxy, der das Thumbnail über die Kunden-API holt + verkleinert ausliefert. */
+export const CAR_IMAGE_PROXY = "/api/databases/car-image";
 
 /**
- * Stark verkleinertes Thumbnail aus dem `r2_key` (schnelles Laden, via
- * Cloudflare Image Resizing). Liefert `null`, solange kein Bild-Host gesetzt
- * ist → die UI zeigt dann einen Platzhalter statt fehlschlagender Anfragen.
+ * Thumbnail-URL für ein Auto. Zeigt auf den Dashboard-Proxy
+ * (`/api/databases/car-image`), der das Bild über die bestehende Kunden-API
+ * (mit internem Key) holt und verkleinert ausliefert.
+ *
+ * Identifiziert wird das Auto über marke/modell/jahr (+ body/trim/farbe), NICHT
+ * über den neuen `r2_key` — denn die Kunden-API bedient aktuell noch das alte
+ * System. Sobald sie aufs neue System umgestellt ist, liefert derselbe Proxy
+ * automatisch die neuen Bilder. Fehlt das Bild → Proxy gibt 404 → Platzhalter.
  */
-export function carThumbUrl(
-  r2Key: string | null | undefined,
-  width = 96,
+export function carThumbApiUrl(
+  car: {
+    marke?: string | null;
+    modell?: string | null;
+    jahr?: number | string | null;
+    body?: string | null;
+    trim?: string | null;
+    farbe?: string | null;
+  },
+  opts?: { view?: string; width?: number },
 ): string | null {
-  if (!r2Key || !CAR_DB_IMAGE_CDN) return null;
-  const base = CAR_DB_IMAGE_CDN.replace(/\/$/, "");
-  const key = String(r2Key).replace(/^\/+/, "");
-  const src = `${base}/${key}`;
-  return `${base}/cdn-cgi/image/width=${width},quality=55,format=auto,fit=contain/${encodeURI(src)}`;
+  if (!car || !car.marke || !car.modell || !car.jahr) return null;
+  const u = new URL(CAR_IMAGE_PROXY, "https://x");
+  u.searchParams.set("marke", String(car.marke));
+  u.searchParams.set("modell", String(car.modell));
+  u.searchParams.set("jahr", String(car.jahr));
+  if (car.body) u.searchParams.set("body", String(car.body));
+  if (car.trim) u.searchParams.set("trim", String(car.trim));
+  if (car.farbe) u.searchParams.set("farbe", String(car.farbe));
+  u.searchParams.set("view", opts?.view || "front_right");
+  u.searchParams.set("w", String(opts?.width ?? 160));
+  return u.pathname + u.search;
 }
 
 export type CarDatabaseOverview = {
@@ -75,7 +85,6 @@ export type CarRow = {
   hold: number;
   nichtGerendert: number;
   lastUpdated: string | null;
-  thumbKey: string | null;
 };
 
 export type CarListResponse = {

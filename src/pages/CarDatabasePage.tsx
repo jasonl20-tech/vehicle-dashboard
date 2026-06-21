@@ -25,9 +25,10 @@ import {
   CAR_STATUS_LABELS,
   carDatabaseListUrl,
   carDatabaseOverviewUrl,
-  carThumbUrl,
+  carThumbApiUrl,
   type CarDatabaseOverview,
   type CarListResponse,
+  type CarRow,
   type CarStatusFilter,
 } from "../lib/carDatabaseApi";
 
@@ -355,7 +356,7 @@ export default function CarDatabasePage() {
                   className="border-t border-hair hover:bg-ink-50/40"
                 >
                   <td className={TD}>
-                    <Thumb thumbKey={r.thumbKey} />
+                    <Thumb car={r} />
                   </td>
                   <td className={TD}>
                     <div className="font-medium text-ink-900">
@@ -545,9 +546,9 @@ function Badge({
   );
 }
 
-function Thumb({ thumbKey }: { thumbKey: string | null }) {
+function Thumb({ car }: { car: CarRow }) {
   const [failed, setFailed] = useState(false);
-  const url = carThumbUrl(thumbKey, 96);
+  const url = carThumbApiUrl(car, { view: "front_right", width: 160 });
   if (!url || failed) {
     return (
       <div className="grid h-12 w-16 place-items-center rounded border border-hair bg-ink-50">

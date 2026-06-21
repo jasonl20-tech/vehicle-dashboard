@@ -129,6 +129,11 @@ export interface AuthEnv {
    */
   cardb?: D1Database;
   /**
+   * Interner Kunden-API-Key (Voll-Zugriff) für den Car-Database-Thumbnail-Proxy.
+   * Pages-Env-Variable `CAR_DB_API_KEY` (secret) → `env.CAR_DB_API_KEY`.
+   */
+  CAR_DB_API_KEY?: string;
+  /**
    * D1: Konfiguration (`settings`-Tabelle, u. a. `controll_buttons`). Binding `configs` → `env.configs`.
    */
   configs?: D1Database;

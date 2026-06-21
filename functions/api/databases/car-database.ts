@@ -248,8 +248,7 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
       ifnull(SUM(fehler), 0) AS fehler,
       ifnull(SUM(hold), 0) AS hold,
       ifnull(SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END), 0) AS nicht_gerendert,
-      MAX(last_updated) AS last_updated,
-      MAX(CASE WHEN lower("view") = 'front_right' AND NOT ${NOT_RENDERED} THEN r2_key END) AS thumb_key
+      MAX(last_updated) AS last_updated
     FROM fahrzeugliste${whereSql}
     GROUP BY marke, modell, jahr, body, trim, farbe${havingSql}
     ORDER BY views_offen DESC, fehler DESC, marke, modell, jahr
@@ -286,7 +285,6 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
       hold: Number(o.hold ?? 0),
       nichtGerendert: Number(o.nicht_gerendert ?? 0),
       lastUpdated: o.last_updated ? String(o.last_updated) : null,
-      thumbKey: o.thumb_key ? String(o.thumb_key) : null,
     };
   });
 
