@@ -61,7 +61,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const farbe = (p.get("farbe") || "default").trim() || "default";
   let view = (p.get("view") || "front_right").trim().toLowerCase();
   if (!EXTERIOR.has(view)) view = "front_right";
-  const width = Math.min(400, Math.max(48, Number(p.get("w") || 160) || 160));
+  const width = Math.min(1600, Math.max(48, Number(p.get("w") || 160) || 160));
 
   if (!marke || !modell || !jahr) {
     return jsonResponse(

@@ -7,6 +7,7 @@ import {
   PauseCircle,
   RefreshCw,
   Search,
+  X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
@@ -23,10 +24,14 @@ import { fmtNumber, useApi } from "../lib/customerApi";
 import {
   CAR_STATUS_FILTERS,
   CAR_STATUS_LABELS,
+  carDatabaseDetailUrl,
   carDatabaseListUrl,
   carDatabaseOverviewUrl,
   carThumbApiUrl,
   type CarDatabaseOverview,
+  type CarDetailResponse,
+  type CarDetailStatus,
+  type CarDetailView,
   type CarListResponse,
   type CarRow,
   type CarStatusFilter,
@@ -77,6 +82,8 @@ export default function CarDatabasePage() {
   const [view, setView] = useState("");
   const [status, setStatus] = useState<CarStatusFilter>("all");
   const [offset, setOffset] = useState(0);
+  // Angeklicktes Auto → Detail-Ansicht.
+  const [selected, setSelected] = useState<CarRow | null>(null);
 
   // Suche entprellen.
   useEffect(() => {
@@ -271,17 +278,27 @@ export default function CarDatabasePage() {
             Bestand nach Marke (Top 10)
           </h3>
           <div className="flex flex-wrap gap-2">
-            {ov.topBrands.map((b) => (
-              <span
-                key={b.marke}
-                className="inline-flex items-center gap-1.5 rounded-full border border-hair bg-white px-2.5 py-1 text-[12px] text-ink-700"
-              >
-                <span className="font-medium">{b.marke}</span>
-                <span className="text-ink-400">
-                  {fmtNumber(b.vehicles)} Fz · {fmtNumber(b.images)} Bilder
-                </span>
-              </span>
-            ))}
+            {ov.topBrands.map((b) => {
+              const active = marke.toLowerCase() === b.marke.toLowerCase();
+              return (
+                <button
+                  key={b.marke}
+                  type="button"
+                  onClick={() => setMarke(active ? "" : b.marke)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
+                    active
+                      ? "border-brand-500 bg-brand-500/10 text-brand-700"
+                      : "border-hair bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50"
+                  }`}
+                  title={active ? "Filter entfernen" : `Nur ${b.marke} zeigen`}
+                >
+                  <span className="font-medium">{b.marke}</span>
+                  <span className="text-ink-400">
+                    {fmtNumber(b.vehicles)} Fz · {fmtNumber(b.images)} Bilder
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -353,7 +370,9 @@ export default function CarDatabasePage() {
               list.rows.map((r, i) => (
                 <tr
                   key={`${r.marke}-${r.modell}-${r.jahr}-${r.body}-${r.trim}-${r.farbe}-${i}`}
-                  className="border-t border-hair hover:bg-ink-50/40"
+                  onClick={() => setSelected(r)}
+                  className="cursor-pointer border-t border-hair hover:bg-ink-50/40"
+                  title="Details & alle Ansichten anzeigen"
                 >
                   <td className={TD}>
                     <Thumb car={r} />
@@ -484,6 +503,10 @@ export default function CarDatabasePage() {
           {overviewApi.error || listApi.error}
         </p>
       )}
+
+      {selected && (
+        <CarDetailModal car={selected} onClose={() => setSelected(null)} />
+      )}
     </div>
   );
 }
@@ -572,6 +595,335 @@ function EmptyChart() {
   return (
     <div className="grid h-full place-items-center text-[11px] text-ink-300">
       keine Daten
+    </div>
+  );
+}
+
+// Anzeige-Reihenfolge + deutsche Labels der Ansichten (Außen im Uhrzeigersinn, dann Innen).
+const VIEW_ORDER = [
+  "front",
+  "front_right",
+  "right",
+  "rear_right",
+  "rear",
+  "rear_left",
+  "left",
+  "front_left",
+  "top",
+  "dashboard",
+  "cockpit",
+  "center_console",
+  "interior",
+  "trunk",
+  "engine",
+];
+const VIEW_LABELS: Record<string, string> = {
+  front: "Vorne",
+  rear: "Hinten",
+  left: "Links",
+  right: "Rechts",
+  front_left: "Vorne links",
+  front_right: "Vorne rechts",
+  rear_left: "Hinten links",
+  rear_right: "Hinten rechts",
+  top: "Oben",
+  dashboard: "Cockpit",
+  cockpit: "Cockpit",
+  center_console: "Mittelkonsole",
+  interior: "Innenraum",
+  trunk: "Kofferraum",
+  engine: "Motor",
+};
+function viewLabel(v: string): string {
+  return VIEW_LABELS[v.toLowerCase()] ?? v;
+}
+function viewSortIndex(v: string): number {
+  const i = VIEW_ORDER.indexOf(v.toLowerCase());
+  return i === -1 ? 900 : i;
+}
+
+const DETAIL_STATUS: Record<CarDetailStatus, { label: string; cls: string }> = {
+  done: { label: "fertig", cls: "bg-emerald-500/10 text-emerald-700" },
+  open: { label: "offen", cls: "bg-brand-500/10 text-brand-700" },
+  error: { label: "Fehler", cls: "bg-accent-rose/10 text-accent-rose" },
+  hold: { label: "On Hold", cls: "bg-amber-500/10 text-amber-700" },
+  not_rendered: { label: "nicht gerendert", cls: "bg-ink-100 text-ink-500" },
+};
+
+type Car5 = {
+  marke: string;
+  modell: string;
+  jahr: number;
+  body: string;
+  trim: string;
+  farbe: string;
+};
+
+function CarDetailModal({
+  car,
+  onClose,
+}: {
+  car: CarRow;
+  onClose: () => void;
+}) {
+  const [farbe, setFarbe] = useState(car.farbe);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const detailApi = useApi<CarDetailResponse>(
+    carDatabaseDetailUrl({
+      marke: car.marke,
+      modell: car.modell,
+      jahr: car.jahr,
+      body: car.body,
+      trim: car.trim,
+      farbe,
+    }),
+  );
+  const detail = detailApi.data;
+
+  // Esc: erst Lightbox, dann Modal. Body-Scroll sperren, solange offen.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (lightbox) setLightbox(null);
+      else onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [lightbox, onClose]);
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const views = useMemo(() => {
+    const vs = detail?.views ?? [];
+    return [...vs].sort(
+      (a, b) =>
+        viewSortIndex(a.view) - viewSortIndex(b.view) ||
+        a.view.localeCompare(b.view),
+    );
+  }, [detail]);
+
+  const car5: Car5 = {
+    marke: car.marke,
+    modell: car.modell,
+    jahr: car.jahr,
+    body: car.body,
+    trim: car.trim,
+    farbe,
+  };
+  const doneViews = views.filter((v) => v.status === "done").length;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/50 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="my-6 w-full max-w-5xl rounded-xl border border-hair bg-paper shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Kopf */}
+        <div className="flex items-start justify-between gap-3 border-b border-hair px-5 py-4">
+          <div className="min-w-0">
+            <div className="truncate text-[15px] font-semibold text-ink-900">
+              {car.marke} {car.modell}
+            </div>
+            <div className="mt-0.5 text-[12px] text-ink-500">
+              {car.jahr} · {car.body} · {car.trim}
+              {views.length > 0 && (
+                <span className="ml-2 text-ink-400">
+                  · {doneViews}/{views.length} Ansichten fertig
+                </span>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-hair bg-paper text-ink-500 hover:bg-ink-50"
+            aria-label="Schließen"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4">
+          {/* Farb-Auswahl */}
+          {detail && detail.colors.length > 0 && (
+            <div className="mb-4">
+              <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400">
+                Farbe ({detail.colors.length})
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {detail.colors.map((c) => {
+                  const act = c.farbe === farbe;
+                  return (
+                    <button
+                      key={c.farbe}
+                      type="button"
+                      onClick={() => setFarbe(c.farbe)}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
+                        act
+                          ? "border-brand-500 bg-brand-500/10 text-brand-700"
+                          : "border-hair bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50"
+                      }`}
+                    >
+                      <span className="font-medium">{c.farbe || "—"}</span>
+                      <span className="text-ink-400">
+                        {fmtNumber(c.aktiv)}/{fmtNumber(c.images)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Ansichten-Galerie */}
+          {detailApi.loading && !detail ? (
+            <div className="py-10 text-center text-[12px] text-ink-400">
+              Lädt Ansichten…
+            </div>
+          ) : views.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {views.map((v) => (
+                <ViewCard
+                  key={v.view}
+                  car={car5}
+                  v={v}
+                  onOpen={() => setLightbox(v.view)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="py-10 text-center text-[12px] text-ink-400">
+              Keine Ansichten für diese Farbe.
+            </div>
+          )}
+
+          {detailApi.error && (
+            <p className="mt-3 text-[12px] text-accent-rose">
+              {detailApi.error}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {lightbox && (
+        <Lightbox
+          car={car5}
+          view={lightbox}
+          onClose={() => setLightbox(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ViewCard({
+  car,
+  v,
+  onOpen,
+}: {
+  car: Car5;
+  v: CarDetailView;
+  onOpen: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const url = carThumbApiUrl(car, { view: v.view, width: 400 });
+  const st = DETAIL_STATUS[v.status];
+  return (
+    <div className="overflow-hidden rounded-lg border border-hair bg-white">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="relative block aspect-[4/3] w-full bg-ink-50"
+        title="Groß ansehen"
+      >
+        {url && !failed ? (
+          <img
+            src={url}
+            alt={viewLabel(v.view)}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailed(true)}
+            className="h-full w-full object-contain"
+          />
+        ) : (
+          <span className="grid h-full w-full place-items-center">
+            <ImageIcon className="h-5 w-5 text-ink-300" />
+          </span>
+        )}
+      </button>
+      <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+        <span className="truncate text-[12px] font-medium text-ink-800">
+          {viewLabel(v.view)}
+        </span>
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${st.cls}`}
+        >
+          {st.label}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Lightbox({
+  car,
+  view,
+  onClose,
+}: {
+  car: Car5;
+  view: string;
+  onClose: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const url = carThumbApiUrl(car, { view, width: 1400 });
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink-900/85 p-6"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md bg-white/10 text-white hover:bg-white/20"
+        aria-label="Schließen"
+      >
+        <X className="h-5 w-5" />
+      </button>
+      <div
+        className="flex max-h-[90vh] max-w-[92vw] flex-col items-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {url && !failed ? (
+          <img
+            src={url}
+            alt={viewLabel(view)}
+            onError={() => setFailed(true)}
+            className="max-h-[84vh] max-w-[92vw] rounded-lg object-contain"
+          />
+        ) : (
+          <div className="rounded-lg bg-paper px-10 py-14 text-center text-[13px] text-ink-500">
+            Für diese Ansicht ist (noch) kein Bild verfügbar.
+          </div>
+        )}
+        <div className="mt-2 text-center text-[12px] text-white/80">
+          {viewLabel(view)} · {car.marke} {car.modell} {car.jahr}
+        </div>
+      </div>
     </div>
   );
 }

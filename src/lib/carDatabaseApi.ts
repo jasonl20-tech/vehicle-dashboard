@@ -96,6 +96,72 @@ export type CarListResponse = {
   offset?: number;
 };
 
+export type CarDetailStatus =
+  | "done"
+  | "open"
+  | "error"
+  | "hold"
+  | "not_rendered";
+
+export type CarDetailColor = {
+  farbe: string;
+  images: number;
+  aktiv: number;
+  viewsTotal: number;
+  viewsOffen: number;
+};
+
+export type CarDetailView = {
+  view: string;
+  images: number;
+  aktiv: number;
+  fehler: number;
+  hold: number;
+  notRendered: number;
+  status: CarDetailStatus;
+  formats: string[];
+  resolutions: string[];
+  hohe: number | null;
+  shadow: boolean;
+  transparent: boolean;
+  lastUpdated: string | null;
+};
+
+export type CarDetailResponse = {
+  empty: boolean;
+  car: {
+    marke: string;
+    modell: string;
+    jahr: number;
+    body: string;
+    trim: string;
+  };
+  colors: CarDetailColor[];
+  selectedFarbe: string;
+  views: CarDetailView[];
+};
+
+export type CarDetailParams = {
+  marke: string;
+  modell: string;
+  jahr: number | string;
+  body?: string;
+  trim?: string;
+  farbe?: string;
+};
+
+export function carDatabaseDetailUrl(params: CarDetailParams): string {
+  const u = new URL(CAR_DATABASE_API, "https://x");
+  u.searchParams.set("mode", "detail");
+  u.searchParams.set("marke", String(params.marke));
+  u.searchParams.set("modell", String(params.modell));
+  u.searchParams.set("jahr", String(params.jahr));
+  u.searchParams.set("body", String(params.body ?? ""));
+  u.searchParams.set("trim", String(params.trim ?? ""));
+  if (params.farbe) u.searchParams.set("farbe", String(params.farbe));
+  return u.pathname + u.search;
+}
+
 export const CAR_STATUS_FILTERS = [
   "all",
   "open",
