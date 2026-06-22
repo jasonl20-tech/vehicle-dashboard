@@ -305,6 +305,28 @@ function stageStyle(bg: BgMode): CSSProperties {
 }
 
 /**
+ * Bewertet, wie gut sich ein Auto als Hero-Showcase eignet: möglichst viele
+ * Farben, alle 8 Außen- + 2 Innen-Ansichten, jede Farbe komplett, nichts
+ * fehlend/fehlerhaft. Höher = besser.
+ */
+function showcaseScore(r: CarRow): number {
+  const allViews = r.aussen + r.innen; // 0..10
+  const clean = r.fehler === 0 && r.hold === 0 && r.nichtGerendert === 0 ? 1 : 0;
+  // images === farben*10 → JEDE Farbe hat alle 10 Ansichten.
+  const everyColorComplete =
+    r.aussen === 8 && r.innen === 2 && r.farben > 0 && r.images === r.farben * 10
+      ? 1
+      : 0;
+  return (
+    everyColorComplete * 1e12 +
+    clean * 1e10 +
+    allViews * 1e8 +
+    r.farben * 1e5 +
+    r.images
+  );
+}
+
+/**
  * Bild-URL im Hintergrund vorladen (wärmt Browser- und Edge-Cache vor, bevor
  * der Nutzer klickt). Eine sitzungsweite Menge verhindert doppelte Anfragen
  * für dieselbe URL.
@@ -431,7 +453,33 @@ export default function CarDatabaseDemoPage() {
     }));
   }, [showroomApi.data]);
 
+  // Hero-Showcase: das vollständigste, farbreichste Auto aus der DB
+  // automatisch als Startfahrzeug wählen (sortiert nach Bild-Anzahl, dann
+  // clientseitig nach Vollständigkeit/Farbzahl bewertet). Sobald der Nutzer
+  // selbst ein Auto wählt, greift die Automatik nicht mehr.
+  const pickedRef = useRef(false);
+  const showcaseApi = useApi<CarListResponse>(
+    carDatabaseListUrl({ sort: "bilder_desc", limit: 50 }),
+  );
+  useEffect(() => {
+    if (pickedRef.current) return;
+    const rows = showcaseApi.data?.rows ?? [];
+    if (!rows.length) return;
+    const best = rows.reduce((a, b) =>
+      showcaseScore(b) > showcaseScore(a) ? b : a,
+    );
+    pickedRef.current = true;
+    setCar({
+      marke: best.marke,
+      modell: best.modell,
+      jahr: best.jahr,
+      body: best.body,
+      trim: best.trim,
+    });
+  }, [showcaseApi.data]);
+
   const pick = (c: CarId) => {
+    pickedRef.current = true;
     setCar(c);
     setPickerOpen(false);
   };
