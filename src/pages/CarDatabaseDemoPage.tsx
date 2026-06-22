@@ -690,9 +690,6 @@ export default function CarDatabaseDemoPage() {
           <ColorCompare car={car} colors={colors} />
         )}
 
-        {/* Ähnliche Fahrzeuge */}
-        <SimilarVehicles current={car} onPick={pick} />
-
         {/* Kundenbewertungen */}
         <Reviews />
 
@@ -1632,97 +1629,6 @@ function FinRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SimilarVehicles({
-  current,
-  onPick,
-}: {
-  current: CarId;
-  onPick: (c: CarId) => void;
-}) {
-  const others = FEATURED.filter(
-    (c) =>
-      !(
-        c.marke === current.marke &&
-        c.modell === current.modell &&
-        c.jahr === current.jahr
-      ),
-  ).slice(0, 4);
-  return (
-    <section className="mt-8">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-          Ähnliche Fahrzeuge
-        </h3>
-        <span className="hidden text-[12px] text-ink-400 sm:inline">
-          aus dem Bestand von {DEALER.name}
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {others.map((c) => (
-          <SimilarCard
-            key={`${c.marke}-${c.modell}-${c.jahr}`}
-            car={c}
-            onPick={onPick}
-          />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function SimilarCard({
-  car,
-  onPick,
-}: {
-  car: CarId;
-  onPick: (c: CarId) => void;
-}) {
-  const [failed, setFailed] = useState(false);
-  const url = carThumbApiUrl(
-    { ...car, farbe: "default" },
-    { view: "front_left", width: 420 },
-  );
-  const specs = fakeSpecs(car);
-  return (
-    <button
-      type="button"
-      onClick={() => onPick(car)}
-      className="group overflow-hidden rounded-xl border border-hair bg-white text-left transition hover:-translate-y-0.5 hover:border-ink-200 hover:shadow-sm"
-    >
-      <div
-        className="relative flex aspect-[4/3] items-center justify-center p-3"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e9edf2 100%)",
-        }}
-      >
-        {url && !failed ? (
-          <img
-            src={url}
-            alt={`${car.marke} ${prettyModel(car.modell)}`}
-            loading="lazy"
-            onError={() => setFailed(true)}
-            className="max-h-full max-w-full object-contain transition duration-300 group-hover:scale-[1.04]"
-          />
-        ) : (
-          <ImageIcon className="h-8 w-8 text-ink-300" />
-        )}
-      </div>
-      <div className="border-t border-hair px-3 py-2">
-        <div className="truncate text-[12.5px] font-semibold text-ink-900">
-          {car.marke} {prettyModel(car.modell)}
-        </div>
-        <div className="text-[11px] text-ink-400">
-          {car.jahr} · {specs.fuel}
-        </div>
-        <div className="mt-1 text-[13px] font-bold text-ink-900">
-          {fmtEur(specs.price)}
-        </div>
-      </div>
-    </button>
-  );
-}
-
 function Reviews() {
   return (
     <section className="mt-8">
@@ -1941,17 +1847,22 @@ function ShowroomGrid({
           </h3>
         </div>
         <span className="text-[12px] text-ink-400">
-          {loading ? "lädt…" : "zum Auswählen antippen"}
+          {loading ? "lädt…" : "5 sichtbar · nach rechts scrollen für mehr"}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      {/* Horizontale Reihe: immer 5 sichtbar, Rest per Scroll nach rechts. */}
+      <div className="flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
         {cars.map((c) => (
-          <ShowroomCard
+          <div
             key={`${c.marke}-${c.modell}-${c.jahr}-${c.body}-${c.trim}`}
-            car={c}
-            active={sameCarId(c, current)}
-            onPick={onPick}
-          />
+            className="shrink-0 basis-[calc((100%_-_3rem)/5)] snap-start"
+          >
+            <ShowroomCard
+              car={c}
+              active={sameCarId(c, current)}
+              onPick={onPick}
+            />
+          </div>
         ))}
       </div>
     </section>
@@ -1978,7 +1889,7 @@ function ShowroomCard({
       type="button"
       onClick={() => onPick(car)}
       aria-pressed={active}
-      className={`group overflow-hidden rounded-xl border bg-white text-left transition hover:-translate-y-0.5 hover:shadow-sm ${
+      className={`group block w-full overflow-hidden rounded-xl border bg-white text-left transition hover:-translate-y-0.5 hover:shadow-sm ${
         active
           ? "border-ink-900 ring-1 ring-ink-900"
           : "border-hair hover:border-ink-200"
