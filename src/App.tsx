@@ -45,6 +45,7 @@ import OverviewPage from "./pages/OverviewPage";
 import CarDatabasePage from "./pages/CarDatabasePage";
 import CarDatabaseListPage from "./pages/CarDatabaseListPage";
 import CarDatabaseGalleryPage from "./pages/CarDatabaseGalleryPage";
+import CarDatabaseDemoPage from "./pages/CarDatabaseDemoPage";
 import PlatformHomePage from "./pages/PlatformHomePage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
 import ProductionImagesPage from "./pages/ProductionImagesPage";
@@ -121,6 +122,10 @@ export default function App() {
             <Route
               path="/car-database/galerie"
               element={<CarDatabaseGalleryPage />}
+            />
+            <Route
+              path="/car-database/demo"
+              element={<CarDatabaseDemoPage />}
             />
           </Route>
 
