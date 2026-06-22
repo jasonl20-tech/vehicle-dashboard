@@ -509,10 +509,12 @@ export default function CarDatabaseDemoPage() {
               car={car}
               color={color}
               view={view}
+              views={[...exterior, ...interior]}
               bg={transparent ? "transparent" : bg}
               transparent={transparent}
               onZoom={() => setZoom(true)}
               onToggleTransparent={() => setTransparent((t) => !t)}
+              onPick={setView}
               loading={detailApi.loading && !detail}
             />
 
@@ -768,28 +770,36 @@ export default function CarDatabaseDemoPage() {
 }
 
 /**
- * Hero-Bühne: zeigt die gewählte Perspektive in der gewählten Farbe. KEIN
- * 360°-Dreh (das gibt es im eigenen Abschnitt). Der Transparent-Schalter
- * fragt ein echtes Freisteller-PNG über die API an und zeigt es auf einem
- * Karo-Hintergrund, der die Transparenz sichtbar macht.
+ * Hero-Bühne: zeigt die gewählte Perspektive in der gewählten Farbe. Pfeile
+ * wechseln durch die verfügbaren Ansichten (KEIN 360°-Dreh — das gibt es im
+ * eigenen Abschnitt). Der Transparent-Schalter fragt ein echtes Freisteller-PNG
+ * über die API an und zeigt es auf einem Karo-Hintergrund.
+ *
+ * Der Bild-Kasten hat eine feste Größe: `aspect-[16/10]` bestimmt sie allein,
+ * das Bild liegt absolut darin (object-contain) und kann sie nie verändern —
+ * egal welche Ansicht/Bildgröße geladen wird.
  */
 function Stage({
   car,
   color,
   view,
+  views,
   bg,
   transparent,
   onZoom,
   onToggleTransparent,
+  onPick,
   loading,
 }: {
   car: CarId;
   color: string;
   view: string;
+  views: string[];
   bg: BgMode;
   transparent: boolean;
   onZoom: () => void;
   onToggleTransparent: () => void;
+  onPick: (v: string) => void;
   loading: boolean;
 }) {
   const [failed, setFailed] = useState(false);
@@ -802,33 +812,40 @@ function Stage({
 
   useEffect(() => setFailed(false), [url]);
 
+  const stepView = (dir: number) => {
+    if (views.length < 2) return;
+    const i = views.indexOf(view);
+    const cur = i < 0 ? 0 : i;
+    onPick(views[(cur + dir + views.length) % views.length]);
+  };
+
   return (
     <div className="relative">
       <div
-        className="relative overflow-hidden rounded-xl border border-hair"
+        className="relative aspect-[16/10] overflow-hidden rounded-xl border border-hair"
         style={stageStyle(bg)}
       >
-        <div className="relative flex aspect-[16/10] items-center justify-center p-4 select-none">
+        {/* Bild-Ebene: absolut → beeinflusst die Kastengröße nie. */}
+        <div className="absolute inset-0 flex items-center justify-center p-4 select-none">
           {url && !failed ? (
             <img
               src={url}
               alt={`${car.marke} ${prettyModel(car.modell)} ${VIEW_LABEL[view] ?? view}`}
               draggable={false}
               onError={() => setFailed(true)}
-              className="max-h-full max-w-full object-contain drop-shadow-xl"
+              className="max-h-full max-w-full object-contain"
               style={{ filter: "drop-shadow(0 26px 24px rgba(0,0,0,0.22))" }}
             />
           ) : (
-            <div className="grid place-items-center text-ink-300">
-              <ImageIcon className="h-10 w-10" />
-            </div>
-          )}
-          {loading && (
-            <div className="absolute inset-0 grid place-items-center bg-white/40 backdrop-blur-[1px]">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-ink-300 border-t-ink-700" />
-            </div>
+            <ImageIcon className="h-10 w-10 text-ink-300" />
           )}
         </div>
+
+        {loading && (
+          <div className="absolute inset-0 grid place-items-center bg-white/40 backdrop-blur-[1px]">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-ink-300 border-t-ink-700" />
+          </div>
+        )}
 
         <div
           className={`pointer-events-none absolute right-3 top-3 rounded-full px-2 py-1 text-[10px] font-medium backdrop-blur ${
@@ -864,6 +881,14 @@ function Stage({
           <Maximize2 className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Pfeile: durch die verfügbaren Ansichten blättern. */}
+      {views.length > 1 && (
+        <>
+          <ArrowBtn side="left" onClick={() => stepView(-1)} />
+          <ArrowBtn side="right" onClick={() => stepView(1)} />
+        </>
+      )}
     </div>
   );
 }
