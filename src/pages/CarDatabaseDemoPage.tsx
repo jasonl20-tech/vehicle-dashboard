@@ -337,9 +337,14 @@ export default function CarDatabaseDemoPage() {
   );
   const detail = detailApi.data;
 
-  // Verfügbare Farben + Ansichten des Autos.
+  // Nur Farben mit mindestens einem AKTIVEN (live gerenderten) Bild gelten als
+  // „verfügbar". So tauchen Farben ohne echte Bilder (z. B. wine_red, das nur
+  // in der DB registriert, aber nicht gerendert ist) gar nicht erst auf.
   const colors = useMemo(
-    () => (detail?.colors ?? []).map((c) => c.farbe),
+    () =>
+      (detail?.colors ?? [])
+        .filter((c) => c.aktiv > 0)
+        .map((c) => c.farbe),
     [detail],
   );
   const availViews = useMemo(
@@ -360,10 +365,17 @@ export default function CarDatabaseDemoPage() {
     setView("front_left");
   }, [car]);
   useEffect(() => {
-    if (colors.length && !colors.includes(color)) {
+    if (!detail) return;
+    // Keine verfügbare Farbe → ehrlich die Standardfarbe zeigen.
+    if (colors.length === 0) {
+      if (color !== "default") setColor("default");
+      return;
+    }
+    // Gewählte Farbe nicht (mehr) verfügbar → auf eine verfügbare wechseln.
+    if (!colors.includes(color)) {
       setColor(colors.includes("white") ? "white" : colors[0]);
     }
-  }, [colors, color]);
+  }, [detail, colors, color]);
   // Fehlt die aktuelle Außen-Ansicht beim gewählten Auto → erste verfügbare.
   useEffect(() => {
     if (!availViews.size) return;

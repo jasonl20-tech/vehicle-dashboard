@@ -615,26 +615,47 @@ function CarDetailModal({
           {detail && detail.colors.length > 0 && (
             <div className="mb-4">
               <div className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.1em] text-ink-400">
-                Farbe ({detail.colors.length})
+                Farbe ({detail.colors.filter((c) => c.aktiv > 0).length}{" "}
+                verfügbar / {detail.colors.length} gesamt)
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {detail.colors.map((c) => {
                   const act = c.farbe === farbe;
+                  // „Verfügbar" = mind. ein aktives (live) Bild.
+                  const available = c.aktiv > 0;
                   return (
                     <button
                       key={c.farbe}
                       type="button"
                       onClick={() => setFarbe(c.farbe)}
+                      title={
+                        available
+                          ? `${c.aktiv} von ${c.images} Bildern aktiv`
+                          : "Keine aktiven Bilder — Farbe nicht verfügbar"
+                      }
                       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
                         act
                           ? "border-brand-500 bg-brand-500/10 text-brand-700"
-                          : "border-hair bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50"
+                          : available
+                            ? "border-hair bg-white text-ink-700 hover:border-ink-300 hover:bg-ink-50"
+                            : "border-dashed border-hair bg-ink-50 text-ink-400"
                       }`}
                     >
-                      <span className="font-medium">{c.farbe || "—"}</span>
-                      <span className="text-ink-400">
+                      <span
+                        className={`font-medium ${
+                          available ? "" : "line-through decoration-ink-300"
+                        }`}
+                      >
+                        {c.farbe || "—"}
+                      </span>
+                      <span className={available ? "text-ink-400" : "text-ink-300"}>
                         {fmtNumber(c.aktiv)}/{fmtNumber(c.images)}
                       </span>
+                      {!available && (
+                        <span className="rounded bg-ink-200/70 px-1 text-[9px] font-medium uppercase tracking-wide text-ink-500">
+                          n/v
+                        </span>
+                      )}
                     </button>
                   );
                 })}
