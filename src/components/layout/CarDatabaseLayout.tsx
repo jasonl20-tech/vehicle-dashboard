@@ -1,17 +1,19 @@
-import { BarChart3, LayoutGrid, LogOut, Table2 } from "lucide-react";
+import { BarChart3, LayoutGrid, LogOut, Sparkles, Table2 } from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { Logo } from "../brand/Logo";
 import { useAuth } from "../../lib/auth";
 
 /**
  * Eigenständige Hülle für die „Car Database" mit Sidebar-Navigation zu den
- * Unterseiten (Übersicht / Datenbank / Galerie). Top-Level-Bereich wie Control
- * Platform. Desktop: feste Sidebar links; mobil: Tab-Leiste oben.
+ * Unterseiten (Übersicht / Datenbank / Galerie). Zusätzlich ein Button, der
+ * zur eigenständigen Demo-Website (`/demo`) führt. Top-Level-Bereich wie
+ * Control Platform. Desktop: feste Sidebar links; mobil: Tab-Leiste oben.
  */
 const NAV = [
   { to: "/car-database", label: "Übersicht", icon: BarChart3, end: true },
   { to: "/car-database/eintraege", label: "Datenbank", icon: Table2, end: false },
   { to: "/car-database/galerie", label: "Galerie", icon: LayoutGrid, end: false },
+  { to: "/demo", label: "Demo-Website", icon: Sparkles, end: false },
 ];
 
 const linkCls = ({ isActive }: { isActive: boolean }) =>

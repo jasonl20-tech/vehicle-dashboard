@@ -143,7 +143,14 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     status: 200,
     headers: {
       "content-type": img.headers.get("content-type") || "image/png",
-      "cache-control": "public, max-age=3600",
+      // Bilder pro Auto/Ansicht/Farbe sind praktisch unveränderlich:
+      //  - max-age=86400        → Browser nutzt das Bild 1 Tag ohne Netzaufruf
+      //                           (Farbwechsel/Zurückblättern = sofort)
+      //  - stale-while-revalidate → danach bis 7 Tage sofort aus dem Cache,
+      //                           Aktualisierung läuft im Hintergrund
+      // Läuft der (signierte) CDN-Link der Kunden-API ab, holt der Proxy beim
+      // nächsten Cache-Miss automatisch einen frischen Link.
+      "cache-control": "public, max-age=86400, stale-while-revalidate=604800",
     },
   });
   waitUntil(cache.put(cacheKey, resp.clone()));

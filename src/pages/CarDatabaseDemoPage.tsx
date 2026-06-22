@@ -304,6 +304,19 @@ function stageStyle(bg: BgMode): CSSProperties {
   };
 }
 
+/**
+ * Bild-URL im Hintergrund vorladen (wärmt Browser- und Edge-Cache vor, bevor
+ * der Nutzer klickt). Eine sitzungsweite Menge verhindert doppelte Anfragen
+ * für dieselbe URL.
+ */
+const preloadedUrls = new Set<string>();
+function preloadImage(url: string | null) {
+  if (!url || preloadedUrls.has(url)) return;
+  preloadedUrls.add(url);
+  const img = new Image();
+  img.src = url;
+}
+
 export default function CarDatabaseDemoPage() {
   const [car, setCar] = useState<CarId>(FEATURED[0]);
   const [color, setColor] = useState("white");
@@ -359,16 +372,25 @@ export default function CarDatabaseDemoPage() {
     }
   }, [availViews, view, exterior, interior]);
 
-  // Alle Außen-Ansichten der aktuellen Farbe vorladen → flüssiger 360°-Dreh.
+  // Aktuelle Farbe: alle Ansichten vorladen → Ansichtswechsel ist sofort da.
   useEffect(() => {
-    exterior.forEach((v) => {
-      const u = carThumbApiUrl({ ...car, farbe: color }, { view: v, width: 900 });
-      if (u) {
-        const img = new Image();
-        img.src = u;
-      }
-    });
-  }, [car, color, exterior]);
+    [...exterior, ...interior].forEach((v) =>
+      preloadImage(
+        carThumbApiUrl(
+          { ...car, farbe: SPIN.includes(v) ? color : "default" },
+          { view: v, width: 900 },
+        ),
+      ),
+    );
+  }, [car, color, exterior, interior]);
+
+  // Aktuelle Ansicht in ALLEN Farben vorladen → Farbwechsel ist sofort da.
+  useEffect(() => {
+    if (!SPIN.includes(view)) return; // Innen-Ansichten sind farb-unabhängig
+    colors.forEach((c) =>
+      preloadImage(carThumbApiUrl({ ...car, farbe: c }, { view, width: 900 })),
+    );
+  }, [car, colors, view]);
 
   const specs = useMemo(() => fakeSpecs(car), [car]);
   const equipment = useMemo(() => fakeEquipment(car), [car]);
@@ -1366,16 +1388,11 @@ function Spin360Section({
 
   // Alle Außen-Ansichten vorladen → flüssiger Dreh.
   useEffect(() => {
-    exterior.forEach((v) => {
-      const u = carThumbApiUrl(
-        { ...car, farbe: "default" },
-        { view: v, width: 1100 },
-      );
-      if (u) {
-        const img = new Image();
-        img.src = u;
-      }
-    });
+    exterior.forEach((v) =>
+      preloadImage(
+        carThumbApiUrl({ ...car, farbe: "default" }, { view: v, width: 1100 }),
+      ),
+    );
   }, [car, exterior]);
 
   const len = exterior.length;
