@@ -1,4 +1,13 @@
-import { ImageIcon, RotateCcw, Shuffle, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ImageIcon,
+  Plus,
+  RotateCcw,
+  Search,
+  Shuffle,
+  X,
+} from "lucide-react";
 import {
   type CSSProperties,
   type ReactNode,
@@ -10,19 +19,35 @@ import PageHeader from "../components/ui/PageHeader";
 import { useApi } from "../lib/customerApi";
 import {
   carDatabaseGalleryUrl,
+  carDatabaseListUrl,
   carThumbApiUrl,
   GALLERY_COLORS,
   GALLERY_VIEWS,
+  type CarListResponse,
+  type CarRow,
   type GalleryResponse,
-  type GalleryRow,
 } from "../lib/carDatabaseApi";
 import { TEXT_IN } from "../lib/carDatabaseUi";
 
 type Bg = "weiss" | "hell" | "dunkel" | "transparent";
 type Fit = "contain" | "cover";
 type Aspect = "square" | "4/3" | "16/9";
+type Mode = "auto" | "manual";
+
+/** Minimale Auto-Identität (reicht für Thumbnail-Proxy + Anzeige). */
+type CarId = {
+  marke: string;
+  modell: string;
+  jahr: number;
+  body: string;
+  trim: string;
+};
+
+/** Ein manuell ausgewähltes Auto mit eigener Ansicht. */
+type ManualItem = CarId & { farbe: string; view: string; id: string };
 
 type Settings = {
+  mode: Mode;
   view: string;
   color: string;
   count: number;
@@ -37,9 +62,11 @@ type Settings = {
   marke: string;
   jahrMin: string;
   jahrMax: string;
+  manual: ManualItem[];
 };
 
 const DEFAULTS: Settings = {
+  mode: "auto",
   view: "front_left",
   color: "",
   count: 24,
@@ -54,6 +81,7 @@ const DEFAULTS: Settings = {
   marke: "",
   jahrMin: "",
   jahrMax: "",
+  manual: [],
 };
 
 const STORAGE_KEY = "cardb_gallery_v1";
@@ -66,6 +94,14 @@ function loadSettings(): Settings {
   } catch {
     return DEFAULTS;
   }
+}
+
+function newId(): string {
+  return `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+function viewLabel(v: string): string {
+  return GALLERY_VIEWS.find((x) => x.value === v)?.label ?? v;
 }
 
 const ASPECT_CLASS: Record<Aspect, string> = {
@@ -96,14 +132,16 @@ export default function CarDatabaseGalleryPage() {
   const [s, setS] = useState<Settings>(loadSettings);
   const [seed, setSeed] = useState(1);
   const [lightbox, setLightbox] = useState<{
-    car: GalleryRow;
+    car: CarId;
     farbe: string;
+    view: string;
   } | null>(null);
+
+  const isManual = s.mode === "manual";
 
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) =>
     setS((prev) => ({ ...prev, [k]: v }));
 
-  // Einstellungen merken.
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
@@ -112,23 +150,25 @@ export default function CarDatabaseGalleryPage() {
     }
   }, [s]);
 
-  const url = useMemo(
+  // Zufalls-/Filter-Auswahl nur im Auto-Modus laden (manuell = kein Fetch).
+  const autoUrl = useMemo(
     () =>
-      carDatabaseGalleryUrl({
-        marke: s.marke,
-        jahrMin: s.jahrMin,
-        jahrMax: s.jahrMax,
-        view: s.view,
-        random: s.random,
-        limit: s.count,
-        seed,
-      }),
-    [s.marke, s.jahrMin, s.jahrMax, s.view, s.random, s.count, seed],
+      isManual
+        ? null
+        : carDatabaseGalleryUrl({
+            marke: s.marke,
+            jahrMin: s.jahrMin,
+            jahrMax: s.jahrMax,
+            view: s.view,
+            random: s.random,
+            limit: s.count,
+            seed,
+          }),
+    [isManual, s.marke, s.jahrMin, s.jahrMax, s.view, s.random, s.count, seed],
   );
-  const api = useApi<GalleryResponse>(url);
-  const rows = api.data?.rows ?? [];
+  const api = useApi<GalleryResponse>(autoUrl);
 
-  // Esc schließt die Lightbox.
+  // Esc schließt Lightbox.
   useEffect(() => {
     if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
@@ -138,21 +178,87 @@ export default function CarDatabaseGalleryPage() {
     return () => document.removeEventListener("keydown", onKey);
   }, [lightbox]);
 
+  // Manuelle Auswahl bearbeiten.
+  const addCar = (r: CarRow) =>
+    setS((prev) => ({
+      ...prev,
+      manual: [
+        ...prev.manual,
+        {
+          marke: r.marke,
+          modell: r.modell,
+          jahr: r.jahr,
+          body: r.body,
+          trim: r.trim,
+          farbe: r.farbe,
+          view: prev.view,
+          id: newId(),
+        },
+      ],
+    }));
+  const removeItem = (id: string) =>
+    setS((prev) => ({
+      ...prev,
+      manual: prev.manual.filter((m) => m.id !== id),
+    }));
+  const setItemView = (id: string, view: string) =>
+    setS((prev) => ({
+      ...prev,
+      manual: prev.manual.map((m) => (m.id === id ? { ...m, view } : m)),
+    }));
+  const moveItem = (id: string, dir: -1 | 1) =>
+    setS((prev) => {
+      const i = prev.manual.findIndex((m) => m.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.manual.length) return prev;
+      const next = [...prev.manual];
+      [next[i], next[j]] = [next[j], next[i]];
+      return { ...prev, manual: next };
+    });
+
   const tileBgClass = bgClass(s.bg);
   const tileBgStyle = s.bg === "transparent" ? CHECKER : undefined;
+
+  const displayItems = isManual
+    ? s.manual.map((m) => ({
+        key: m.id,
+        car: m as CarId,
+        farbe: s.color || m.farbe,
+        view: m.view || s.view,
+      }))
+    : (api.data?.rows ?? []).map((r, i) => ({
+        key: `${r.marke}-${r.modell}-${r.jahr}-${r.body}-${r.trim}-${i}`,
+        car: r as CarId,
+        farbe: s.color || r.farbe,
+        view: s.view,
+      }));
 
   return (
     <div>
       <PageHeader
         eyebrow="Car Database"
         title="Galerie"
-        description="Fahrzeuge als anpassbares Raster — standardmäßig zufällige Autos in der Ansicht Vorne links. Ansicht, Layout, Hintergrund und vieles mehr frei einstellbar."
+        description="Fahrzeuge als anpassbares Raster: zufällig/gefiltert oder als eigene Auswahl, bei der du jedes Auto und seine Ansicht selbst bestimmst."
       />
+
+      {/* Modus-Umschalter */}
+      <div className="mb-3 inline-flex rounded-lg border border-hair bg-paper p-0.5">
+        <ModeBtn
+          active={!isManual}
+          onClick={() => set("mode", "auto")}
+          label="Zufällig & Filter"
+        />
+        <ModeBtn
+          active={isManual}
+          onClick={() => set("mode", "manual")}
+          label="Eigene Auswahl"
+        />
+      </div>
 
       {/* Steuerpanel */}
       <div className="mb-4 rounded-lg border border-hair bg-paper p-3">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-          <Field label="Ansicht">
+          <Field label={isManual ? "Ansicht (Standard f. neue)" : "Ansicht"}>
             <select
               value={s.view}
               onChange={(e) => set("view", e.target.value)}
@@ -178,19 +284,21 @@ export default function CarDatabaseGalleryPage() {
               ))}
             </select>
           </Field>
-          <Field label="Anzahl">
-            <select
-              value={s.count}
-              onChange={(e) => set("count", Number(e.target.value))}
-              className={TEXT_IN}
-            >
-              {[12, 24, 36, 48, 60].map((n) => (
-                <option key={n} value={n}>
-                  {n} Autos
-                </option>
-              ))}
-            </select>
-          </Field>
+          {!isManual && (
+            <Field label="Anzahl">
+              <select
+                value={s.count}
+                onChange={(e) => set("count", Number(e.target.value))}
+                className={TEXT_IN}
+              >
+                {[12, 24, 36, 48, 60].map((n) => (
+                  <option key={n} value={n}>
+                    {n} Autos
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="Spalten">
             <select
               value={s.columns}
@@ -237,36 +345,46 @@ export default function CarDatabaseGalleryPage() {
               <option value="transparent">Transparent (Schachbrett)</option>
             </select>
           </Field>
-          <Field label="Marke (genau)">
-            <input
-              value={s.marke}
-              onChange={(e) => set("marke", e.target.value)}
-              placeholder="alle"
-              className={TEXT_IN}
-            />
-          </Field>
-          <Field label="Jahr von / bis">
-            <div className="flex gap-2">
-              <input
-                value={s.jahrMin}
-                onChange={(e) =>
-                  set("jahrMin", e.target.value.replace(/[^0-9]/g, "").slice(0, 4))
-                }
-                placeholder="von"
-                inputMode="numeric"
-                className={TEXT_IN}
-              />
-              <input
-                value={s.jahrMax}
-                onChange={(e) =>
-                  set("jahrMax", e.target.value.replace(/[^0-9]/g, "").slice(0, 4))
-                }
-                placeholder="bis"
-                inputMode="numeric"
-                className={TEXT_IN}
-              />
-            </div>
-          </Field>
+          {!isManual && (
+            <>
+              <Field label="Marke (genau)">
+                <input
+                  value={s.marke}
+                  onChange={(e) => set("marke", e.target.value)}
+                  placeholder="alle"
+                  className={TEXT_IN}
+                />
+              </Field>
+              <Field label="Jahr von / bis">
+                <div className="flex gap-2">
+                  <input
+                    value={s.jahrMin}
+                    onChange={(e) =>
+                      set(
+                        "jahrMin",
+                        e.target.value.replace(/[^0-9]/g, "").slice(0, 4),
+                      )
+                    }
+                    placeholder="von"
+                    inputMode="numeric"
+                    className={TEXT_IN}
+                  />
+                  <input
+                    value={s.jahrMax}
+                    onChange={(e) =>
+                      set(
+                        "jahrMax",
+                        e.target.value.replace(/[^0-9]/g, "").slice(0, 4),
+                      )
+                    }
+                    placeholder="bis"
+                    inputMode="numeric"
+                    className={TEXT_IN}
+                  />
+                </div>
+              </Field>
+            </>
+          )}
         </div>
 
         {/* Schalter + Aktionen */}
@@ -286,79 +404,99 @@ export default function CarDatabaseGalleryPage() {
             checked={s.rounded}
             onChange={(v) => set("rounded", v)}
           />
-          <Toggle
-            label="Zufällig"
-            checked={s.random}
-            onChange={(v) => set("random", v)}
-          />
+          {!isManual && (
+            <Toggle
+              label="Zufällig"
+              checked={s.random}
+              onChange={(v) => set("random", v)}
+            />
+          )}
           <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setS(DEFAULTS)}
+              onClick={() =>
+                setS({ ...DEFAULTS, manual: s.manual, mode: s.mode })
+              }
               className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-paper px-2.5 py-1.5 text-[12px] text-ink-600 hover:bg-ink-50"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Zurücksetzen
+              Ansicht zurücksetzen
             </button>
-            <button
-              type="button"
-              onClick={() => setSeed((n) => n + 1)}
-              disabled={!s.random}
-              className="inline-flex items-center gap-1.5 rounded-md border border-brand-500/40 bg-brand-500/10 px-3 py-1.5 text-[12px] font-medium text-brand-700 hover:bg-brand-500/15 disabled:opacity-40"
-              title={s.random ? "Neue Zufallsauswahl" : "Nur bei aktivem Zufall"}
-            >
-              <Shuffle className="h-3.5 w-3.5" />
-              Würfeln
-            </button>
+            {!isManual && (
+              <button
+                type="button"
+                onClick={() => setSeed((n) => n + 1)}
+                disabled={!s.random}
+                className="inline-flex items-center gap-1.5 rounded-md border border-brand-500/40 bg-brand-500/10 px-3 py-1.5 text-[12px] font-medium text-brand-700 hover:bg-brand-500/15 disabled:opacity-40"
+                title={
+                  s.random ? "Neue Zufallsauswahl" : "Nur bei aktivem Zufall"
+                }
+              >
+                <Shuffle className="h-3.5 w-3.5" />
+                Würfeln
+              </button>
+            )}
           </div>
         </div>
       </div>
 
+      {/* Manuelle Auswahl */}
+      {isManual && (
+        <ManualPanel
+          items={s.manual}
+          defaultView={s.view}
+          onAdd={addCar}
+          onRemove={removeItem}
+          onSetView={setItemView}
+          onMove={moveItem}
+          onClear={() => set("manual", [])}
+        />
+      )}
+
       {/* Galerie */}
-      {api.loading && rows.length === 0 ? (
+      {!isManual && api.loading && displayItems.length === 0 ? (
         <div className="py-16 text-center text-[12px] text-ink-400">
           Lädt Autos…
         </div>
-      ) : rows.length === 0 ? (
+      ) : displayItems.length === 0 ? (
         <div className="py-16 text-center text-[12px] text-ink-400">
-          Keine Autos für diese Auswahl.
+          {isManual
+            ? "Noch keine Autos ausgewählt – oben suchen und hinzufügen."
+            : "Keine Autos für diese Auswahl."}
         </div>
       ) : (
         <div
           className="grid gap-3"
-          style={{
-            gridTemplateColumns: `repeat(${s.columns}, minmax(0, 1fr))`,
-          }}
+          style={{ gridTemplateColumns: `repeat(${s.columns}, minmax(0, 1fr))` }}
         >
-          {rows.map((car, i) => {
-            const farbe = s.color || car.farbe;
-            return (
-              <GalleryCard
-                key={`${car.marke}-${car.modell}-${car.jahr}-${car.body}-${car.trim}-${i}`}
-                car={car}
-                farbe={farbe}
-                view={s.view}
-                aspectClass={ASPECT_CLASS[s.aspect]}
-                fit={s.fit}
-                bgClass={tileBgClass}
-                bgStyle={tileBgStyle}
-                labels={s.labels}
-                border={s.border}
-                rounded={s.rounded}
-                onOpen={() => setLightbox({ car, farbe })}
-              />
-            );
-          })}
+          {displayItems.map((it) => (
+            <GalleryCard
+              key={it.key}
+              car={it.car}
+              farbe={it.farbe}
+              view={it.view}
+              aspectClass={ASPECT_CLASS[s.aspect]}
+              fit={s.fit}
+              bgClass={tileBgClass}
+              bgStyle={tileBgStyle}
+              labels={s.labels}
+              border={s.border}
+              rounded={s.rounded}
+              onOpen={() =>
+                setLightbox({ car: it.car, farbe: it.farbe, view: it.view })
+              }
+            />
+          ))}
         </div>
       )}
 
       <p className="mt-3 text-[11px] text-ink-400">
-        {rows.length > 0 && `${rows.length} Autos angezeigt`}
+        {displayItems.length > 0 && `${displayItems.length} Autos angezeigt`}
         {s.color &&
           " · feste Farbe: nicht jedes Auto hat sie (sonst Platzhalter)"}
       </p>
 
-      {api.error && (
+      {api.error && !isManual && (
         <p className="mt-3 text-[12px] text-accent-rose">{api.error}</p>
       )}
 
@@ -366,7 +504,7 @@ export default function CarDatabaseGalleryPage() {
         <GalleryLightbox
           car={lightbox.car}
           farbe={lightbox.farbe}
-          view={s.view}
+          view={lightbox.view}
           onClose={() => setLightbox(null)}
         />
       )}
@@ -374,13 +512,232 @@ export default function CarDatabaseGalleryPage() {
   );
 }
 
-function Field({
+function ModeBtn({
+  active,
+  onClick,
   label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${
+        active ? "bg-ink-900 text-white" : "text-ink-500 hover:text-ink-900"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ManualPanel({
+  items,
+  defaultView,
+  onAdd,
+  onRemove,
+  onSetView,
+  onMove,
+  onClear,
+}: {
+  items: ManualItem[];
+  defaultView: string;
+  onAdd: (r: CarRow) => void;
+  onRemove: (id: string) => void;
+  onSetView: (id: string, view: string) => void;
+  onMove: (id: string, dir: -1 | 1) => void;
+  onClear: () => void;
+}) {
+  const [qIn, setQIn] = useState("");
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setQ(qIn.trim()), 350);
+    return () => clearTimeout(t);
+  }, [qIn]);
+
+  const searchApi = useApi<CarListResponse>(
+    q.length >= 2 ? carDatabaseListUrl({ q, limit: 8 }) : null,
+  );
+  const results = searchApi.data?.rows ?? [];
+
+  return (
+    <div className="mb-4 rounded-lg border border-hair bg-paper p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-[12px] font-medium uppercase tracking-[0.1em] text-ink-400">
+          Eigene Auswahl ({items.length})
+        </h3>
+        {items.length > 0 && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[11px] text-ink-500 hover:text-accent-rose"
+          >
+            Alle entfernen
+          </button>
+        )}
+      </div>
+
+      {/* Suche + hinzufügen */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+        <input
+          value={qIn}
+          onChange={(e) => setQIn(e.target.value)}
+          placeholder="Auto suchen (Marke, Modell, Jahr) und hinzufügen…"
+          className={`${TEXT_IN} pl-7`}
+        />
+        {q.length >= 2 && (
+          <div className="absolute z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-hair bg-paper shadow-lg">
+            {searchApi.loading && results.length === 0 ? (
+              <div className="px-3 py-2 text-[12px] text-ink-400">Suche…</div>
+            ) : results.length === 0 ? (
+              <div className="px-3 py-2 text-[12px] text-ink-400">
+                Nichts gefunden.
+              </div>
+            ) : (
+              results.map((r, i) => (
+                <button
+                  key={`${r.marke}-${r.modell}-${r.jahr}-${i}`}
+                  type="button"
+                  onClick={() => onAdd(r)}
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-ink-50"
+                >
+                  <MiniThumb car={r} farbe={r.farbe} view={defaultView} />
+                  <span className="min-w-0 flex-1 truncate text-[12px]">
+                    <span className="font-medium text-ink-800">
+                      {r.marke} {r.modell}
+                    </span>
+                    <span className="text-ink-400">
+                      {" "}
+                      {r.jahr} · {r.body} · {r.trim}
+                    </span>
+                  </span>
+                  <Plus className="h-4 w-4 shrink-0 text-brand-600" />
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Ausgewählte Autos */}
+      {items.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {items.map((m, i) => (
+            <div
+              key={m.id}
+              className="flex items-center gap-2 rounded-md border border-hair bg-white px-2 py-1.5"
+            >
+              <span className="w-5 shrink-0 text-center text-[11px] tabular-nums text-ink-400">
+                {i + 1}
+              </span>
+              <MiniThumb car={m} farbe={m.farbe} view={m.view} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[12px] font-medium text-ink-800">
+                  {m.marke} {m.modell}
+                </div>
+                <div className="truncate text-[10px] text-ink-400">
+                  {m.jahr} · {m.body} · {m.trim}
+                </div>
+              </div>
+              <select
+                value={m.view}
+                onChange={(e) => onSetView(m.id, e.target.value)}
+                className="shrink-0 rounded border border-hair bg-white px-1.5 py-1 text-[11px] text-ink-700 focus:outline-none"
+                title="Ansicht dieses Autos"
+              >
+                {GALLERY_VIEWS.map((v) => (
+                  <option key={v.value} value={v.value}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+              <div className="flex shrink-0 items-center">
+                <IconBtn
+                  onClick={() => onMove(m.id, -1)}
+                  disabled={i === 0}
+                  aria="Nach oben"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </IconBtn>
+                <IconBtn
+                  onClick={() => onMove(m.id, 1)}
+                  disabled={i === items.length - 1}
+                  aria="Nach unten"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </IconBtn>
+                <IconBtn onClick={() => onRemove(m.id)} aria="Entfernen">
+                  <X className="h-3.5 w-3.5" />
+                </IconBtn>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IconBtn({
+  onClick,
+  disabled,
+  aria,
   children,
 }: {
-  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  aria: string;
   children: ReactNode;
 }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={aria}
+      title={aria}
+      className="inline-flex h-7 w-7 items-center justify-center rounded text-ink-500 hover:bg-ink-100 hover:text-ink-900 disabled:opacity-30 disabled:hover:bg-transparent"
+    >
+      {children}
+    </button>
+  );
+}
+
+function MiniThumb({
+  car,
+  farbe,
+  view,
+}: {
+  car: CarId;
+  farbe: string;
+  view: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const url = carThumbApiUrl({ ...car, farbe }, { view, width: 96 });
+  if (!url || failed) {
+    return (
+      <span className="grid h-9 w-12 shrink-0 place-items-center rounded border border-hair bg-ink-50">
+        <ImageIcon className="h-3.5 w-3.5 text-ink-300" />
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onError={() => setFailed(true)}
+      className="h-9 w-12 shrink-0 rounded border border-hair bg-white object-contain"
+    />
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
       <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-ink-400">
@@ -426,7 +783,7 @@ function GalleryCard({
   rounded,
   onOpen,
 }: {
-  car: GalleryRow;
+  car: CarId;
   farbe: string;
   view: string;
   aspectClass: string;
@@ -475,7 +832,10 @@ function GalleryCard({
           <span className="font-medium text-ink-800">
             {car.marke} {car.modell}
           </span>
-          <span className="text-ink-400"> · {car.jahr}</span>
+          <span className="text-ink-400">
+            {" "}
+            · {car.jahr} · {viewLabel(view)}
+          </span>
         </figcaption>
       )}
     </figure>
@@ -488,7 +848,7 @@ function GalleryLightbox({
   view,
   onClose,
 }: {
-  car: GalleryRow;
+  car: CarId;
   farbe: string;
   view: string;
   onClose: () => void;
@@ -528,7 +888,7 @@ function GalleryLightbox({
           </div>
         )}
         <div className="mt-2 text-center text-[12px] text-white/80">
-          {car.marke} {car.modell} · {car.jahr}
+          {car.marke} {car.modell} · {car.jahr} · {viewLabel(view)}
           {farbe && farbe !== "default" ? ` · ${farbe}` : ""}
         </div>
       </div>
