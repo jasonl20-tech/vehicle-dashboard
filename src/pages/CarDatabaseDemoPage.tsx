@@ -308,7 +308,10 @@ export default function CarDatabaseDemoPage() {
   const [car, setCar] = useState<CarId>(FEATURED[0]);
   const [color, setColor] = useState("white");
   const [view, setView] = useState("front_left");
-  const [bg, setBg] = useState<BgMode>("showroom");
+  // Hintergrund der Hero-Bühne (nur Showroom/Studio). Transparent ist ein
+  // eigener Schalter, der ausschließlich die Hero betrifft.
+  const [bg, setBg] = useState<"showroom" | "studio">("showroom");
+  const [transparent, setTransparent] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [showApi, setShowApi] = useState(false);
   const [zoom, setZoom] = useState(false);
@@ -367,14 +370,6 @@ export default function CarDatabaseDemoPage() {
     });
   }, [car, color, exterior]);
 
-  // 360°-Steuerung nur über tatsächlich vorhandene Außen-Ansichten.
-  const spinIdx = Math.max(0, exterior.indexOf(view));
-  const setSpin = (idx: number) => {
-    if (!exterior.length) return;
-    const n = ((idx % exterior.length) + exterior.length) % exterior.length;
-    setView(exterior[n]);
-  };
-
   const specs = useMemo(() => fakeSpecs(car), [car]);
   const equipment = useMemo(() => fakeEquipment(car), [car]);
   const finance = useMemo(() => financing(specs.price), [specs.price]);
@@ -401,16 +396,6 @@ export default function CarDatabaseDemoPage() {
       trim: r.trim,
     }));
   }, [showroomApi.data]);
-
-  // Transparent-Umschalter merkt sich die zuletzt gewählte „feste" Bühne, um
-  // sie beim Ausschalten wiederherzustellen.
-  const prevSolidBg = useRef<BgMode>("showroom");
-  const toggleTransparent = () =>
-    setBg((b) => {
-      if (b === "transparent") return prevSolidBg.current;
-      prevSolidBg.current = b;
-      return "transparent";
-    });
 
   const pick = (c: CarId) => {
     setCar(c);
@@ -490,13 +475,10 @@ export default function CarDatabaseDemoPage() {
               car={car}
               color={color}
               view={view}
-              bg={bg}
-              isExterior={SPIN.includes(view)}
-              spinIdx={spinIdx}
-              onSpin={setSpin}
+              bg={transparent ? "transparent" : bg}
+              transparent={transparent}
               onZoom={() => setZoom(true)}
-              transparentActive={bg === "transparent"}
-              onToggleTransparent={toggleTransparent}
+              onToggleTransparent={() => setTransparent((t) => !t)}
               loading={detailApi.loading && !detail}
             />
 
@@ -507,22 +489,31 @@ export default function CarDatabaseDemoPage() {
               </span>
               <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
                 <SegBtn
-                  active={bg === "showroom"}
-                  onClick={() => setBg("showroom")}
+                  active={!transparent && bg === "showroom"}
+                  onClick={() => {
+                    setTransparent(false);
+                    setBg("showroom");
+                  }}
                 >
                   Showroom
                 </SegBtn>
-                <SegBtn active={bg === "studio"} onClick={() => setBg("studio")}>
+                <SegBtn
+                  active={!transparent && bg === "studio"}
+                  onClick={() => {
+                    setTransparent(false);
+                    setBg("studio");
+                  }}
+                >
                   Studio
                 </SegBtn>
               </div>
               <button
                 type="button"
-                onClick={toggleTransparent}
-                aria-pressed={bg === "transparent"}
-                title="Bild als transparentes PNG (Freisteller) anzeigen"
+                onClick={() => setTransparent((t) => !t)}
+                aria-pressed={transparent}
+                title="Echtes transparentes PNG über die API anzeigen"
                 className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition ${
-                  bg === "transparent"
+                  transparent
                     ? "border-ink-900 bg-ink-900 text-white"
                     : "border-ink-200 bg-white text-ink-700 hover:bg-ink-50"
                 }`}
@@ -531,7 +522,7 @@ export default function CarDatabaseDemoPage() {
                 Transparent (PNG)
                 <span
                   className={`ml-0.5 inline-block h-2 w-2 rounded-full ${
-                    bg === "transparent" ? "bg-emerald-400" : "bg-ink-300"
+                    transparent ? "bg-emerald-400" : "bg-ink-300"
                   }`}
                 />
               </button>
@@ -674,8 +665,8 @@ export default function CarDatabaseDemoPage() {
           </aside>
         </div>
 
-        {/* 360°-Rundumblick (eigener Abschnitt) */}
-        <Spin360Section car={car} color={color} exterior={exterior} bg={bg} />
+        {/* 360°-Rundumblick (eigener Abschnitt) — immer Standardfarbe */}
+        <Spin360Section car={car} exterior={exterior} bg={bg} />
 
         {/* Übersicht · 10 Fahrzeuge (Baujahr 2010) */}
         <ShowroomGrid
@@ -737,6 +728,7 @@ export default function CarDatabaseDemoPage() {
           car={car}
           color={color}
           view={view}
+          transparent={transparent}
           onClose={() => setZoom(false)}
         />
       )}
@@ -744,16 +736,19 @@ export default function CarDatabaseDemoPage() {
   );
 }
 
+/**
+ * Hero-Bühne: zeigt die gewählte Perspektive in der gewählten Farbe. KEIN
+ * 360°-Dreh (das gibt es im eigenen Abschnitt). Der Transparent-Schalter
+ * fragt ein echtes Freisteller-PNG über die API an und zeigt es auf einem
+ * Karo-Hintergrund, der die Transparenz sichtbar macht.
+ */
 function Stage({
   car,
   color,
   view,
   bg,
-  isExterior,
-  spinIdx,
-  onSpin,
+  transparent,
   onZoom,
-  transparentActive,
   onToggleTransparent,
   loading,
 }: {
@@ -761,47 +756,26 @@ function Stage({
   color: string;
   view: string;
   bg: BgMode;
-  isExterior: boolean;
-  spinIdx: number;
-  onSpin: (idx: number) => void;
+  transparent: boolean;
   onZoom: () => void;
-  transparentActive: boolean;
   onToggleTransparent: () => void;
   loading: boolean;
 }) {
   const [failed, setFailed] = useState(false);
-  const drag = useRef<{ x: number; idx: number } | null>(null);
   // Innenraum-Bilder sind farb-unabhängig → über „default" laden.
   const imgFarbe = SPIN.includes(view) ? color : "default";
-  const url = carThumbApiUrl({ ...car, farbe: imgFarbe }, { view, width: 900 });
+  const url = carThumbApiUrl(
+    { ...car, farbe: imgFarbe },
+    { view, width: 900, transparent },
+  );
 
   useEffect(() => setFailed(false), [url]);
-
-  const onDown = (e: React.PointerEvent) => {
-    if (!isExterior) return;
-    drag.current = { x: e.clientX, idx: spinIdx };
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  };
-  const onMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    const steps = Math.round((drag.current.x - e.clientX) / 24);
-    onSpin(drag.current.idx + steps);
-  };
-  const onUp = () => {
-    drag.current = null;
-  };
 
   return (
     <div className="relative">
       <div
-        className={`relative overflow-hidden rounded-xl border border-hair ${
-          isExterior ? "cursor-ew-resize" : ""
-        }`}
+        className="relative overflow-hidden rounded-xl border border-hair"
         style={stageStyle(bg)}
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerLeave={onUp}
       >
         <div className="relative flex aspect-[16/10] items-center justify-center p-4 select-none">
           {url && !failed ? (
@@ -825,13 +799,6 @@ function Stage({
           )}
         </div>
 
-        {/* 360-Badge */}
-        {isExterior && (
-          <div className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-ink-900/80 px-2 py-1 text-[10px] font-medium text-white backdrop-blur">
-            <Rotate3d className="h-3 w-3" />
-            360°
-          </div>
-        )}
         <div
           className={`pointer-events-none absolute right-3 top-3 rounded-full px-2 py-1 text-[10px] font-medium backdrop-blur ${
             bg === "studio" ? "bg-white/15 text-white" : "bg-ink-900/70 text-white"
@@ -840,14 +807,14 @@ function Stage({
           {VIEW_LABEL[view] ?? view}
         </div>
 
-        {/* Transparent-Umschalter (Freisteller) */}
+        {/* Transparent-Schalter (echtes Freisteller-PNG) */}
         <button
           type="button"
           onClick={onToggleTransparent}
-          aria-pressed={transparentActive}
-          title="Transparentes Bild (Freisteller) ein-/ausblenden"
+          aria-pressed={transparent}
+          title="Echtes transparentes PNG über die API anzeigen"
           className={`absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium shadow backdrop-blur transition ${
-            transparentActive
+            transparent
               ? "bg-ink-900 text-white"
               : "bg-white/85 text-ink-700 hover:bg-white"
           }`}
@@ -866,14 +833,6 @@ function Stage({
           <Maximize2 className="h-4 w-4" />
         </button>
       </div>
-
-      {/* Pfeile */}
-      {isExterior && (
-        <>
-          <ArrowBtn side="left" onClick={() => onSpin(spinIdx - 1)} />
-          <ArrowBtn side="right" onClick={() => onSpin(spinIdx + 1)} />
-        </>
-      )}
     </div>
   );
 }
@@ -1337,15 +1296,20 @@ function Zoomed({
   car,
   color,
   view,
+  transparent,
   onClose,
 }: {
   car: CarId;
   color: string;
   view: string;
+  transparent: boolean;
   onClose: () => void;
 }) {
   const imgFarbe = SPIN.includes(view) ? color : "default";
-  const url = carThumbApiUrl({ ...car, farbe: imgFarbe }, { view, width: 1500 });
+  const url = carThumbApiUrl(
+    { ...car, farbe: imgFarbe },
+    { view, width: 1500, transparent },
+  );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
@@ -1368,8 +1332,11 @@ function Zoomed({
         <img
           src={url}
           alt={`${car.marke} ${prettyModel(car.modell)}`}
-          className="max-h-[88vh] max-w-[94vw] object-contain"
           onClick={(e) => e.stopPropagation()}
+          style={transparent ? CHECKER : undefined}
+          className={`max-h-[88vh] max-w-[94vw] object-contain ${
+            transparent ? "rounded-lg" : ""
+          }`}
         />
       )}
     </div>
@@ -1379,17 +1346,15 @@ function Zoomed({
 /**
  * Eigenständiger 360°-Abschnitt: großer Viewer, durch Ziehen, Pfeile oder den
  * Regler durch die 8 Studio-Perspektiven drehbar. Hat eine eigene
- * Dreh-Position (unabhängig vom Perspektiven-Viewer oben), nutzt aber das
- * gewählte Fahrzeug, die Farbe und den Hintergrund.
+ * Dreh-Position (unabhängig vom Perspektiven-Viewer oben) und zeigt das
+ * Fahrzeug immer in der Standardfarbe (`default`).
  */
 function Spin360Section({
   car,
-  color,
   exterior,
   bg,
 }: {
   car: CarId;
-  color: string;
   exterior: string[];
   bg: BgMode;
 }) {
@@ -1397,16 +1362,16 @@ function Spin360Section({
   const [failed, setFailed] = useState(false);
   const drag = useRef<{ x: number; idx: number } | null>(null);
 
-  // Bei Fahrzeug-/Farbwechsel zurück auf die erste Ansicht.
+  // Bei Fahrzeugwechsel zurück auf die erste Ansicht.
   useEffect(() => {
     setIdx(0);
-  }, [car, color]);
+  }, [car]);
 
   // Alle Außen-Ansichten vorladen → flüssiger Dreh.
   useEffect(() => {
     exterior.forEach((v) => {
       const u = carThumbApiUrl(
-        { ...car, farbe: color },
+        { ...car, farbe: "default" },
         { view: v, width: 1100 },
       );
       if (u) {
@@ -1414,13 +1379,13 @@ function Spin360Section({
         img.src = u;
       }
     });
-  }, [car, color, exterior]);
+  }, [car, exterior]);
 
   const len = exterior.length;
   const safeIdx = len ? Math.min(idx, len - 1) : 0;
   const view = exterior[safeIdx];
   const url = view
-    ? carThumbApiUrl({ ...car, farbe: color }, { view, width: 1100 })
+    ? carThumbApiUrl({ ...car, farbe: "default" }, { view, width: 1100 })
     : null;
 
   useEffect(() => setFailed(false), [url]);
@@ -1714,7 +1679,7 @@ function SimilarCard({
 }) {
   const [failed, setFailed] = useState(false);
   const url = carThumbApiUrl(
-    { ...car, farbe: "white" },
+    { ...car, farbe: "default" },
     { view: "front_left", width: 420 },
   );
   const specs = fakeSpecs(car);
@@ -2004,7 +1969,7 @@ function ShowroomCard({
 }) {
   const [failed, setFailed] = useState(false);
   const url = carThumbApiUrl(
-    { ...car, farbe: "white" },
+    { ...car, farbe: "default" },
     { view: "front_left", width: 360 },
   );
   const specs = fakeSpecs(car);

@@ -65,6 +65,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const view =
     (p.get("view") || "front_right").trim().toLowerCase() || "front_right";
   const width = Math.min(1600, Math.max(48, Number(p.get("w") || 160) || 160));
+  // Echtes Freisteller-PNG anfragen (Hintergrund serverseitig entfernt).
+  const transparent = ["1", "true", "yes"].includes(
+    (p.get("transparent") || "").trim().toLowerCase(),
+  );
 
   if (!marke || !modell || !jahr) {
     return jsonResponse(
@@ -91,7 +95,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const seg = (s: string) => encodeURIComponent(s);
   const apiUrl =
     `${API_BASE}/api/${seg(marke)}/${seg(modell)}/${seg(jahr)}/${seg(body)}/${seg(trim)}/${seg(view)}` +
-    `?format=png&resolution=default&color=${seg(farbe)}`;
+    `?format=png&resolution=default&color=${seg(farbe)}` +
+    (transparent ? `&transparent=true` : "");
 
   // 1) Kunden-API fragen → signierte image_url holen.
   let imageUrl: string | null = null;
