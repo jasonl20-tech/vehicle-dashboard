@@ -95,6 +95,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     if (mode === "detail") {
       return await handleDetail(db, url);
     }
+    if (mode === "gallery") {
+      return await handleGallery(db, url);
+    }
     return await handleList(db, url);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -542,4 +545,75 @@ async function handleDetail(db: D1Database, url: URL): Promise<Response> {
     selectedFarbe,
     views,
   });
+}
+
+/**
+ * Galerie: N Autos (zufällig oder sortiert), optional gefiltert (Marke/Jahr) und
+ * eingeschränkt auf Autos, die die gewählte Ansicht wirklich haben. Liefert nur
+ * die Auto-Identität (+ repräsentative Farbe) — die Bilder lädt das Frontend
+ * über den Thumbnail-Proxy. `seed` (vom Frontend) bricht nur den useApi-Cache,
+ * damit „Würfeln" eine neue Zufallsauswahl liefert.
+ */
+async function handleGallery(db: D1Database, url: URL): Promise<Response> {
+  const p = url.searchParams;
+  const where: string[] = [];
+  const binds: (string | number)[] = [];
+
+  const marke = (p.get("marke") || "").trim();
+  if (marke) {
+    where.push("lower(marke) = ?");
+    binds.push(marke.toLowerCase());
+  }
+  const jahrMin = Number((p.get("jahr_min") || "").trim());
+  if (Number.isFinite(jahrMin) && jahrMin > 0) {
+    where.push("jahr >= ?");
+    binds.push(jahrMin);
+  }
+  const jahrMax = Number((p.get("jahr_max") || "").trim());
+  if (Number.isFinite(jahrMax) && jahrMax > 0) {
+    where.push("jahr <= ?");
+    binds.push(jahrMax);
+  }
+
+  // Nur Autos, die die gewählte Ansicht haben (sonst nur Platzhalter).
+  const view = (p.get("view") || "").trim().toLowerCase();
+  const havingBinds: (string | number)[] = [];
+  let havingSql = "";
+  if (view) {
+    havingSql = ` HAVING COUNT(DISTINCT CASE WHEN lower("view") = ? THEN 1 END) > 0`;
+    havingBinds.push(view);
+  }
+
+  const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+  const limit = Math.min(60, Math.max(1, Number(p.get("limit") || 24)));
+  const random = (p.get("random") || "1") !== "0";
+  const orderBy = random ? "RANDOM()" : "marke, modell, jahr";
+
+  const sql = `SELECT marke, modell, jahr, body, trim,
+      COALESCE(MAX(CASE WHEN lower(farbe) = 'default' THEN farbe END), MIN(farbe)) AS farbe,
+      COUNT(DISTINCT farbe) AS farben
+    FROM fahrzeugliste${whereSql}
+    GROUP BY marke, modell, jahr, body, trim${havingSql}
+    ORDER BY ${orderBy}
+    LIMIT ?`;
+
+  const res = await db
+    .prepare(sql)
+    .bind(...binds, ...havingBinds, limit)
+    .all();
+
+  const rows = (res.results ?? []).map((r) => {
+    const o = r as Record<string, unknown>;
+    return {
+      marke: String(o.marke ?? ""),
+      modell: String(o.modell ?? ""),
+      jahr: Number(o.jahr ?? 0),
+      body: String(o.body ?? ""),
+      trim: String(o.trim ?? ""),
+      farbe: String(o.farbe ?? ""),
+      farben: Number(o.farben ?? 0),
+    };
+  });
+
+  return jsonResponse({ rows, count: rows.length });
 }

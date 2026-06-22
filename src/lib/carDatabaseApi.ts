@@ -258,3 +258,74 @@ export function carDatabaseListUrl(params: CarListParams): string {
   set("offset", params.offset);
   return u.pathname + u.search;
 }
+
+// --- Galerie ---
+
+export type GalleryRow = {
+  marke: string;
+  modell: string;
+  jahr: number;
+  body: string;
+  trim: string;
+  farbe: string;
+  farben: number;
+};
+
+export type GalleryResponse = {
+  rows: GalleryRow[];
+  count: number;
+};
+
+export type GalleryParams = {
+  marke?: string;
+  jahrMin?: number | string;
+  jahrMax?: number | string;
+  view?: string;
+  random?: boolean;
+  limit?: number;
+  /** Nur Cache-Buster für „Würfeln" (neue Zufallsauswahl). */
+  seed?: number;
+};
+
+export function carDatabaseGalleryUrl(params: GalleryParams): string {
+  const u = new URL(CAR_DATABASE_API, "https://x");
+  u.searchParams.set("mode", "gallery");
+  const set = (k: string, v: string | number | undefined | null) => {
+    if (v === undefined || v === null) return;
+    const s = String(v).trim();
+    if (s) u.searchParams.set(k, s);
+  };
+  set("marke", params.marke);
+  set("jahr_min", params.jahrMin);
+  set("jahr_max", params.jahrMax);
+  set("view", params.view);
+  if (params.random === false) u.searchParams.set("random", "0");
+  set("limit", params.limit);
+  set("seed", params.seed);
+  return u.pathname + u.search;
+}
+
+/** Auswählbare Ansichten für die Galerie (Außen + Innen), mit Labels. */
+export const GALLERY_VIEWS: { value: string; label: string }[] = [
+  { value: "front_left", label: "Vorne links" },
+  { value: "front_right", label: "Vorne rechts" },
+  { value: "front", label: "Vorne" },
+  { value: "rear", label: "Hinten" },
+  { value: "rear_left", label: "Hinten links" },
+  { value: "rear_right", label: "Hinten rechts" },
+  { value: "left", label: "Links" },
+  { value: "right", label: "Rechts" },
+  { value: "dashboard", label: "Cockpit" },
+  { value: "center_console", label: "Mittelkonsole" },
+];
+
+/** Auswählbare Farben (Galerie). „" = jeweils Auto-Standard. */
+export const GALLERY_COLORS: { value: string; label: string }[] = [
+  { value: "", label: "Auto-Standard" },
+  { value: "default", label: "Default" },
+  { value: "black", label: "Schwarz" },
+  { value: "white", label: "Weiß" },
+  { value: "blue", label: "Blau" },
+  { value: "orange", label: "Orange" },
+  { value: "wine_red", label: "Weinrot" },
+];

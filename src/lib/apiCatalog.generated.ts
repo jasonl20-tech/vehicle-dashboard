@@ -15,7 +15,7 @@ export type ApiCatalogEntry = {
   description: string;
 };
 
-export const API_CATALOG_GENERATED_AT = "2026-06-21T17:00:02.090Z" as const;
+export const API_CATALOG_GENERATED_AT = "2026-06-22T10:32:22.759Z" as const;
 
 export const API_CATALOG: readonly ApiCatalogEntry[] = [
   { path: "/api/admin/settings", methods: ["GET", "PUT"], source: "functions/api/admin/settings.ts", description: "Admin: listet alle Zeilen der Tabelle `settings` im D1-Binding `configs` (GET) bzw. upsert einer Zeile mit id, config (JSON), optional description (PUT). Zugriff nur mit freigegebenem `/admin-settings` in der Sicherheitsstufe." },

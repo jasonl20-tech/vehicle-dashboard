@@ -23,7 +23,8 @@
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
 const API_BASE = "https://api.vehicleimagery.com";
-const EXTERIOR = new Set([
+// Vom Proxy unterstützte Ansichten: 8 Außen + 2 Innen (die Kunden-API liefert sie).
+const ALLOWED_VIEWS = new Set([
   "front",
   "rear",
   "left",
@@ -32,6 +33,8 @@ const EXTERIOR = new Set([
   "front_right",
   "rear_left",
   "rear_right",
+  "dashboard",
+  "center_console",
 ]);
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
@@ -59,8 +62,8 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const body = (p.get("body") || "Basis").trim() || "Basis";
   const trim = (p.get("trim") || "base").trim() || "base";
   const farbe = (p.get("farbe") || "default").trim() || "default";
-  let view = (p.get("view") || "front_right").trim().toLowerCase();
-  if (!EXTERIOR.has(view)) view = "front_right";
+  const view =
+    (p.get("view") || "front_right").trim().toLowerCase() || "front_right";
   const width = Math.min(1600, Math.max(48, Number(p.get("w") || 160) || 160));
 
   if (!marke || !modell || !jahr) {
@@ -68,6 +71,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
       { error: "marke, modell und jahr sind erforderlich." },
       { status: 400 },
     );
+  }
+  // Unbekannte Ansicht NICHT still auf front_right umbiegen → ehrlicher 404,
+  // damit die UI einen Platzhalter zeigt statt eines falschen Bildes.
+  if (!ALLOWED_VIEWS.has(view)) {
+    return new Response("unsupported view", { status: 404 });
   }
 
   // Edge-Cache prüfen (Key = normalisierte Proxy-URL, deterministisch aus den
