@@ -12,6 +12,7 @@ import {
   Send,
   Settings,
   Shield,
+  Sparkles,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -85,6 +86,11 @@ const TILES: PlatformTile[] = [
     to: "/car-database",
   },
   {
+    title: "Demo",
+    icon: Sparkles,
+    to: "/demo",
+  },
+  {
     title: "Job Manager",
     icon: Briefcase,
     to: "/job-manager",
@@ -143,9 +149,9 @@ export default function PlatformHomePage() {
         if (!mayAccessDeveloperHub(erlaubtePfade)) return [];
         return [{ ...t, to: DEVELOPER_HUB_PATH }];
       }
-      // /account ist für jeden eingeloggten User immer erreichbar (eigene
-      // Top-Level-Route, keine Sicherheitsstufen-Pflicht).
-      if (t.to === "/account") return [t];
+      // /account und /demo sind für jeden eingeloggten User immer erreichbar
+      // (eigene Top-Level-Routen, keine Sicherheitsstufen-Pflicht).
+      if (t.to === "/account" || t.to === "/demo") return [t];
       if (t.external) {
         return mayAccessCms(erlaubtePfade) ? [t] : [];
       }

@@ -8,11 +8,12 @@ import {
 import { normalizePathname, pathMatchesPfadliste } from "../../lib/routeAccess";
 
 /**
- * Plattform-Start und persönliche Account-Settings – immer nach Login ohne
- * gesonderte Routen-Zeile in D1 erreichbar. Damit kann jeder eingeloggte
- * Nutzer mindestens ausloggen und sein Konto / 2FA einrichten.
+ * Plattform-Start, persönliche Account-Settings und die Kunden-Demo – immer
+ * nach Login ohne gesonderte Routen-Zeile in D1 erreichbar. Damit kann jeder
+ * eingeloggte Nutzer mindestens ausloggen, sein Konto / 2FA einrichten und die
+ * Demo aufrufen.
  */
-const SPA_ROUTE_NO_ACL = new Set<string>(["/", "/account"]);
+const SPA_ROUTE_NO_ACL = new Set<string>(["/", "/account", "/demo"]);
 
 export default function ProtectedRoute({
   children,

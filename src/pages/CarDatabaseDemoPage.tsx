@@ -1,19 +1,35 @@
 import {
+  Award,
+  BadgeCheck,
   Boxes,
+  Calculator,
+  Calendar,
+  Car,
   Check,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Code2,
+  Fuel,
+  Gauge,
+  Heart,
   ImageIcon,
   Layers,
+  Mail,
+  MapPin,
   Maximize2,
   Minimize2,
   Palette,
+  Phone,
   Rotate3d,
   Search,
+  Share2,
+  ShieldCheck,
   Sparkles,
+  Star,
   X,
   Zap,
+  type LucideIcon,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -26,11 +42,13 @@ import {
 import { useApi } from "../lib/customerApi";
 import {
   carDatabaseDetailUrl,
+  carDatabaseGalleryUrl,
   carDatabaseListUrl,
   carThumbApiUrl,
   type CarDetailResponse,
   type CarListResponse,
   type CarRow,
+  type GalleryResponse,
 } from "../lib/carDatabaseApi";
 
 /** Fiktiver Kunde (Händler/Marktplatz), in dessen Auftritt die Demo läuft. */
@@ -61,6 +79,34 @@ const FEATURED: CarId[] = [
   },
   { marke: "BMW", modell: "iX", jahr: 2021, body: "Basis", trim: "base" },
 ];
+
+/**
+ * Fallback-Showroom „Baujahr 2010" — wird genutzt, falls die Galerie-API
+ * (noch) keine 2010er-Fahrzeuge liefert (neue DB evtl. leer). Sobald die DB
+ * gefüllt ist, ersetzt die Live-Abfrage diese Liste automatisch.
+ */
+const SHOWROOM_2010: CarId[] = [
+  { marke: "Volkswagen", modell: "Golf", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "BMW", modell: "5er", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Audi", modell: "A4", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Mercedes-Benz", modell: "C_Klasse", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Ford", modell: "Focus", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Opel", modell: "Astra", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Toyota", modell: "Corolla", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Volkswagen", modell: "Passat", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Audi", modell: "A6", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "BMW", modell: "X5", jahr: 2010, body: "Basis", trim: "base" },
+];
+
+function sameCarId(a: CarId, b: CarId): boolean {
+  return (
+    a.marke === b.marke &&
+    a.modell === b.modell &&
+    a.jahr === b.jahr &&
+    a.body === b.body &&
+    a.trim === b.trim
+  );
+}
 
 /** 360°-Reihenfolge der 8 Außen-Ansichten (im Uhrzeigersinn). */
 const SPIN = [
@@ -163,6 +209,78 @@ const fmtEur = (n: number) =>
   }).format(n);
 const fmtNum = (n: number) => new Intl.NumberFormat("de-DE").format(n);
 
+/** Pool an Ausstattungsmerkmalen — deterministisch je Auto ausgewählt. */
+const EQUIPMENT_POOL = [
+  "LED-Matrix-Scheinwerfer",
+  "Navigationssystem",
+  "Panorama-Glasdach",
+  "Sitzheizung vorn",
+  "Adaptiver Tempomat",
+  "Rückfahrkamera",
+  "Apple CarPlay",
+  "Android Auto",
+  "Head-up-Display",
+  "Keyless-Go",
+  "Elektrische Heckklappe",
+  '18"-Leichtmetallfelgen',
+  "Einparkhilfe vorn & hinten",
+  "Klimaautomatik (3-Zonen)",
+  "Lederausstattung",
+  "DAB+ Digitalradio",
+  "Spurhalteassistent",
+  "Totwinkel-Assistent",
+  "Ambientebeleuchtung",
+  "Wireless Charging",
+];
+
+/** Stabile Pseudo-Zufallsauswahl (kein Math.random → bei jedem Render gleich). */
+function fakeEquipment(car: CarId): string[] {
+  let seed = hashStr(`${car.marke}|${car.modell}|${car.jahr}|equip`);
+  const pool = [...EQUIPMENT_POOL];
+  const out: string[] = [];
+  const count = 9 + (seed % 4); // 9–12 Merkmale
+  while (out.length < count && pool.length) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    out.push(pool.splice(seed % pool.length, 1)[0]);
+  }
+  return out;
+}
+
+/** Einfache Finanzierungsrechnung (Annuität) für den Finanzierungs-Teaser. */
+function financing(price: number) {
+  const months = 60;
+  const anzahlung = Math.round((price * 0.2) / 500) * 500; // ~20 %
+  const financed = Math.max(0, price - anzahlung);
+  const apr = 0.039;
+  const m = apr / 12;
+  const rate = Math.round(
+    (financed * m) / (1 - Math.pow(1 + m, -months)),
+  );
+  return { months, anzahlung, rate, apr };
+}
+
+type Review = { name: string; date: string; stars: number; text: string };
+const REVIEWS: Review[] = [
+  {
+    name: "Markus Brandt",
+    date: "vor 2 Wochen",
+    stars: 5,
+    text: "Super Beratung, transparente Preise und die Fotos im Inserat haben exakt dem Fahrzeug entsprochen. Probefahrt war unkompliziert.",
+  },
+  {
+    name: "Sandra Keller",
+    date: "vor 1 Monat",
+    stars: 5,
+    text: "Vom ersten Kontakt bis zur Übergabe alles top organisiert. Finanzierung wurde mir verständlich erklärt — gerne wieder!",
+  },
+  {
+    name: "Tobias Reinhardt",
+    date: "vor 1 Monat",
+    stars: 4,
+    text: "Faire Inzahlungnahme meines Altwagens. Abwicklung etwas zügiger gewünscht, aber insgesamt sehr zufrieden.",
+  },
+];
+
 const CHECKER: CSSProperties = {
   backgroundColor: "#fff",
   backgroundImage:
@@ -258,7 +376,41 @@ export default function CarDatabaseDemoPage() {
   };
 
   const specs = useMemo(() => fakeSpecs(car), [car]);
+  const equipment = useMemo(() => fakeEquipment(car), [car]);
+  const finance = useMemo(() => financing(specs.price), [specs.price]);
   const title = `${car.marke} ${prettyModel(car.modell)}`;
+
+  // Showroom „Baujahr 2010": 10 zufällige Autos live aus der Galerie-API,
+  // mit fester Fallback-Liste, falls die DB (noch) nichts liefert.
+  const showroomApi = useApi<GalleryResponse>(
+    carDatabaseGalleryUrl({
+      jahrMin: 2010,
+      jahrMax: 2010,
+      random: true,
+      limit: 10,
+    }),
+  );
+  const showroom2010 = useMemo<CarId[]>(() => {
+    const rows = showroomApi.data?.rows ?? [];
+    if (!rows.length) return SHOWROOM_2010;
+    return rows.slice(0, 10).map((r) => ({
+      marke: r.marke,
+      modell: r.modell,
+      jahr: r.jahr,
+      body: r.body,
+      trim: r.trim,
+    }));
+  }, [showroomApi.data]);
+
+  // Transparent-Umschalter merkt sich die zuletzt gewählte „feste" Bühne, um
+  // sie beim Ausschalten wiederherzustellen.
+  const prevSolidBg = useRef<BgMode>("showroom");
+  const toggleTransparent = () =>
+    setBg((b) => {
+      if (b === "transparent") return prevSolidBg.current;
+      prevSolidBg.current = b;
+      return "transparent";
+    });
 
   const pick = (c: CarId) => {
     setCar(c);
@@ -343,11 +495,16 @@ export default function CarDatabaseDemoPage() {
               spinIdx={spinIdx}
               onSpin={setSpin}
               onZoom={() => setZoom(true)}
+              transparentActive={bg === "transparent"}
+              onToggleTransparent={toggleTransparent}
               loading={detailApi.loading && !detail}
             />
 
-            {/* Steuerleiste */}
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {/* Hintergrund + Transparent-Schalter */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
+                Hintergrund
+              </span>
               <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
                 <SegBtn
                   active={bg === "showroom"}
@@ -358,17 +515,26 @@ export default function CarDatabaseDemoPage() {
                 <SegBtn active={bg === "studio"} onClick={() => setBg("studio")}>
                   Studio
                 </SegBtn>
-                <SegBtn
-                  active={bg === "transparent"}
-                  onClick={() => setBg("transparent")}
-                >
-                  Freisteller
-                </SegBtn>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-ink-400">
-                <Rotate3d className="h-3.5 w-3.5" />
-                Ziehen zum Drehen
-              </div>
+              <button
+                type="button"
+                onClick={toggleTransparent}
+                aria-pressed={bg === "transparent"}
+                title="Bild als transparentes PNG (Freisteller) anzeigen"
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition ${
+                  bg === "transparent"
+                    ? "border-ink-900 bg-ink-900 text-white"
+                    : "border-ink-200 bg-white text-ink-700 hover:bg-ink-50"
+                }`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                Transparent (PNG)
+                <span
+                  className={`ml-0.5 inline-block h-2 w-2 rounded-full ${
+                    bg === "transparent" ? "bg-emerald-400" : "bg-ink-300"
+                  }`}
+                />
+              </button>
             </div>
 
             {/* Ansichts-Streifen */}
@@ -389,6 +555,26 @@ export default function CarDatabaseDemoPage() {
             </h1>
             <div className="mt-0.5 text-[13px] text-ink-500">
               {car.jahr} · {specs.fuel} · {specs.powerHp} PS
+            </div>
+
+            <div className="mt-2 flex items-center gap-1.5 text-[11.5px] text-ink-500">
+              <RatingStars value={4.8} />
+              <span>4,8 · 127 Bewertungen</span>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-500">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-ink-400" />
+                EZ {specs.firstReg}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Gauge className="h-3.5 w-3.5 text-ink-400" />
+                {fmtNum(specs.km)} km
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Fuel className="h-3.5 w-3.5 text-ink-400" />
+                {specs.fuel}
+              </span>
             </div>
 
             <div className="mt-3 text-[24px] font-bold text-ink-900">
@@ -447,8 +633,20 @@ export default function CarDatabaseDemoPage() {
               </div>
             </div>
 
+            {/* Merken / Teilen */}
+            <div className="mt-5 flex gap-2">
+              <button className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 py-2 text-[12px] font-medium text-ink-600 hover:bg-ink-50">
+                <Heart className="h-3.5 w-3.5" />
+                Merken
+              </button>
+              <button className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 py-2 text-[12px] font-medium text-ink-600 hover:bg-ink-50">
+                <Share2 className="h-3.5 w-3.5" />
+                Teilen
+              </button>
+            </div>
+
             {/* CTAs */}
-            <div className="mt-5 space-y-2">
+            <div className="mt-3 space-y-2">
               <button className="w-full rounded-lg bg-ink-900 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-ink-800">
                 Probefahrt buchen
               </button>
@@ -476,6 +674,23 @@ export default function CarDatabaseDemoPage() {
           </aside>
         </div>
 
+        {/* 360°-Rundumblick (eigener Abschnitt) */}
+        <Spin360Section car={car} color={color} exterior={exterior} bg={bg} />
+
+        {/* Übersicht · 10 Fahrzeuge (Baujahr 2010) */}
+        <ShowroomGrid
+          cars={showroom2010}
+          current={car}
+          onPick={pick}
+          loading={showroomApi.loading && !showroomApi.data}
+        />
+
+        {/* Ausstattung & Highlights */}
+        <Highlights items={equipment} />
+
+        {/* Finanzierung */}
+        <FinanceTeaser price={specs.price} finance={finance} />
+
         {/* Feature-Band */}
         <FeatureBand />
 
@@ -483,6 +698,15 @@ export default function CarDatabaseDemoPage() {
         {colors.length >= 2 && (
           <ColorCompare car={car} colors={colors} />
         )}
+
+        {/* Ähnliche Fahrzeuge */}
+        <SimilarVehicles current={car} onPick={pick} />
+
+        {/* Kundenbewertungen */}
+        <Reviews />
+
+        {/* Händler / Standort */}
+        <DealerInfo />
 
         {/* API-Vorschau */}
         <ApiPanel
@@ -492,12 +716,16 @@ export default function CarDatabaseDemoPage() {
           open={showApi}
           onToggle={() => setShowApi((v) => !v)}
         />
+
+        {/* Footer */}
+        <DealerFooter />
       </div>
 
       {/* Fahrzeug-Auswahl */}
       {pickerOpen && (
         <CarPicker
           current={car}
+          cars2010={showroom2010}
           onPick={pick}
           onClose={() => setPickerOpen(false)}
         />
@@ -525,6 +753,8 @@ function Stage({
   spinIdx,
   onSpin,
   onZoom,
+  transparentActive,
+  onToggleTransparent,
   loading,
 }: {
   car: CarId;
@@ -535,6 +765,8 @@ function Stage({
   spinIdx: number;
   onSpin: (idx: number) => void;
   onZoom: () => void;
+  transparentActive: boolean;
+  onToggleTransparent: () => void;
   loading: boolean;
 }) {
   const [failed, setFailed] = useState(false);
@@ -607,6 +839,22 @@ function Stage({
         >
           {VIEW_LABEL[view] ?? view}
         </div>
+
+        {/* Transparent-Umschalter (Freisteller) */}
+        <button
+          type="button"
+          onClick={onToggleTransparent}
+          aria-pressed={transparentActive}
+          title="Transparentes Bild (Freisteller) ein-/ausblenden"
+          className={`absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium shadow backdrop-blur transition ${
+            transparentActive
+              ? "bg-ink-900 text-white"
+              : "bg-white/85 text-ink-700 hover:bg-white"
+          }`}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          Transparent
+        </button>
 
         {/* Zoom */}
         <button
@@ -935,10 +1183,12 @@ function ApiPanel({
 
 function CarPicker({
   current,
+  cars2010,
   onPick,
   onClose,
 }: {
   current: CarId;
+  cars2010: CarId[];
   onPick: (c: CarId) => void;
   onClose: () => void;
 }) {
@@ -1014,6 +1264,29 @@ function CarPicker({
               </button>
             ))}
           </div>
+          {cars2010.length > 0 && (
+            <>
+              <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+                Baujahr 2010
+              </div>
+              <div className="mb-4 flex flex-wrap gap-1.5">
+                {cars2010.map((c) => (
+                  <button
+                    key={`${c.marke}-${c.modell}-${c.jahr}-${c.body}-${c.trim}`}
+                    type="button"
+                    onClick={() => onPick(c)}
+                    className={`rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
+                      sameId(c, current)
+                        ? "border-ink-900 bg-ink-900 text-white"
+                        : "border-hair bg-white text-ink-700 hover:bg-ink-50"
+                    }`}
+                  >
+                    {c.marke} {prettyModel(c.modell)} {c.jahr}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
             <input
@@ -1100,5 +1373,687 @@ function Zoomed({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Eigenständiger 360°-Abschnitt: großer Viewer, durch Ziehen, Pfeile oder den
+ * Regler durch die 8 Studio-Perspektiven drehbar. Hat eine eigene
+ * Dreh-Position (unabhängig vom Perspektiven-Viewer oben), nutzt aber das
+ * gewählte Fahrzeug, die Farbe und den Hintergrund.
+ */
+function Spin360Section({
+  car,
+  color,
+  exterior,
+  bg,
+}: {
+  car: CarId;
+  color: string;
+  exterior: string[];
+  bg: BgMode;
+}) {
+  const [idx, setIdx] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const drag = useRef<{ x: number; idx: number } | null>(null);
+
+  // Bei Fahrzeug-/Farbwechsel zurück auf die erste Ansicht.
+  useEffect(() => {
+    setIdx(0);
+  }, [car, color]);
+
+  // Alle Außen-Ansichten vorladen → flüssiger Dreh.
+  useEffect(() => {
+    exterior.forEach((v) => {
+      const u = carThumbApiUrl(
+        { ...car, farbe: color },
+        { view: v, width: 1100 },
+      );
+      if (u) {
+        const img = new Image();
+        img.src = u;
+      }
+    });
+  }, [car, color, exterior]);
+
+  const len = exterior.length;
+  const safeIdx = len ? Math.min(idx, len - 1) : 0;
+  const view = exterior[safeIdx];
+  const url = view
+    ? carThumbApiUrl({ ...car, farbe: color }, { view, width: 1100 })
+    : null;
+
+  useEffect(() => setFailed(false), [url]);
+
+  const setSpin = (n: number) => {
+    if (!len) return;
+    setIdx(((n % len) + len) % len);
+  };
+  const onDown = (e: React.PointerEvent) => {
+    drag.current = { x: e.clientX, idx: safeIdx };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onMove = (e: React.PointerEvent) => {
+    if (!drag.current) return;
+    const steps = Math.round((drag.current.x - e.clientX) / 24);
+    setSpin(drag.current.idx + steps);
+  };
+  const onUp = () => {
+    drag.current = null;
+  };
+
+  if (len < 2) return null;
+
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center gap-2">
+        <Rotate3d className="h-4 w-4 text-brand-600" />
+        <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
+          360°-Rundumblick
+        </h3>
+        <span className="text-[12px] text-ink-400">
+          {car.marke} {prettyModel(car.modell)} · {VIEW_LABEL[view] ?? view}
+        </span>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[1fr_240px]">
+        <div className="relative">
+          <div
+            className="relative cursor-ew-resize overflow-hidden rounded-xl border border-hair"
+            style={stageStyle(bg)}
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerLeave={onUp}
+          >
+            <div className="relative flex aspect-[16/9] select-none items-center justify-center p-6">
+              {url && !failed ? (
+                <img
+                  src={url}
+                  alt={`${car.marke} ${prettyModel(car.modell)} 360 Grad`}
+                  draggable={false}
+                  onError={() => setFailed(true)}
+                  className="max-h-full max-w-full object-contain"
+                  style={{ filter: "drop-shadow(0 26px 24px rgba(0,0,0,0.22))" }}
+                />
+              ) : (
+                <ImageIcon className="h-10 w-10 text-ink-300" />
+              )}
+            </div>
+            <div className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-ink-900/80 px-2 py-1 text-[10px] font-medium text-white backdrop-blur">
+              <Rotate3d className="h-3 w-3" />
+              360°
+            </div>
+          </div>
+          <ArrowBtn side="left" onClick={() => setSpin(safeIdx - 1)} />
+          <ArrowBtn side="right" onClick={() => setSpin(safeIdx + 1)} />
+          <SpinSlider
+            exterior={exterior}
+            spinIdx={safeIdx}
+            view={view}
+            onSpin={setSpin}
+          />
+        </div>
+        <aside className="flex flex-col justify-center gap-2 rounded-xl border border-hair bg-white p-4">
+          <div className="text-[13px] font-semibold text-ink-900">
+            {car.marke} {prettyModel(car.modell)}
+          </div>
+          <p className="text-[11.5px] leading-relaxed text-ink-500">
+            Ziehe das Bild oder nutze den Regler, um das Fahrzeug in 8
+            Studio-Perspektiven zu drehen — alle live über die
+            Vehicleimagery-API.
+          </p>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {exterior.map((v, i) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setSpin(i)}
+                className={`rounded-full border px-2 py-0.5 text-[10.5px] transition ${
+                  i === safeIdx
+                    ? "border-ink-900 bg-ink-900 text-white"
+                    : "border-hair bg-white text-ink-600 hover:bg-ink-50"
+                }`}
+              >
+                {VIEW_LABEL[v] ?? v}
+              </button>
+            ))}
+          </div>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+/** 360°-Regler: scrubbt durch die vorhandenen Außen-Ansichten. */
+function SpinSlider({
+  exterior,
+  spinIdx,
+  view,
+  onSpin,
+}: {
+  exterior: string[];
+  spinIdx: number;
+  view: string;
+  onSpin: (idx: number) => void;
+}) {
+  if (exterior.length < 2) return null;
+  const isExt = SPIN.includes(view) && exterior.includes(view);
+  const current = exterior[spinIdx] ?? exterior[0];
+  return (
+    <div className="mt-3 rounded-lg border border-hair bg-white px-3 py-2.5">
+      <div className="mb-2 flex items-center justify-between text-[11px]">
+        <span className="inline-flex items-center gap-1.5 font-medium text-ink-700">
+          <Rotate3d className="h-3.5 w-3.5 text-brand-600" />
+          360°-Ansicht
+        </span>
+        <span className="text-ink-400">
+          {isExt ? VIEW_LABEL[current] ?? current : "Innenansicht aktiv"} ·{" "}
+          {spinIdx + 1}/{exterior.length}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={exterior.length - 1}
+        step={1}
+        value={spinIdx}
+        onChange={(e) => onSpin(Number(e.target.value))}
+        aria-label="360-Grad-Ansicht drehen"
+        className="w-full cursor-ew-resize accent-ink-900"
+      />
+      <div className="mt-1 flex justify-between text-[9.5px] uppercase tracking-wider text-ink-300">
+        <span>Vorne</span>
+        <span>Links</span>
+        <span>Hinten</span>
+        <span>Rechts</span>
+      </div>
+    </div>
+  );
+}
+
+function RatingStars({ value }: { value: number }) {
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      aria-label={`${value} von 5 Sternen`}
+    >
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          className={`h-3.5 w-3.5 ${
+            i <= Math.round(value)
+              ? "fill-amber-400 text-amber-400"
+              : "text-ink-200"
+          }`}
+        />
+      ))}
+    </span>
+  );
+}
+
+function Highlights({ items }: { items: string[] }) {
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center gap-2">
+        <BadgeCheck className="h-4 w-4 text-brand-600" />
+        <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
+          Ausstattung &amp; Highlights
+        </h3>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((it) => (
+          <div
+            key={it}
+            className="flex items-center gap-2 rounded-lg border border-hair bg-white px-3 py-2 text-[12.5px] text-ink-700"
+          >
+            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+            <span className="truncate">{it}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FinanceTeaser({
+  price,
+  finance,
+}: {
+  price: number;
+  finance: ReturnType<typeof financing>;
+}) {
+  return (
+    <section className="mt-8 overflow-hidden rounded-xl border border-hair bg-white">
+      <div className="grid sm:grid-cols-[1.2fr_1fr]">
+        <div className="border-b border-hair p-5 sm:border-b-0 sm:border-r">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-ink-900">
+            <Calculator className="h-4 w-4 text-brand-600" />
+            Finanzierung ab
+          </div>
+          <div className="mt-2 flex items-end gap-2">
+            <span className="text-[34px] font-bold leading-none text-ink-900">
+              {fmtEur(finance.rate)}
+            </span>
+            <span className="pb-1 text-[13px] text-ink-500">/ Monat</span>
+          </div>
+          <p className="mt-2 max-w-md text-[11.5px] leading-relaxed text-ink-500">
+            Repräsentatives Beispiel: {fmtEur(finance.anzahlung)} Anzahlung,{" "}
+            {finance.months} Monate Laufzeit,{" "}
+            {(finance.apr * 100).toLocaleString("de-DE", {
+              minimumFractionDigits: 1,
+            })}{" "}
+            % eff. Jahreszins. Bonität vorausgesetzt.
+          </p>
+        </div>
+        <div className="flex flex-col justify-center gap-2 p-5">
+          <FinRow label="Anzahlung" value={fmtEur(finance.anzahlung)} />
+          <FinRow label="Laufzeit" value={`${finance.months} Monate`} />
+          <FinRow label="Fahrzeugpreis" value={fmtEur(price)} />
+          <button className="mt-1 rounded-lg border border-ink-200 bg-white px-4 py-2 text-[12.5px] font-medium text-ink-700 hover:bg-ink-50">
+            Finanzierung berechnen
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FinRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-hair pb-1.5 text-[12.5px]">
+      <span className="text-ink-500">{label}</span>
+      <span className="font-medium text-ink-800">{value}</span>
+    </div>
+  );
+}
+
+function SimilarVehicles({
+  current,
+  onPick,
+}: {
+  current: CarId;
+  onPick: (c: CarId) => void;
+}) {
+  const others = FEATURED.filter(
+    (c) =>
+      !(
+        c.marke === current.marke &&
+        c.modell === current.modell &&
+        c.jahr === current.jahr
+      ),
+  ).slice(0, 4);
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
+          Ähnliche Fahrzeuge
+        </h3>
+        <span className="hidden text-[12px] text-ink-400 sm:inline">
+          aus dem Bestand von {DEALER.name}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {others.map((c) => (
+          <SimilarCard
+            key={`${c.marke}-${c.modell}-${c.jahr}`}
+            car={c}
+            onPick={onPick}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SimilarCard({
+  car,
+  onPick,
+}: {
+  car: CarId;
+  onPick: (c: CarId) => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const url = carThumbApiUrl(
+    { ...car, farbe: "white" },
+    { view: "front_left", width: 420 },
+  );
+  const specs = fakeSpecs(car);
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(car)}
+      className="group overflow-hidden rounded-xl border border-hair bg-white text-left transition hover:-translate-y-0.5 hover:border-ink-200 hover:shadow-sm"
+    >
+      <div
+        className="relative flex aspect-[4/3] items-center justify-center p-3"
+        style={{
+          background:
+            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e9edf2 100%)",
+        }}
+      >
+        {url && !failed ? (
+          <img
+            src={url}
+            alt={`${car.marke} ${prettyModel(car.modell)}`}
+            loading="lazy"
+            onError={() => setFailed(true)}
+            className="max-h-full max-w-full object-contain transition duration-300 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <ImageIcon className="h-8 w-8 text-ink-300" />
+        )}
+      </div>
+      <div className="border-t border-hair px-3 py-2">
+        <div className="truncate text-[12.5px] font-semibold text-ink-900">
+          {car.marke} {prettyModel(car.modell)}
+        </div>
+        <div className="text-[11px] text-ink-400">
+          {car.jahr} · {specs.fuel}
+        </div>
+        <div className="mt-1 text-[13px] font-bold text-ink-900">
+          {fmtEur(specs.price)}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function Reviews() {
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
+            Kundenbewertungen
+          </h3>
+        </div>
+        <span className="text-[12px] text-ink-500">
+          4,8 / 5 · 127 Google-Rezensionen
+        </span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {REVIEWS.map((r) => (
+          <figure
+            key={r.name}
+            className="rounded-xl border border-hair bg-white p-4"
+          >
+            <RatingStars value={r.stars} />
+            <blockquote className="mt-2 text-[12.5px] leading-relaxed text-ink-700">
+              „{r.text}“
+            </blockquote>
+            <figcaption className="mt-3 flex items-center gap-2">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink-900 text-[11px] font-semibold text-white">
+                {r.name.charAt(0)}
+              </span>
+              <span className="text-[11.5px] text-ink-500">
+                <span className="font-medium text-ink-800">{r.name}</span> ·{" "}
+                {r.date}
+              </span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+const HOURS = [
+  { d: "Mo – Fr", t: "08:00 – 19:00" },
+  { d: "Samstag", t: "09:00 – 16:00" },
+  { d: "Sonntag", t: "Schautag 11 – 15 Uhr" },
+];
+
+function DealerInfo() {
+  return (
+    <section className="mt-8 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+      <div className="rounded-xl border border-hair bg-white p-5">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-brand-600" />
+          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
+            {DEALER.name}
+          </h3>
+        </div>
+        <p className="mt-1 text-[12.5px] text-ink-500">
+          Industriestraße 14 · 80939 München
+        </p>
+        <div className="mt-3 grid gap-2 text-[12.5px] text-ink-700 sm:grid-cols-2">
+          <span className="inline-flex items-center gap-2">
+            <Phone className="h-3.5 w-3.5 text-ink-400" />
+            +49 89 1234-567
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <Mail className="h-3.5 w-3.5 text-ink-400" />
+            verkauf@northlane-motors.de
+          </span>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Badge icon={ShieldCheck}>Geprüfter Händler</Badge>
+          <Badge icon={Award}>Top-Bewertung 2025</Badge>
+          <Badge icon={Check}>Gebrauchtwagen-Garantie</Badge>
+        </div>
+        <div
+          className="relative mt-4 h-32 overflow-hidden rounded-lg border border-hair"
+          style={{
+            backgroundColor: "#eef1f5",
+            backgroundImage:
+              "linear-gradient(#dde2e9 1px, transparent 1px), linear-gradient(90deg, #dde2e9 1px, transparent 1px)",
+            backgroundSize: "26px 26px",
+          }}
+          aria-hidden
+        >
+          <span className="absolute left-1/2 top-1/2 grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-brand-600/15">
+            <MapPin className="h-5 w-5 text-brand-600" />
+          </span>
+        </div>
+      </div>
+      <div className="rounded-xl border border-hair bg-white p-5">
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-brand-600" />
+          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
+            Öffnungszeiten
+          </h3>
+        </div>
+        <ul className="mt-3 space-y-1.5 text-[12.5px]">
+          {HOURS.map((h) => (
+            <li key={h.d} className="flex items-center justify-between">
+              <span className="text-ink-500">{h.d}</span>
+              <span className="font-medium text-ink-800">{h.t}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 rounded-lg bg-ink-50 p-3 text-[11.5px] leading-relaxed text-ink-600">
+          Vereinbare online einen Termin — wir stellen dein Wunschfahrzeug
+          bereit.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Badge({
+  icon: Icon,
+  children,
+}: {
+  icon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-hair bg-ink-50 px-2.5 py-1 text-[11px] font-medium text-ink-700">
+      <Icon className="h-3.5 w-3.5 text-brand-600" />
+      {children}
+    </span>
+  );
+}
+
+function DealerFooter() {
+  return (
+    <footer className="mt-10 rounded-xl bg-ink-900 px-5 py-6 text-ink-100 sm:px-7">
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="grid h-7 w-7 place-items-center rounded-md bg-white text-[13px] font-bold text-ink-900">
+              N
+            </span>
+            <span className="text-[14px] font-semibold text-white">
+              {DEALER.name}
+            </span>
+          </div>
+          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
+            {DEALER.tagline} — Neu- &amp; Gebrauchtwagen, Finanzierung, Leasing
+            und Service aus einer Hand.
+          </p>
+        </div>
+        <FooterCol
+          title="Fahrzeuge"
+          items={[
+            "Neuwagen",
+            "Gebrauchtwagen",
+            "Elektro & Hybrid",
+            "Transporter",
+          ]}
+        />
+        <FooterCol
+          title="Service"
+          items={["Finanzierung", "Leasing", "Inzahlungnahme", "Werkstatt"]}
+        />
+        <FooterCol
+          title="Unternehmen"
+          items={["Über uns", "Kontakt", "Karriere", "Standorte"]}
+        />
+      </div>
+      <div className="mt-6 flex flex-col items-start justify-between gap-2 border-t border-white/10 pt-4 text-[11px] text-ink-400 sm:flex-row sm:items-center">
+        <span>
+          © {DEALER.name} — Demo-Auftritt. Fahrzeugbilder live über die
+          Vehicleimagery-API.
+        </span>
+        <span className="flex gap-3">
+          <span>Impressum</span>
+          <span>Datenschutz</span>
+          <span>AGB</span>
+        </span>
+      </div>
+    </footer>
+  );
+}
+
+function FooterCol({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <div className="text-[12px] font-semibold uppercase tracking-wider text-ink-300">
+        {title}
+      </div>
+      <ul className="mt-2 space-y-1.5 text-[12px] text-ink-400">
+        {items.map((it) => (
+          <li key={it} className="cursor-pointer transition hover:text-white">
+            {it}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Auswählbarer Showroom mit (zufälligen) Fahrzeugen — hier Baujahr 2010. */
+function ShowroomGrid({
+  cars,
+  current,
+  onPick,
+  loading,
+}: {
+  cars: CarId[];
+  current: CarId;
+  onPick: (c: CarId) => void;
+  loading: boolean;
+}) {
+  return (
+    <section className="mt-8">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Car className="h-4 w-4 text-brand-600" />
+          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
+            Übersicht · {cars.length} Fahrzeuge (Baujahr 2010)
+          </h3>
+        </div>
+        <span className="text-[12px] text-ink-400">
+          {loading ? "lädt…" : "zum Auswählen antippen"}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {cars.map((c) => (
+          <ShowroomCard
+            key={`${c.marke}-${c.modell}-${c.jahr}-${c.body}-${c.trim}`}
+            car={c}
+            active={sameCarId(c, current)}
+            onPick={onPick}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ShowroomCard({
+  car,
+  active,
+  onPick,
+}: {
+  car: CarId;
+  active: boolean;
+  onPick: (c: CarId) => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const url = carThumbApiUrl(
+    { ...car, farbe: "white" },
+    { view: "front_left", width: 360 },
+  );
+  const specs = fakeSpecs(car);
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(car)}
+      aria-pressed={active}
+      className={`group overflow-hidden rounded-xl border bg-white text-left transition hover:-translate-y-0.5 hover:shadow-sm ${
+        active
+          ? "border-ink-900 ring-1 ring-ink-900"
+          : "border-hair hover:border-ink-200"
+      }`}
+    >
+      <div
+        className="relative flex aspect-[4/3] items-center justify-center p-2.5"
+        style={{
+          background:
+            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e9edf2 100%)",
+        }}
+      >
+        {url && !failed ? (
+          <img
+            src={url}
+            alt={`${car.marke} ${prettyModel(car.modell)}`}
+            loading="lazy"
+            onError={() => setFailed(true)}
+            className="max-h-full max-w-full object-contain transition duration-300 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <ImageIcon className="h-7 w-7 text-ink-300" />
+        )}
+        {active && (
+          <span className="absolute left-2 top-2 rounded-full bg-ink-900 px-1.5 py-0.5 text-[9px] font-medium text-white">
+            Ausgewählt
+          </span>
+        )}
+      </div>
+      <div className="border-t border-hair px-2.5 py-1.5">
+        <div className="truncate text-[12px] font-semibold text-ink-900">
+          {car.marke} {prettyModel(car.modell)}
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[10.5px] text-ink-400">{car.jahr}</span>
+          <span className="text-[11.5px] font-bold text-ink-900">
+            {fmtEur(specs.price)}
+          </span>
+        </div>
+      </div>
+    </button>
   );
 }

@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import AccountLayout from "./components/layout/AccountLayout";
 import CmsLayout from "./components/layout/CmsLayout";
 import CarDatabaseLayout from "./components/layout/CarDatabaseLayout";
+import DemoLayout from "./components/layout/DemoLayout";
 import ControlPlatformLayout from "./components/layout/ControlPlatformLayout";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import AccountPage from "./pages/AccountPage";
@@ -123,10 +124,14 @@ export default function App() {
               path="/car-database/galerie"
               element={<CarDatabaseGalleryPage />}
             />
-            <Route
-              path="/car-database/demo"
-              element={<CarDatabaseDemoPage />}
-            />
+          </Route>
+
+          {/*
+           * Demo (Kunden-Showcase): eigener Top-Level-Bereich mit eigener
+           * Route `/demo` — bewusst NICHT mehr unter der Car Database.
+           */}
+          <Route element={<DemoLayout />}>
+            <Route path="/demo" element={<CarDatabaseDemoPage />} />
           </Route>
 
           <Route
@@ -312,6 +317,10 @@ export default function App() {
           <Route
             path="/settings"
             element={<Navigate to="/account" replace />}
+          />
+          <Route
+            path="/car-database/demo"
+            element={<Navigate to="/demo" replace />}
           />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
