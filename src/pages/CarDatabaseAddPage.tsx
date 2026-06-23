@@ -28,6 +28,9 @@ const EXTERIOR_VIEWS = [
 ] as const;
 const INTERIOR_VIEWS = ["dashboard", "center_console"] as const;
 
+/** Max. Anzahl Referenzfotos (mehr Winkel = bessere Rekonstruktion). */
+const MAX_REF = 8;
+
 const VIEW_LABEL: Record<string, string> = {
   front: "Vorne",
   rear: "Hinten",
@@ -327,7 +330,7 @@ function ImageCreate() {
   const addFiles = async (files: FileList | null) => {
     if (!files) return;
     setErr(null);
-    const room = 4 - uploads.length;
+    const room = MAX_REF - uploads.length;
     const list = Array.from(files).slice(0, Math.max(0, room));
     const next: Upload[] = [];
     for (const f of list) {
@@ -342,7 +345,7 @@ function ImageCreate() {
         /* ignore single file errors */
       }
     }
-    setUploads((prev) => [...prev, ...next].slice(0, 4));
+    setUploads((prev) => [...prev, ...next].slice(0, MAX_REF));
   };
 
   const removeUpload = (id: string) =>
@@ -431,7 +434,7 @@ function ImageCreate() {
 
       <section className="rounded-lg border border-hair bg-paper/80 p-4">
         {/* Upload */}
-        <label className={LABEL}>Referenzfotos (max. 4)</label>
+        <label className={LABEL}>Referenzfotos (max. {MAX_REF})</label>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           {uploads.map((u) => (
             <div
@@ -453,7 +456,7 @@ function ImageCreate() {
               </button>
             </div>
           ))}
-          {uploads.length < 4 && (
+          {uploads.length < MAX_REF && (
             <label className="grid h-20 w-24 cursor-pointer place-items-center rounded-md border border-dashed border-hair bg-white text-ink-400 hover:bg-ink-50">
               <div className="flex flex-col items-center gap-1">
                 <Upload className="h-4 w-4" />

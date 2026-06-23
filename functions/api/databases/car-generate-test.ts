@@ -60,7 +60,7 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     ? (body.images as unknown[])
         .map((s) => stripB64(String(s)))
         .filter(Boolean)
-        .slice(0, 4)
+        .slice(0, 8)
     : [];
   if (images.length === 0) {
     return jsonResponse(
