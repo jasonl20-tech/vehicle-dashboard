@@ -16,8 +16,6 @@ const PRE_SESSION_PATH = new Set<string>([
   "/api/login-totp",
   "/api/setup-password",
   "/api/logout",
-  // TEMPORÄR (Diagnose, per CAR_DB_API_KEY gesichert) — wieder entfernen.
-  "/api/databases/car-generate-diag",
 ]);
 
 /** Nur Session, keine Routen-Pflicht (lädt u. a. erlaubte Pfade fürs Frontend). */

@@ -427,16 +427,17 @@ function ImageCreate() {
           image?: string;
           error?: string;
         };
+        const msg =
+          data.error ||
+          (res.status === 502
+            ? "KI aktuell offline (502) — AI-Gateway/Google-Credentials"
+            : `HTTP ${res.status}`);
         setResults((prev) =>
           prev.map((r) =>
             r.view === v
               ? data.ok && data.image
                 ? { view: v, status: "done", image: data.image }
-                : {
-                    view: v,
-                    status: "error",
-                    error: data.error || `HTTP ${res.status}`,
-                  }
+                : { view: v, status: "error", error: msg }
               : r,
           ),
         );
