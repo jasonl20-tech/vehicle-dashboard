@@ -1,4 +1,11 @@
-import { BarChart3, LayoutGrid, LogOut, Sparkles, Table2 } from "lucide-react";
+import {
+  BarChart3,
+  LayoutGrid,
+  LogOut,
+  PlusCircle,
+  Sparkles,
+  Table2,
+} from "lucide-react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { Logo } from "../brand/Logo";
 import { useAuth } from "../../lib/auth";
@@ -14,6 +21,12 @@ const NAV = [
   { to: "/car-database/eintraege", label: "Datenbank", icon: Table2, end: false },
   { to: "/car-database/galerie", label: "Galerie", icon: LayoutGrid, end: false },
   { to: "/demo", label: "Demo-Website", icon: Sparkles, end: false },
+  {
+    to: "/car-database/auto-hinzufuegen",
+    label: "Auto hinzufügen",
+    icon: PlusCircle,
+    end: false,
+  },
 ];
 
 const linkCls = ({ isActive }: { isActive: boolean }) =>
