@@ -306,12 +306,45 @@ type GenResult = {
   error?: string;
 };
 
-function readAsDataUrl(file: File): Promise<string> {
+/**
+ * Lädt eine Bilddatei und verkleinert sie (max. Kante `maxDim`, JPEG) → kleine
+ * Data-URL. Wichtig, damit der Request nicht zu groß wird (sonst 502 beim
+ * Generieren). Reicht für KI-Referenzbilder völlig aus.
+ */
+function loadAndDownscale(
+  file: File,
+  maxDim = 1280,
+  quality = 0.85,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
-    r.readAsDataURL(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        try {
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        } catch {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => reject(new Error("Bild konnte nicht geladen werden."));
+      img.src = dataUrl;
+    };
+    reader.onerror = () => reject(new Error("Datei konnte nicht gelesen werden."));
+    reader.readAsDataURL(file);
   });
 }
 
@@ -335,7 +368,7 @@ function ImageCreate() {
     const next: Upload[] = [];
     for (const f of list) {
       try {
-        const dataUrl = await readAsDataUrl(f);
+        const dataUrl = await loadAndDownscale(f);
         next.push({
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           name: f.name,
