@@ -1,7 +1,9 @@
 import {
   AlertTriangle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ImageIcon,
   PauseCircle,
   RefreshCw,
@@ -30,54 +32,151 @@ import {
 } from "../lib/carDatabaseApi";
 import { fmtWhen, PAGE_SIZE, TD, TEXT_IN, TH } from "../lib/carDatabaseUi";
 
+const FARBE_OPTIONS = [
+  "blue",
+  "black",
+  "orange",
+  "white",
+  "default",
+  "wine_red",
+] as const;
+
+const EMPTY_STRUCT = {
+  marke: "",
+  modell: "",
+  jahr: "",
+  body: "",
+  trim: "",
+  farbe: "",
+  resolution: "",
+  viewMissing: "",
+  jahrMin: "",
+  jahrMax: "",
+  viewsMin: "",
+  viewsMax: "",
+  updatedFrom: "",
+  updatedTo: "",
+};
+
 export default function CarDatabaseListPage() {
   // Anfangsfilter aus der URL (Drill-Down von der Übersicht), danach lokaler State.
   const [searchParams] = useSearchParams();
   const initStatus = searchParams.get("status") || "";
-  const [qIn, setQIn] = useState("");
-  const [q, setQ] = useState("");
-  const [marke, setMarke] = useState(searchParams.get("marke") || "");
-  const [farbe, setFarbe] = useState("");
-  const [format, setFormat] = useState("");
-  const [view, setView] = useState(searchParams.get("view") || "");
+  const initMarke = searchParams.get("marke") || "";
+  const initView = searchParams.get("view") || "";
+
+  // Sofort wirksam.
   const [status, setStatus] = useState<CarStatusFilter>(
     (CAR_STATUS_FILTERS as readonly string[]).includes(initStatus)
       ? (initStatus as CarStatusFilter)
       : "all",
   );
-  const [jahrMin, setJahrMin] = useState("");
-  const [jahrMax, setJahrMax] = useState("");
   const [sort, setSort] = useState<CarSort>("marke");
+  const [format, setFormat] = useState("");
+  const [farben, setFarben] = useState<string[]>([]);
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<CarRow | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
-  // Suche entprellen.
+  // Freitext (entprellt).
+  const [qIn, setQIn] = useState("");
+  const [q, setQ] = useState("");
+
+  // Strukturierte Felder (entprellt → applied).
+  const [marke, setMarke] = useState(initMarke);
+  const [modell, setModell] = useState("");
+  const [jahr, setJahr] = useState("");
+  const [body, setBody] = useState("");
+  const [trim, setTrim] = useState("");
+  const [farbe, setFarbe] = useState("");
+  const [resolution, setResolution] = useState("");
+  const [viewMissing, setViewMissing] = useState(initView);
+  const [jahrMin, setJahrMin] = useState("");
+  const [jahrMax, setJahrMax] = useState("");
+  const [viewsMin, setViewsMin] = useState("");
+  const [viewsMax, setViewsMax] = useState("");
+  const [updatedFrom, setUpdatedFrom] = useState("");
+  const [updatedTo, setUpdatedTo] = useState("");
+
+  const [applied, setApplied] = useState({
+    ...EMPTY_STRUCT,
+    marke: initMarke,
+    viewMissing: initView,
+  });
+
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 400);
     return () => clearTimeout(t);
   }, [qIn]);
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setApplied({
+        marke,
+        modell,
+        jahr,
+        body,
+        trim,
+        farbe,
+        resolution,
+        viewMissing,
+        jahrMin,
+        jahrMax,
+        viewsMin,
+        viewsMax,
+        updatedFrom,
+        updatedTo,
+      });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [
+    marke,
+    modell,
+    jahr,
+    body,
+    trim,
+    farbe,
+    resolution,
+    viewMissing,
+    jahrMin,
+    jahrMax,
+    viewsMin,
+    viewsMax,
+    updatedFrom,
+    updatedTo,
+  ]);
+
   // Bei Filter-/Sortier-Änderung auf Seite 1 zurück.
   useEffect(() => {
     setOffset(0);
-  }, [q, marke, farbe, format, view, status, jahrMin, jahrMax, sort]);
+  }, [q, status, sort, format, farben, applied]);
 
   const listUrl = useMemo(
     () =>
       carDatabaseListUrl({
         q,
-        marke,
-        farbe,
+        marke: applied.marke,
+        modell: applied.modell,
+        jahr: applied.jahr,
+        body: applied.body,
+        trim: applied.trim,
+        farbe: applied.farbe,
+        farben,
         format,
-        view,
+        resolution: applied.resolution,
+        view: applied.viewMissing,
         status,
-        jahrMin,
-        jahrMax,
+        jahrMin: applied.jahrMin,
+        jahrMax: applied.jahrMax,
+        viewsMin: applied.viewsMin,
+        viewsMax: applied.viewsMax,
+        updatedFrom: applied.updatedFrom,
+        updatedTo: applied.updatedTo,
         sort,
         limit: PAGE_SIZE,
         offset,
       }),
-    [q, marke, farbe, format, view, status, jahrMin, jahrMax, sort, offset],
+    [q, applied, farben, format, status, sort, offset],
   );
   const listApi = useApi<CarListResponse>(listUrl);
   const list = listApi.data;
@@ -85,23 +184,37 @@ export default function CarDatabaseListPage() {
 
   const activeFilters =
     !!q ||
-    !!marke ||
-    !!farbe ||
+    farben.length > 0 ||
     !!format ||
-    !!view ||
     status !== "all" ||
-    !!jahrMin ||
-    !!jahrMax;
+    Object.values(applied).some((v) => !!v);
+
+  const toggleFarbe = (c: string) =>
+    setFarben((prev) =>
+      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
+    );
+
   const resetFilters = () => {
     setQIn("");
     setQ("");
     setMarke("");
+    setModell("");
+    setJahr("");
+    setBody("");
+    setTrim("");
     setFarbe("");
-    setFormat("");
-    setView("");
-    setStatus("all");
+    setResolution("");
+    setViewMissing("");
     setJahrMin("");
     setJahrMax("");
+    setViewsMin("");
+    setViewsMax("");
+    setUpdatedFrom("");
+    setUpdatedTo("");
+    setFarben([]);
+    setFormat("");
+    setStatus("all");
+    setApplied({ ...EMPTY_STRUCT });
   };
 
   return (
@@ -112,116 +225,260 @@ export default function CarDatabaseListPage() {
         description="Alle Fahrzeuge der neuen Datenbank (eine Zeile je Auto). Suchen, filtern, sortieren — und ein Auto anklicken für alle Ansichten."
       />
 
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <p className="text-[11px] text-ink-500">
           {total > 0 ? `${fmtNumber(total)} Fahrzeuge` : "—"}
           {listApi.loading && <span className="ml-2 text-ink-400">lädt…</span>}
         </p>
-        <button
-          type="button"
-          onClick={() => listApi.reload()}
-          className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-paper px-2.5 py-1.5 text-[12px] text-ink-600 hover:bg-ink-50"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Aktualisieren
-        </button>
-      </div>
-
-      {/* Filterleiste */}
-      <div className="mb-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="relative sm:col-span-2">
-          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
-          <input
-            value={qIn}
-            onChange={(e) => setQIn(e.target.value)}
-            placeholder="Suche: Marke, Modell, Jahr…"
-            className={`${TEXT_IN} pl-7`}
-          />
-        </div>
-        <input
-          value={marke}
-          onChange={(e) => setMarke(e.target.value)}
-          placeholder="Marke (genau)"
-          className={TEXT_IN}
-        />
-        <input
-          value={farbe}
-          onChange={(e) => setFarbe(e.target.value)}
-          placeholder="Farbe"
-          className={TEXT_IN}
-        />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as CarStatusFilter)}
-          className={TEXT_IN}
-          title="Vollständigkeit / Status"
-        >
-          {CAR_STATUS_FILTERS.map((s) => (
-            <option key={s} value={s}>
-              {CAR_STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <input
-          value={view}
-          onChange={(e) => setView(e.target.value)}
-          placeholder="Ansicht fehlt (z. B. front_right)"
-          className={TEXT_IN}
-        />
-        <select
-          value={format}
-          onChange={(e) => setFormat(e.target.value)}
-          className={TEXT_IN}
-          title="Format"
-        >
-          <option value="">Format: alle</option>
-          <option value="png">PNG</option>
-          <option value="jpg">JPG</option>
-        </select>
-        <div className="flex gap-2">
-          <input
-            value={jahrMin}
-            onChange={(e) =>
-              setJahrMin(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))
-            }
-            placeholder="Jahr von"
-            inputMode="numeric"
-            className={TEXT_IN}
-          />
-          <input
-            value={jahrMax}
-            onChange={(e) =>
-              setJahrMax(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))
-            }
-            placeholder="Jahr bis"
-            inputMode="numeric"
-            className={TEXT_IN}
-          />
-        </div>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as CarSort)}
-          className={TEXT_IN}
-          title="Sortierung"
-        >
-          {CAR_SORTS.map((s) => (
-            <option key={s} value={s}>
-              Sortierung: {CAR_SORT_LABELS[s]}
-            </option>
-          ))}
-        </select>
-      </div>
-      {activeFilters && (
-        <div className="mb-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={resetFilters}
-            className="inline-flex items-center gap-1 rounded-md border border-hair bg-paper px-2 py-1 text-[11px] text-ink-500 hover:bg-ink-50"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-paper px-2.5 py-1.5 text-[12px] text-ink-600 hover:bg-ink-50"
           >
-            <X className="h-3 w-3" />
-            Filter zurücksetzen
+            {filtersOpen ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+            Filter
+            {activeFilters && (
+              <span className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-brand-500" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => listApi.reload()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-paper px-2.5 py-1.5 text-[12px] text-ink-600 hover:bg-ink-50"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${listApi.loading ? "animate-spin" : ""}`}
+            />
+            <span className="hidden sm:inline">Aktualisieren</span>
           </button>
         </div>
+      </div>
+
+      {filtersOpen && (
+        <section className="mb-4 rounded-lg border border-hair bg-paper p-3">
+          {/* Freitext + Status + Sortierung */}
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="relative sm:col-span-2">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-400" />
+              <input
+                value={qIn}
+                onChange={(e) => setQIn(e.target.value)}
+                placeholder="Freitext: Marke, Modell, Jahr…"
+                className={`${TEXT_IN} pl-7`}
+              />
+            </div>
+            <Field label="Status / Vollständigkeit">
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as CarStatusFilter)}
+                className={TEXT_IN}
+              >
+                {CAR_STATUS_FILTERS.map((s) => (
+                  <option key={s} value={s}>
+                    {CAR_STATUS_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Sortierung">
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as CarSort)}
+                className={TEXT_IN}
+              >
+                {CAR_SORTS.map((s) => (
+                  <option key={s} value={s}>
+                    {CAR_SORT_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          {/* Farbe (Mehrfach) */}
+          <div className="mb-3">
+            <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-ink-400">
+              Farbe (Mehrfach)
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {FARBE_OPTIONS.map((c) => {
+                const on = farben.includes(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => toggleFarbe(c)}
+                    className={`rounded-md border px-2.5 py-1 text-[12px] transition-colors ${
+                      on
+                        ? "border-ink-900 bg-ink-900 text-white"
+                        : "border-hair bg-white text-ink-600 hover:bg-ink-50"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Strukturierte Felder */}
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+            <Field label="Marke">
+              <input
+                value={marke}
+                onChange={(e) => setMarke(e.target.value)}
+                placeholder="z. B. BMW"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Modell">
+              <input
+                value={modell}
+                onChange={(e) => setModell(e.target.value)}
+                placeholder="z. B. X3"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Jahr (exakt)">
+              <input
+                value={jahr}
+                onChange={(e) =>
+                  setJahr(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))
+                }
+                inputMode="numeric"
+                placeholder="2024"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Jahr ab">
+              <input
+                value={jahrMin}
+                onChange={(e) =>
+                  setJahrMin(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))
+                }
+                inputMode="numeric"
+                placeholder="2010"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Jahr bis">
+              <input
+                value={jahrMax}
+                onChange={(e) =>
+                  setJahrMax(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))
+                }
+                inputMode="numeric"
+                placeholder="2025"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Ansichten min">
+              <input
+                value={viewsMin}
+                onChange={(e) =>
+                  setViewsMin(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))
+                }
+                inputMode="numeric"
+                placeholder="8"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Ansichten max">
+              <input
+                value={viewsMax}
+                onChange={(e) =>
+                  setViewsMax(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))
+                }
+                inputMode="numeric"
+                placeholder="10"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Body">
+              <input
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Trim">
+              <input
+                value={trim}
+                onChange={(e) => setTrim(e.target.value)}
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Farbe (Text)">
+              <input
+                value={farbe}
+                onChange={(e) => setFarbe(e.target.value)}
+                placeholder="z. B. black"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Format">
+              <select
+                value={format}
+                onChange={(e) => setFormat(e.target.value)}
+                className={TEXT_IN}
+              >
+                <option value="">alle</option>
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+              </select>
+            </Field>
+            <Field label="Resolution">
+              <input
+                value={resolution}
+                onChange={(e) => setResolution(e.target.value)}
+                placeholder="z. B. default"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Ansicht fehlt">
+              <input
+                value={viewMissing}
+                onChange={(e) => setViewMissing(e.target.value)}
+                placeholder="z. B. front_right"
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Stand ab (Datum)">
+              <input
+                type="date"
+                value={updatedFrom}
+                onChange={(e) => setUpdatedFrom(e.target.value)}
+                className={TEXT_IN}
+              />
+            </Field>
+            <Field label="Stand bis (Datum)">
+              <input
+                type="date"
+                value={updatedTo}
+                onChange={(e) => setUpdatedTo(e.target.value)}
+                className={TEXT_IN}
+              />
+            </Field>
+          </div>
+
+          {activeFilters && (
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1 rounded-md border border-hair bg-white px-2.5 py-1.5 text-[12px] text-ink-600 hover:bg-ink-50"
+              >
+                <X className="h-3 w-3" />
+                Filter zurücksetzen
+              </button>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Tabelle */}
@@ -369,6 +626,17 @@ export default function CarDatabaseListPage() {
         <CarDetailModal car={selected} onClose={() => setSelected(null)} />
       )}
     </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wider text-ink-400">
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }
 

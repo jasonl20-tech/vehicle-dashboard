@@ -225,12 +225,22 @@ export const CAR_SORT_LABELS: Record<CarSort, string> = {
 export type CarListParams = {
   q?: string;
   marke?: string;
+  modell?: string;
+  body?: string;
+  trim?: string;
   farbe?: string;
+  farben?: string[];
   format?: string;
+  resolution?: string;
   view?: string;
   status?: CarStatusFilter;
+  jahr?: number | string;
   jahrMin?: number | string;
   jahrMax?: number | string;
+  viewsMin?: number | string;
+  viewsMax?: number | string;
+  updatedFrom?: string;
+  updatedTo?: string;
   sort?: CarSort;
   limit?: number;
   offset?: number;
@@ -249,12 +259,23 @@ export function carDatabaseListUrl(params: CarListParams): string {
   };
   set("q", params.q);
   set("marke", params.marke);
+  set("modell", params.modell);
+  set("body", params.body);
+  set("trim", params.trim);
   set("farbe", params.farbe);
+  if (params.farben && params.farben.length)
+    u.searchParams.set("farben", params.farben.join(","));
   set("format", params.format);
+  set("resolution", params.resolution);
   set("view", params.view);
   if (params.status && params.status !== "all") set("status", params.status);
+  set("jahr", params.jahr);
   set("jahr_min", params.jahrMin);
   set("jahr_max", params.jahrMax);
+  set("views_min", params.viewsMin);
+  set("views_max", params.viewsMax);
+  set("updated_from", params.updatedFrom);
+  set("updated_to", params.updatedTo);
   if (params.sort && params.sort !== "marke") set("sort", params.sort);
   set("limit", params.limit);
   set("offset", params.offset);

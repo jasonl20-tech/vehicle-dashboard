@@ -283,14 +283,37 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
     );
     binds.push(q, q, q, q);
   }
-  for (const col of ["marke", "farbe", "format"] as const) {
+  // Exakte Gleichheit: marke, format.
+  for (const col of ["marke", "format"] as const) {
     const raw = (p.get(col) || "").trim();
     if (raw) {
       where.push(`lower(${col}) = ?`);
       binds.push(raw.toLowerCase());
     }
   }
-  // Jahr-Bereich (von/bis).
+  // LIKE %…%: modell, body, trim, farbe (Text), resolution.
+  for (const col of ["modell", "body", "trim", "farbe", "resolution"] as const) {
+    const pat = likePattern(p.get(col) || "");
+    if (pat) {
+      where.push(`${col} LIKE ?`);
+      binds.push(pat);
+    }
+  }
+  // Mehrfach-Farben (farben=comma, exakte Werte).
+  const farbenList = (p.get("farben") || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (farbenList.length) {
+    where.push(`lower(farbe) IN (${farbenList.map(() => "?").join(", ")})`);
+    binds.push(...farbenList);
+  }
+  // Jahr: exakt + Bereich (von/bis).
+  const jahrExact = Number((p.get("jahr") || "").trim());
+  if (Number.isFinite(jahrExact) && jahrExact > 0) {
+    where.push("jahr = ?");
+    binds.push(jahrExact);
+  }
   const jahrMin = Number((p.get("jahr_min") || "").trim());
   if (Number.isFinite(jahrMin) && jahrMin > 0) {
     where.push("jahr >= ?");
@@ -300,6 +323,17 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
   if (Number.isFinite(jahrMax) && jahrMax > 0) {
     where.push("jahr <= ?");
     binds.push(jahrMax);
+  }
+  // Stand (last_updated) Datum von/bis (YYYY-MM-DD, UTC).
+  const updFrom = (p.get("updated_from") || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(updFrom)) {
+    where.push("date(last_updated) >= ?");
+    binds.push(updFrom);
+  }
+  const updTo = (p.get("updated_to") || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(updTo)) {
+    where.push("date(last_updated) <= ?");
+    binds.push(updTo);
   }
 
   // Status-Filter → HAVING auf den Aggregaten.
@@ -319,16 +353,28 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
   else if (status === "not_rendered")
     having.push(`SUM(CASE WHEN ${NOT_RENDERED} THEN 1 ELSE 0 END) > 0`);
 
+  // HAVING-Binds (Reihenfolge = Reihenfolge der HAVING-Klauseln) kommen NACH den WHERE-Binds.
+  const havingBinds: (string | number)[] = [];
   // View-Filter → nur Autos, denen diese Ansicht ganz FEHLT.
   const view = (p.get("view") || "").trim().toLowerCase();
   if (view) {
     having.push('COUNT(DISTINCT CASE WHEN lower("view") = ? THEN 1 END) = 0');
+    havingBinds.push(view);
+  }
+  // Ansichten-Anzahl (gesamt) min/max.
+  const viewsMin = Number((p.get("views_min") || "").trim());
+  if (Number.isFinite(viewsMin) && viewsMin > 0) {
+    having.push('COUNT(DISTINCT "view") >= ?');
+    havingBinds.push(viewsMin);
+  }
+  const viewsMax = Number((p.get("views_max") || "").trim());
+  if (Number.isFinite(viewsMax) && viewsMax > 0) {
+    having.push('COUNT(DISTINCT "view") <= ?');
+    havingBinds.push(viewsMax);
   }
 
   const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
   const havingSql = having.length ? ` HAVING ${having.join(" AND ")}` : "";
-  // HAVING-Binds (View) kommen NACH den WHERE-Binds.
-  const havingBinds: (string | number)[] = view ? [view] : [];
 
   const limit = Math.min(100, Math.max(1, Number(p.get("limit") || 30)));
   const offset = Math.max(0, Number(p.get("offset") || 0));
