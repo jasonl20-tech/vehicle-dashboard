@@ -380,13 +380,16 @@ async function handleList(db: D1Database, url: URL): Promise<Response> {
   const offset = Math.max(0, Number(p.get("offset") || 0));
 
   // Sortierung (Whitelist gegen Injection; Spalten-Aliase erlaubt).
+  // Tie-Breaker marke, modell, jahr, body, trim am Ende → vollständig
+  // deterministisch; gleichnamige Modelle bleiben gruppiert und nach Jahr
+  // aufsteigend (Standard-Sort), nicht durcheinander.
   const SORTS: Record<string, string> = {
-    marke: "marke, modell, jahr",
-    jahr_desc: "jahr DESC, marke, modell",
-    jahr_asc: "jahr ASC, marke, modell",
-    aussen_asc: "aussen ASC, marke, modell, jahr",
-    bilder_desc: "images DESC, marke, modell",
-    updated_desc: "last_updated DESC, marke, modell",
+    marke: "marke, modell, jahr, body, trim",
+    jahr_desc: "jahr DESC, marke, modell, body, trim",
+    jahr_asc: "jahr ASC, marke, modell, body, trim",
+    aussen_asc: "aussen ASC, marke, modell, jahr, body, trim",
+    bilder_desc: "images DESC, marke, modell, jahr, body, trim",
+    updated_desc: "last_updated DESC, marke, modell, jahr, body, trim",
   };
   const orderBy = SORTS[(p.get("sort") || "marke").toLowerCase()] || SORTS.marke;
 

@@ -214,7 +214,7 @@ export const CAR_SORTS = [
 export type CarSort = (typeof CAR_SORTS)[number];
 
 export const CAR_SORT_LABELS: Record<CarSort, string> = {
-  marke: "Marke (A–Z)",
+  marke: "Marke, Modell, Jahr ↑ (Standard)",
   jahr_desc: "Jahr (neueste)",
   jahr_asc: "Jahr (älteste)",
   aussen_asc: "Außen (unvollständige zuerst)",
