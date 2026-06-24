@@ -33,6 +33,10 @@ export function carThumbApiUrl(
     format?: "png" | "jpeg" | "webp" | "avif";
     shadow?: boolean;
     transparent?: boolean;
+    /** Vorgefertigte Auflösungsstufe (z. B. "default", "1K", "2K", "4K"). */
+    resolution?: string;
+    /** Fahrzeug am Boden „verankern" (nicht schwebend). */
+    ground?: boolean;
   },
 ): string | null {
   if (!car || !car.marke || !car.modell || !car.jahr) return null;
@@ -55,6 +59,11 @@ export function carThumbApiUrl(
   if (opts?.shadow) u.searchParams.set("shadow", "1");
   // Echtes Freisteller-PNG (Hintergrund von der Kunden-API entfernt) anfragen.
   if (opts?.transparent) u.searchParams.set("transparent", "1");
+  // Vorgefertigte Auflösung (nur setzen, wenn ≠ default → stabile Default-URLs).
+  if (opts?.resolution && opts.resolution !== "default")
+    u.searchParams.set("resolution", opts.resolution);
+  // Fahrzeug am Boden verankern.
+  if (opts?.ground) u.searchParams.set("ground", "1");
   return u.pathname + u.search;
 }
 

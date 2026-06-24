@@ -80,6 +80,14 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const transparent = ["1", "true", "yes"].includes(
     (p.get("transparent") || "").trim().toLowerCase(),
   );
+  // Vorgefertigte Auflösung (neu). Unbekanntes → default.
+  const ALLOWED_RES = new Set(["default", "1k", "2k", "4k"]);
+  const resIn = (p.get("resolution") || "default").trim();
+  const resolution = ALLOWED_RES.has(resIn.toLowerCase()) ? resIn : "default";
+  // Fahrzeug am Boden verankern (neu).
+  const ground = ["1", "true", "yes"].includes(
+    (p.get("ground") || "").trim().toLowerCase(),
+  );
 
   if (!marke || !modell || !jahr) {
     return jsonResponse(
@@ -106,9 +114,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const seg = (s: string) => encodeURIComponent(s);
   const apiUrl =
     `${API_BASE}/api/${seg(marke)}/${seg(modell)}/${seg(jahr)}/${seg(body)}/${seg(trim)}/${seg(view)}` +
-    `?format=${seg(format)}&resolution=default&color=${seg(farbe)}` +
+    `?format=${seg(format)}&resolution=${seg(resolution)}&color=${seg(farbe)}` +
     (shadow ? `&shadow=true` : "") +
     (transparent ? `&transparent=true` : "") +
+    (ground ? `&ground=true` : "") +
     // Explizite Maße nur senden, wenn eine Höhe angefragt wurde.
     (height ? `&width=${width}&height=${height}` : "");
 

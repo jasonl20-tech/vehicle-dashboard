@@ -177,9 +177,13 @@ type OutOptions = {
   width: number;
   height: number | null;
   watermark: boolean;
+  resolution: string;
 };
 
 const FORMATS: ImgFormat[] = ["png", "jpeg", "webp", "avif"];
+
+/** Vorgefertigte Auflösungsstufen (neues API-Feature). */
+const RESOLUTIONS = ["default", "1K", "2K", "4K"];
 
 /** Größen-Presets (zeigt: Breite & Höhe sind anfragbar). */
 const SIZE_PRESETS: { label: string; w: number; h: number | null }[] = [
@@ -203,6 +207,13 @@ function preloadImage(url: string | null) {
   img.src = url;
 }
 
+/**
+ * Alle Demo-Bilder werden grundsätzlich „am Boden verankert" (ground=true)
+ * angefragt, damit das Fahrzeug nie schwebt. Einziger Bild-URL-Helfer der Demo.
+ */
+const groundThumb: typeof carThumbApiUrl = (car, opts) =>
+  carThumbApiUrl(car, { ...(opts ?? {}), ground: true });
+
 export default function CarDatabaseDemoPage() {
   const [car, setCar] = useState<CarId>(FEATURED[0]);
   const [color, setColor] = useState("white");
@@ -216,6 +227,7 @@ export default function CarDatabaseDemoPage() {
   const [shadow, setShadow] = useState(false);
   const [width, setWidth] = useState(900);
   const [height, setHeight] = useState<number | null>(null);
+  const [resolution, setResolution] = useState("default");
   // Wasserzeichen: Plan-/Key-Merkmal (Testkunden) → hier Vorschau-Overlay.
   const [watermark, setWatermark] = useState(false);
   const [presenting, setPresenting] = useState(false);
@@ -281,7 +293,7 @@ export default function CarDatabaseDemoPage() {
   useEffect(() => {
     [...exterior, ...interior].forEach((v) =>
       preloadImage(
-        carThumbApiUrl(
+        groundThumb(
           { ...car, farbe: SPIN.includes(v) ? color : "default" },
           { view: v, width: 900 },
         ),
@@ -293,7 +305,7 @@ export default function CarDatabaseDemoPage() {
   useEffect(() => {
     if (!SPIN.includes(view)) return; // Innen-Ansichten sind farb-unabhängig
     colors.forEach((c) =>
-      preloadImage(carThumbApiUrl({ ...car, farbe: c }, { view, width: 900 })),
+      preloadImage(groundThumb({ ...car, farbe: c }, { view, width: 900 })),
     );
   }, [car, colors, view]);
 
@@ -335,6 +347,7 @@ export default function CarDatabaseDemoPage() {
     width,
     height,
     watermark,
+    resolution,
   };
 
   return (
@@ -486,6 +499,24 @@ export default function CarDatabaseDemoPage() {
                 >
                   Test customer · Watermark
                 </OptToggle>
+              </div>
+
+              {/* Resolution preset */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
+                  Resolution
+                </span>
+                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
+                  {RESOLUTIONS.map((r) => (
+                    <SegBtn
+                      key={r}
+                      active={resolution === r}
+                      onClick={() => setResolution(r)}
+                    >
+                      {r === "default" ? "Default" : r}
+                    </SegBtn>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -667,7 +698,7 @@ function Stage({
   const [failed, setFailed] = useState(false);
   // Innenraum-Bilder sind farb-unabhängig → über „default" laden.
   const imgFarbe = SPIN.includes(view) ? color : "default";
-  const url = carThumbApiUrl(
+  const url = groundThumb(
     { ...car, farbe: imgFarbe },
     {
       view,
@@ -676,6 +707,7 @@ function Stage({
       format: out.format,
       shadow: out.shadow,
       transparent: out.transparent,
+      resolution: out.resolution,
     },
   );
 
@@ -815,7 +847,7 @@ function ThumbStrip({
   const Thumb = ({ v }: { v: string }) => {
     const [failed, setFailed] = useState(false);
     const farbe = SPIN.includes(v) ? color : "default";
-    const url = carThumbApiUrl({ ...car, farbe }, { view: v, width: 150 });
+    const url = groundThumb({ ...car, farbe }, { view: v, width: 150 });
     return (
       <button
         type="button"
@@ -976,11 +1008,11 @@ function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
     setPos(Math.min(100, Math.max(0, p)));
   };
 
-  const lUrl = carThumbApiUrl(
+  const lUrl = groundThumb(
     { ...car, farbe: left },
     { view: "front_left", width: 760 },
   );
-  const rUrl = carThumbApiUrl(
+  const rUrl = groundThumb(
     { ...car, farbe: right },
     { view: "front_left", width: 760 },
   );
@@ -1071,9 +1103,12 @@ function ApiPanel({
   const path = `/api/${car.marke}/${prettyModel(car.modell).replace(/ /g, "_")}/${car.jahr}/${view}`;
   // Query-String aus den aktuell gewählten Optionen — spiegelt 1:1 das Bild oben.
   const params: string[] = [`format=${out.format}`];
+  if (out.resolution !== "default")
+    params.push(`resolution=${out.resolution}`);
   if (color && color !== "default") params.push(`color=${color}`);
   if (out.shadow) params.push("shadow=true");
   if (out.transparent) params.push("transparent=true");
+  params.push("ground=true");
   params.push(`width=${out.width}`);
   if (out.height) params.push(`height=${out.height}`);
   const qs = `?${params.join("&")}`;
@@ -1105,15 +1140,18 @@ function ApiPanel({
             <div className="mt-1 text-ink-400">
               → 200 · {CT_BY_FORMAT[out.format]} · {out.width}
               {out.height ? `×${out.height}` : ""} px
+              {out.resolution !== "default" ? ` · ${out.resolution}` : ""}
               {out.shadow ? " · shadow" : ""}
-              {out.transparent ? " · transparent" : ""}
+              {out.transparent ? " · transparent" : ""} · grounded
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {[
               "format: png · jpeg · webp · avif",
+              "resolution: default · 1K · 2K · 4K",
               "shadow=true",
               "transparent=true (cut-out)",
+              "ground=true (on the floor)",
               "width & height freely selectable",
               "getall: all views at once",
               "CDN cache",
@@ -1305,7 +1343,7 @@ function Zoomed({
   onClose: () => void;
 }) {
   const imgFarbe = SPIN.includes(view) ? color : "default";
-  const url = carThumbApiUrl(
+  const url = groundThumb(
     { ...car, farbe: imgFarbe },
     {
       view,
@@ -1313,6 +1351,7 @@ function Zoomed({
       format: out.format,
       shadow: out.shadow,
       transparent: out.transparent,
+      resolution: out.resolution,
     },
   );
   useEffect(() => {
@@ -1381,7 +1420,7 @@ function Spin360Section({
   useEffect(() => {
     exterior.forEach((v) =>
       preloadImage(
-        carThumbApiUrl({ ...car, farbe: "default" }, { view: v, width: 1100 }),
+        groundThumb({ ...car, farbe: "default" }, { view: v, width: 1100 }),
       ),
     );
   }, [car, exterior]);
@@ -1390,7 +1429,7 @@ function Spin360Section({
   const safeIdx = len ? Math.min(idx, len - 1) : 0;
   const view = exterior[safeIdx];
   const url = view
-    ? carThumbApiUrl({ ...car, farbe: "default" }, { view, width: 1100 })
+    ? groundThumb({ ...car, farbe: "default" }, { view, width: 1100 })
     : null;
 
   useEffect(() => setFailed(false), [url]);
@@ -1598,7 +1637,7 @@ function ShowroomCard({
   onPick: (c: CarId) => void;
 }) {
   const [failed, setFailed] = useState(false);
-  const url = carThumbApiUrl(
+  const url = groundThumb(
     { ...car, farbe: "default" },
     { view: "front_left", width: 360 },
   );
