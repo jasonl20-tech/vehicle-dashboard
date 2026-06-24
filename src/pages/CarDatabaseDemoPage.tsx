@@ -1413,17 +1413,26 @@ function Spin360Section({
   if (len < 2) return null;
 
   return (
-    <section className="mt-8">
-      <div className="mb-3 flex items-center gap-2">
-        <Rotate3d className="h-4 w-4 text-brand-600" />
-        <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-          360°-Rundumblick
-        </h3>
-        <span className="text-[12px] text-ink-400">
-          {car.marke} {prettyModel(car.modell)} · {VIEW_LABEL[view] ?? view}
-        </span>
-      </div>
-      <div className="grid gap-4 lg:grid-cols-[1fr_240px]">
+    <section className="mt-10 border-t border-hair pt-8">
+      <div className="rounded-2xl border border-hair bg-ink-50/60 p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-ink-900 text-white">
+            <Rotate3d className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[17px] font-semibold tracking-tight text-ink-900">
+              360°-Rundumblick
+            </h3>
+            <p className="truncate text-[12px] text-ink-500">
+              Ziehen, Pfeile oder Regler — dreh {car.marke}{" "}
+              {prettyModel(car.modell)} durch alle Perspektiven.
+            </p>
+          </div>
+          <span className="ml-auto rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
+            {VIEW_LABEL[view] ?? view}
+          </span>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[1fr_240px]">
         <div className="relative">
           {/* Fester Bild-Kasten: aspect-[16/9] bestimmt die Größe allein, das
               Bild liegt absolut darin → kein Größensprung beim Drehen. */}
@@ -1489,6 +1498,7 @@ function Spin360Section({
             ))}
           </div>
         </aside>
+        </div>
       </div>
     </section>
   );
@@ -1563,22 +1573,18 @@ function ShowroomGrid({
           </h3>
         </div>
         <span className="text-[12px] text-ink-400">
-          {loading ? "lädt…" : "5 sichtbar · nach rechts scrollen für mehr"}
+          {loading ? "lädt…" : "zum Auswählen antippen"}
         </span>
       </div>
-      {/* Horizontale Reihe: immer 5 sichtbar, Rest per Scroll nach rechts. */}
-      <div className="flex snap-x gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
+      {/* Raster: 5 pro Reihe → 10 Fahrzeuge in zwei Reihen. */}
+      <div className="grid grid-cols-5 gap-3">
         {cars.map((c) => (
-          <div
+          <ShowroomCard
             key={`${c.marke}-${c.modell}-${c.jahr}-${c.body}-${c.trim}`}
-            className="shrink-0 basis-[calc((100%_-_3rem)/5)] snap-start"
-          >
-            <ShowroomCard
-              car={c}
-              active={sameCarId(c, current)}
-              onPick={onPick}
-            />
-          </div>
+            car={c}
+            active={sameCarId(c, current)}
+            onPick={onPick}
+          />
         ))}
       </div>
     </section>
