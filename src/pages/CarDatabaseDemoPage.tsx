@@ -1,5 +1,4 @@
 import {
-  Boxes,
   Car,
   Check,
   ChevronLeft,
@@ -208,9 +207,9 @@ export default function CarDatabaseDemoPage() {
   const [car, setCar] = useState<CarId>(FEATURED[0]);
   const [color, setColor] = useState("white");
   const [view, setView] = useState("front_left");
-  // Hintergrund der Hero-Bühne (nur Showroom/Studio). Transparent ist ein
-  // eigener Schalter, der ausschließlich die Hero betrifft.
-  const [bg, setBg] = useState<"showroom" | "studio">("showroom");
+  // Fester heller Studio-Hintergrund (Showroom). Transparent ist ein eigener
+  // Schalter, der ausschließlich die Hero betrifft.
+  const bg: BgMode = "showroom";
   const [transparent, setTransparent] = useState(false);
   // Neue API-Ausgabe-Optionen.
   const [format, setFormat] = useState<"png" | "jpeg" | "webp" | "avif">("png");
@@ -420,47 +419,7 @@ export default function CarDatabaseDemoPage() {
 
             {/* Ausgabe-Optionen — demonstriert die API-Funktionen live */}
             <div className="mt-3 space-y-2.5 rounded-xl border border-hair bg-white p-3">
-              {/* Hintergrund + Transparent */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                  Hintergrund
-                </span>
-                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
-                  <SegBtn
-                    active={!effTransparent && bg === "showroom"}
-                    onClick={() => {
-                      setTransparent(false);
-                      setBg("showroom");
-                    }}
-                  >
-                    Showroom
-                  </SegBtn>
-                  <SegBtn
-                    active={!effTransparent && bg === "studio"}
-                    onClick={() => {
-                      setTransparent(false);
-                      setBg("studio");
-                    }}
-                  >
-                    Studio
-                  </SegBtn>
-                </div>
-                <OptToggle
-                  active={effTransparent}
-                  disabled={format === "jpeg"}
-                  onClick={() => setTransparent((t) => !t)}
-                  title={
-                    format === "jpeg"
-                      ? "JPEG unterstützt keine Transparenz"
-                      : "Echtes transparentes PNG über die API anzeigen"
-                  }
-                  icon={Layers}
-                >
-                  Transparent
-                </OptToggle>
-              </div>
-
-              {/* Format + Schatten */}
+              {/* Format + Schatten + Transparent */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
                   Format
@@ -485,6 +444,19 @@ export default function CarDatabaseDemoPage() {
                   title="Schlagschatten von der API rendern lassen"
                 >
                   Schatten
+                </OptToggle>
+                <OptToggle
+                  active={effTransparent}
+                  disabled={format === "jpeg"}
+                  onClick={() => setTransparent((t) => !t)}
+                  title={
+                    format === "jpeg"
+                      ? "JPEG unterstützt keine Transparenz"
+                      : "Echtes transparentes PNG über die API anzeigen"
+                  }
+                  icon={Layers}
+                >
+                  Transparent
                 </OptToggle>
               </div>
 
@@ -609,9 +581,6 @@ export default function CarDatabaseDemoPage() {
             </div>
           </aside>
         </div>
-
-        {/* Was die API liefert */}
-        <FeatureBand />
 
         {/* 360°-Rundumblick (eigener Abschnitt) — immer Standardfarbe */}
         <Spin360Section car={car} exterior={exterior} bg={bg} />
@@ -989,56 +958,6 @@ function WatermarkOverlay() {
   );
 }
 
-const FEATURES = [
-  {
-    icon: Rotate3d,
-    title: "8 Perspektiven",
-    desc: "Rundum-Ansicht + Cockpit & Mittelkonsole.",
-  },
-  {
-    icon: Layers,
-    title: "Freisteller",
-    desc: "Echte transparente PNGs (Hintergrund entfernt).",
-  },
-  {
-    icon: Boxes,
-    title: "Schlagschatten",
-    desc: "Optionaler Schatten direkt aus der API.",
-  },
-  {
-    icon: ImageIcon,
-    title: "4 Formate",
-    desc: "PNG · JPEG · WebP · AVIF wählbar.",
-  },
-  {
-    icon: Maximize2,
-    title: "Größe nach Maß",
-    desc: "Breite & Höhe frei anfragbar.",
-  },
-  {
-    icon: Palette,
-    title: "Farbtreue Lacke",
-    desc: "Kalibrierte, konsistente Farben.",
-  },
-];
-
-function FeatureBand() {
-  return (
-    <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      {FEATURES.map((f) => (
-        <div key={f.title} className="rounded-lg border border-hair bg-white p-3">
-          <f.icon className="h-5 w-5 text-brand-600" />
-          <div className="mt-1.5 text-[12.5px] font-semibold text-ink-900">
-            {f.title}
-          </div>
-          <div className="mt-0.5 text-[11px] leading-snug text-ink-500">
-            {f.desc}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
   const left = colors.includes("white") ? "white" : colors[0];
