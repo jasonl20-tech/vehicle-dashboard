@@ -1,35 +1,20 @@
 import {
-  Award,
-  BadgeCheck,
   Boxes,
-  Calculator,
-  Calendar,
   Car,
   Check,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Code2,
-  Fuel,
-  Gauge,
-  Heart,
   ImageIcon,
   Layers,
-  Mail,
-  MapPin,
   Maximize2,
   Minimize2,
   Palette,
-  Phone,
   Rotate3d,
   Search,
-  Share2,
-  ShieldCheck,
   Sparkles,
-  Star,
   X,
   Zap,
-  type LucideIcon,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -50,12 +35,6 @@ import {
   type CarRow,
   type GalleryResponse,
 } from "../lib/carDatabaseApi";
-
-/** Fiktiver Kunde (Händler/Marktplatz), in dessen Auftritt die Demo läuft. */
-const DEALER = {
-  name: "NorthLane Motors",
-  tagline: "Premium-Fahrzeuge",
-};
 
 type CarId = {
   marke: string;
@@ -166,120 +145,6 @@ function colorLabel(c: string): string {
 function prettyModel(s: string): string {
   return s.replace(/_/g, " ");
 }
-
-function hashStr(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
-function fakeSpecs(car: CarId) {
-  const h = hashStr(`${car.marke}|${car.modell}|${car.jahr}`);
-  const m = car.modell.toLowerCase();
-  const isEv =
-    car.marke.toLowerCase() === "tesla" ||
-    m.includes("e-tron") ||
-    m.includes("e_tron") ||
-    /^i\d/.test(m) ||
-    m.startsWith("ix") ||
-    m.includes("id.") ||
-    m.includes("ev");
-  const fuels = ["Benzin", "Diesel", "Mild-Hybrid"];
-  const fuel = isEv ? "Elektro" : fuels[h % fuels.length];
-  const price = 24900 + (h % 79000);
-  const power = isEv ? 250 + (h % 360) : 110 + (h % 320);
-  const km = 1000 + (h % 78000);
-  return {
-    price,
-    powerHp: power,
-    powerKw: Math.round(power * 0.7355),
-    fuel,
-    km,
-    gearbox: isEv ? "Automatik (1-Gang)" : h % 2 ? "Automatik" : "Schaltgetriebe",
-    firstReg: `${["01", "03", "06", "09"][h % 4]}/${car.jahr}`,
-    isEv,
-  };
-}
-
-const fmtEur = (n: number) =>
-  new Intl.NumberFormat("de-DE", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(n);
-const fmtNum = (n: number) => new Intl.NumberFormat("de-DE").format(n);
-
-/** Pool an Ausstattungsmerkmalen — deterministisch je Auto ausgewählt. */
-const EQUIPMENT_POOL = [
-  "LED-Matrix-Scheinwerfer",
-  "Navigationssystem",
-  "Panorama-Glasdach",
-  "Sitzheizung vorn",
-  "Adaptiver Tempomat",
-  "Rückfahrkamera",
-  "Apple CarPlay",
-  "Android Auto",
-  "Head-up-Display",
-  "Keyless-Go",
-  "Elektrische Heckklappe",
-  '18"-Leichtmetallfelgen',
-  "Einparkhilfe vorn & hinten",
-  "Klimaautomatik (3-Zonen)",
-  "Lederausstattung",
-  "DAB+ Digitalradio",
-  "Spurhalteassistent",
-  "Totwinkel-Assistent",
-  "Ambientebeleuchtung",
-  "Wireless Charging",
-];
-
-/** Stabile Pseudo-Zufallsauswahl (kein Math.random → bei jedem Render gleich). */
-function fakeEquipment(car: CarId): string[] {
-  let seed = hashStr(`${car.marke}|${car.modell}|${car.jahr}|equip`);
-  const pool = [...EQUIPMENT_POOL];
-  const out: string[] = [];
-  const count = 9 + (seed % 4); // 9–12 Merkmale
-  while (out.length < count && pool.length) {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    out.push(pool.splice(seed % pool.length, 1)[0]);
-  }
-  return out;
-}
-
-/** Einfache Finanzierungsrechnung (Annuität) für den Finanzierungs-Teaser. */
-function financing(price: number) {
-  const months = 60;
-  const anzahlung = Math.round((price * 0.2) / 500) * 500; // ~20 %
-  const financed = Math.max(0, price - anzahlung);
-  const apr = 0.039;
-  const m = apr / 12;
-  const rate = Math.round(
-    (financed * m) / (1 - Math.pow(1 + m, -months)),
-  );
-  return { months, anzahlung, rate, apr };
-}
-
-type Review = { name: string; date: string; stars: number; text: string };
-const REVIEWS: Review[] = [
-  {
-    name: "Markus Brandt",
-    date: "vor 2 Wochen",
-    stars: 5,
-    text: "Super Beratung, transparente Preise und die Fotos im Inserat haben exakt dem Fahrzeug entsprochen. Probefahrt war unkompliziert.",
-  },
-  {
-    name: "Sandra Keller",
-    date: "vor 1 Monat",
-    stars: 5,
-    text: "Vom ersten Kontakt bis zur Übergabe alles top organisiert. Finanzierung wurde mir verständlich erklärt — gerne wieder!",
-  },
-  {
-    name: "Tobias Reinhardt",
-    date: "vor 1 Monat",
-    stars: 4,
-    text: "Faire Inzahlungnahme meines Altwagens. Abwicklung etwas zügiger gewünscht, aber insgesamt sehr zufrieden.",
-  },
-];
 
 const CHECKER: CSSProperties = {
   backgroundColor: "#fff",
@@ -404,9 +269,6 @@ export default function CarDatabaseDemoPage() {
     );
   }, [car, colors, view]);
 
-  const specs = useMemo(() => fakeSpecs(car), [car]);
-  const equipment = useMemo(() => fakeEquipment(car), [car]);
-  const finance = useMemo(() => financing(specs.price), [specs.price]);
   const title = `${car.marke} ${prettyModel(car.modell)}`;
 
   // Showroom „Baujahr 2010": 10 zufällige Autos live aus der Galerie-API,
@@ -444,27 +306,22 @@ export default function CarDatabaseDemoPage() {
           : "overflow-hidden rounded-xl border border-hair"
       }
     >
-      {/* Kunden-Header */}
-      <header className="flex items-center justify-between gap-3 border-b border-ink-100 bg-white px-4 py-3 sm:px-6">
-        <div className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-md bg-ink-900 text-white">
-            <span className="text-[15px] font-bold">N</span>
-          </div>
+      {/* Demo-Header (Vehicleimagery, kein fiktiver Händler) */}
+      <header className="flex items-center justify-between gap-3 border-b border-hair bg-white px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-2.5">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Live-Demo
+          </span>
           <div className="leading-tight">
             <div className="text-[14px] font-semibold tracking-tight text-ink-900">
-              {DEALER.name}
+              Vehicleimagery
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-ink-400">
-              {DEALER.tagline}
+              Fahrzeugbilder aus der API
             </div>
           </div>
         </div>
-        <nav className="hidden items-center gap-5 text-[13px] text-ink-500 md:flex">
-          <span className="font-medium text-ink-900">Fahrzeuge</span>
-          <span>Leasing</span>
-          <span>Service</span>
-          <span>Kontakt</span>
-        </nav>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -472,7 +329,7 @@ export default function CarDatabaseDemoPage() {
             className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-ink-50"
           >
             <Search className="h-3.5 w-3.5" />
-            Fahrzeug
+            Fahrzeug wählen
           </button>
           <button
             type="button"
@@ -493,13 +350,16 @@ export default function CarDatabaseDemoPage() {
       </header>
 
       <div className="bg-paper px-4 py-5 sm:px-6">
-        {/* Breadcrumb */}
-        <div className="mb-3 flex items-center gap-1.5 text-[11px] text-ink-400">
-          <span>Fahrzeuge</span>
-          <ChevronRight className="h-3 w-3" />
-          <span>{car.marke}</span>
-          <ChevronRight className="h-3 w-3" />
-          <span className="text-ink-600">{prettyModel(car.modell)}</span>
+        {/* Demo-Intro statt Händler-Breadcrumb */}
+        <div className="mb-5">
+          <h2 className="font-display text-[22px] font-semibold leading-tight tracking-tight text-ink-900 sm:text-[26px]">
+            Jedes Fahrzeug. Jede Farbe. Jede Perspektive.
+          </h2>
+          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-500">
+            Alle Bilder werden live über eine einzige API geladen — in
+            Studio-Qualität, farbtreu und freistellbar. Wähle Fahrzeug, Farbe,
+            Ansicht und Hintergrund und sieh, wie das Bild in Echtzeit kommt.
+          </p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -575,52 +435,20 @@ export default function CarDatabaseDemoPage() {
             />
           </div>
 
-          {/* Listing-Infos */}
+          {/* Demo-Infos (echt, kein Fake-Listing) */}
           <aside>
-            <h1 className="text-[22px] font-semibold leading-tight tracking-tight text-ink-900">
+            <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-ink-400">
+              Aktuelles Fahrzeug
+            </div>
+            <h1 className="mt-0.5 text-[22px] font-semibold leading-tight tracking-tight text-ink-900">
               {title}
             </h1>
             <div className="mt-0.5 text-[13px] text-ink-500">
-              {car.jahr} · {specs.fuel} · {specs.powerHp} PS
+              {car.jahr}
+              {car.body && car.body !== "Basis" ? ` · ${car.body}` : ""}
             </div>
 
-            <div className="mt-2 flex items-center gap-1.5 text-[11.5px] text-ink-500">
-              <RatingStars value={4.8} />
-              <span>4,8 · 127 Bewertungen</span>
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-500">
-              <span className="inline-flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-ink-400" />
-                EZ {specs.firstReg}
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Gauge className="h-3.5 w-3.5 text-ink-400" />
-                {fmtNum(specs.km)} km
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <Fuel className="h-3.5 w-3.5 text-ink-400" />
-                {specs.fuel}
-              </span>
-            </div>
-
-            <div className="mt-3 text-[24px] font-bold text-ink-900">
-              {fmtEur(specs.price)}
-              <span className="ml-2 align-middle text-[11px] font-normal text-ink-400">
-                inkl. MwSt.
-              </span>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <Spec label="Erstzulassung" value={specs.firstReg} />
-              <Spec label="Kilometer" value={`${fmtNum(specs.km)} km`} />
-              <Spec label="Leistung" value={`${specs.powerKw} kW (${specs.powerHp} PS)`} />
-              <Spec label="Kraftstoff" value={specs.fuel} />
-              <Spec label="Getriebe" value={specs.gearbox} />
-              <Spec label="Karosserie" value={car.body} />
-            </div>
-
-            {/* Farben */}
+            {/* Farben (live aus der API) */}
             <div className="mt-5">
               <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-400">
                 <Palette className="h-3.5 w-3.5" />
@@ -660,51 +488,45 @@ export default function CarDatabaseDemoPage() {
               </div>
             </div>
 
-            {/* Merken / Teilen */}
-            <div className="mt-5 flex gap-2">
-              <button className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 py-2 text-[12px] font-medium text-ink-600 hover:bg-ink-50">
-                <Heart className="h-3.5 w-3.5" />
-                Merken
-              </button>
-              <button className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 py-2 text-[12px] font-medium text-ink-600 hover:bg-ink-50">
-                <Share2 className="h-3.5 w-3.5" />
-                Teilen
-              </button>
+            {/* Echte Verfügbarkeits-Infos aus der Datenbank/API */}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Spec label="Farben" value={String(colors.length || 1)} />
+              <Spec
+                label="Ansichten"
+                value={String(exterior.length + interior.length)}
+              />
+              <Spec
+                label="Außen / Innen"
+                value={`${exterior.length} / ${interior.length}`}
+              />
+              <Spec label="Formate" value="PNG · JPG · WebP" />
             </div>
 
-            {/* CTAs */}
-            <div className="mt-3 space-y-2">
-              <button className="w-full rounded-lg bg-ink-900 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-ink-800">
-                Probefahrt buchen
-              </button>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="rounded-lg border border-ink-200 bg-white px-4 py-2.5 text-[13px] font-medium text-ink-700 hover:bg-ink-50">
-                  Angebot anfragen
-                </button>
-                <button className="rounded-lg border border-ink-200 bg-white px-4 py-2.5 text-[13px] font-medium text-ink-700 hover:bg-ink-50">
-                  Finanzierung
-                </button>
-              </div>
-            </div>
-
-            {/* Vertrauens-Zeile */}
+            {/* Erklär-Box: was man hier sieht */}
             <div className="mt-5 rounded-lg border border-hair bg-white p-3">
               <div className="flex items-center gap-1.5 text-[12px] font-medium text-ink-700">
                 <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-                Studio-Bilder in 8 Perspektiven
+                Live aus der Vehicleimagery-API
               </div>
               <p className="mt-1 text-[11px] leading-relaxed text-ink-500">
-                Alle Aufnahmen farbtreu, freistellbar und blitzschnell geladen —
-                bereitgestellt über die Vehicleimagery-API.
+                Diese Aufnahmen kommen direkt aus unserer API — kein Foto-Shoot,
+                kein Hosting, kein Freistellen. Farben, Perspektiven und
+                Freisteller in Echtzeit.
               </p>
             </div>
           </aside>
         </div>
 
+        {/* Was die API liefert */}
+        <FeatureBand />
+
         {/* 360°-Rundumblick (eigener Abschnitt) — immer Standardfarbe */}
         <Spin360Section car={car} exterior={exterior} bg={bg} />
 
-        {/* Übersicht · 10 Fahrzeuge (Baujahr 2010) */}
+        {/* Farbvergleich */}
+        {colors.length >= 2 && <ColorCompare car={car} colors={colors} />}
+
+        {/* Aus dem Katalog wählen */}
         <ShowroomGrid
           cars={showroom2010}
           current={car}
@@ -712,27 +534,7 @@ export default function CarDatabaseDemoPage() {
           loading={showroomApi.loading && !showroomApi.data}
         />
 
-        {/* Ausstattung & Highlights */}
-        <Highlights items={equipment} />
-
-        {/* Finanzierung */}
-        <FinanceTeaser price={specs.price} finance={finance} />
-
-        {/* Feature-Band */}
-        <FeatureBand />
-
-        {/* Farbvergleich */}
-        {colors.length >= 2 && (
-          <ColorCompare car={car} colors={colors} />
-        )}
-
-        {/* Kundenbewertungen */}
-        <Reviews />
-
-        {/* Händler / Standort */}
-        <DealerInfo />
-
-        {/* API-Vorschau */}
+        {/* So kommt das Bild aus der API */}
         <ApiPanel
           car={car}
           view={view}
@@ -740,9 +542,6 @@ export default function CarDatabaseDemoPage() {
           open={showApi}
           onToggle={() => setShowApi((v) => !v)}
         />
-
-        {/* Footer */}
-        <DealerFooter />
       </div>
 
       {/* Fahrzeug-Auswahl */}
@@ -1589,298 +1388,6 @@ function SpinSlider({
   );
 }
 
-function RatingStars({ value }: { value: number }) {
-  return (
-    <span
-      className="inline-flex items-center gap-0.5"
-      aria-label={`${value} von 5 Sternen`}
-    >
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={`h-3.5 w-3.5 ${
-            i <= Math.round(value)
-              ? "fill-amber-400 text-amber-400"
-              : "text-ink-200"
-          }`}
-        />
-      ))}
-    </span>
-  );
-}
-
-function Highlights({ items }: { items: string[] }) {
-  return (
-    <section className="mt-8">
-      <div className="mb-3 flex items-center gap-2">
-        <BadgeCheck className="h-4 w-4 text-brand-600" />
-        <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-          Ausstattung &amp; Highlights
-        </h3>
-      </div>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((it) => (
-          <div
-            key={it}
-            className="flex items-center gap-2 rounded-lg border border-hair bg-white px-3 py-2 text-[12.5px] text-ink-700"
-          >
-            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-            <span className="truncate">{it}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FinanceTeaser({
-  price,
-  finance,
-}: {
-  price: number;
-  finance: ReturnType<typeof financing>;
-}) {
-  return (
-    <section className="mt-8 overflow-hidden rounded-xl border border-hair bg-white">
-      <div className="grid sm:grid-cols-[1.2fr_1fr]">
-        <div className="border-b border-hair p-5 sm:border-b-0 sm:border-r">
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-ink-900">
-            <Calculator className="h-4 w-4 text-brand-600" />
-            Finanzierung ab
-          </div>
-          <div className="mt-2 flex items-end gap-2">
-            <span className="text-[34px] font-bold leading-none text-ink-900">
-              {fmtEur(finance.rate)}
-            </span>
-            <span className="pb-1 text-[13px] text-ink-500">/ Monat</span>
-          </div>
-          <p className="mt-2 max-w-md text-[11.5px] leading-relaxed text-ink-500">
-            Repräsentatives Beispiel: {fmtEur(finance.anzahlung)} Anzahlung,{" "}
-            {finance.months} Monate Laufzeit,{" "}
-            {(finance.apr * 100).toLocaleString("de-DE", {
-              minimumFractionDigits: 1,
-            })}{" "}
-            % eff. Jahreszins. Bonität vorausgesetzt.
-          </p>
-        </div>
-        <div className="flex flex-col justify-center gap-2 p-5">
-          <FinRow label="Anzahlung" value={fmtEur(finance.anzahlung)} />
-          <FinRow label="Laufzeit" value={`${finance.months} Monate`} />
-          <FinRow label="Fahrzeugpreis" value={fmtEur(price)} />
-          <button className="mt-1 rounded-lg border border-ink-200 bg-white px-4 py-2 text-[12.5px] font-medium text-ink-700 hover:bg-ink-50">
-            Finanzierung berechnen
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FinRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-hair pb-1.5 text-[12.5px]">
-      <span className="text-ink-500">{label}</span>
-      <span className="font-medium text-ink-800">{value}</span>
-    </div>
-  );
-}
-
-function Reviews() {
-  return (
-    <section className="mt-8">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-            Kundenbewertungen
-          </h3>
-        </div>
-        <span className="text-[12px] text-ink-500">
-          4,8 / 5 · 127 Google-Rezensionen
-        </span>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {REVIEWS.map((r) => (
-          <figure
-            key={r.name}
-            className="rounded-xl border border-hair bg-white p-4"
-          >
-            <RatingStars value={r.stars} />
-            <blockquote className="mt-2 text-[12.5px] leading-relaxed text-ink-700">
-              „{r.text}“
-            </blockquote>
-            <figcaption className="mt-3 flex items-center gap-2">
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink-900 text-[11px] font-semibold text-white">
-                {r.name.charAt(0)}
-              </span>
-              <span className="text-[11.5px] text-ink-500">
-                <span className="font-medium text-ink-800">{r.name}</span> ·{" "}
-                {r.date}
-              </span>
-            </figcaption>
-          </figure>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const HOURS = [
-  { d: "Mo – Fr", t: "08:00 – 19:00" },
-  { d: "Samstag", t: "09:00 – 16:00" },
-  { d: "Sonntag", t: "Schautag 11 – 15 Uhr" },
-];
-
-function DealerInfo() {
-  return (
-    <section className="mt-8 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-      <div className="rounded-xl border border-hair bg-white p-5">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-4 w-4 text-brand-600" />
-          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-            {DEALER.name}
-          </h3>
-        </div>
-        <p className="mt-1 text-[12.5px] text-ink-500">
-          Industriestraße 14 · 80939 München
-        </p>
-        <div className="mt-3 grid gap-2 text-[12.5px] text-ink-700 sm:grid-cols-2">
-          <span className="inline-flex items-center gap-2">
-            <Phone className="h-3.5 w-3.5 text-ink-400" />
-            +49 89 1234-567
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <Mail className="h-3.5 w-3.5 text-ink-400" />
-            verkauf@northlane-motors.de
-          </span>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Badge icon={ShieldCheck}>Geprüfter Händler</Badge>
-          <Badge icon={Award}>Top-Bewertung 2025</Badge>
-          <Badge icon={Check}>Gebrauchtwagen-Garantie</Badge>
-        </div>
-        <div
-          className="relative mt-4 h-32 overflow-hidden rounded-lg border border-hair"
-          style={{
-            backgroundColor: "#eef1f5",
-            backgroundImage:
-              "linear-gradient(#dde2e9 1px, transparent 1px), linear-gradient(90deg, #dde2e9 1px, transparent 1px)",
-            backgroundSize: "26px 26px",
-          }}
-          aria-hidden
-        >
-          <span className="absolute left-1/2 top-1/2 grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-brand-600/15">
-            <MapPin className="h-5 w-5 text-brand-600" />
-          </span>
-        </div>
-      </div>
-      <div className="rounded-xl border border-hair bg-white p-5">
-        <div className="flex items-center gap-2">
-          <Clock className="h-4 w-4 text-brand-600" />
-          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-            Öffnungszeiten
-          </h3>
-        </div>
-        <ul className="mt-3 space-y-1.5 text-[12.5px]">
-          {HOURS.map((h) => (
-            <li key={h.d} className="flex items-center justify-between">
-              <span className="text-ink-500">{h.d}</span>
-              <span className="font-medium text-ink-800">{h.t}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="mt-4 rounded-lg bg-ink-50 p-3 text-[11.5px] leading-relaxed text-ink-600">
-          Vereinbare online einen Termin — wir stellen dein Wunschfahrzeug
-          bereit.
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Badge({
-  icon: Icon,
-  children,
-}: {
-  icon: LucideIcon;
-  children: ReactNode;
-}) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-hair bg-ink-50 px-2.5 py-1 text-[11px] font-medium text-ink-700">
-      <Icon className="h-3.5 w-3.5 text-brand-600" />
-      {children}
-    </span>
-  );
-}
-
-function DealerFooter() {
-  return (
-    <footer className="mt-10 rounded-xl bg-ink-900 px-5 py-6 text-ink-100 sm:px-7">
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-white text-[13px] font-bold text-ink-900">
-              N
-            </span>
-            <span className="text-[14px] font-semibold text-white">
-              {DEALER.name}
-            </span>
-          </div>
-          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
-            {DEALER.tagline} — Neu- &amp; Gebrauchtwagen, Finanzierung, Leasing
-            und Service aus einer Hand.
-          </p>
-        </div>
-        <FooterCol
-          title="Fahrzeuge"
-          items={[
-            "Neuwagen",
-            "Gebrauchtwagen",
-            "Elektro & Hybrid",
-            "Transporter",
-          ]}
-        />
-        <FooterCol
-          title="Service"
-          items={["Finanzierung", "Leasing", "Inzahlungnahme", "Werkstatt"]}
-        />
-        <FooterCol
-          title="Unternehmen"
-          items={["Über uns", "Kontakt", "Karriere", "Standorte"]}
-        />
-      </div>
-      <div className="mt-6 flex flex-col items-start justify-between gap-2 border-t border-white/10 pt-4 text-[11px] text-ink-400 sm:flex-row sm:items-center">
-        <span>
-          © {DEALER.name} — Demo-Auftritt. Fahrzeugbilder live über die
-          Vehicleimagery-API.
-        </span>
-        <span className="flex gap-3">
-          <span>Impressum</span>
-          <span>Datenschutz</span>
-          <span>AGB</span>
-        </span>
-      </div>
-    </footer>
-  );
-}
-
-function FooterCol({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <div className="text-[12px] font-semibold uppercase tracking-wider text-ink-300">
-        {title}
-      </div>
-      <ul className="mt-2 space-y-1.5 text-[12px] text-ink-400">
-        {items.map((it) => (
-          <li key={it} className="cursor-pointer transition hover:text-white">
-            {it}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 /** Auswählbarer Showroom mit (zufälligen) Fahrzeugen — hier Baujahr 2010. */
 function ShowroomGrid({
   cars,
@@ -1939,7 +1446,6 @@ function ShowroomCard({
     { ...car, farbe: "default" },
     { view: "front_left", width: 360 },
   );
-  const specs = fakeSpecs(car);
   return (
     <button
       type="button"
@@ -1979,12 +1485,7 @@ function ShowroomCard({
         <div className="truncate text-[12px] font-semibold text-ink-900">
           {car.marke} {prettyModel(car.modell)}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-[10.5px] text-ink-400">{car.jahr}</span>
-          <span className="text-[11.5px] font-bold text-ink-900">
-            {fmtEur(specs.price)}
-          </span>
-        </div>
+        <div className="text-[10.5px] text-ink-400">{car.jahr}</div>
       </div>
     </button>
   );
