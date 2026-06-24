@@ -65,6 +65,17 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const view =
     (p.get("view") || "front_right").trim().toLowerCase() || "front_right";
   const width = Math.min(1600, Math.max(48, Number(p.get("w") || 160) || 160));
+  // Optional explizite Höhe (neues API-Feature: Breite & Höhe anfragbar).
+  const hRaw = Number(p.get("h") || 0) || 0;
+  const height = hRaw > 0 ? Math.min(1600, Math.max(48, hRaw)) : null;
+  // Ausgabeformat (neu: PNG/JPEG/WebP/AVIF). Unbekanntes → png.
+  const ALLOWED_FORMATS = new Set(["png", "jpeg", "webp", "avif"]);
+  const fmtIn = (p.get("format") || "png").trim().toLowerCase();
+  const format = ALLOWED_FORMATS.has(fmtIn) ? fmtIn : "png";
+  // Schatten-Variante (neues API-Feature).
+  const shadow = ["1", "true", "yes"].includes(
+    (p.get("shadow") || "").trim().toLowerCase(),
+  );
   // Echtes Freisteller-PNG anfragen (Hintergrund serverseitig entfernt).
   const transparent = ["1", "true", "yes"].includes(
     (p.get("transparent") || "").trim().toLowerCase(),
@@ -95,8 +106,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const seg = (s: string) => encodeURIComponent(s);
   const apiUrl =
     `${API_BASE}/api/${seg(marke)}/${seg(modell)}/${seg(jahr)}/${seg(body)}/${seg(trim)}/${seg(view)}` +
-    `?format=png&resolution=default&color=${seg(farbe)}` +
-    (transparent ? `&transparent=true` : "");
+    `?format=${seg(format)}&resolution=default&color=${seg(farbe)}` +
+    (shadow ? `&shadow=true` : "") +
+    (transparent ? `&transparent=true` : "") +
+    // Explizite Maße nur senden, wenn eine Höhe angefragt wurde.
+    (height ? `&width=${width}&height=${height}` : "");
 
   // 1) Kunden-API fragen → signierte image_url holen.
   let imageUrl: string | null = null;
@@ -130,7 +144,16 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   let img: Response;
   try {
     img = await fetch(imageUrl, {
-      cf: { image: { width, quality: 55, fit: "contain" } },
+      cf: {
+        image: {
+          width,
+          ...(height ? { height } : {}),
+          quality: 55,
+          fit: "contain",
+          // Liefert das gewünschte Format aus (auch wenn die Quelle PNG ist).
+          format,
+        },
+      },
     } as RequestInit);
   } catch {
     return new Response("image error", { status: 502 });
@@ -139,10 +162,16 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return new Response("image error", { status: 502 });
   }
 
+  const CT_BY_FORMAT: Record<string, string> = {
+    png: "image/png",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    avif: "image/avif",
+  };
   const resp = new Response(img.body, {
     status: 200,
     headers: {
-      "content-type": img.headers.get("content-type") || "image/png",
+      "content-type": CT_BY_FORMAT[format] || "image/png",
       // Bilder pro Auto/Ansicht/Farbe sind praktisch unveränderlich:
       //  - max-age=86400        → Browser nutzt das Bild 1 Tag ohne Netzaufruf
       //                           (Farbwechsel/Zurückblättern = sofort)

@@ -14,7 +14,7 @@ import {
   Search,
   Sparkles,
   X,
-  Zap,
+  type LucideIcon,
 } from "lucide-react";
 import {
   type CSSProperties,
@@ -169,6 +169,28 @@ function stageStyle(bg: BgMode): CSSProperties {
   };
 }
 
+type ImgFormat = "png" | "jpeg" | "webp" | "avif";
+/** Ausgabe-Optionen der API, die der Viewer demonstriert. */
+type OutOptions = {
+  format: ImgFormat;
+  shadow: boolean;
+  transparent: boolean;
+  width: number;
+  height: number | null;
+  watermark: boolean;
+};
+
+const FORMATS: ImgFormat[] = ["png", "jpeg", "webp", "avif"];
+
+/** Größen-Presets (zeigt: Breite & Höhe sind anfragbar). */
+const SIZE_PRESETS: { label: string; w: number; h: number | null }[] = [
+  { label: "Auto", w: 900, h: null },
+  { label: "600", w: 600, h: null },
+  { label: "1600", w: 1600, h: null },
+  { label: "1:1 · 1000", w: 1000, h: 1000 },
+  { label: "16:9 · 1280", w: 1280, h: 720 },
+];
+
 /**
  * Bild-URL im Hintergrund vorladen (wärmt Browser- und Edge-Cache vor, bevor
  * der Nutzer klickt). Eine sitzungsweite Menge verhindert doppelte Anfragen
@@ -190,6 +212,13 @@ export default function CarDatabaseDemoPage() {
   // eigener Schalter, der ausschließlich die Hero betrifft.
   const [bg, setBg] = useState<"showroom" | "studio">("showroom");
   const [transparent, setTransparent] = useState(false);
+  // Neue API-Ausgabe-Optionen.
+  const [format, setFormat] = useState<"png" | "jpeg" | "webp" | "avif">("png");
+  const [shadow, setShadow] = useState(false);
+  const [width, setWidth] = useState(900);
+  const [height, setHeight] = useState<number | null>(null);
+  // Wasserzeichen: Plan-/Key-Merkmal (Testkunden) → hier Vorschau-Overlay.
+  const [watermark, setWatermark] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [showApi, setShowApi] = useState(false);
   const [zoom, setZoom] = useState(false);
@@ -298,6 +327,17 @@ export default function CarDatabaseDemoPage() {
     setPickerOpen(false);
   };
 
+  // JPEG kann keine Transparenz → in dem Fall Freisteller ausschalten.
+  const effTransparent = transparent && format !== "jpeg";
+  const out: OutOptions = {
+    format,
+    shadow,
+    transparent: effTransparent,
+    width,
+    height,
+    watermark,
+  };
+
   return (
     <div
       className={
@@ -370,58 +410,111 @@ export default function CarDatabaseDemoPage() {
               color={color}
               view={view}
               views={[...exterior, ...interior]}
-              bg={transparent ? "transparent" : bg}
-              transparent={transparent}
+              bg={effTransparent ? "transparent" : bg}
+              out={out}
               onZoom={() => setZoom(true)}
               onToggleTransparent={() => setTransparent((t) => !t)}
               onPick={setView}
               loading={detailApi.loading && !detail}
             />
 
-            {/* Hintergrund + Transparent-Schalter */}
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                Hintergrund
-              </span>
-              <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
-                <SegBtn
-                  active={!transparent && bg === "showroom"}
-                  onClick={() => {
-                    setTransparent(false);
-                    setBg("showroom");
-                  }}
+            {/* Ausgabe-Optionen — demonstriert die API-Funktionen live */}
+            <div className="mt-3 space-y-2.5 rounded-xl border border-hair bg-white p-3">
+              {/* Hintergrund + Transparent */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
+                  Hintergrund
+                </span>
+                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
+                  <SegBtn
+                    active={!effTransparent && bg === "showroom"}
+                    onClick={() => {
+                      setTransparent(false);
+                      setBg("showroom");
+                    }}
+                  >
+                    Showroom
+                  </SegBtn>
+                  <SegBtn
+                    active={!effTransparent && bg === "studio"}
+                    onClick={() => {
+                      setTransparent(false);
+                      setBg("studio");
+                    }}
+                  >
+                    Studio
+                  </SegBtn>
+                </div>
+                <OptToggle
+                  active={effTransparent}
+                  disabled={format === "jpeg"}
+                  onClick={() => setTransparent((t) => !t)}
+                  title={
+                    format === "jpeg"
+                      ? "JPEG unterstützt keine Transparenz"
+                      : "Echtes transparentes PNG über die API anzeigen"
+                  }
+                  icon={Layers}
                 >
-                  Showroom
-                </SegBtn>
-                <SegBtn
-                  active={!transparent && bg === "studio"}
-                  onClick={() => {
-                    setTransparent(false);
-                    setBg("studio");
-                  }}
-                >
-                  Studio
-                </SegBtn>
+                  Transparent
+                </OptToggle>
               </div>
-              <button
-                type="button"
-                onClick={() => setTransparent((t) => !t)}
-                aria-pressed={transparent}
-                title="Echtes transparentes PNG über die API anzeigen"
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition ${
-                  transparent
-                    ? "border-ink-900 bg-ink-900 text-white"
-                    : "border-ink-200 bg-white text-ink-700 hover:bg-ink-50"
-                }`}
-              >
-                <Layers className="h-3.5 w-3.5" />
-                Transparent (PNG)
-                <span
-                  className={`ml-0.5 inline-block h-2 w-2 rounded-full ${
-                    transparent ? "bg-emerald-400" : "bg-ink-300"
-                  }`}
-                />
-              </button>
+
+              {/* Format + Schatten */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
+                  Format
+                </span>
+                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
+                  {FORMATS.map((f) => (
+                    <SegBtn
+                      key={f}
+                      active={format === f}
+                      onClick={() => {
+                        setFormat(f);
+                        if (f === "jpeg") setTransparent(false);
+                      }}
+                    >
+                      {f.toUpperCase()}
+                    </SegBtn>
+                  ))}
+                </div>
+                <OptToggle
+                  active={shadow}
+                  onClick={() => setShadow((s) => !s)}
+                  title="Schlagschatten von der API rendern lassen"
+                >
+                  Schatten
+                </OptToggle>
+              </div>
+
+              {/* Größe + Wasserzeichen */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
+                  Größe
+                </span>
+                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
+                  {SIZE_PRESETS.map((s) => (
+                    <SegBtn
+                      key={s.label}
+                      active={width === s.w && height === s.h}
+                      onClick={() => {
+                        setWidth(s.w);
+                        setHeight(s.h);
+                      }}
+                    >
+                      {s.label}
+                    </SegBtn>
+                  ))}
+                </div>
+                <OptToggle
+                  active={watermark}
+                  onClick={() => setWatermark((w) => !w)}
+                  title="Vorschau: So sehen Bilder von Test-/Trial-Kunden aus (automatisches Wasserzeichen)"
+                >
+                  Testkunde · Wasserzeichen
+                </OptToggle>
+              </div>
             </div>
 
             {/* Ansichts-Streifen */}
@@ -499,7 +592,7 @@ export default function CarDatabaseDemoPage() {
                 label="Außen / Innen"
                 value={`${exterior.length} / ${interior.length}`}
               />
-              <Spec label="Formate" value="PNG · JPG · WebP" />
+              <Spec label="Formate" value="PNG·JPEG·WebP·AVIF" />
             </div>
 
             {/* Erklär-Box: was man hier sieht */}
@@ -539,6 +632,7 @@ export default function CarDatabaseDemoPage() {
           car={car}
           view={view}
           color={color}
+          out={out}
           open={showApi}
           onToggle={() => setShowApi((v) => !v)}
         />
@@ -560,7 +654,7 @@ export default function CarDatabaseDemoPage() {
           car={car}
           color={color}
           view={view}
-          transparent={transparent}
+          out={out}
           onClose={() => setZoom(false)}
         />
       )}
@@ -584,7 +678,7 @@ function Stage({
   view,
   views,
   bg,
-  transparent,
+  out,
   onZoom,
   onToggleTransparent,
   onPick,
@@ -595,7 +689,7 @@ function Stage({
   view: string;
   views: string[];
   bg: BgMode;
-  transparent: boolean;
+  out: OutOptions;
   onZoom: () => void;
   onToggleTransparent: () => void;
   onPick: (v: string) => void;
@@ -606,7 +700,14 @@ function Stage({
   const imgFarbe = SPIN.includes(view) ? color : "default";
   const url = carThumbApiUrl(
     { ...car, farbe: imgFarbe },
-    { view, width: 900, transparent },
+    {
+      view,
+      width: out.width,
+      height: out.height,
+      format: out.format,
+      shadow: out.shadow,
+      transparent: out.transparent,
+    },
   );
 
   useEffect(() => setFailed(false), [url]);
@@ -640,6 +741,9 @@ function Stage({
           )}
         </div>
 
+        {/* Wasserzeichen-Vorschau (Testkunde) */}
+        {out.watermark && <WatermarkOverlay />}
+
         {loading && (
           <div className="absolute inset-0 grid place-items-center bg-white/40 backdrop-blur-[1px]">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-ink-300 border-t-ink-700" />
@@ -658,12 +762,19 @@ function Stage({
         <button
           type="button"
           onClick={onToggleTransparent}
-          aria-pressed={transparent}
-          title="Echtes transparentes PNG über die API anzeigen"
+          aria-pressed={out.transparent}
+          disabled={out.format === "jpeg"}
+          title={
+            out.format === "jpeg"
+              ? "JPEG unterstützt keine Transparenz"
+              : "Echtes transparentes PNG über die API anzeigen"
+          }
           className={`absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium shadow backdrop-blur transition ${
-            transparent
-              ? "bg-ink-900 text-white"
-              : "bg-white/85 text-ink-700 hover:bg-white"
+            out.format === "jpeg"
+              ? "cursor-not-allowed bg-white/70 text-ink-300"
+              : out.transparent
+                ? "bg-ink-900 text-white"
+                : "bg-white/85 text-ink-700 hover:bg-white"
           }`}
         >
           <Layers className="h-3.5 w-3.5" />
@@ -811,13 +922,104 @@ function SegBtn({
   );
 }
 
+/** Umschalt-Pille mit Status-Punkt (Transparent / Schatten / Wasserzeichen). */
+function OptToggle({
+  active,
+  onClick,
+  children,
+  title,
+  disabled,
+  icon: Icon,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  title?: string;
+  disabled?: boolean;
+  icon?: LucideIcon;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      title={title}
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition ${
+        disabled
+          ? "cursor-not-allowed border-hair bg-ink-50 text-ink-300"
+          : active
+            ? "border-ink-900 bg-ink-900 text-white"
+            : "border-ink-200 bg-white text-ink-700 hover:bg-ink-50"
+      }`}
+    >
+      {Icon && <Icon className="h-3.5 w-3.5" />}
+      {children}
+      <span
+        className={`ml-0.5 inline-block h-2 w-2 rounded-full ${
+          active ? "bg-emerald-400" : disabled ? "bg-ink-200" : "bg-ink-300"
+        }`}
+      />
+    </button>
+  );
+}
+
+/**
+ * Demo-Vorschau des Test-/Trial-Wasserzeichens. Wasserzeichen ist serverseitig
+ * ein Plan-Merkmal (Testkunden); hier als clientseitiges Overlay simuliert, um
+ * im Call zu zeigen, wie Trial-Bilder aussehen.
+ */
+function WatermarkOverlay() {
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="absolute inset-[-40%] flex flex-wrap content-center justify-center gap-x-8 gap-y-5 rotate-[-28deg]">
+        {Array.from({ length: 80 }).map((_, i) => (
+          <span
+            key={i}
+            className="whitespace-nowrap text-[12px] font-bold uppercase tracking-[0.3em] text-ink-900/15"
+          >
+            Vehicleimagery · Demo
+          </span>
+        ))}
+      </div>
+      <span className="absolute left-3 top-3 rounded-full bg-amber-500/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+        Testkunde
+      </span>
+    </div>
+  );
+}
+
 const FEATURES = [
-  { icon: Rotate3d, title: "8 Perspektiven", desc: "Rundum-Ansicht für jedes Fahrzeug." },
-  { icon: Palette, title: "Farbtreue Lacke", desc: "Kalibrierte, konsistente Farben." },
-  { icon: Layers, title: "Freisteller", desc: "Transparente PNGs für jedes Layout." },
-  { icon: Sparkles, title: "Studio-Qualität", desc: "Einheitlich wie aus dem Fotostudio." },
-  { icon: Zap, title: "Blitzschnell", desc: "Global gecachtes CDN, ~50 ms." },
-  { icon: Boxes, title: "Innenraum", desc: "Cockpit & Mittelkonsole inklusive." },
+  {
+    icon: Rotate3d,
+    title: "8 Perspektiven",
+    desc: "Rundum-Ansicht + Cockpit & Mittelkonsole.",
+  },
+  {
+    icon: Layers,
+    title: "Freisteller",
+    desc: "Echte transparente PNGs (Hintergrund entfernt).",
+  },
+  {
+    icon: Boxes,
+    title: "Schlagschatten",
+    desc: "Optionaler Schatten direkt aus der API.",
+  },
+  {
+    icon: ImageIcon,
+    title: "4 Formate",
+    desc: "PNG · JPEG · WebP · AVIF wählbar.",
+  },
+  {
+    icon: Maximize2,
+    title: "Größe nach Maß",
+    desc: "Breite & Höhe frei anfragbar.",
+  },
+  {
+    icon: Palette,
+    title: "Farbtreue Lacke",
+    desc: "Kalibrierte, konsistente Farben.",
+  },
 ];
 
 function FeatureBand() {
@@ -925,21 +1127,38 @@ function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
   );
 }
 
+const CT_BY_FORMAT: Record<ImgFormat, string> = {
+  png: "image/png",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  avif: "image/avif",
+};
+
 function ApiPanel({
   car,
   view,
   color,
+  out,
   open,
   onToggle,
 }: {
   car: CarId;
   view: string;
   color: string;
+  out: OutOptions;
   open: boolean;
   onToggle: () => void;
 }) {
   const path = `/api/${car.marke}/${prettyModel(car.modell).replace(/ /g, "_")}/${car.jahr}/${view}`;
-  const colorQ = color && color !== "default" ? `?color=${color}` : "";
+  // Query-String aus den aktuell gewählten Optionen — spiegelt 1:1 das Bild oben.
+  const params: string[] = [`format=${out.format}`];
+  if (color && color !== "default") params.push(`color=${color}`);
+  if (out.shadow) params.push("shadow=true");
+  if (out.transparent) params.push("transparent=true");
+  params.push(`width=${out.width}`);
+  if (out.height) params.push(`height=${out.height}`);
+  const qs = `?${params.join("&")}`;
+
   return (
     <div className="mt-8 rounded-xl border border-hair bg-white">
       <button
@@ -949,7 +1168,7 @@ function ApiPanel({
       >
         <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink-900">
           <Code2 className="h-4 w-4 text-brand-600" />
-          So einfach kommt dieses Bild aus der API
+          So kommt genau dieses Bild aus der API
         </span>
         <span className="text-[11px] text-ink-400">
           {open ? "ausblenden" : "anzeigen"}
@@ -961,20 +1180,23 @@ function ApiPanel({
             <div>
               <span className="text-emerald-400">GET</span>{" "}
               https://api.vehicleimagery.com{path}
-              {colorQ}
+              <span className="text-amber-300">{qs}</span>
             </div>
             <div className="text-ink-400">x-api-key: VI-••••••••••••••••</div>
             <div className="mt-1 text-ink-400">
-              → 200 · image/png · studio-quality, farbtreu
+              → 200 · {CT_BY_FORMAT[out.format]} · {out.width}
+              {out.height ? `×${out.height}` : ""} px
+              {out.shadow ? " · Schatten" : ""}
+              {out.transparent ? " · transparent" : ""}
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {[
-              "Formate: PNG · JPG · WebP",
-              "Auflösungen wählbar",
-              "transparent=true (Freisteller)",
+              "format: png · jpeg · webp · avif",
               "shadow=true",
-              "getall: alle 8 Ansichten auf einmal",
+              "transparent=true (Freisteller)",
+              "width & height frei wählbar",
+              "getall: alle Ansichten auf einmal",
               "CDN-Cache",
             ].map((t) => (
               <span
@@ -987,7 +1209,8 @@ function ApiPanel({
           </div>
           <p className="mt-2 text-[11px] text-ink-400">
             Diese Demo lädt die Bilder live über genau diese API — kein eigener
-            Foto-Shoot, kein Hosting, kein Freistellen.
+            Foto-Shoot, kein Hosting, kein Freistellen. Test-/Trial-Keys liefern
+            die Bilder automatisch mit Wasserzeichen.
           </p>
         </div>
       )}
@@ -1151,19 +1374,25 @@ function Zoomed({
   car,
   color,
   view,
-  transparent,
+  out,
   onClose,
 }: {
   car: CarId;
   color: string;
   view: string;
-  transparent: boolean;
+  out: OutOptions;
   onClose: () => void;
 }) {
   const imgFarbe = SPIN.includes(view) ? color : "default";
   const url = carThumbApiUrl(
     { ...car, farbe: imgFarbe },
-    { view, width: 1500, transparent },
+    {
+      view,
+      width: 1500,
+      format: out.format,
+      shadow: out.shadow,
+      transparent: out.transparent,
+    },
   );
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -1184,15 +1413,20 @@ function Zoomed({
         <X className="h-5 w-5" />
       </button>
       {url && (
-        <img
-          src={url}
-          alt={`${car.marke} ${prettyModel(car.modell)}`}
+        <div
+          className="relative"
           onClick={(e) => e.stopPropagation()}
-          style={transparent ? CHECKER : undefined}
-          className={`max-h-[88vh] max-w-[94vw] object-contain ${
-            transparent ? "rounded-lg" : ""
-          }`}
-        />
+          style={out.transparent ? CHECKER : undefined}
+        >
+          <img
+            src={url}
+            alt={`${car.marke} ${prettyModel(car.modell)}`}
+            className={`max-h-[88vh] max-w-[94vw] object-contain ${
+              out.transparent ? "rounded-lg" : ""
+            }`}
+          />
+          {out.watermark && <WatermarkOverlay />}
+        </div>
       )}
     </div>
   );

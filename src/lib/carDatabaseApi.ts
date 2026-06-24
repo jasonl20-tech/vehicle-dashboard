@@ -26,7 +26,14 @@ export function carThumbApiUrl(
     trim?: string | null;
     farbe?: string | null;
   },
-  opts?: { view?: string; width?: number; transparent?: boolean },
+  opts?: {
+    view?: string;
+    width?: number;
+    height?: number | null;
+    format?: "png" | "jpeg" | "webp" | "avif";
+    shadow?: boolean;
+    transparent?: boolean;
+  },
 ): string | null {
   if (!car || !car.marke || !car.modell || !car.jahr) return null;
   const u = new URL(CAR_IMAGE_PROXY, "https://x");
@@ -38,6 +45,14 @@ export function carThumbApiUrl(
   if (car.farbe) u.searchParams.set("farbe", String(car.farbe));
   u.searchParams.set("view", opts?.view || "front_right");
   u.searchParams.set("w", String(opts?.width ?? 160));
+  // Optionale explizite Höhe (Breite & Höhe anfragbar).
+  if (opts?.height) u.searchParams.set("h", String(opts.height));
+  // Ausgabeformat — nur setzen, wenn ≠ png (hält bestehende Thumbnail-URLs
+  // und damit deren Cache-Keys stabil).
+  if (opts?.format && opts.format !== "png")
+    u.searchParams.set("format", opts.format);
+  // Schatten-Variante.
+  if (opts?.shadow) u.searchParams.set("shadow", "1");
   // Echtes Freisteller-PNG (Hintergrund von der Kunden-API entfernt) anfragen.
   if (opts?.transparent) u.searchParams.set("transparent", "1");
   return u.pathname + u.search;
