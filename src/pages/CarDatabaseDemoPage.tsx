@@ -100,16 +100,16 @@ const SPIN = [
 const INTERIOR = ["dashboard", "center_console"];
 
 const VIEW_LABEL: Record<string, string> = {
-  front: "Vorne",
-  rear: "Hinten",
-  left: "Links",
-  right: "Rechts",
-  front_left: "Vorne links",
-  front_right: "Vorne rechts",
-  rear_left: "Hinten links",
-  rear_right: "Hinten rechts",
-  dashboard: "Cockpit",
-  center_console: "Mittelkonsole",
+  front: "Front",
+  rear: "Rear",
+  left: "Left",
+  right: "Right",
+  front_left: "Front left",
+  front_right: "Front right",
+  rear_left: "Rear left",
+  rear_right: "Rear right",
+  dashboard: "Dashboard",
+  center_console: "Center console",
 };
 
 const COLOR_HEX: Record<string, string> = {
@@ -128,11 +128,11 @@ const COLOR_HEX: Record<string, string> = {
 };
 const COLOR_LABEL: Record<string, string> = {
   default: "Original",
-  black: "Schwarz",
-  white: "Weiß",
-  blue: "Blau",
+  black: "Black",
+  white: "White",
+  blue: "Blue",
   orange: "Orange",
-  wine_red: "Weinrot",
+  wine_red: "Wine red",
 };
 
 function colorHex(c: string): string {
@@ -350,14 +350,14 @@ export default function CarDatabaseDemoPage() {
         <div className="flex items-center gap-2.5">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Live-Demo
+            Live demo
           </span>
           <div className="leading-tight">
             <div className="text-[14px] font-semibold tracking-tight text-ink-900">
               Vehicleimagery
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-ink-400">
-              Fahrzeugbilder aus der API
+              Vehicle images from the API
             </div>
           </div>
         </div>
@@ -368,13 +368,13 @@ export default function CarDatabaseDemoPage() {
             className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-ink-50"
           >
             <Search className="h-3.5 w-3.5" />
-            Fahrzeug wählen
+            Choose vehicle
           </button>
           <button
             type="button"
             onClick={() => setPresenting((p) => !p)}
             className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-[12px] text-ink-600 hover:bg-ink-50"
-            title={presenting ? "Präsentation beenden" : "Präsentationsmodus"}
+            title={presenting ? "Exit presentation" : "Presentation mode"}
           >
             {presenting ? (
               <Minimize2 className="h-3.5 w-3.5" />
@@ -382,7 +382,7 @@ export default function CarDatabaseDemoPage() {
               <Maximize2 className="h-3.5 w-3.5" />
             )}
             <span className="hidden sm:inline">
-              {presenting ? "Beenden" : "Präsentation"}
+              {presenting ? "Exit" : "Present"}
             </span>
           </button>
         </div>
@@ -392,12 +392,12 @@ export default function CarDatabaseDemoPage() {
         {/* Demo-Intro statt Händler-Breadcrumb */}
         <div className="mb-5">
           <h2 className="font-display text-[22px] font-semibold leading-tight tracking-tight text-ink-900 sm:text-[26px]">
-            Jedes Fahrzeug. Jede Farbe. Jede Perspektive.
+            Every vehicle. Every color. Every angle.
           </h2>
           <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-500">
-            Alle Bilder werden live über eine einzige API geladen — in
-            Studio-Qualität, farbtreu und freistellbar. Wähle Fahrzeug, Farbe,
-            Ansicht und Hintergrund und sieh, wie das Bild in Echtzeit kommt.
+            Every image is loaded live from a single API — in studio quality,
+            color-accurate and ready to cut out. Pick a vehicle, color, view and
+            background and watch the image arrive in real time.
           </p>
         </div>
 
@@ -441,9 +441,9 @@ export default function CarDatabaseDemoPage() {
                 <OptToggle
                   active={shadow}
                   onClick={() => setShadow((s) => !s)}
-                  title="Schlagschatten von der API rendern lassen"
+                  title="Render a drop shadow from the API"
                 >
-                  Schatten
+                  Shadow
                 </OptToggle>
                 <OptToggle
                   active={effTransparent}
@@ -451,8 +451,8 @@ export default function CarDatabaseDemoPage() {
                   onClick={() => setTransparent((t) => !t)}
                   title={
                     format === "jpeg"
-                      ? "JPEG unterstützt keine Transparenz"
-                      : "Echtes transparentes PNG über die API anzeigen"
+                      ? "JPEG doesn't support transparency"
+                      : "Show a real transparent PNG from the API"
                   }
                   icon={Layers}
                 >
@@ -463,7 +463,7 @@ export default function CarDatabaseDemoPage() {
               {/* Größe + Wasserzeichen */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                  Größe
+                  Size
                 </span>
                 <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
                   {SIZE_PRESETS.map((s) => (
@@ -482,9 +482,9 @@ export default function CarDatabaseDemoPage() {
                 <OptToggle
                   active={watermark}
                   onClick={() => setWatermark((w) => !w)}
-                  title="Vorschau: So sehen Bilder von Test-/Trial-Kunden aus (automatisches Wasserzeichen)"
+                  title="Preview: how images look for test/trial customers (automatic watermark)"
                 >
-                  Testkunde · Wasserzeichen
+                  Test customer · Watermark
                 </OptToggle>
               </div>
             </div>
@@ -503,7 +503,7 @@ export default function CarDatabaseDemoPage() {
           {/* Demo-Infos (echt, kein Fake-Listing) */}
           <aside>
             <div className="text-[10px] font-medium uppercase tracking-[0.18em] text-ink-400">
-              Aktuelles Fahrzeug
+              Current vehicle
             </div>
             <h1 className="mt-0.5 text-[22px] font-semibold leading-tight tracking-tight text-ink-900">
               {title}
@@ -517,7 +517,7 @@ export default function CarDatabaseDemoPage() {
             <div className="mt-5">
               <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-ink-400">
                 <Palette className="h-3.5 w-3.5" />
-                Außenfarbe · {colorLabel(color)}
+                Exterior color · {colorLabel(color)}
               </div>
               <div className="flex flex-wrap gap-2">
                 {(colors.length ? colors : [color]).map((c) => {
@@ -555,28 +555,28 @@ export default function CarDatabaseDemoPage() {
 
             {/* Echte Verfügbarkeits-Infos aus der Datenbank/API */}
             <div className="mt-5 grid grid-cols-2 gap-2">
-              <Spec label="Farben" value={String(colors.length || 1)} />
+              <Spec label="Colors" value={String(colors.length || 1)} />
               <Spec
-                label="Ansichten"
+                label="Views"
                 value={String(exterior.length + interior.length)}
               />
               <Spec
-                label="Außen / Innen"
+                label="Exterior / Interior"
                 value={`${exterior.length} / ${interior.length}`}
               />
-              <Spec label="Formate" value="PNG·JPEG·WebP·AVIF" />
+              <Spec label="Formats" value="PNG·JPEG·WebP·AVIF" />
             </div>
 
             {/* Erklär-Box: was man hier sieht */}
             <div className="mt-5 rounded-lg border border-hair bg-white p-3">
               <div className="flex items-center gap-1.5 text-[12px] font-medium text-ink-700">
                 <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-                Live aus der Vehicleimagery-API
+                Live from the Vehicleimagery API
               </div>
               <p className="mt-1 text-[11px] leading-relaxed text-ink-500">
-                Diese Aufnahmen kommen direkt aus unserer API — kein Foto-Shoot,
-                kein Hosting, kein Freistellen. Farben, Perspektiven und
-                Freisteller in Echtzeit.
+                These shots come straight from our API — no photo shoot, no
+                hosting, no manual cut-out. Colors, angles and cut-outs in real
+                time.
               </p>
             </div>
           </aside>
@@ -735,8 +735,8 @@ function Stage({
           disabled={out.format === "jpeg"}
           title={
             out.format === "jpeg"
-              ? "JPEG unterstützt keine Transparenz"
-              : "Echtes transparentes PNG über die API anzeigen"
+              ? "JPEG doesn't support transparency"
+              : "Show a real transparent PNG from the API"
           }
           className={`absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium shadow backdrop-blur transition ${
             out.format === "jpeg"
@@ -754,7 +754,7 @@ function Stage({
         <button
           type="button"
           onClick={onZoom}
-          aria-label="Vergrößern"
+          aria-label="Zoom"
           className="absolute bottom-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/85 text-ink-700 shadow hover:bg-white"
         >
           <Maximize2 className="h-4 w-4" />
@@ -783,7 +783,7 @@ function ArrowBtn({
     <button
       type="button"
       onClick={onClick}
-      aria-label={side === "left" ? "Vorherige Ansicht" : "Nächste Ansicht"}
+      aria-label={side === "left" ? "Previous view" : "Next view"}
       className={`absolute top-1/2 -translate-y-1/2 ${
         side === "left" ? "left-3" : "right-3"
       } inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-ink-700 shadow hover:bg-white`}
@@ -952,7 +952,7 @@ function WatermarkOverlay() {
         ))}
       </div>
       <span className="absolute left-3 top-3 rounded-full bg-amber-500/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-        Testkunde
+        Test customer
       </span>
     </div>
   );
@@ -989,10 +989,10 @@ function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
     <div className="mt-8">
       <div className="mb-2 flex items-center gap-2">
         <h3 className="text-[13px] font-semibold text-ink-900">
-          Farbvergleich
+          Color comparison
         </h3>
         <span className="text-[11px] text-ink-400">
-          {colorLabel(left)} ↔ {colorLabel(right)} · Regler ziehen
+          {colorLabel(left)} ↔ {colorLabel(right)} · drag the slider
         </span>
       </div>
       <div
@@ -1087,10 +1087,10 @@ function ApiPanel({
       >
         <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink-900">
           <Code2 className="h-4 w-4 text-brand-600" />
-          So kommt genau dieses Bild aus der API
+          Exactly how this image comes from the API
         </span>
         <span className="text-[11px] text-ink-400">
-          {open ? "ausblenden" : "anzeigen"}
+          {open ? "hide" : "show"}
         </span>
       </button>
       {open && (
@@ -1105,7 +1105,7 @@ function ApiPanel({
             <div className="mt-1 text-ink-400">
               → 200 · {CT_BY_FORMAT[out.format]} · {out.width}
               {out.height ? `×${out.height}` : ""} px
-              {out.shadow ? " · Schatten" : ""}
+              {out.shadow ? " · shadow" : ""}
               {out.transparent ? " · transparent" : ""}
             </div>
           </div>
@@ -1113,10 +1113,10 @@ function ApiPanel({
             {[
               "format: png · jpeg · webp · avif",
               "shadow=true",
-              "transparent=true (Freisteller)",
-              "width & height frei wählbar",
-              "getall: alle Ansichten auf einmal",
-              "CDN-Cache",
+              "transparent=true (cut-out)",
+              "width & height freely selectable",
+              "getall: all views at once",
+              "CDN cache",
             ].map((t) => (
               <span
                 key={t}
@@ -1127,9 +1127,9 @@ function ApiPanel({
             ))}
           </div>
           <p className="mt-2 text-[11px] text-ink-400">
-            Diese Demo lädt die Bilder live über genau diese API — kein eigener
-            Foto-Shoot, kein Hosting, kein Freistellen. Test-/Trial-Keys liefern
-            die Bilder automatisch mit Wasserzeichen.
+            This demo loads the images live through exactly this API — no photo
+            shoot of your own, no hosting, no manual cut-out. Test/trial keys
+            return the images with a watermark automatically.
           </p>
         </div>
       )}
@@ -1189,20 +1189,20 @@ function CarPicker({
       >
         <div className="flex items-center justify-between border-b border-hair px-4 py-3">
           <h3 className="text-[14px] font-semibold text-ink-900">
-            Fahrzeug wählen
+            Choose vehicle
           </h3>
           <button
             type="button"
             onClick={onClose}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-500 hover:bg-ink-100"
-            aria-label="Schließen"
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="px-4 py-3">
           <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-ink-400">
-            Empfohlen
+            Recommended
           </div>
           <div className="mb-4 flex flex-wrap gap-1.5">
             {FEATURED.map((c) => (
@@ -1223,7 +1223,7 @@ function CarPicker({
           {cars2010.length > 0 && (
             <>
               <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-ink-400">
-                Baujahr 2010
+                Model year 2010
               </div>
               <div className="mb-4 flex flex-wrap gap-1.5">
                 {cars2010.map((c) => (
@@ -1249,17 +1249,19 @@ function CarPicker({
               autoFocus
               value={qIn}
               onChange={(e) => setQIn(e.target.value)}
-              placeholder="Alle Fahrzeuge durchsuchen…"
+              placeholder="Search all vehicles…"
               className="w-full rounded-md border border-hair bg-white py-2 pl-7 pr-2 text-[13px] text-ink-800 focus:border-ink-400 focus:outline-none"
             />
           </div>
           {q.length >= 2 && (
             <div className="mt-2 max-h-72 overflow-y-auto rounded-md border border-hair">
               {searchApi.loading && results.length === 0 ? (
-                <div className="px-3 py-2 text-[12px] text-ink-400">Suche…</div>
+                <div className="px-3 py-2 text-[12px] text-ink-400">
+                  Searching…
+                </div>
               ) : results.length === 0 ? (
                 <div className="px-3 py-2 text-[12px] text-ink-400">
-                  Nichts gefunden.
+                  Nothing found.
                 </div>
               ) : (
                 results.map((r, i) => (
@@ -1276,7 +1278,7 @@ function CarPicker({
                       <span className="text-ink-400"> · {r.jahr}</span>
                     </span>
                     <span className="text-[10px] text-ink-400">
-                      {r.farben} Farben
+                      {r.farben} colors
                     </span>
                   </button>
                 ))
@@ -1326,7 +1328,7 @@ function Zoomed({
       <button
         type="button"
         onClick={onClose}
-        aria-label="Schließen"
+        aria-label="Close"
         className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-md bg-white/10 text-white hover:bg-white/20"
       >
         <X className="h-5 w-5" />
@@ -1421,11 +1423,11 @@ function Spin360Section({
           </span>
           <div className="min-w-0">
             <h3 className="text-[17px] font-semibold tracking-tight text-ink-900">
-              360°-Rundumblick
+              All angles
             </h3>
             <p className="truncate text-[12px] text-ink-500">
-              Ziehen, Pfeile oder Regler — dreh {car.marke}{" "}
-              {prettyModel(car.modell)} durch alle Perspektiven.
+              Drag, arrows or slider — turn {car.marke}{" "}
+              {prettyModel(car.modell)} through every angle.
             </p>
           </div>
           <span className="ml-auto rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
@@ -1448,7 +1450,7 @@ function Spin360Section({
               {url && !failed ? (
                 <img
                   src={url}
-                  alt={`${car.marke} ${prettyModel(car.modell)} 360 Grad`}
+                  alt={`${car.marke} ${prettyModel(car.modell)} ${VIEW_LABEL[view] ?? view}`}
                   draggable={false}
                   onError={() => setFailed(true)}
                   className="max-h-full max-w-full object-contain"
@@ -1457,10 +1459,6 @@ function Spin360Section({
               ) : (
                 <ImageIcon className="h-10 w-10 text-ink-300" />
               )}
-            </div>
-            <div className="pointer-events-none absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-ink-900/80 px-2 py-1 text-[10px] font-medium text-white backdrop-blur">
-              <Rotate3d className="h-3 w-3" />
-              360°
             </div>
           </div>
           <ArrowBtn side="left" onClick={() => setSpin(safeIdx - 1)} />
@@ -1477,9 +1475,8 @@ function Spin360Section({
             {car.marke} {prettyModel(car.modell)}
           </div>
           <p className="text-[11.5px] leading-relaxed text-ink-500">
-            Ziehe das Bild oder nutze den Regler, um das Fahrzeug in 8
-            Studio-Perspektiven zu drehen — alle live über die
-            Vehicleimagery-API.
+            Drag the image or use the slider to turn the vehicle through 8
+            studio angles — all live from the Vehicleimagery API.
           </p>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {exterior.map((v, i) => (
@@ -1524,10 +1521,10 @@ function SpinSlider({
       <div className="mb-2 flex items-center justify-between text-[11px]">
         <span className="inline-flex items-center gap-1.5 font-medium text-ink-700">
           <Rotate3d className="h-3.5 w-3.5 text-brand-600" />
-          360°-Ansicht
+          All angles
         </span>
         <span className="text-ink-400">
-          {isExt ? VIEW_LABEL[current] ?? current : "Innenansicht aktiv"} ·{" "}
+          {isExt ? VIEW_LABEL[current] ?? current : "Interior view active"} ·{" "}
           {spinIdx + 1}/{exterior.length}
         </span>
       </div>
@@ -1538,14 +1535,14 @@ function SpinSlider({
         step={1}
         value={spinIdx}
         onChange={(e) => onSpin(Number(e.target.value))}
-        aria-label="360-Grad-Ansicht drehen"
+        aria-label="Rotate the vehicle"
         className="w-full cursor-ew-resize accent-ink-900"
       />
       <div className="mt-1 flex justify-between text-[9.5px] uppercase tracking-wider text-ink-300">
-        <span>Vorne</span>
-        <span>Links</span>
-        <span>Hinten</span>
-        <span>Rechts</span>
+        <span>Front</span>
+        <span>Left</span>
+        <span>Rear</span>
+        <span>Right</span>
       </div>
     </div>
   );
@@ -1569,11 +1566,11 @@ function ShowroomGrid({
         <div className="flex items-center gap-2">
           <Car className="h-4 w-4 text-brand-600" />
           <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-            Übersicht · {cars.length} Fahrzeuge (Baujahr 2010)
+            Overview · {cars.length} vehicles (model year 2010)
           </h3>
         </div>
         <span className="text-[12px] text-ink-400">
-          {loading ? "lädt…" : "zum Auswählen antippen"}
+          {loading ? "loading…" : "tap to select"}
         </span>
       </div>
       {/* Raster: 5 pro Reihe → 10 Fahrzeuge in zwei Reihen. */}
@@ -1636,7 +1633,7 @@ function ShowroomCard({
         )}
         {active && (
           <span className="absolute left-2 top-2 rounded-full bg-ink-900 px-1.5 py-0.5 text-[9px] font-medium text-white">
-            Ausgewählt
+            Selected
           </span>
         )}
       </div>
