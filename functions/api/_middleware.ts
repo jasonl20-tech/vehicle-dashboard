@@ -16,6 +16,12 @@ const PRE_SESSION_PATH = new Set<string>([
   "/api/login-totp",
   "/api/setup-password",
   "/api/logout",
+  // Öffentliche Demo-Links (Kunden ohne Dashboard-Login):
+  //  - demo-link-public: liefert die Link-Konfiguration (Token-Prüfung im Handler).
+  //  - car-image: der Bild-Proxy authentifiziert SELBST (Session-Cookie ODER gültiges
+  //    Demo-Token mit harter Scope-Prüfung) — daher hier von der Session-Pflicht frei.
+  "/api/databases/demo-link-public",
+  "/api/databases/car-image",
 ]);
 
 /** Nur Session, keine Routen-Pflicht (lädt u. a. erlaubte Pfade fürs Frontend). */

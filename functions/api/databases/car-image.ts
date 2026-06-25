@@ -21,6 +21,61 @@
  */
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import {
+  demoCarAllowed,
+  demoColorAllowed,
+  getValidDemoLink,
+  recordDemoHit,
+  snapDemoWidth,
+  type DemoLinkConfig,
+} from "../../_lib/demoLinks";
+
+/**
+ * Lädt die Demo-Link-Konfiguration mit kurzem Edge-Cache (60 s). Ohne diesen
+ * Cache löste JEDE Demo-Bildanfrage — auch wenn das Bild selbst im Cache liegt —
+ * einen D1-Read aus (eine Demo-Seite lädt Dutzende Bilder). Negativ-Ergebnisse
+ * werden kurz (20 s) gecacht, um D1 bei wiederholt ungültigem Token zu schonen.
+ * Ablauf wird beim Lesen erneut geprüft (Sperrung greift mit ≤60 s Verzögerung).
+ */
+async function loadDemoCfgCached(
+  env: AuthEnv,
+  token: string,
+  waitUntil: (p: Promise<unknown>) => void,
+): Promise<DemoLinkConfig | null> {
+  const cache = caches.default;
+  const key = new Request(
+    `https://demo-cfg.cache/${encodeURIComponent(token)}`,
+    { method: "GET" },
+  );
+  const now = Math.floor(Date.now() / 1000);
+  const hit = await cache.match(key);
+  if (hit) {
+    try {
+      const j = (await hit.json()) as
+        | (DemoLinkConfig & { __invalid?: boolean })
+        | null;
+      if (!j || j.__invalid) return null;
+      if (j.status !== "active" || (j.expiresAt || 0) < now) return null;
+      return j;
+    } catch {
+      /* defekter Cache-Eintrag → frisch laden */
+    }
+  }
+  const cfg = await getValidDemoLink(env, token);
+  const ttl = cfg ? 60 : 20;
+  waitUntil(
+    cache.put(
+      key,
+      new Response(JSON.stringify(cfg ?? { __invalid: true }), {
+        headers: {
+          "content-type": "application/json",
+          "cache-control": `public, max-age=${ttl}`,
+        },
+      }),
+    ),
+  );
+  return cfg;
+}
 
 const API_BASE = "https://api.vehicleimagery.com";
 // Vom Proxy unterstützte Ansichten: 8 Außen + 2 Innen (die Kunden-API liefert sie).
@@ -42,11 +97,6 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   env,
   waitUntil,
 }) => {
-  const user = await getCurrentUser(env, request);
-  if (!user) {
-    return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
-  }
-
   const apiKey = env.CAR_DB_API_KEY;
   if (!apiKey) {
     return jsonResponse(
@@ -89,6 +139,25 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     (p.get("ground") || "").trim().toLowerCase(),
   );
 
+  // --- Auth: Dashboard-Session ODER gültiges Demo-Token (dt) ---
+  // Angemeldete Nutzer haben Vollzugriff. Ohne Session ist nur ein gültiges
+  // Demo-Token erlaubt, dessen Scope unten HART geprüft wird (vor Cache + Key).
+  const user = await getCurrentUser(env, request);
+  const dt = (p.get("dt") || "").trim();
+  let demoCfg: DemoLinkConfig | null = null;
+  if (!user) {
+    if (!dt) {
+      return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
+    }
+    demoCfg = await loadDemoCfgCached(env, dt, waitUntil);
+    if (!demoCfg) {
+      return jsonResponse(
+        { error: "Demo-Link ungültig, gesperrt oder abgelaufen." },
+        { status: 403 },
+      );
+    }
+  }
+
   if (!marke || !modell || !jahr) {
     return jsonResponse(
       { error: "marke, modell und jahr sind erforderlich." },
@@ -101,25 +170,76 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     return new Response("unsupported view", { status: 404 });
   }
 
-  // Edge-Cache prüfen (Key = normalisierte Proxy-URL, deterministisch aus den
-  // Auto-Parametern). Lookup NACH der Auth-Prüfung — nicht angemeldete Anfragen
-  // erhalten oben bereits 401, erreichen den Cache also nie.
+  // --- Demo-Scope: HART erzwingen, BEVOR Cache/Voll-Key berührt werden ---
+  // Nur die im Link gespeicherten Fahrzeuge + Farben sind erlaubt; sonst wäre
+  // der Demo-Link ein offenes Tor auf die gesamte Kunden-API.
+  const isDemo = !!demoCfg;
+  if (demoCfg) {
+    if (!demoCarAllowed(demoCfg, { marke, modell, jahr, body, trim })) {
+      return new Response("vehicle not in demo scope", { status: 403 });
+    }
+    if (!demoColorAllowed(demoCfg, farbe)) {
+      return new Response("color not in demo scope", { status: 403 });
+    }
+  }
+
+  // Für Demo-Anfragen die Parameter-Oberfläche hart auf die sicheren Standard-
+  // werte begrenzen (Kostenschutz: kein teures Format/Auflösung/Maß-Variieren,
+  // das den Cache umgehen würde). Transparent bleibt (zeigt die Demo).
+  const effFormat = isDemo ? "png" : format;
+  const effResolution = isDemo ? "default" : resolution;
+  const effShadow = isDemo ? false : shadow;
+  const effGround = isDemo ? false : ground;
+  const effHeight = isDemo ? null : height;
+  // Demo: Breite auf eine feste Whitelist einrasten (verhindert Cache-Umgehung
+  // durch beliebige w-Werte und damit massenhafte teure Voll-Key-Renderings).
+  const effWidth = isDemo ? snapDemoWidth(width) : width;
+
+  // Edge-Cache prüfen. Kanonischer Key aus den EFFEKTIVEN Parametern (ohne `dt`)
+  // → Demo- und Dashboard-Anfragen für dasselbe Bild teilen sich den Cache, und
+  // das interne Token taucht nie im Cache-Key auf.
+  const canon = new URL("https://car-image.cache/");
+  const cp = canon.searchParams;
+  cp.set("marke", marke);
+  cp.set("modell", modell);
+  cp.set("jahr", jahr);
+  cp.set("body", body);
+  cp.set("trim", trim);
+  cp.set("farbe", farbe);
+  cp.set("view", view);
+  cp.set("w", String(effWidth));
+  if (effHeight) cp.set("h", String(effHeight));
+  if (effFormat !== "png") cp.set("format", effFormat);
+  if (effResolution !== "default") cp.set("resolution", effResolution);
+  if (effShadow) cp.set("shadow", "1");
+  if (transparent) cp.set("transparent", "1");
+  if (effGround) cp.set("ground", "1");
   const cache = caches.default;
-  const cacheKey = new Request(new URL(request.url).toString(), {
-    method: "GET",
-  });
+  const cacheKey = new Request(canon.toString(), { method: "GET" });
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
+
+  // Cache-MISS → echter Kunden-API-Aufruf steht bevor. Für Demo-Links hier das
+  // Tageslimit prüfen (nur Misses kosten etwas; Cache-Hits oben zählen nicht).
+  if (demoCfg) {
+    const within = await recordDemoHit(env, dt);
+    if (!within) {
+      return new Response("demo rate limit reached", {
+        status: 429,
+        headers: { "cache-control": "no-store" },
+      });
+    }
+  }
 
   const seg = (s: string) => encodeURIComponent(s);
   const apiUrl =
     `${API_BASE}/api/${seg(marke)}/${seg(modell)}/${seg(jahr)}/${seg(body)}/${seg(trim)}/${seg(view)}` +
-    `?format=${seg(format)}&resolution=${seg(resolution)}&color=${seg(farbe)}` +
-    (shadow ? `&shadow=true` : "") +
+    `?format=${seg(effFormat)}&resolution=${seg(effResolution)}&color=${seg(farbe)}` +
+    (effShadow ? `&shadow=true` : "") +
     (transparent ? `&transparent=true` : "") +
-    (ground ? `&ground=true` : "") +
+    (effGround ? `&ground=true` : "") +
     // Explizite Maße nur senden, wenn eine Höhe angefragt wurde.
-    (height ? `&width=${width}&height=${height}` : "");
+    (effHeight ? `&width=${effWidth}&height=${effHeight}` : "");
 
   // 1) Kunden-API fragen → signierte image_url holen.
   let imageUrl: string | null = null;
@@ -155,12 +275,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     img = await fetch(imageUrl, {
       cf: {
         image: {
-          width,
-          ...(height ? { height } : {}),
+          width: effWidth,
+          ...(effHeight ? { height: effHeight } : {}),
           quality: 55,
           fit: "contain",
           // Liefert das gewünschte Format aus (auch wenn die Quelle PNG ist).
-          format,
+          format: effFormat,
         },
       },
     } as RequestInit);
@@ -180,7 +300,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const resp = new Response(img.body, {
     status: 200,
     headers: {
-      "content-type": CT_BY_FORMAT[format] || "image/png",
+      "content-type": CT_BY_FORMAT[effFormat] || "image/png",
       // Bilder pro Auto/Ansicht/Farbe sind praktisch unveränderlich:
       //  - max-age=86400        → Browser nutzt das Bild 1 Tag ohne Netzaufruf
       //                           (Farbwechsel/Zurückblättern = sofort)

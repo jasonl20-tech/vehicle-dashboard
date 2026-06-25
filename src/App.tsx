@@ -47,6 +47,8 @@ import CarDatabasePage from "./pages/CarDatabasePage";
 import CarDatabaseListPage from "./pages/CarDatabaseListPage";
 import CarDatabaseGalleryPage from "./pages/CarDatabaseGalleryPage";
 import CarDatabaseDemoPage from "./pages/CarDatabaseDemoPage";
+import CarDatabaseDemoLinksPage from "./pages/CarDatabaseDemoLinksPage";
+import PublicDemoPage from "./pages/PublicDemoPage";
 import CarDatabaseAddPage from "./pages/CarDatabaseAddPage";
 import PlatformHomePage from "./pages/PlatformHomePage";
 import ProductionDatabasePage from "./pages/ProductionDatabasePage";
@@ -74,6 +76,11 @@ export default function App() {
 
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/*
+         * Öffentlicher Kunden-Demo-Link (`/d/:token`) — bewusst AUSSERHALB von
+         * <ProtectedRoute>: der Kunde testet die Demo ohne Dashboard-Login.
+         */}
+        <Route path="/d/:token" element={<PublicDemoPage />} />
         <Route
           element={
             <ProtectedRoute>
@@ -124,6 +131,10 @@ export default function App() {
             <Route
               path="/car-database/galerie"
               element={<CarDatabaseGalleryPage />}
+            />
+            <Route
+              path="/car-database/demo-links"
+              element={<CarDatabaseDemoLinksPage />}
             />
             <Route
               path="/car-database/auto-hinzufuegen"

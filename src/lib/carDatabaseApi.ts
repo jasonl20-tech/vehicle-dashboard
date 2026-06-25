@@ -37,6 +37,11 @@ export function carThumbApiUrl(
     resolution?: string;
     /** Fahrzeug am Boden „verankern" (nicht schwebend). */
     ground?: boolean;
+    /**
+     * Öffentlicher Demo-Link-Token (`dl_…`). Wird als `dt` an den Proxy gehängt,
+     * damit ein Kunde ohne Dashboard-Login Bilder im erlaubten Scope laden kann.
+     */
+    demoToken?: string;
   },
 ): string | null {
   if (!car || !car.marke || !car.modell || !car.jahr) return null;
@@ -64,6 +69,8 @@ export function carThumbApiUrl(
     u.searchParams.set("resolution", opts.resolution);
   // Fahrzeug am Boden verankern.
   if (opts?.ground) u.searchParams.set("ground", "1");
+  // Demo-Link-Token (öffentlicher Kunden-Showcase).
+  if (opts?.demoToken) u.searchParams.set("dt", opts.demoToken);
   return u.pathname + u.search;
 }
 

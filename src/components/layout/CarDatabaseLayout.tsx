@@ -1,6 +1,7 @@
 import {
   BarChart3,
   LayoutGrid,
+  Link2,
   LogOut,
   PlusCircle,
   Sparkles,
@@ -21,6 +22,7 @@ const NAV = [
   { to: "/car-database/eintraege", label: "Datenbank", icon: Table2, end: false },
   { to: "/car-database/galerie", label: "Galerie", icon: LayoutGrid, end: false },
   { to: "/demo", label: "Demo-Website", icon: Sparkles, end: false },
+  { to: "/car-database/demo-links", label: "Demo-Links", icon: Link2, end: false },
   {
     to: "/car-database/auto-hinzufuegen",
     label: "Auto hinzufügen",

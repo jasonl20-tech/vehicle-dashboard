@@ -15,7 +15,9 @@ import {
   X,
 } from "lucide-react";
 import {
+  createContext,
   type CSSProperties,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -32,6 +34,10 @@ import {
   type CarRow,
   type GalleryResponse,
 } from "../lib/carDatabaseApi";
+import {
+  STANDARD_FEATURED as FEATURED,
+  STANDARD_SHOWROOM as SHOWROOM_2010,
+} from "../lib/demoCars";
 
 type CarId = {
   marke: string;
@@ -41,38 +47,21 @@ type CarId = {
   trim: string;
 };
 
-const FEATURED: CarId[] = [
-  { marke: "BMW", modell: "X3", jahr: 2024, body: "Basis", trim: "base" },
-  { marke: "Tesla", modell: "Model_S", jahr: 2021, body: "Basis", trim: "base" },
-  { marke: "Audi", modell: "e-tron", jahr: 2022, body: "Basis", trim: "base" },
-  { marke: "BMW", modell: "i7", jahr: 2022, body: "Basis", trim: "base" },
-  {
-    marke: "Tesla",
-    modell: "Cybertruck",
-    jahr: 2023,
-    body: "Basis",
-    trim: "base",
-  },
-  { marke: "BMW", modell: "iX", jahr: 2021, body: "Basis", trim: "base" },
-];
-
 /**
- * Fallback-Showroom „Baujahr 2010" — wird genutzt, falls die Galerie-API
- * (noch) keine 2010er-Fahrzeuge liefert (neue DB evtl. leer). Sobald die DB
- * gefüllt ist, ersetzt die Live-Abfrage diese Liste automatisch.
+ * Demo-Modus (öffentlicher Kunden-Link `/d/:token`): wenn gesetzt, läuft die
+ * Seite OHNE Dashboard-Login und ist auf die im Link gespeicherten Fahrzeuge
+ * und Farben begrenzt. Jede Bild-URL trägt das Token (`dt`), der Proxy prüft
+ * den Scope serverseitig.
  */
-const SHOWROOM_2010: CarId[] = [
-  { marke: "Volkswagen", modell: "Golf", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "BMW", modell: "5er", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Audi", modell: "A4", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Mercedes-Benz", modell: "C_Klasse", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Ford", modell: "Focus", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Opel", modell: "Astra", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Toyota", modell: "Corolla", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Volkswagen", modell: "Passat", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Audi", modell: "A6", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "BMW", modell: "X5", jahr: 2010, body: "Basis", trim: "base" },
-];
+export type DemoMode = {
+  token: string;
+  allowedColors: string[];
+  featured: CarId[];
+  showroom: CarId[];
+};
+
+/** Liefert das Demo-Token an alle Bild-bauenden Unterkomponenten (oder "" normal). */
+const DemoTokenCtx = createContext<string>("");
 
 function sameCarId(a: CarId, b: CarId): boolean {
   return (
@@ -189,9 +178,19 @@ function preloadImage(url: string | null) {
   img.src = url;
 }
 
-export default function CarDatabaseDemoPage() {
-  const [car, setCar] = useState<CarId>(FEATURED[0]);
-  const [color, setColor] = useState("white");
+export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
+  const isDemo = !!demo;
+  const demoToken = demo?.token ?? "";
+  // Fahrzeug-/Farb-Quellen: im Demo-Modus AUSSCHLIESSLICH aus dem Link (sonst
+  // läge das Hero-Auto außerhalb des Scopes → 403). Nie auf den globalen
+  // Standard-Satz zurückfallen, solange der Link Fahrzeuge mitbringt.
+  const featuredCars = isDemo
+    ? demo!.featured.length
+      ? demo!.featured
+      : demo!.showroom
+    : FEATURED;
+  const [car, setCar] = useState<CarId>(() => featuredCars[0] ?? FEATURED[0]);
+  const [color, setColor] = useState(() => demo?.allowedColors?.[0] ?? "white");
   const [view, setView] = useState("front_left");
   // Fester heller Studio-Hintergrund (Showroom). Transparent ist ein eigener
   // Schalter, der ausschließlich die Hero betrifft.
@@ -204,8 +203,10 @@ export default function CarDatabaseDemoPage() {
 
   // Innen-Ansichten liegen nur unter Farbe „default" → Metadaten immer über
   // „default" laden (liefert alle Farben + alle Ansichten inkl. Innenraum).
+  // Im Demo-Modus (öffentlich, ohne Login) NICHT die geschützte Detail-API
+  // rufen — Farben/Ansichten kommen aus dem Link bzw. den Standard-Ansichten.
   const detailApi = useApi<CarDetailResponse>(
-    carDatabaseDetailUrl({ ...car, farbe: "default" }),
+    isDemo ? null : carDatabaseDetailUrl({ ...car, farbe: "default" }),
   );
   const detail = detailApi.data;
 
@@ -214,22 +215,26 @@ export default function CarDatabaseDemoPage() {
   // in der DB registriert, aber nicht gerendert ist) gar nicht erst auf.
   const colors = useMemo(
     () =>
-      (detail?.colors ?? [])
-        .filter((c) => c.aktiv > 0)
-        .map((c) => c.farbe),
-    [detail],
+      isDemo
+        ? (demo?.allowedColors ?? [])
+        : (detail?.colors ?? [])
+            .filter((c) => c.aktiv > 0)
+            .map((c) => c.farbe),
+    [detail, isDemo, demo],
   );
   const availViews = useMemo(
     () => new Set((detail?.views ?? []).map((v) => v.view.toLowerCase())),
     [detail],
   );
+  // Im Demo-Modus alle Standard-Ansichten zeigen (kein Detail-Abruf verfügbar).
   const exterior = useMemo(
-    () => SPIN.filter((v) => availViews.size === 0 || availViews.has(v)),
-    [availViews],
+    () =>
+      isDemo ? SPIN : SPIN.filter((v) => availViews.size === 0 || availViews.has(v)),
+    [availViews, isDemo],
   );
   const interior = useMemo(
-    () => INTERIOR.filter((v) => availViews.has(v)),
-    [availViews],
+    () => (isDemo ? INTERIOR : INTERIOR.filter((v) => availViews.has(v))),
+    [availViews, isDemo],
   );
 
   // Bei Auto-Wechsel: Farbe/Ansicht auf sinnvolle Defaults.
@@ -237,7 +242,7 @@ export default function CarDatabaseDemoPage() {
     setView("front_left");
   }, [car]);
   useEffect(() => {
-    if (!detail) return;
+    if (!isDemo && !detail) return;
     // Keine verfügbare Farbe → ehrlich die Standardfarbe zeigen.
     if (colors.length === 0) {
       if (color !== "default") setColor("default");
@@ -247,7 +252,7 @@ export default function CarDatabaseDemoPage() {
     if (!colors.includes(color)) {
       setColor(colors.includes("white") ? "white" : colors[0]);
     }
-  }, [detail, colors, color]);
+  }, [detail, colors, color, isDemo]);
   // Fehlt die aktuelle Außen-Ansicht beim gewählten Auto → erste verfügbare.
   useEffect(() => {
     if (!availViews.size) return;
@@ -262,33 +267,45 @@ export default function CarDatabaseDemoPage() {
       preloadImage(
         carThumbApiUrl(
           { ...car, farbe: SPIN.includes(v) ? color : "default" },
-          { view: v, width: 900 },
+          { view: v, width: 900, demoToken },
         ),
       ),
     );
-  }, [car, color, exterior, interior]);
+  }, [car, color, exterior, interior, demoToken]);
 
   // Aktuelle Ansicht in ALLEN Farben vorladen → Farbwechsel ist sofort da.
   useEffect(() => {
     if (!SPIN.includes(view)) return; // Innen-Ansichten sind farb-unabhängig
     colors.forEach((c) =>
-      preloadImage(carThumbApiUrl({ ...car, farbe: c }, { view, width: 900 })),
+      preloadImage(
+        carThumbApiUrl({ ...car, farbe: c }, { view, width: 900, demoToken }),
+      ),
     );
-  }, [car, colors, view]);
+  }, [car, colors, view, demoToken]);
 
   const title = `${car.marke} ${prettyModel(car.modell)}`;
 
   // Showroom „Baujahr 2010": 10 zufällige Autos live aus der Galerie-API,
   // mit fester Fallback-Liste, falls die DB (noch) nichts liefert.
   const showroomApi = useApi<GalleryResponse>(
-    carDatabaseGalleryUrl({
-      jahrMin: 2010,
-      jahrMax: 2010,
-      random: true,
-      limit: 10,
-    }),
+    isDemo
+      ? null
+      : carDatabaseGalleryUrl({
+          jahrMin: 2010,
+          jahrMax: 2010,
+          random: true,
+          limit: 10,
+        }),
   );
   const showroom2010 = useMemo<CarId[]>(() => {
+    // Demo-Modus: genau die im Link erlaubten Fahrzeuge (Hero + Showroom),
+    // dedupliziert — so ist jedes erlaubte Auto auswählbar und im Scope.
+    if (isDemo) {
+      const all = [...(demo?.featured ?? []), ...(demo?.showroom ?? [])];
+      const out: CarId[] = [];
+      for (const c of all) if (!out.some((o) => sameCarId(o, c))) out.push(c);
+      return out;
+    }
     const rows = showroomApi.data?.rows ?? [];
     if (!rows.length) return SHOWROOM_2010;
     return rows.slice(0, 10).map((r) => ({
@@ -298,7 +315,7 @@ export default function CarDatabaseDemoPage() {
       body: r.body,
       trim: r.trim,
     }));
-  }, [showroomApi.data]);
+  }, [showroomApi.data, isDemo, demo]);
 
   const pick = (c: CarId) => {
     setCar(c);
@@ -316,6 +333,7 @@ export default function CarDatabaseDemoPage() {
   };
 
   return (
+    <DemoTokenCtx.Provider value={demoToken}>
     <div
       className={
         presenting
@@ -340,14 +358,16 @@ export default function CarDatabaseDemoPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-ink-50"
-          >
-            <Search className="h-3.5 w-3.5" />
-            Choose vehicle
-          </button>
+          {!isDemo && (
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-3 py-1.5 text-[12px] font-medium text-ink-700 hover:bg-ink-50"
+            >
+              <Search className="h-3.5 w-3.5" />
+              Choose vehicle
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setPresenting((p) => !p)}
@@ -518,8 +538,8 @@ export default function CarDatabaseDemoPage() {
         />
       </div>
 
-      {/* Fahrzeug-Auswahl */}
-      {pickerOpen && (
+      {/* Fahrzeug-Auswahl (im Demo-Modus deaktiviert) */}
+      {!isDemo && pickerOpen && (
         <CarPicker
           current={car}
           cars2010={showroom2010}
@@ -539,6 +559,7 @@ export default function CarDatabaseDemoPage() {
         />
       )}
     </div>
+    </DemoTokenCtx.Provider>
   );
 }
 
@@ -575,6 +596,7 @@ function Stage({
   onPick: (v: string) => void;
   loading: boolean;
 }) {
+  const dt = useContext(DemoTokenCtx);
   const [failed, setFailed] = useState(false);
   // Innenraum-Bilder sind farb-unabhängig → über „default" laden.
   const imgFarbe = SPIN.includes(view) ? color : "default";
@@ -587,6 +609,7 @@ function Stage({
       format: out.format,
       transparent: out.transparent,
       resolution: out.resolution,
+      demoToken: dt,
     },
   );
 
@@ -720,10 +743,14 @@ function ThumbStrip({
   active: string;
   onPick: (v: string) => void;
 }) {
+  const dt = useContext(DemoTokenCtx);
   const Thumb = ({ v }: { v: string }) => {
     const [failed, setFailed] = useState(false);
     const farbe = SPIN.includes(v) ? color : "default";
-    const url = carThumbApiUrl({ ...car, farbe }, { view: v, width: 150 });
+    const url = carThumbApiUrl(
+      { ...car, farbe },
+      { view: v, width: 150, demoToken: dt },
+    );
     return (
       <button
         type="button"
@@ -780,6 +807,7 @@ function Spec({ label, value }: { label: string; value: string }) {
 
 /** Vorher/Nachher-Regler: Bild mit Hintergrund ↔ echtes transparentes PNG. */
 function TransparentCompare({ car }: { car: CarId }) {
+  const dt = useContext(DemoTokenCtx);
   const [pos, setPos] = useState(50);
   const ref = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
@@ -795,11 +823,11 @@ function TransparentCompare({ car }: { car: CarId }) {
   // Gleiche Ansicht/Farbe; links mit Hintergrund, rechts echtes Freisteller-PNG.
   const bgUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 760 },
+    { view: "front_left", width: 760, demoToken: dt },
   );
   const trpUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 760, transparent: true },
+    { view: "front_left", width: 760, transparent: true, demoToken: dt },
   );
 
   return (
@@ -871,16 +899,17 @@ function ShadowGroundSection({
   car: CarId;
   exterior: string[];
 }) {
+  const dt = useContext(DemoTokenCtx);
   const v = exterior.includes("front_left")
     ? "front_left"
     : exterior[0] ?? "front_left";
   const shadowUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 760, shadow: true },
+    { view: v, width: 760, shadow: true, demoToken: dt },
   );
   const groundUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 760, ground: true },
+    { view: v, width: 760, ground: true, demoToken: dt },
   );
 
   return (
@@ -1288,6 +1317,7 @@ function Zoomed({
   out: OutOptions;
   onClose: () => void;
 }) {
+  const dt = useContext(DemoTokenCtx);
   const imgFarbe = SPIN.includes(view) ? color : "default";
   const url = carThumbApiUrl(
     { ...car, farbe: imgFarbe },
@@ -1297,6 +1327,7 @@ function Zoomed({
       format: out.format,
       transparent: out.transparent,
       resolution: out.resolution,
+      demoToken: dt,
     },
   );
   useEffect(() => {
@@ -1351,6 +1382,7 @@ function Spin360Section({
   exterior: string[];
   bg: BgMode;
 }) {
+  const dt = useContext(DemoTokenCtx);
   const [idx, setIdx] = useState(0);
   const [failed, setFailed] = useState(false);
   const drag = useRef<{ x: number; idx: number } | null>(null);
@@ -1364,16 +1396,22 @@ function Spin360Section({
   useEffect(() => {
     exterior.forEach((v) =>
       preloadImage(
-        carThumbApiUrl({ ...car, farbe: "default" }, { view: v, width: 1100 }),
+        carThumbApiUrl(
+          { ...car, farbe: "default" },
+          { view: v, width: 1100, demoToken: dt },
+        ),
       ),
     );
-  }, [car, exterior]);
+  }, [car, exterior, dt]);
 
   const len = exterior.length;
   const safeIdx = len ? Math.min(idx, len - 1) : 0;
   const view = exterior[safeIdx];
   const url = view
-    ? carThumbApiUrl({ ...car, farbe: "default" }, { view, width: 1100 })
+    ? carThumbApiUrl(
+        { ...car, farbe: "default" },
+        { view, width: 1100, demoToken: dt },
+      )
     : null;
 
   useEffect(() => setFailed(false), [url]);
@@ -1553,10 +1591,11 @@ function ShowroomCard({
   active: boolean;
   onPick: (c: CarId) => void;
 }) {
+  const dt = useContext(DemoTokenCtx);
   const [failed, setFailed] = useState(false);
   const url = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 360 },
+    { view: "front_left", width: 360, demoToken: dt },
   );
   return (
     <button
