@@ -172,12 +172,10 @@ type ImgFormat = "png" | "jpeg" | "webp" | "avif";
 /** Ausgabe-Optionen der API, die der Viewer demonstriert. */
 type OutOptions = {
   format: ImgFormat;
-  shadow: boolean;
   transparent: boolean;
   width: number;
   height: number | null;
   resolution: string;
-  ground: boolean;
 };
 
 const FORMATS: ImgFormat[] = ["png", "jpeg", "webp", "avif"];
@@ -217,8 +215,6 @@ export default function CarDatabaseDemoPage() {
   const [transparent, setTransparent] = useState(false);
   // Neue API-Ausgabe-Optionen.
   const [format, setFormat] = useState<"png" | "jpeg" | "webp" | "avif">("png");
-  const [shadow, setShadow] = useState(false);
-  const [ground, setGround] = useState(false);
   const [width, setWidth] = useState(900);
   const [height, setHeight] = useState<number | null>(null);
   const [resolution, setResolution] = useState("default");
@@ -334,12 +330,10 @@ export default function CarDatabaseDemoPage() {
   const effTransparent = transparent && format !== "jpeg";
   const out: OutOptions = {
     format,
-    shadow,
     transparent: effTransparent,
     width,
     height,
     resolution,
-    ground,
   };
 
   return (
@@ -424,7 +418,7 @@ export default function CarDatabaseDemoPage() {
 
             {/* Ausgabe-Optionen — demonstriert die API-Funktionen live */}
             <div className="mt-3 space-y-2.5 rounded-xl border border-hair bg-white p-3">
-              {/* Format + Schatten + Transparent */}
+              {/* Format + Transparent */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
                   Format
@@ -443,20 +437,6 @@ export default function CarDatabaseDemoPage() {
                     </SegBtn>
                   ))}
                 </div>
-                <OptToggle
-                  active={shadow}
-                  onClick={() => setShadow((s) => !s)}
-                  title="Render a drop shadow from the API"
-                >
-                  Shadow
-                </OptToggle>
-                <OptToggle
-                  active={ground}
-                  onClick={() => setGround((g) => !g)}
-                  title="Anchor the vehicle to the ground (instead of floating)"
-                >
-                  Ground
-                </OptToggle>
                 <OptToggle
                   active={effTransparent}
                   disabled={format === "jpeg"}
@@ -608,8 +588,11 @@ export default function CarDatabaseDemoPage() {
         {/* 360°-Rundumblick (eigener Abschnitt) — immer Standardfarbe */}
         <Spin360Section car={car} exterior={exterior} bg={bg} />
 
-        {/* Farbvergleich */}
-        {colors.length >= 2 && <ColorCompare car={car} colors={colors} />}
+        {/* Shadow & Ground (eigener Abschnitt) */}
+        <ShadowGroundSection car={car} exterior={exterior} />
+
+        {/* Transparent-Vergleich (Regler) */}
+        <TransparentCompare car={car} />
 
         {/* Aus dem Katalog wählen */}
         <ShowroomGrid
@@ -697,10 +680,8 @@ function Stage({
       width: out.width,
       height: out.height,
       format: out.format,
-      shadow: out.shadow,
       transparent: out.transparent,
       resolution: out.resolution,
-      ground: out.ground,
     },
   );
 
@@ -955,11 +936,8 @@ function OptToggle({
   );
 }
 
-function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
-  const left = colors.includes("white") ? "white" : colors[0];
-  const right = colors.includes("black")
-    ? "black"
-    : colors.find((c) => c !== left) ?? colors[0];
+/** Vorher/Nachher-Regler: Bild mit Hintergrund ↔ echtes transparentes PNG. */
+function TransparentCompare({ car }: { car: CarId }) {
   const [pos, setPos] = useState(50);
   const ref = useRef<HTMLDivElement | null>(null);
   const dragging = useRef(false);
@@ -972,32 +950,27 @@ function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
     setPos(Math.min(100, Math.max(0, p)));
   };
 
-  const lUrl = carThumbApiUrl(
-    { ...car, farbe: left },
+  // Gleiche Ansicht/Farbe; links mit Hintergrund, rechts echtes Freisteller-PNG.
+  const bgUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
     { view: "front_left", width: 760 },
   );
-  const rUrl = carThumbApiUrl(
-    { ...car, farbe: right },
-    { view: "front_left", width: 760 },
+  const trpUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: "front_left", width: 760, transparent: true },
   );
 
   return (
     <div className="mt-8">
       <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-[13px] font-semibold text-ink-900">
-          Color comparison
-        </h3>
+        <h3 className="text-[13px] font-semibold text-ink-900">Transparent</h3>
         <span className="text-[11px] text-ink-400">
-          {colorLabel(left)} ↔ {colorLabel(right)} · drag the slider
+          With background ↔ transparent cut-out · drag the slider
         </span>
       </div>
       <div
         ref={ref}
         className="relative aspect-[16/9] w-full select-none overflow-hidden rounded-xl border border-hair"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e6eaf0 100%)",
-        }}
         onPointerDown={(e) => {
           dragging.current = true;
           move(e.clientX);
@@ -1006,23 +979,35 @@ function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
         onPointerUp={() => (dragging.current = false)}
         onPointerLeave={() => (dragging.current = false)}
       >
-        {rUrl && (
-          <img
-            src={rUrl}
-            alt={colorLabel(right)}
-            draggable={false}
-            className="absolute inset-0 h-full w-full object-contain p-6"
-          />
-        )}
-        {lUrl && (
-          <img
-            src={lUrl}
-            alt={colorLabel(left)}
-            draggable={false}
-            className="absolute inset-0 h-full w-full object-contain p-6"
-            style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
-          />
-        )}
+        {/* Rechte Seite (volle Ebene): transparentes PNG auf Karo */}
+        <div className="absolute inset-0" style={CHECKER}>
+          {trpUrl && (
+            <img
+              src={trpUrl}
+              alt="Transparent cut-out"
+              draggable={false}
+              className="absolute inset-0 h-full w-full object-contain p-6"
+            />
+          )}
+        </div>
+        {/* Linke Seite (geclippt): Bild auf Showroom-Hintergrund */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e6eaf0 100%)",
+            clipPath: `inset(0 ${100 - pos}% 0 0)`,
+          }}
+        >
+          {bgUrl && (
+            <img
+              src={bgUrl}
+              alt="With background"
+              draggable={false}
+              className="absolute inset-0 h-full w-full object-contain p-6"
+            />
+          )}
+        </div>
         <div
           className="absolute inset-y-0 w-0.5 bg-white shadow"
           style={{ left: `${pos}%` }}
@@ -1032,13 +1017,98 @@ function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
           </span>
         </div>
         <span className="absolute left-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
-          {colorLabel(left)}
+          Background
         </span>
         <span className="absolute right-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
-          {colorLabel(right)}
+          Transparent
         </span>
       </div>
     </div>
+  );
+}
+
+/** Eigener Abschnitt: Schatten + Bodenkontakt zusammen, per Toggle vorführbar. */
+function ShadowGroundSection({
+  car,
+  exterior,
+}: {
+  car: CarId;
+  exterior: string[];
+}) {
+  const [shadow, setShadow] = useState(true);
+  const [ground, setGround] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const v = exterior.includes("front_left")
+    ? "front_left"
+    : exterior[0] ?? "front_left";
+  const url = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: v, width: 1000, shadow, ground },
+  );
+  useEffect(() => setFailed(false), [url]);
+
+  return (
+    <section className="mt-10 border-t border-hair pt-8">
+      <div className="rounded-2xl border border-hair bg-ink-50/60 p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-ink-900 text-white">
+            <Sparkles className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[17px] font-semibold tracking-tight text-ink-900">
+              Shadow &amp; ground
+            </h3>
+            <p className="truncate text-[12px] text-ink-500">
+              Add a drop shadow and anchor the vehicle to the ground.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-[1fr_240px]">
+          <div
+            className="relative aspect-[16/9] overflow-hidden rounded-xl border border-hair"
+            style={{
+              background:
+                "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 55%, #e6eaf0 100%)",
+            }}
+          >
+            <div className="absolute inset-0 flex select-none items-center justify-center p-6">
+              {url && !failed ? (
+                <img
+                  src={url}
+                  alt={`${car.marke} ${prettyModel(car.modell)}`}
+                  draggable={false}
+                  onError={() => setFailed(true)}
+                  className="max-h-full max-w-full object-contain"
+                />
+              ) : (
+                <ImageIcon className="h-10 w-10 text-ink-300" />
+              )}
+            </div>
+          </div>
+          <aside className="flex flex-col justify-center gap-3 rounded-xl border border-hair bg-white p-4">
+            <div className="flex flex-wrap gap-2">
+              <OptToggle
+                active={shadow}
+                onClick={() => setShadow((s) => !s)}
+                title="Render a drop shadow from the API"
+              >
+                Shadow
+              </OptToggle>
+              <OptToggle
+                active={ground}
+                onClick={() => setGround((g) => !g)}
+                title="Anchor the vehicle to the ground (instead of floating)"
+              >
+                Ground
+              </OptToggle>
+            </div>
+            <p className="text-[11.5px] leading-relaxed text-ink-500">
+              Both come straight from the API — toggle them to see the effect.
+            </p>
+          </aside>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1070,9 +1140,7 @@ function ApiPanel({
   if (out.resolution !== "default")
     params.push(`resolution=${out.resolution}`);
   if (color && color !== "default") params.push(`color=${color}`);
-  if (out.shadow) params.push("shadow=true");
   if (out.transparent) params.push("transparent=true");
-  if (out.ground) params.push("ground=true");
   params.push(`width=${out.width}`);
   if (out.height) params.push(`height=${out.height}`);
   const qs = `?${params.join("&")}`;
@@ -1105,9 +1173,7 @@ function ApiPanel({
               → 200 · {CT_BY_FORMAT[out.format]} · {out.width}
               {out.height ? `×${out.height}` : ""} px
               {out.resolution !== "default" ? ` · ${out.resolution}` : ""}
-              {out.shadow ? " · shadow" : ""}
               {out.transparent ? " · transparent" : ""}
-              {out.ground ? " · grounded" : ""}
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1314,10 +1380,8 @@ function Zoomed({
       view,
       width: 1500,
       format: out.format,
-      shadow: out.shadow,
       transparent: out.transparent,
       resolution: out.resolution,
-      ground: out.ground,
     },
   );
   useEffect(() => {
