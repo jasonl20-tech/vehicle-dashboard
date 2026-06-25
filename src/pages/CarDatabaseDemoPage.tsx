@@ -538,7 +538,10 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
         {/* 04 · Ground — mit/ohne, umschaltbar */}
         <GroundSection car={car} exterior={exterior} />
 
-        {/* Aus dem Katalog wählen */}
+        {/* 05 · Mirroring — normal vs. gespiegelt */}
+        <MirrorSection car={car} exterior={exterior} />
+
+        {/* 06 · Aus dem Katalog wählen */}
         <ShowroomGrid
           cars={showroom2010}
           current={car}
@@ -1102,6 +1105,97 @@ function GroundSection({
   );
 }
 
+/** 05 · Mirroring — dasselbe Bild normal vs. horizontal gespiegelt (Gegenüberstellung). */
+function MirrorSection({
+  car,
+  exterior,
+}: {
+  car: CarId;
+  exterior: string[];
+}) {
+  const dt = useContext(DemoTokenCtx);
+  const v = exterior.includes("front_left")
+    ? "front_left"
+    : exterior[0] ?? "front_left";
+  const normalUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: v, width: 480, demoToken: dt },
+  );
+  const mirrorUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: v, width: 480, mirroring: true, demoToken: dt },
+  );
+  return (
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <SectionHead
+        n="05"
+        eyebrow="Mirroring"
+        title="Flip any shot — same car, mirrored"
+      >
+        Need the car facing the other way? Request a mirrored version of any
+        angle — no extra render. Here's the same shot, normal vs. mirrored.
+      </SectionHead>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <MirrorCard
+          label="Mirroring off"
+          mirrored={false}
+          url={normalUrl}
+          alt={`${prettyModel(car.modell)} normal`}
+        />
+        <MirrorCard
+          label="Mirroring on"
+          mirrored
+          url={mirrorUrl}
+          alt={`${prettyModel(car.modell)} mirrored`}
+        />
+      </div>
+    </section>
+  );
+}
+
+function MirrorCard({
+  label,
+  mirrored,
+  url,
+  alt,
+}: {
+  label: string;
+  mirrored: boolean;
+  url: string | null;
+  alt: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  return (
+    <div>
+      <div
+        className="relative aspect-[4/3] overflow-hidden rounded-xl border border-hair"
+        style={SOFT_BG}
+      >
+        <div className="absolute inset-0 flex items-center justify-center p-6">
+          {url && !failed ? (
+            <img
+              src={url}
+              alt={alt}
+              draggable={false}
+              onError={() => setFailed(true)}
+              className="max-h-full max-w-full object-contain"
+            />
+          ) : (
+            <ImageIcon className="h-10 w-10 text-ink-300" />
+          )}
+        </div>
+        <span className="absolute left-3 top-3 rounded-full bg-ink-900/80 px-2.5 py-0.5 text-[11px] font-medium text-white">
+          {label}
+        </span>
+      </div>
+      <div className="mt-1.5 text-center font-mono text-[11px] text-ink-400">
+        mirroring={mirrored ? "true" : "false"}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Eigener Abschnitt, der API-Bildoptionen bewirbt, die im kleinen Preview NICHT
  * sichtbar werden (Format, Auflösung, Maße) — daher als klare Info statt Auswahl.
@@ -1247,6 +1341,7 @@ function ApiPanel({
               "shadow=true",
               "transparent=true (cut-out)",
               "ground=true (on the floor)",
+              "mirroring=true (flip)",
               "width & height freely selectable",
               "getall: all views at once",
               "CDN cache",
@@ -1672,7 +1767,7 @@ function ShowroomGrid({
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <SectionHead
-          n="05"
+          n="06"
           eyebrow="Any vehicle"
           title="Pick a car — it loads instantly"
         >

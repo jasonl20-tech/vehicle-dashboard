@@ -138,6 +138,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const ground = ["1", "true", "yes"].includes(
     (p.get("ground") || "").trim().toLowerCase(),
   );
+  // Spiegelung (neues API-Feature): Bild horizontal spiegeln.
+  const mirroring = ["1", "true", "yes"].includes(
+    (p.get("mirroring") || "").trim().toLowerCase(),
+  );
 
   // --- Auth: Dashboard-Session ODER gültiges Demo-Token (dt) ---
   // Angemeldete Nutzer haben Vollzugriff. Ohne Session ist nur ein gültiges
@@ -214,6 +218,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (effShadow) cp.set("shadow", "1");
   if (transparent) cp.set("transparent", "1");
   if (effGround) cp.set("ground", "1");
+  if (mirroring) cp.set("mirroring", "1");
   const cache = caches.default;
   const cacheKey = new Request(canon.toString(), { method: "GET" });
   const cached = await cache.match(cacheKey);
@@ -238,6 +243,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     (effShadow ? `&shadow=true` : "") +
     (transparent ? `&transparent=true` : "") +
     (effGround ? `&ground=true` : "") +
+    (mirroring ? `&mirroring=true` : "") +
     // Explizite Maße nur senden, wenn eine Höhe angefragt wurde.
     (effHeight ? `&width=${effWidth}&height=${effHeight}` : "");
 
