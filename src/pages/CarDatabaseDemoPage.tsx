@@ -527,7 +527,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
         <OutputOptionsSection />
 
         {/* 01 · Alle Ansichten / 360 */}
-        <Spin360Section car={car} exterior={exterior} bg={bg} />
+        <Spin360Section car={car} exterior={exterior} />
 
         {/* 02 · Transparenter Freisteller (Regler) */}
         <TransparentCompare car={car} />
@@ -982,7 +982,7 @@ function ShadowSection({
           labelOff="Shadow off"
         />
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {views.map((v) => (
           <ShadowTile key={v} car={car} view={v} shadow={on} dt={dt} />
         ))}
@@ -1005,7 +1005,7 @@ function ShadowTile({
   const [failed, setFailed] = useState(false);
   const url = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view, width: 300, shadow, demoToken: dt },
+    { view, width: 380, shadow, demoToken: dt },
   );
   useEffect(() => setFailed(false), [url]);
   return (
@@ -1013,7 +1013,7 @@ function ShadowTile({
       className="relative aspect-[4/3] overflow-hidden rounded-lg border border-hair"
       style={SOFT_BG}
     >
-      <div className="absolute inset-0 flex items-center justify-center p-3">
+      <div className="absolute inset-0 flex items-center justify-center p-4">
         {url && !failed ? (
           <img
             src={url}
@@ -1027,14 +1027,11 @@ function ShadowTile({
           <ImageIcon className="h-6 w-6 text-ink-300" />
         )}
       </div>
-      <span className="absolute left-2 top-2 rounded bg-ink-900/70 px-1.5 py-0.5 text-[9.5px] font-medium text-white">
-        {VIEW_LABEL[view] ?? view}
-      </span>
     </div>
   );
 }
 
-/** 04 · Ground — dasselbe Bild mit/ohne Boden-Verankerung (Schalter). */
+/** 04 · Ground — links mit, rechts ohne Boden-Verankerung (Gegenüberstellung). */
 function GroundSection({
   car,
   exterior,
@@ -1043,63 +1040,40 @@ function GroundSection({
   exterior: string[];
 }) {
   const dt = useContext(DemoTokenCtx);
-  const [on, setOn] = useState(true);
-  const [failed, setFailed] = useState(false);
   const v = exterior.includes("front_left")
     ? "front_left"
     : exterior[0] ?? "front_left";
-  const url = carThumbApiUrl(
+  const withUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 600, ground: on, demoToken: dt },
+    { view: v, width: 480, ground: true, demoToken: dt },
   );
-  useEffect(() => setFailed(false), [url]);
-  // Gegenzustand vorladen → Umschalten ist sofort sichtbar.
-  useEffect(() => {
-    preloadImage(
-      carThumbApiUrl(
-        { ...car, farbe: "default" },
-        { view: v, width: 600, ground: !on, demoToken: dt },
-      ),
-    );
-  }, [car, v, on, dt]);
+  const withoutUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: v, width: 480, demoToken: dt },
+  );
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionHead
-          n="04"
-          eyebrow="Grounded, not floating"
-          title="Every car sits firmly on the ground"
-        >
-          With grounding on, the wheels sit cleanly on the floor — no floating,
-          no odd perspective. Toggle it to watch the car settle.
-        </SectionHead>
-        <Switch
-          on={on}
-          onToggle={() => setOn((v) => !v)}
-          labelOn="Ground on"
-          labelOff="Ground off"
-        />
-      </div>
-      <div
-        className="relative mx-auto aspect-[16/10] w-full max-w-2xl overflow-hidden rounded-xl border border-hair"
-        style={SOFT_BG}
+      <SectionHead
+        n="04"
+        eyebrow="Grounded, not floating"
+        title="Every car sits firmly on the ground"
       >
-        <div className="absolute inset-0 flex items-center justify-center p-6">
-          {url && !failed ? (
-            <img
-              src={url}
-              alt={`${prettyModel(car.modell)} ${on ? "on the ground" : "floating"}`}
-              draggable={false}
-              onError={() => setFailed(true)}
-              className="max-h-full max-w-full object-contain"
-            />
-          ) : (
-            <ImageIcon className="h-10 w-10 text-ink-300" />
-          )}
-        </div>
-        <span className="absolute left-3 top-3 rounded-full bg-ink-900/80 px-2.5 py-0.5 text-[11px] font-medium text-white">
-          {on ? "With ground" : "Without ground"}
-        </span>
+        With grounding, the wheels sit cleanly on the floor — no floating, no odd
+        perspective. Left with ground, right without.
+      </SectionHead>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <CompareTile
+          label="With ground"
+          caption="ground=true"
+          url={withUrl}
+          alt={`${prettyModel(car.modell)} on the ground`}
+        />
+        <CompareTile
+          label="Without ground"
+          caption="ground=false"
+          url={withoutUrl}
+          alt={`${prettyModel(car.modell)} floating`}
+        />
       </div>
     </section>
   );
@@ -1136,15 +1110,15 @@ function MirrorSection({
         angle — no extra render. Here's the same shot, normal vs. mirrored.
       </SectionHead>
       <div className="grid gap-4 sm:grid-cols-2">
-        <MirrorCard
+        <CompareTile
           label="Mirroring off"
-          mirrored={false}
+          caption="mirroring=false"
           url={normalUrl}
           alt={`${prettyModel(car.modell)} normal`}
         />
-        <MirrorCard
+        <CompareTile
           label="Mirroring on"
-          mirrored
+          caption="mirroring=true"
           url={mirrorUrl}
           alt={`${prettyModel(car.modell)} mirrored`}
         />
@@ -1153,14 +1127,15 @@ function MirrorSection({
   );
 }
 
-function MirrorCard({
+/** Vergleichskachel: Bild mit Eck-Label + Mono-Caption (für Ground/Mirroring). */
+function CompareTile({
   label,
-  mirrored,
+  caption,
   url,
   alt,
 }: {
   label: string;
-  mirrored: boolean;
+  caption: string;
   url: string | null;
   alt: string;
 }) {
@@ -1190,7 +1165,7 @@ function MirrorCard({
         </span>
       </div>
       <div className="mt-1.5 text-center font-mono text-[11px] text-ink-400">
-        mirroring={mirrored ? "true" : "false"}
+        {caption}
       </div>
     </div>
   );
@@ -1591,11 +1566,9 @@ function Zoomed({
 function Spin360Section({
   car,
   exterior,
-  bg,
 }: {
   car: CarId;
   exterior: string[];
-  bg: BgMode;
 }) {
   const dt = useContext(DemoTokenCtx);
   const [idx, setIdx] = useState(0);
@@ -1613,7 +1586,7 @@ function Spin360Section({
       preloadImage(
         carThumbApiUrl(
           { ...car, farbe: "default" },
-          { view: v, width: 720, demoToken: dt },
+          { view: v, width: 720, transparent: true, demoToken: dt },
         ),
       ),
     );
@@ -1625,7 +1598,7 @@ function Spin360Section({
   const url = view
     ? carThumbApiUrl(
         { ...car, farbe: "default" },
-        { view, width: 720, demoToken: dt },
+        { view, width: 720, transparent: true, demoToken: dt },
       )
     : null;
 
@@ -1669,8 +1642,7 @@ function Spin360Section({
           {/* Fester Bild-Kasten: aspect-[16/9] bestimmt die Größe allein, das
               Bild liegt absolut darin → kein Größensprung beim Drehen. */}
           <div
-            className="relative aspect-[16/9] cursor-ew-resize overflow-hidden rounded-xl border border-hair"
-            style={stageStyle(bg)}
+            className="relative aspect-[16/9] cursor-ew-resize overflow-hidden rounded-xl border border-hair bg-white"
             onPointerDown={onDown}
             onPointerMove={onMove}
             onPointerUp={onUp}
