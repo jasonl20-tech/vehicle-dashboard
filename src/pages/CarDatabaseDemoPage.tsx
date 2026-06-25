@@ -176,7 +176,6 @@ type OutOptions = {
   transparent: boolean;
   width: number;
   height: number | null;
-  watermark: boolean;
   resolution: string;
   ground: boolean;
 };
@@ -223,8 +222,6 @@ export default function CarDatabaseDemoPage() {
   const [width, setWidth] = useState(900);
   const [height, setHeight] = useState<number | null>(null);
   const [resolution, setResolution] = useState("default");
-  // Wasserzeichen: Plan-/Key-Merkmal (Testkunden) → hier Vorschau-Overlay.
-  const [watermark, setWatermark] = useState(false);
   const [presenting, setPresenting] = useState(false);
   const [showApi, setShowApi] = useState(false);
   const [zoom, setZoom] = useState(false);
@@ -341,7 +338,6 @@ export default function CarDatabaseDemoPage() {
     transparent: effTransparent,
     width,
     height,
-    watermark,
     resolution,
     ground,
   };
@@ -495,13 +491,6 @@ export default function CarDatabaseDemoPage() {
                     </SegBtn>
                   ))}
                 </div>
-                <OptToggle
-                  active={watermark}
-                  onClick={() => setWatermark((w) => !w)}
-                  title="Preview: how images look for test/trial customers (automatic watermark)"
-                >
-                  Test customer · Watermark
-                </OptToggle>
               </div>
 
               {/* Resolution preset */}
@@ -746,9 +735,6 @@ function Stage({
           )}
         </div>
 
-        {/* Wasserzeichen-Vorschau (Testkunde) */}
-        {out.watermark && <WatermarkOverlay />}
-
         {loading && (
           <div className="absolute inset-0 grid place-items-center bg-white/40 backdrop-blur-[1px]">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-ink-300 border-t-ink-700" />
@@ -968,32 +954,6 @@ function OptToggle({
     </button>
   );
 }
-
-/**
- * Demo-Vorschau des Test-/Trial-Wasserzeichens. Wasserzeichen ist serverseitig
- * ein Plan-Merkmal (Testkunden); hier als clientseitiges Overlay simuliert, um
- * im Call zu zeigen, wie Trial-Bilder aussehen.
- */
-function WatermarkOverlay() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-[-40%] flex flex-wrap content-center justify-center gap-x-8 gap-y-5 rotate-[-28deg]">
-        {Array.from({ length: 80 }).map((_, i) => (
-          <span
-            key={i}
-            className="whitespace-nowrap text-[12px] font-bold uppercase tracking-[0.3em] text-ink-900/15"
-          >
-            Vehicleimagery · Demo
-          </span>
-        ))}
-      </div>
-      <span className="absolute left-3 top-3 rounded-full bg-amber-500/90 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-        Test customer
-      </span>
-    </div>
-  );
-}
-
 
 function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
   const left = colors.includes("white") ? "white" : colors[0];
@@ -1391,7 +1351,6 @@ function Zoomed({
               out.transparent ? "rounded-lg" : ""
             }`}
           />
-          {out.watermark && <WatermarkOverlay />}
         </div>
       )}
     </div>
