@@ -1027,7 +1027,7 @@ function TransparentCompare({ car }: { car: CarId }) {
   );
 }
 
-/** Eigener Abschnitt: Schatten + Bodenkontakt zusammen, per Toggle vorführbar. */
+/** Eigener Abschnitt: zwei Bilder nebeneinander — links mit Schatten, rechts mit Ground. */
 function ShadowGroundSection({
   car,
   exterior,
@@ -1035,17 +1035,17 @@ function ShadowGroundSection({
   car: CarId;
   exterior: string[];
 }) {
-  const [shadow, setShadow] = useState(true);
-  const [ground, setGround] = useState(true);
-  const [failed, setFailed] = useState(false);
   const v = exterior.includes("front_left")
     ? "front_left"
     : exterior[0] ?? "front_left";
-  const url = carThumbApiUrl(
+  const shadowUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 1000, shadow, ground },
+    { view: v, width: 760, shadow: true },
   );
-  useEffect(() => setFailed(false), [url]);
+  const groundUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: v, width: 760, ground: true },
+  );
 
   return (
     <section className="mt-10 border-t border-hair pt-8">
@@ -1059,56 +1059,73 @@ function ShadowGroundSection({
               Shadow &amp; ground
             </h3>
             <p className="truncate text-[12px] text-ink-500">
-              Add a drop shadow and anchor the vehicle to the ground.
+              Two API options side by side — drop shadow vs. anchored to the
+              ground.
             </p>
           </div>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1fr_240px]">
-          <div
-            className="relative aspect-[16/9] overflow-hidden rounded-xl border border-hair"
-            style={{
-              background:
-                "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 55%, #e6eaf0 100%)",
-            }}
-          >
-            <div className="absolute inset-0 flex select-none items-center justify-center p-6">
-              {url && !failed ? (
-                <img
-                  src={url}
-                  alt={`${car.marke} ${prettyModel(car.modell)}`}
-                  draggable={false}
-                  onError={() => setFailed(true)}
-                  className="max-h-full max-w-full object-contain"
-                />
-              ) : (
-                <ImageIcon className="h-10 w-10 text-ink-300" />
-              )}
-            </div>
-          </div>
-          <aside className="flex flex-col justify-center gap-3 rounded-xl border border-hair bg-white p-4">
-            <div className="flex flex-wrap gap-2">
-              <OptToggle
-                active={shadow}
-                onClick={() => setShadow((s) => !s)}
-                title="Render a drop shadow from the API"
-              >
-                Shadow
-              </OptToggle>
-              <OptToggle
-                active={ground}
-                onClick={() => setGround((g) => !g)}
-                title="Anchor the vehicle to the ground (instead of floating)"
-              >
-                Ground
-              </OptToggle>
-            </div>
-            <p className="text-[11.5px] leading-relaxed text-ink-500">
-              Both come straight from the API — toggle them to see the effect.
-            </p>
-          </aside>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <SgCard
+            label="Shadow"
+            param="shadow=true"
+            url={shadowUrl}
+            alt={`${car.marke} ${prettyModel(car.modell)} with shadow`}
+          />
+          <SgCard
+            label="Ground"
+            param="ground=true"
+            url={groundUrl}
+            alt={`${car.marke} ${prettyModel(car.modell)} on the ground`}
+          />
         </div>
       </div>
     </section>
+  );
+}
+
+function SgCard({
+  label,
+  param,
+  url,
+  alt,
+}: {
+  label: string;
+  param: string;
+  url: string | null;
+  alt: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [url]);
+  return (
+    <div>
+      <div
+        className="relative aspect-[4/3] overflow-hidden rounded-xl border border-hair"
+        style={{
+          background:
+            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 55%, #e6eaf0 100%)",
+        }}
+      >
+        <div className="absolute inset-0 flex select-none items-center justify-center p-6">
+          {url && !failed ? (
+            <img
+              src={url}
+              alt={alt}
+              draggable={false}
+              onError={() => setFailed(true)}
+              className="max-h-full max-w-full object-contain"
+            />
+          ) : (
+            <ImageIcon className="h-10 w-10 text-ink-300" />
+          )}
+        </div>
+        <span className="absolute left-3 top-3 rounded-full bg-ink-900/80 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur">
+          {label}
+        </span>
+      </div>
+      <div className="mt-1.5 text-center font-mono text-[11px] text-ink-400">
+        {param}
+      </div>
+    </div>
   );
 }
 
