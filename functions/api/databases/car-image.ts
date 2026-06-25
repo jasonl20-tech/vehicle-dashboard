@@ -130,8 +130,15 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const transparent = ["1", "true", "yes"].includes(
     (p.get("transparent") || "").trim().toLowerCase(),
   );
-  // Vorgefertigte Auflösung (neu). Unbekanntes → default.
-  const ALLOWED_RES = new Set(["default", "1k", "2k", "4k"]);
+  // Vorgefertigte Auflösungs-Presets (laut OpenAPI-Spec). Unbekanntes → default.
+  const ALLOWED_RES = new Set([
+    "default",
+    "thumb",
+    "small",
+    "medium",
+    "large",
+    "full",
+  ]);
   const resIn = (p.get("resolution") || "default").trim();
   const resolution = ALLOWED_RES.has(resIn.toLowerCase()) ? resIn : "default";
   // Fahrzeug am Boden verankern (neu).
@@ -187,17 +194,20 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     }
   }
 
-  // Für Demo-Anfragen die Parameter-Oberfläche hart auf die sicheren Standard-
-  // werte begrenzen (Kostenschutz: kein teures Format/Auflösung/Maß-Variieren,
-  // das den Cache umgehen würde). Transparent bleibt (zeigt die Demo).
+  // Für Demo-Anfragen die Parameter-Oberfläche begrenzen (Kostenschutz): festes
+  // Format/Auflösung, keine freie Höhe, eingerastete Breite. Schatten/Ground/
+  // Transparenz/Mirroring sind erlaubt — Teil der Demo, je nur ~2 Zustände.
   const effFormat = isDemo ? "png" : format;
   const effResolution = isDemo ? "default" : resolution;
-  const effShadow = isDemo ? false : shadow;
-  const effGround = isDemo ? false : ground;
   const effHeight = isDemo ? null : height;
   // Demo: Breite auf eine feste Whitelist einrasten (verhindert Cache-Umgehung
   // durch beliebige w-Werte und damit massenhafte teure Voll-Key-Renderings).
   const effWidth = isDemo ? snapDemoWidth(width) : width;
+  // Transparenter Hintergrund — der API-Parameter heißt `transparency` (NICHT
+  // `transparent`). Ground und Mirroring brauchen laut API zwingend eine
+  // transparente Variante → hier mit-erzwingen, sonst werden sie ignoriert
+  // (genau das Symptom „kein sichtbarer Unterschied").
+  const transparency = transparent || ground || mirroring;
 
   // Edge-Cache prüfen. Kanonischer Key aus den EFFEKTIVEN Parametern (ohne `dt`)
   // → Demo- und Dashboard-Anfragen für dasselbe Bild teilen sich den Cache, und
@@ -215,9 +225,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (effHeight) cp.set("h", String(effHeight));
   if (effFormat !== "png") cp.set("format", effFormat);
   if (effResolution !== "default") cp.set("resolution", effResolution);
-  if (effShadow) cp.set("shadow", "1");
-  if (transparent) cp.set("transparent", "1");
-  if (effGround) cp.set("ground", "1");
+  if (shadow) cp.set("shadow", "1");
+  if (transparency) cp.set("transparency", "1");
+  if (ground) cp.set("ground", "1");
   if (mirroring) cp.set("mirroring", "1");
   const cache = caches.default;
   const cacheKey = new Request(canon.toString(), { method: "GET" });
@@ -240,9 +250,9 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const apiUrl =
     `${API_BASE}/api/${seg(marke)}/${seg(modell)}/${seg(jahr)}/${seg(body)}/${seg(trim)}/${seg(view)}` +
     `?format=${seg(effFormat)}&resolution=${seg(effResolution)}&color=${seg(farbe)}` +
-    (effShadow ? `&shadow=true` : "") +
-    (transparent ? `&transparent=true` : "") +
-    (effGround ? `&ground=true` : "") +
+    (shadow ? `&shadow=true` : "") +
+    (transparency ? `&transparency=true` : "") +
+    (ground ? `&ground=true` : "") +
     (mirroring ? `&mirroring=true` : "") +
     // Explizite Maße nur senden, wenn eine Höhe angefragt wurde.
     (effHeight ? `&width=${effWidth}&height=${effHeight}` : "");

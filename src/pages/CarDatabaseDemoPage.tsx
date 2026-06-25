@@ -493,6 +493,9 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
                   );
                 })}
               </div>
+              <p className="mt-2 text-[11px] text-ink-400">
+                We add new colors continuously.
+              </p>
             </div>
 
             {/* Echte Verfügbarkeits-Infos aus der Datenbank/API */}
@@ -1045,21 +1048,22 @@ function GroundSection({
     : exterior[0] ?? "front_left";
   const withUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, ground: true, demoToken: dt },
+    { view: v, width: 480, ground: true, transparent: true, demoToken: dt },
   );
   const withoutUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, demoToken: dt },
+    { view: v, width: 480, transparent: true, demoToken: dt },
   );
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <SectionHead
         n="04"
         eyebrow="Grounded, not floating"
-        title="Every car sits firmly on the ground"
+        title="Every car on the same ground line"
       >
-        With grounding, the wheels sit cleanly on the floor — no floating, no odd
-        perspective. Left with ground, right without.
+        Grounding sets every car's wheels onto the same floor line. The payoff:
+        line up several models side by side and none of them look like they're
+        floating at different heights. Left with ground, right without.
       </SectionHead>
       <div className="grid gap-4 sm:grid-cols-2">
         <CompareTile
@@ -1093,21 +1097,22 @@ function MirrorSection({
     : exterior[0] ?? "front_left";
   const normalUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, demoToken: dt },
+    { view: v, width: 480, transparent: true, demoToken: dt },
   );
   const mirrorUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, mirroring: true, demoToken: dt },
+    { view: v, width: 480, transparent: true, mirroring: true, demoToken: dt },
   );
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <SectionHead
         n="05"
         eyebrow="Mirroring"
-        title="Flip any shot — same car, mirrored"
+        title="A soft floor reflection"
       >
-        Need the car facing the other way? Request a mirrored version of any
-        angle — no extra render. Here's the same shot, normal vs. mirrored.
+        Mirroring drops a mirrored reflection of the car beneath itself — a faded
+        image of the car, not a hard black shadow — for a premium,
+        showroom-floor look. Left without, right with.
       </SectionHead>
       <div className="grid gap-4 sm:grid-cols-2">
         <CompareTile
@@ -1186,8 +1191,8 @@ function OutputOptionsSection() {
     {
       icon: Sparkles,
       title: "Resolution",
-      desc: "Crisp at any size — up to 4K.",
-      tags: ["Default", "1K", "2K", "4K"],
+      desc: "Size & quality presets, or exact pixels.",
+      tags: ["thumb", "small", "medium", "large", "full"],
     },
     {
       icon: Maximize2,
@@ -1273,7 +1278,7 @@ function ApiPanel({
   if (out.resolution !== "default")
     params.push(`resolution=${out.resolution}`);
   if (color && color !== "default") params.push(`color=${color}`);
-  if (out.transparent) params.push("transparent=true");
+  if (out.transparent) params.push("transparency=true");
   params.push(`width=${out.width}`);
   if (out.height) params.push(`height=${out.height}`);
   const qs = `?${params.join("&")}`;
@@ -1311,14 +1316,14 @@ function ApiPanel({
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {[
-              "format: png · jpeg · webp · avif",
-              "resolution: default · 1K · 2K · 4K",
+              "format: png · jpeg · webp · avif · auto",
+              "resolution: thumb · small · medium · large · full",
               "shadow=true",
-              "transparent=true (cut-out)",
+              "transparency=true (cut-out)",
               "ground=true (on the floor)",
-              "mirroring=true (flip)",
-              "width & height freely selectable",
-              "getall: all views at once",
+              "mirroring=true (floor reflection)",
+              "ratio: 1:1 · 4:3 · 16:9 · …",
+              "all: every view at once",
               "CDN cache",
             ].map((t) => (
               <span
@@ -1629,10 +1634,12 @@ function Spin360Section({
           <SectionHead
             n="01"
             eyebrow="Every angle"
-            title="Walk around the car — every angle"
+            title="Walk around the car — a 360°-style view"
           >
-            Eight studio angles plus interior, straight from the API. Drag, use
-            the arrows, or pull the slider below.
+            Customers often ask: do you have a 360° view? Yes and no — we deliver
+            all eight exterior angles (plus interior), and from them you can
+            build a smooth walk-around. It's not a true continuous 360°, but it
+            gives the same effect. Drag, use the arrows, or pull the slider.
           </SectionHead>
           <span className="shrink-0 rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
             {VIEW_LABEL[view] ?? view}
