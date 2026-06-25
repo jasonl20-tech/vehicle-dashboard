@@ -1519,7 +1519,6 @@ function Spin360Section({
             {VIEW_LABEL[view] ?? view}
           </span>
         </div>
-        <div className="grid gap-4 lg:grid-cols-[1fr_240px]">
         <div className="relative">
           {/* Fester Bild-Kasten: aspect-[16/9] bestimmt die Größe allein, das
               Bild liegt absolut darin → kein Größensprung beim Drehen. */}
@@ -1554,32 +1553,6 @@ function Spin360Section({
             view={view}
             onSpin={setSpin}
           />
-        </div>
-        <aside className="flex flex-col justify-center gap-2 rounded-xl border border-hair bg-white p-4">
-          <div className="text-[13px] font-semibold text-ink-900">
-            {car.marke} {prettyModel(car.modell)}
-          </div>
-          <p className="text-[11.5px] leading-relaxed text-ink-500">
-            Drag the image or use the slider to turn the vehicle through 8
-            studio angles — all live from the Vehicleimagery API.
-          </p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {exterior.map((v, i) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setSpin(i)}
-                className={`rounded-full border px-2 py-0.5 text-[10.5px] transition ${
-                  i === safeIdx
-                    ? "border-ink-900 bg-ink-900 text-white"
-                    : "border-hair bg-white text-ink-600 hover:bg-ink-50"
-                }`}
-              >
-                {VIEW_LABEL[v] ?? v}
-              </button>
-            ))}
-          </div>
-        </aside>
         </div>
       </div>
     </section>
