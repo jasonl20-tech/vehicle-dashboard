@@ -13,11 +13,9 @@ import {
   Search,
   Sparkles,
   X,
-  type LucideIcon,
 } from "lucide-react";
 import {
   type CSSProperties,
-  type ReactNode,
   useEffect,
   useMemo,
   useRef,
@@ -178,20 +176,6 @@ type OutOptions = {
   resolution: string;
 };
 
-const FORMATS: ImgFormat[] = ["png", "jpeg", "webp", "avif"];
-
-/** Vorgefertigte Auflösungsstufen (neues API-Feature). */
-const RESOLUTIONS = ["default", "1K", "2K", "4K"];
-
-/** Größen-Presets (zeigt: Breite & Höhe sind anfragbar). */
-const SIZE_PRESETS: { label: string; w: number; h: number | null }[] = [
-  { label: "Auto", w: 900, h: null },
-  { label: "600", w: 600, h: null },
-  { label: "1600", w: 1600, h: null },
-  { label: "1:1 · 1000", w: 1000, h: 1000 },
-  { label: "16:9 · 1280", w: 1280, h: 720 },
-];
-
 /**
  * Bild-URL im Hintergrund vorladen (wärmt Browser- und Edge-Cache vor, bevor
  * der Nutzer klickt). Eine sitzungsweite Menge verhindert doppelte Anfragen
@@ -213,11 +197,6 @@ export default function CarDatabaseDemoPage() {
   // Schalter, der ausschließlich die Hero betrifft.
   const bg: BgMode = "showroom";
   const [transparent, setTransparent] = useState(false);
-  // Neue API-Ausgabe-Optionen.
-  const [format, setFormat] = useState<"png" | "jpeg" | "webp" | "avif">("png");
-  const [width, setWidth] = useState(900);
-  const [height, setHeight] = useState<number | null>(null);
-  const [resolution, setResolution] = useState("default");
   const [presenting, setPresenting] = useState(false);
   const [showApi, setShowApi] = useState(false);
   const [zoom, setZoom] = useState(false);
@@ -326,14 +305,14 @@ export default function CarDatabaseDemoPage() {
     setPickerOpen(false);
   };
 
-  // JPEG kann keine Transparenz → in dem Fall Freisteller ausschalten.
-  const effTransparent = transparent && format !== "jpeg";
+  // Format/Größe/Auflösung sind in der Demo NICHT auswählbar (nur Werbung) —
+  // die Hero nutzt feste Defaults. Variabel ist nur Transparent.
   const out: OutOptions = {
-    format,
-    transparent: effTransparent,
-    width,
-    height,
-    resolution,
+    format: "png",
+    transparent,
+    width: 900,
+    height: null,
+    resolution: "default",
   };
 
   return (
@@ -408,89 +387,13 @@ export default function CarDatabaseDemoPage() {
               color={color}
               view={view}
               views={[...exterior, ...interior]}
-              bg={effTransparent ? "transparent" : bg}
+              bg={transparent ? "transparent" : bg}
               out={out}
               onZoom={() => setZoom(true)}
               onToggleTransparent={() => setTransparent((t) => !t)}
               onPick={setView}
               loading={detailApi.loading && !detail}
             />
-
-            {/* Ausgabe-Optionen — demonstriert die API-Funktionen live */}
-            <div className="mt-3 space-y-2.5 rounded-xl border border-hair bg-white p-3">
-              {/* Format + Transparent */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                  Format
-                </span>
-                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
-                  {FORMATS.map((f) => (
-                    <SegBtn
-                      key={f}
-                      active={format === f}
-                      onClick={() => {
-                        setFormat(f);
-                        if (f === "jpeg") setTransparent(false);
-                      }}
-                    >
-                      {f.toUpperCase()}
-                    </SegBtn>
-                  ))}
-                </div>
-                <OptToggle
-                  active={effTransparent}
-                  disabled={format === "jpeg"}
-                  onClick={() => setTransparent((t) => !t)}
-                  title={
-                    format === "jpeg"
-                      ? "JPEG doesn't support transparency"
-                      : "Show a real transparent PNG from the API"
-                  }
-                  icon={Layers}
-                >
-                  Transparent
-                </OptToggle>
-              </div>
-
-              {/* Größe + Wasserzeichen */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                  Size
-                </span>
-                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
-                  {SIZE_PRESETS.map((s) => (
-                    <SegBtn
-                      key={s.label}
-                      active={width === s.w && height === s.h}
-                      onClick={() => {
-                        setWidth(s.w);
-                        setHeight(s.h);
-                      }}
-                    >
-                      {s.label}
-                    </SegBtn>
-                  ))}
-                </div>
-              </div>
-
-              {/* Resolution preset */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                  Resolution
-                </span>
-                <div className="inline-flex rounded-lg border border-hair bg-white p-0.5">
-                  {RESOLUTIONS.map((r) => (
-                    <SegBtn
-                      key={r}
-                      active={resolution === r}
-                      onClick={() => setResolution(r)}
-                    >
-                      {r === "default" ? "Default" : r}
-                    </SegBtn>
-                  ))}
-                </div>
-              </div>
-            </div>
 
             {/* Ansichts-Streifen */}
             <ThumbStrip
@@ -568,6 +471,8 @@ export default function CarDatabaseDemoPage() {
                 value={`${exterior.length} / ${interior.length}`}
               />
               <Spec label="Formats" value="PNG·JPEG·WebP·AVIF" />
+              <Spec label="Resolutions" value="up to 4K" />
+              <Spec label="Sizes" value="any size" />
             </div>
 
             {/* Erklär-Box: was man hier sieht */}
@@ -593,6 +498,9 @@ export default function CarDatabaseDemoPage() {
 
         {/* Transparent-Vergleich (Regler) */}
         <TransparentCompare car={car} />
+
+        {/* Farbvergleich (Regler) */}
+        {colors.length >= 2 && <ColorCompare car={car} colors={colors} />}
 
         {/* Aus dem Katalog wählen */}
         <ShowroomGrid
@@ -872,69 +780,6 @@ function Spec({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SegBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-3 py-1.5 text-[12px] font-medium transition-colors ${
-        active ? "bg-ink-900 text-white" : "text-ink-500 hover:text-ink-900"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** Umschalt-Pille mit Status-Punkt (Transparent / Schatten / Wasserzeichen). */
-function OptToggle({
-  active,
-  onClick,
-  children,
-  title,
-  disabled,
-  icon: Icon,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-  title?: string;
-  disabled?: boolean;
-  icon?: LucideIcon;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-pressed={active}
-      title={title}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-medium transition ${
-        disabled
-          ? "cursor-not-allowed border-hair bg-ink-50 text-ink-300"
-          : active
-            ? "border-ink-900 bg-ink-900 text-white"
-            : "border-ink-200 bg-white text-ink-700 hover:bg-ink-50"
-      }`}
-    >
-      {Icon && <Icon className="h-3.5 w-3.5" />}
-      {children}
-      <span
-        className={`ml-0.5 inline-block h-2 w-2 rounded-full ${
-          active ? "bg-emerald-400" : disabled ? "bg-ink-200" : "bg-ink-300"
-        }`}
-      />
-    </button>
-  );
-}
 
 /** Vorher/Nachher-Regler: Bild mit Hintergrund ↔ echtes transparentes PNG. */
 function TransparentCompare({ car }: { car: CarId }) {
@@ -1021,6 +866,94 @@ function TransparentCompare({ car }: { car: CarId }) {
         </span>
         <span className="absolute right-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
           Transparent
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Farbvergleich-Regler: zwei Farben des Autos per Schieberegler vergleichen. */
+function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
+  const left = colors.includes("white") ? "white" : colors[0];
+  const right = colors.includes("black")
+    ? "black"
+    : colors.find((c) => c !== left) ?? colors[0];
+  const [pos, setPos] = useState(50);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const dragging = useRef(false);
+
+  const move = (clientX: number) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const p = ((clientX - r.left) / r.width) * 100;
+    setPos(Math.min(100, Math.max(0, p)));
+  };
+
+  const lUrl = carThumbApiUrl(
+    { ...car, farbe: left },
+    { view: "front_left", width: 760 },
+  );
+  const rUrl = carThumbApiUrl(
+    { ...car, farbe: right },
+    { view: "front_left", width: 760 },
+  );
+
+  return (
+    <div className="mt-8">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="text-[13px] font-semibold text-ink-900">
+          Color comparison
+        </h3>
+        <span className="text-[11px] text-ink-400">
+          {colorLabel(left)} ↔ {colorLabel(right)} · drag the slider
+        </span>
+      </div>
+      <div
+        ref={ref}
+        className="relative aspect-[16/9] w-full select-none overflow-hidden rounded-xl border border-hair"
+        style={{
+          background:
+            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e6eaf0 100%)",
+        }}
+        onPointerDown={(e) => {
+          dragging.current = true;
+          move(e.clientX);
+        }}
+        onPointerMove={(e) => dragging.current && move(e.clientX)}
+        onPointerUp={() => (dragging.current = false)}
+        onPointerLeave={() => (dragging.current = false)}
+      >
+        {rUrl && (
+          <img
+            src={rUrl}
+            alt={colorLabel(right)}
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-contain p-6"
+          />
+        )}
+        {lUrl && (
+          <img
+            src={lUrl}
+            alt={colorLabel(left)}
+            draggable={false}
+            className="absolute inset-0 h-full w-full object-contain p-6"
+            style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
+          />
+        )}
+        <div
+          className="absolute inset-y-0 w-0.5 bg-white shadow"
+          style={{ left: `${pos}%` }}
+        >
+          <span className="absolute top-1/2 left-1/2 grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-ink-700 shadow">
+            <ChevronLeft className="h-3 w-3" />
+          </span>
+        </div>
+        <span className="absolute left-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
+          {colorLabel(left)}
+        </span>
+        <span className="absolute right-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
+          {colorLabel(right)}
         </span>
       </div>
     </div>
