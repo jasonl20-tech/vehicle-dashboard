@@ -229,6 +229,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (transparency) cp.set("transparency", "1");
   if (ground) cp.set("ground", "1");
   if (mirroring) cp.set("mirroring", "1");
+  // Mit dem Spezial-Key liefert Mirroring ein ANDERES Bild (echte Reflexion) als
+  // zuvor mit dem rechtelosen Key → eigener Cache-Key, sonst würde ein evtl. alt
+  // gecachtes Nicht-Reflexions-Bild den Effekt weiter verdecken.
+  if (mirroring && env.CAR_DB_MIRRORING_KEY) cp.set("mk", "1");
   const cache = caches.default;
   const cacheKey = new Request(canon.toString(), { method: "GET" });
   const cached = await cache.match(cacheKey);
