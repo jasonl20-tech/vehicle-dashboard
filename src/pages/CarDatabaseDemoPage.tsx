@@ -235,7 +235,6 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
   // Schalter, der ausschließlich die Hero betrifft.
   const bg: BgMode = "showroom";
   const [transparent, setTransparent] = useState(false);
-  const [showApi, setShowApi] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -390,7 +389,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
               Vehicleimagery
             </div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-ink-400">
-              Vehicle images from the API
+              The car photography API
             </div>
           </div>
         </div>
@@ -413,15 +412,16 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
         {/* Intro — Titel-„Slide" */}
         <div className="mb-7">
           <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">
-            Vehicleimagery · live product demo
+            Vehicleimagery · live demo
           </div>
           <h2 className="mt-1.5 font-display text-[26px] font-bold leading-[1.1] tracking-tight text-ink-900 sm:text-[34px]">
-            Studio-quality car images for anything — from one API.
+            The definitive car photography API.
           </h2>
           <p className="mt-2.5 max-w-2xl text-[15px] leading-relaxed text-ink-700">
-            Any brand, any color, any angle — generated on demand. No photo
-            shoot, no studio, no editing. Everything below is live and
-            interactive: scroll through and try it yourself.
+            Studio-quality vehicle images for dealerships, leasing and automotive
+            platforms — any brand, any color, any angle, generated on demand. No
+            photo shoot, no studio, no editing. Consistent, scalable, beautiful.
+            Everything below is live: scroll through and try it yourself.
           </p>
           <div className="mt-3.5 flex flex-wrap gap-2">
             {[
@@ -573,23 +573,11 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
         {/* 06 · Marken-Übersicht (live) */}
         {brands.length > 0 && <BrandsSection brands={brands} />}
 
-        {/* 07 · Aus dem Katalog wählen */}
-        <ShowroomGrid
-          cars={showroom2010}
-          current={car}
-          onPick={pick}
-          loading={showroomApi.loading && !showroomApi.data}
-        />
+        {/* 07 · Beispiel-Fahrzeuge (nur Schaufenster, nicht klickbar) */}
+        <ShowroomGrid cars={showroom2010} />
 
-        {/* So kommt das Bild aus der API */}
-        <ApiPanel
-          car={car}
-          view={view}
-          color={color}
-          out={out}
-          open={showApi}
-          onToggle={() => setShowApi((v) => !v)}
-        />
+        {/* 08 · Dokumentation (statt roher Code-Vorschau) */}
+        <DocsSection />
       </div>
 
       {/* Fahrzeug-Auswahl (im Demo-Modus deaktiviert) */}
@@ -1231,11 +1219,12 @@ function BrandLogo({ brand }: { brand: string }) {
   );
 }
 
-/** 06 · Coverage — Marken-Logo-Wall (live aus der Kunden-API, Logos von der Website). */
+/** 06 · Coverage — Marken-Logo-Wall (live), per Klick auf „+N more" voll ausklappbar. */
 function BrandsSection({ brands }: { brands: string[] }) {
   const MAX = 48;
-  const shown = brands.slice(0, MAX);
-  const extra = brands.length - shown.length;
+  const [showAll, setShowAll] = useState(false);
+  const shown = showAll ? brands : brands.slice(0, MAX);
+  const extra = brands.length - MAX;
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <SectionHead
@@ -1250,12 +1239,25 @@ function BrandsSection({ brands }: { brands: string[] }) {
         {shown.map((b) => (
           <BrandLogo key={b} brand={b} />
         ))}
-        {extra > 0 && (
-          <div className="flex h-16 items-center justify-center rounded-xl border border-dashed border-hair text-[12px] font-medium text-ink-400">
+        {!showAll && extra > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowAll(true)}
+            className="flex h-16 items-center justify-center rounded-xl border border-dashed border-hair text-[12px] font-medium text-ink-500 transition hover:border-ink-300 hover:bg-ink-50 hover:text-ink-800"
+          >
             +{extra} more
-          </div>
+          </button>
         )}
       </div>
+      {showAll && extra > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowAll(false)}
+          className="mt-3 text-[12px] font-medium text-ink-400 transition hover:text-ink-700"
+        >
+          Show fewer
+        </button>
+      )}
     </section>
   );
 }
@@ -1286,146 +1288,141 @@ function OutputOptionsSection() {
     },
   ];
   return (
-    <section className="mt-6">
-      <div className="overflow-hidden rounded-2xl border border-ink-200 bg-gradient-to-br from-ink-900 to-ink-800 shadow-sm">
-        {/* Header */}
-        <div className="flex flex-wrap items-center gap-3 px-5 py-4 text-white sm:px-6">
-          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
-            <Code2 className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <h3 className="text-[18px] font-semibold tracking-tight">
-              More output options
-            </h3>
-            <p className="text-[12px] leading-snug text-white/60">
-              Not visible in this small preview — available for every image via
-              the API.
-            </p>
-          </div>
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <div className="mb-4 flex items-center gap-2.5">
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-600/10 text-brand-600">
+          <Code2 className="h-5 w-5" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="font-display text-[17px] font-semibold tracking-tight text-ink-900">
+            More output options
+          </h3>
+          <p className="text-[12.5px] leading-snug text-ink-500">
+            Not visible in this small preview — available for every image via the
+            API.
+          </p>
         </div>
-        {/* Cards */}
-        <div className="grid gap-3 bg-white/5 p-3 sm:grid-cols-3 sm:p-4">
-          {items.map((it) => (
-            <div key={it.title} className="rounded-xl bg-white p-4 text-ink-900">
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600/10 text-brand-600">
-                  <it.icon className="h-[18px] w-[18px]" />
-                </span>
-                <div className="text-[14px] font-semibold">{it.title}</div>
-              </div>
-              <div className="mt-2.5 flex flex-wrap gap-1.5">
-                {it.tags.map((t) => (
-                  <span
-                    key={t}
-                    className="rounded-md bg-ink-100 px-2 py-0.5 text-[11px] font-medium text-ink-700"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-              <div className="mt-2 text-[11.5px] leading-relaxed text-ink-500">
-                {it.desc}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {items.map((it) => (
+          <div
+            key={it.title}
+            className="rounded-xl border border-hair bg-ink-50/50 p-4"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600/10 text-brand-600">
+                <it.icon className="h-[18px] w-[18px]" />
+              </span>
+              <div className="text-[14px] font-semibold text-ink-900">
+                {it.title}
               </div>
             </div>
-          ))}
-        </div>
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {it.tags.map((t) => (
+                <span
+                  key={t}
+                  className="rounded-md border border-hair bg-white px-2 py-0.5 text-[11px] font-medium text-ink-700"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+            <div className="mt-2 text-[11.5px] leading-relaxed text-ink-500">
+              {it.desc}
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
 
-const CT_BY_FORMAT: Record<ImgFormat, string> = {
-  png: "image/png",
-  jpeg: "image/jpeg",
-  webp: "image/webp",
-  avif: "image/avif",
-};
-
-function ApiPanel({
-  car,
-  view,
-  color,
-  out,
-  open,
-  onToggle,
-}: {
-  car: CarId;
-  view: string;
-  color: string;
-  out: OutOptions;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const path = `/api/${car.marke}/${prettyModel(car.modell).replace(/ /g, "_")}/${car.jahr}/${view}`;
-  // Query-String aus den aktuell gewählten Optionen — spiegelt 1:1 das Bild oben.
-  const params: string[] = [`format=${out.format}`];
-  if (out.resolution !== "default")
-    params.push(`resolution=${out.resolution}`);
-  if (color && color !== "default") params.push(`color=${color}`);
-  if (out.transparent) params.push("transparency=true");
-  params.push(`width=${out.width}`);
-  if (out.height) params.push(`height=${out.height}`);
-  const qs = `?${params.join("&")}`;
-
+/** 08 · Dokumentation — kompakte, doku-artige Übersicht (statt roher Code-Vorschau),
+ *  an die Struktur der Website-Doku angelehnt. */
+function DocsSection() {
+  const groups: { label: string; items: string[] }[] = [
+    {
+      label: "Request a vehicle",
+      items: [
+        "Brand → Model → Year → Variant → Trim → View",
+        "8 exterior views + interior",
+        "List brands, models, years, colors & views",
+      ],
+    },
+    {
+      label: "Output",
+      items: [
+        "Formats: PNG · JPEG · WebP · AVIF · auto",
+        "Resolution: thumb → full",
+        "Exact width & height (px)",
+        "Aspect ratios: 1:1 · 4:3 · 16:9 · …",
+      ],
+    },
+    {
+      label: "Looks",
+      items: [
+        "Transparent cut-out",
+        "Studio shadow",
+        "Grounded on the floor",
+        "Floor reflection (mirroring)",
+        "Any color on demand",
+      ],
+    },
+    {
+      label: "Delivery",
+      items: [
+        "Simple GET + x-api-key",
+        "api.vehicleimagery.com",
+        "Global CDN cache",
+        "Documented status & error notes",
+      ],
+    },
+  ];
   return (
-    <div className="mt-8 rounded-xl border border-hair bg-white">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
-      >
-        <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink-900">
-          <Code2 className="h-4 w-4 text-brand-600" />
-          Exactly how this image comes from the API
-        </span>
-        <span className="text-[11px] text-ink-400">
-          {open ? "hide" : "show"}
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-hair px-4 py-3">
-          <div className="overflow-x-auto rounded-lg bg-ink-900 px-3 py-2.5 font-mono text-[12px] leading-relaxed text-ink-100">
-            <div>
-              <span className="text-emerald-400">GET</span>{" "}
-              https://api.vehicleimagery.com{path}
-              <span className="text-amber-300">{qs}</span>
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionHead
+          n="08"
+          eyebrow="Documentation"
+          title="The whole API, at a glance"
+        >
+          One simple, well-documented REST API. Here's everything it does — the
+          full reference, parameters and examples live in the docs.
+        </SectionHead>
+        <a
+          href="https://vehicleimagery.com/documentation"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-[12px] font-medium text-ink-700 transition hover:bg-ink-50"
+        >
+          <Code2 className="h-3.5 w-3.5" />
+          Full documentation
+        </a>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {groups.map((g) => (
+          <div
+            key={g.label}
+            className="rounded-xl border border-hair bg-ink-50/50 p-4"
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-600">
+              {g.label}
             </div>
-            <div className="text-ink-400">x-api-key: VI-••••••••••••••••</div>
-            <div className="mt-1 text-ink-400">
-              → 200 · {CT_BY_FORMAT[out.format]} · {out.width}
-              {out.height ? `×${out.height}` : ""} px
-              {out.resolution !== "default" ? ` · ${out.resolution}` : ""}
-              {out.transparent ? " · transparent" : ""}
-            </div>
+            <ul className="mt-2 space-y-1.5">
+              {g.items.map((it) => (
+                <li
+                  key={it}
+                  className="flex gap-1.5 text-[12px] leading-snug text-ink-700"
+                >
+                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-400" />
+                  <span>{it}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {[
-              "format: png · jpeg · webp · avif · auto",
-              "resolution: thumb · small · medium · large · full",
-              "shadow=true",
-              "transparency=true (cut-out)",
-              "ground=true (on the floor)",
-              "mirroring=true (floor reflection)",
-              "ratio: 1:1 · 4:3 · 16:9 · …",
-              "all: every view at once",
-              "CDN cache",
-            ].map((t) => (
-              <span
-                key={t}
-                className="rounded-full border border-hair bg-ink-50 px-2 py-0.5 text-[11px] text-ink-600"
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-          <p className="mt-2 text-[11px] text-ink-400">
-            This demo loads the images live through exactly this API — no photo
-            shoot of your own, no hosting, no manual cut-out. Test/trial keys
-            return the images with a watermark automatically.
-          </p>
-        </div>
-      )}
-    </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1814,40 +1811,18 @@ function SpinSlider({
 }
 
 /** Auswählbarer Showroom mit (zufälligen) Fahrzeugen — hier Baujahr 2010. */
-function ShowroomGrid({
-  cars,
-  current,
-  onPick,
-  loading,
-}: {
-  cars: CarId[];
-  current: CarId;
-  onPick: (c: CarId) => void;
-  loading: boolean;
-}) {
+/** 07 · Beispiel-Fahrzeuge — reines Schaufenster (nicht klickbar). */
+function ShowroomGrid({ cars }: { cars: CarId[] }) {
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <SectionHead
-          n="07"
-          eyebrow="Any vehicle"
-          title="Pick a car — it loads instantly"
-        >
-          Any make, model and year your catalog needs. Choose one to load it
-          into the viewer above.
-        </SectionHead>
-        <span className="shrink-0 text-[12px] text-ink-400">
-          {loading ? "loading…" : "tap to select"}
-        </span>
-      </div>
-      {/* Raster: 5 pro Reihe. */}
+      <SectionHead n="07" eyebrow="Examples" title="A few example vehicles">
+        Just a small sample — any make, model and year is available on request.
+      </SectionHead>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {cars.map((c) => (
           <ShowroomCard
             key={`${c.marke}-${c.modell}-${c.jahr}-${c.body}-${c.trim}`}
             car={c}
-            active={sameCarId(c, current)}
-            onPick={onPick}
           />
         ))}
       </div>
@@ -1855,15 +1830,7 @@ function ShowroomGrid({
   );
 }
 
-function ShowroomCard({
-  car,
-  active,
-  onPick,
-}: {
-  car: CarId;
-  active: boolean;
-  onPick: (c: CarId) => void;
-}) {
+function ShowroomCard({ car }: { car: CarId }) {
   const dt = useContext(DemoTokenCtx);
   const [failed, setFailed] = useState(false);
   const url = carThumbApiUrl(
@@ -1871,38 +1838,18 @@ function ShowroomCard({
     { view: "front_left", width: 260, demoToken: dt },
   );
   return (
-    <button
-      type="button"
-      onClick={() => onPick(car)}
-      aria-pressed={active}
-      className={`group block w-full overflow-hidden rounded-xl border bg-white text-left transition hover:-translate-y-0.5 hover:shadow-sm ${
-        active
-          ? "border-ink-900 ring-1 ring-ink-900"
-          : "border-hair hover:border-ink-200"
-      }`}
-    >
-      <div
-        className="relative flex aspect-[4/3] items-center justify-center p-2.5"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e9edf2 100%)",
-        }}
-      >
+    <div className="overflow-hidden rounded-xl border border-hair bg-white">
+      <div className="relative flex aspect-[4/3] items-center justify-center bg-white p-2.5">
         {url && !failed ? (
           <img
             src={url}
             alt={`${car.marke} ${prettyModel(car.modell)}`}
             loading="lazy"
             onError={() => setFailed(true)}
-            className="max-h-full max-w-full object-contain transition duration-300 group-hover:scale-[1.04]"
+            className="max-h-full max-w-full object-contain"
           />
         ) : (
           <ImageIcon className="h-7 w-7 text-ink-300" />
-        )}
-        {active && (
-          <span className="absolute left-2 top-2 rounded-full bg-ink-900 px-1.5 py-0.5 text-[9px] font-medium text-white">
-            Selected
-          </span>
         )}
       </div>
       <div className="border-t border-hair px-2.5 py-1.5">
@@ -1911,6 +1858,6 @@ function ShowroomCard({
         </div>
         <div className="text-[10.5px] text-ink-400">{car.jahr}</div>
       </div>
-    </button>
+    </div>
   );
 }
