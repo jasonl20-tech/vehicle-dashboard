@@ -178,6 +178,7 @@ type OutOptions = {
   height: number | null;
   watermark: boolean;
   resolution: string;
+  ground: boolean;
 };
 
 const FORMATS: ImgFormat[] = ["png", "jpeg", "webp", "avif"];
@@ -207,13 +208,6 @@ function preloadImage(url: string | null) {
   img.src = url;
 }
 
-/**
- * Alle Demo-Bilder werden grundsätzlich „am Boden verankert" (ground=true)
- * angefragt, damit das Fahrzeug nie schwebt. Einziger Bild-URL-Helfer der Demo.
- */
-const groundThumb: typeof carThumbApiUrl = (car, opts) =>
-  carThumbApiUrl(car, { ...(opts ?? {}), ground: true });
-
 export default function CarDatabaseDemoPage() {
   const [car, setCar] = useState<CarId>(FEATURED[0]);
   const [color, setColor] = useState("white");
@@ -225,6 +219,7 @@ export default function CarDatabaseDemoPage() {
   // Neue API-Ausgabe-Optionen.
   const [format, setFormat] = useState<"png" | "jpeg" | "webp" | "avif">("png");
   const [shadow, setShadow] = useState(false);
+  const [ground, setGround] = useState(false);
   const [width, setWidth] = useState(900);
   const [height, setHeight] = useState<number | null>(null);
   const [resolution, setResolution] = useState("default");
@@ -293,7 +288,7 @@ export default function CarDatabaseDemoPage() {
   useEffect(() => {
     [...exterior, ...interior].forEach((v) =>
       preloadImage(
-        groundThumb(
+        carThumbApiUrl(
           { ...car, farbe: SPIN.includes(v) ? color : "default" },
           { view: v, width: 900 },
         ),
@@ -305,7 +300,7 @@ export default function CarDatabaseDemoPage() {
   useEffect(() => {
     if (!SPIN.includes(view)) return; // Innen-Ansichten sind farb-unabhängig
     colors.forEach((c) =>
-      preloadImage(groundThumb({ ...car, farbe: c }, { view, width: 900 })),
+      preloadImage(carThumbApiUrl({ ...car, farbe: c }, { view, width: 900 })),
     );
   }, [car, colors, view]);
 
@@ -348,6 +343,7 @@ export default function CarDatabaseDemoPage() {
     height,
     watermark,
     resolution,
+    ground,
   };
 
   return (
@@ -457,6 +453,13 @@ export default function CarDatabaseDemoPage() {
                   title="Render a drop shadow from the API"
                 >
                   Shadow
+                </OptToggle>
+                <OptToggle
+                  active={ground}
+                  onClick={() => setGround((g) => !g)}
+                  title="Anchor the vehicle to the ground (instead of floating)"
+                >
+                  Ground
                 </OptToggle>
                 <OptToggle
                   active={effTransparent}
@@ -698,7 +701,7 @@ function Stage({
   const [failed, setFailed] = useState(false);
   // Innenraum-Bilder sind farb-unabhängig → über „default" laden.
   const imgFarbe = SPIN.includes(view) ? color : "default";
-  const url = groundThumb(
+  const url = carThumbApiUrl(
     { ...car, farbe: imgFarbe },
     {
       view,
@@ -708,6 +711,7 @@ function Stage({
       shadow: out.shadow,
       transparent: out.transparent,
       resolution: out.resolution,
+      ground: out.ground,
     },
   );
 
@@ -847,7 +851,7 @@ function ThumbStrip({
   const Thumb = ({ v }: { v: string }) => {
     const [failed, setFailed] = useState(false);
     const farbe = SPIN.includes(v) ? color : "default";
-    const url = groundThumb({ ...car, farbe }, { view: v, width: 150 });
+    const url = carThumbApiUrl({ ...car, farbe }, { view: v, width: 150 });
     return (
       <button
         type="button"
@@ -1008,11 +1012,11 @@ function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
     setPos(Math.min(100, Math.max(0, p)));
   };
 
-  const lUrl = groundThumb(
+  const lUrl = carThumbApiUrl(
     { ...car, farbe: left },
     { view: "front_left", width: 760 },
   );
-  const rUrl = groundThumb(
+  const rUrl = carThumbApiUrl(
     { ...car, farbe: right },
     { view: "front_left", width: 760 },
   );
@@ -1108,7 +1112,7 @@ function ApiPanel({
   if (color && color !== "default") params.push(`color=${color}`);
   if (out.shadow) params.push("shadow=true");
   if (out.transparent) params.push("transparent=true");
-  params.push("ground=true");
+  if (out.ground) params.push("ground=true");
   params.push(`width=${out.width}`);
   if (out.height) params.push(`height=${out.height}`);
   const qs = `?${params.join("&")}`;
@@ -1142,7 +1146,8 @@ function ApiPanel({
               {out.height ? `×${out.height}` : ""} px
               {out.resolution !== "default" ? ` · ${out.resolution}` : ""}
               {out.shadow ? " · shadow" : ""}
-              {out.transparent ? " · transparent" : ""} · grounded
+              {out.transparent ? " · transparent" : ""}
+              {out.ground ? " · grounded" : ""}
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1343,7 +1348,7 @@ function Zoomed({
   onClose: () => void;
 }) {
   const imgFarbe = SPIN.includes(view) ? color : "default";
-  const url = groundThumb(
+  const url = carThumbApiUrl(
     { ...car, farbe: imgFarbe },
     {
       view,
@@ -1352,6 +1357,7 @@ function Zoomed({
       shadow: out.shadow,
       transparent: out.transparent,
       resolution: out.resolution,
+      ground: out.ground,
     },
   );
   useEffect(() => {
@@ -1420,7 +1426,7 @@ function Spin360Section({
   useEffect(() => {
     exterior.forEach((v) =>
       preloadImage(
-        groundThumb({ ...car, farbe: "default" }, { view: v, width: 1100 }),
+        carThumbApiUrl({ ...car, farbe: "default" }, { view: v, width: 1100 }),
       ),
     );
   }, [car, exterior]);
@@ -1429,7 +1435,7 @@ function Spin360Section({
   const safeIdx = len ? Math.min(idx, len - 1) : 0;
   const view = exterior[safeIdx];
   const url = view
-    ? groundThumb({ ...car, farbe: "default" }, { view, width: 1100 })
+    ? carThumbApiUrl({ ...car, farbe: "default" }, { view, width: 1100 })
     : null;
 
   useEffect(() => setFailed(false), [url]);
@@ -1637,7 +1643,7 @@ function ShowroomCard({
   onPick: (c: CarId) => void;
 }) {
   const [failed, setFailed] = useState(false);
-  const url = groundThumb(
+  const url = carThumbApiUrl(
     { ...car, farbe: "default" },
     { view: "front_left", width: 360 },
   );
