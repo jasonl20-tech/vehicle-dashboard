@@ -470,9 +470,6 @@ export default function CarDatabaseDemoPage() {
                 label="Exterior / Interior"
                 value={`${exterior.length} / ${interior.length}`}
               />
-              <Spec label="Formats" value="PNG·JPEG·WebP·AVIF" />
-              <Spec label="Resolutions" value="up to 4K" />
-              <Spec label="Sizes" value="any size" />
             </div>
 
             {/* Erklär-Box: was man hier sieht */}
@@ -499,8 +496,8 @@ export default function CarDatabaseDemoPage() {
         {/* Transparent-Vergleich (Regler) */}
         <TransparentCompare car={car} />
 
-        {/* Farbvergleich (Regler) */}
-        {colors.length >= 2 && <ColorCompare car={car} colors={colors} />}
+        {/* Weitere API-Bildoptionen (Werbung — im Preview nicht sichtbar) */}
+        <OutputOptionsSection />
 
         {/* Aus dem Katalog wählen */}
         <ShowroomGrid
@@ -861,100 +858,6 @@ function TransparentCompare({ car }: { car: CarId }) {
             <ChevronLeft className="h-3 w-3" />
           </span>
         </div>
-        <span className="absolute left-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
-          Background
-        </span>
-        <span className="absolute right-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
-          Transparent
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** Farbvergleich-Regler: zwei Farben des Autos per Schieberegler vergleichen. */
-function ColorCompare({ car, colors }: { car: CarId; colors: string[] }) {
-  const left = colors.includes("white") ? "white" : colors[0];
-  const right = colors.includes("black")
-    ? "black"
-    : colors.find((c) => c !== left) ?? colors[0];
-  const [pos, setPos] = useState(50);
-  const ref = useRef<HTMLDivElement | null>(null);
-  const dragging = useRef(false);
-
-  const move = (clientX: number) => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const p = ((clientX - r.left) / r.width) * 100;
-    setPos(Math.min(100, Math.max(0, p)));
-  };
-
-  const lUrl = carThumbApiUrl(
-    { ...car, farbe: left },
-    { view: "front_left", width: 760 },
-  );
-  const rUrl = carThumbApiUrl(
-    { ...car, farbe: right },
-    { view: "front_left", width: 760 },
-  );
-
-  return (
-    <div className="mt-8">
-      <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-[13px] font-semibold text-ink-900">
-          Color comparison
-        </h3>
-        <span className="text-[11px] text-ink-400">
-          {colorLabel(left)} ↔ {colorLabel(right)} · drag the slider
-        </span>
-      </div>
-      <div
-        ref={ref}
-        className="relative aspect-[16/9] w-full select-none overflow-hidden rounded-xl border border-hair"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 60%, #e6eaf0 100%)",
-        }}
-        onPointerDown={(e) => {
-          dragging.current = true;
-          move(e.clientX);
-        }}
-        onPointerMove={(e) => dragging.current && move(e.clientX)}
-        onPointerUp={() => (dragging.current = false)}
-        onPointerLeave={() => (dragging.current = false)}
-      >
-        {rUrl && (
-          <img
-            src={rUrl}
-            alt={colorLabel(right)}
-            draggable={false}
-            className="absolute inset-0 h-full w-full object-contain p-6"
-          />
-        )}
-        {lUrl && (
-          <img
-            src={lUrl}
-            alt={colorLabel(left)}
-            draggable={false}
-            className="absolute inset-0 h-full w-full object-contain p-6"
-            style={{ clipPath: `inset(0 ${100 - pos}% 0 0)` }}
-          />
-        )}
-        <div
-          className="absolute inset-y-0 w-0.5 bg-white shadow"
-          style={{ left: `${pos}%` }}
-        >
-          <span className="absolute top-1/2 left-1/2 grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-ink-700 shadow">
-            <ChevronLeft className="h-3 w-3" />
-          </span>
-        </div>
-        <span className="absolute left-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
-          {colorLabel(left)}
-        </span>
-        <span className="absolute right-3 top-3 rounded bg-ink-900/70 px-2 py-0.5 text-[10px] font-medium text-white">
-          {colorLabel(right)}
-        </span>
       </div>
     </div>
   );
@@ -1059,6 +962,68 @@ function SgCard({
         {param}
       </div>
     </div>
+  );
+}
+
+/**
+ * Eigener Abschnitt, der API-Bildoptionen bewirbt, die im kleinen Preview NICHT
+ * sichtbar werden (Format, Auflösung, Maße) — daher als klare Info statt Auswahl.
+ */
+function OutputOptionsSection() {
+  const items = [
+    {
+      icon: ImageIcon,
+      title: "4 file formats",
+      desc: "PNG · JPEG · WebP · AVIF — pick what your stack needs.",
+    },
+    {
+      icon: Sparkles,
+      title: "Up to 4K resolution",
+      desc: "Default · 1K · 2K · 4K — crisp at any size.",
+    },
+    {
+      icon: Maximize2,
+      title: "Any dimensions",
+      desc: "Request an exact width & height in pixels.",
+    },
+  ];
+  return (
+    <section className="mt-10 border-t border-hair pt-8">
+      <div className="rounded-2xl border border-hair bg-ink-50/60 p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-ink-900 text-white">
+            <Code2 className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[17px] font-semibold tracking-tight text-ink-900">
+              More output options
+            </h3>
+            <p className="text-[12px] text-ink-500">
+              Not visible in this small preview — but available for every image
+              via the API.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {items.map((it) => (
+            <div
+              key={it.title}
+              className="rounded-xl border border-hair bg-white p-4"
+            >
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600/10 text-brand-600">
+                <it.icon className="h-4 w-4" />
+              </span>
+              <div className="mt-2 text-[13px] font-semibold text-ink-900">
+                {it.title}
+              </div>
+              <div className="mt-0.5 text-[11.5px] leading-relaxed text-ink-500">
+                {it.desc}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
