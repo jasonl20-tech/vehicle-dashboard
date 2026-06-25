@@ -257,10 +257,16 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
     // Explizite Maße nur senden, wenn eine Höhe angefragt wurde.
     (effHeight ? `&width=${effWidth}&height=${effHeight}` : "");
 
+  // Mirroring (Boden-Reflexion) ist API-seitig hinter dem Key-Recht
+  // `allow_mirroring` gesperrt → für Mirroring-Anfragen den Spezial-Key nutzen
+  // (Fallback: Normal-Key, dann bleibt Mirroring allerdings wirkungslos).
+  const fetchKey =
+    mirroring && env.CAR_DB_MIRRORING_KEY ? env.CAR_DB_MIRRORING_KEY : apiKey;
+
   // 1) Kunden-API fragen → signierte image_url holen.
   let imageUrl: string | null = null;
   try {
-    const r = await fetch(apiUrl, { headers: { "x-api-key": apiKey } });
+    const r = await fetch(apiUrl, { headers: { "x-api-key": fetchKey } });
     if (r.ok) {
       const data = (await r.json()) as unknown;
       const o = (Array.isArray(data) ? data[0] : data) as

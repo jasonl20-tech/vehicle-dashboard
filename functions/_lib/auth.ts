@@ -134,6 +134,13 @@ export interface AuthEnv {
    */
   CAR_DB_API_KEY?: string;
   /**
+   * Optionaler Spezial-Key mit `allow_mirroring: true` — wird NUR für Mirroring-
+   * Anfragen (Boden-Reflexion) genutzt. Pages-Env-Variable `CAR_DB_MIRRORING_KEY`.
+   * Fehlt er, fällt der Proxy auf `CAR_DB_API_KEY` zurück (dann bleibt Mirroring
+   * wirkungslos, weil dieser Key die Berechtigung nicht hat).
+   */
+  CAR_DB_MIRRORING_KEY?: string;
+  /**
    * D1: Konfiguration (`settings`-Tabelle, u. a. `controll_buttons`). Binding `configs` → `env.configs`.
    */
   configs?: D1Database;
