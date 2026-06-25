@@ -22,6 +22,8 @@ const PRE_SESSION_PATH = new Set<string>([
   //    Demo-Token mit harter Scope-Prüfung) — daher hier von der Session-Pflicht frei.
   "/api/databases/demo-link-public",
   "/api/databases/car-image",
+  // Reine Marketing-Daten (Markenliste) — auch im öffentlichen Demo-Link.
+  "/api/databases/car-brands",
 ]);
 
 /** Nur Session, keine Routen-Pflicht (lädt u. a. erlaubte Pfade fürs Frontend). */

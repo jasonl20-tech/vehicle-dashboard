@@ -7,6 +7,10 @@ export const CAR_DATABASE_API = "/api/databases/car-database";
 /** Server-Proxy, der das Thumbnail über die Kunden-API holt + verkleinert ausliefert. */
 export const CAR_IMAGE_PROXY = "/api/databases/car-image";
 
+/** Server-Proxy für die Markenliste (`/api/brands` der Kunden-API, gecacht). */
+export const CAR_BRANDS_API = "/api/databases/car-brands";
+export type BrandsResponse = { brands: string[] };
+
 /**
  * Thumbnail-URL für ein Auto. Zeigt auf den Dashboard-Proxy
  * (`/api/databases/car-image`), der das Bild über die bestehende Kunden-API

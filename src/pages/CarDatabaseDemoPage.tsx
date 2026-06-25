@@ -24,10 +24,12 @@ import {
 } from "react";
 import { useApi } from "../lib/customerApi";
 import {
+  CAR_BRANDS_API,
   carDatabaseDetailUrl,
   carDatabaseGalleryUrl,
   carDatabaseListUrl,
   carThumbApiUrl,
+  type BrandsResponse,
   type CarDetailResponse,
   type CarListResponse,
   type CarRow,
@@ -148,18 +150,23 @@ function SectionHead({
   children?: ReactNode;
 }) {
   return (
-    <div className="mb-4 max-w-2xl">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">
-        {n} · {eyebrow}
+    <div className="mb-5 flex items-start gap-3 sm:gap-4">
+      <div className="select-none font-display text-[30px] font-bold leading-none text-ink-200 sm:text-[38px]">
+        {n}
       </div>
-      <h3 className="mt-1 text-[19px] font-semibold tracking-tight text-ink-900 sm:text-[21px]">
-        {title}
-      </h3>
-      {children && (
-        <p className="mt-1.5 text-[13px] leading-relaxed text-ink-500">
-          {children}
-        </p>
-      )}
+      <div className="max-w-2xl">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">
+          {eyebrow}
+        </div>
+        <h3 className="mt-0.5 font-display text-[20px] font-semibold leading-tight tracking-tight text-ink-900 sm:text-[24px]">
+          {title}
+        </h3>
+        {children && (
+          <p className="mt-1.5 text-[14px] leading-relaxed text-ink-700">
+            {children}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -348,6 +355,11 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
     }));
   }, [showroomApi.data, isDemo, demo]);
 
+  // Angebotene Marken (live aus der Kunden-API, öffentlich gecacht) — auch im
+  // Demo-Link verfügbar.
+  const brandsApi = useApi<BrandsResponse>(CAR_BRANDS_API);
+  const brands = brandsApi.data?.brands ?? [];
+
   const pick = (c: CarId) => {
     setCar(c);
     setPickerOpen(false);
@@ -398,21 +410,35 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
       </header>
 
       <div className="bg-paper px-4 py-5 sm:px-6">
-        {/* Intro — selbsterklärender Einstieg für Kunden */}
-        <div className="mb-6">
+        {/* Intro — Titel-„Slide" */}
+        <div className="mb-7">
           <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">
-            What Vehicleimagery does
+            Vehicleimagery · live product demo
           </div>
-          <h2 className="mt-1 font-display text-[24px] font-semibold leading-tight tracking-tight text-ink-900 sm:text-[28px]">
-            Every vehicle. Every color. Every angle — from one API.
+          <h2 className="mt-1.5 font-display text-[26px] font-bold leading-[1.1] tracking-tight text-ink-900 sm:text-[34px]">
+            Studio-quality car images for anything — from one API.
           </h2>
-          <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-600">
-            Studio-quality car images on demand — no photo shoot, no studio, no
-            manual editing. Wherever you need vehicle images — listings,
-            configurators, ads, marketplaces — you request a car and get a clean,
-            color-accurate image in seconds. Scroll through to see what it can
-            do; you can try every part yourself.
+          <p className="mt-2.5 max-w-2xl text-[15px] leading-relaxed text-ink-700">
+            Any brand, any color, any angle — generated on demand. No photo
+            shoot, no studio, no editing. Everything below is live and
+            interactive: scroll through and try it yourself.
           </p>
+          <div className="mt-3.5 flex flex-wrap gap-2">
+            {[
+              "Any brand",
+              "Every color",
+              "8 angles + interior",
+              "Cut-out · shadow · reflection",
+              "Ready in seconds",
+            ].map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-hair bg-white px-3 py-1 text-[12px] font-medium text-ink-700"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -544,7 +570,10 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
         {/* 05 · Mirroring — normal vs. gespiegelt */}
         <MirrorSection car={car} exterior={exterior} />
 
-        {/* 06 · Aus dem Katalog wählen */}
+        {/* 06 · Marken-Übersicht (live) */}
+        {brands.length > 0 && <BrandsSection brands={brands} />}
+
+        {/* 07 · Aus dem Katalog wählen */}
         <ShowroomGrid
           cars={showroom2010}
           current={car}
@@ -1095,9 +1124,11 @@ function MirrorSection({
   const v = exterior.includes("front_left")
     ? "front_left"
     : exterior[0] ?? "front_left";
+  // „Ohne" = das Standardbild (mit Hintergrund), NICHT der Freisteller — der
+  // transparente Look ist oben schon zu sehen. „Mit" = Boden-Reflexion.
   const normalUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, transparent: true, demoToken: dt },
+    { view: v, width: 480, demoToken: dt },
   );
   const mirrorUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
@@ -1173,6 +1204,40 @@ function CompareTile({
         {caption}
       </div>
     </div>
+  );
+}
+
+/** 06 · Marken-Übersicht — live aus der Kunden-API. */
+function BrandsSection({ brands }: { brands: string[] }) {
+  const MAX = 60;
+  const shown = brands.slice(0, MAX);
+  const extra = brands.length - shown.length;
+  return (
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <SectionHead
+        n="06"
+        eyebrow="Every brand"
+        title={`${brands.length} brands — and counting`}
+      >
+        From mainstream to premium: if it's on the road, we most likely cover it
+        — and we add new brands continuously.
+      </SectionHead>
+      <div className="flex flex-wrap gap-2">
+        {shown.map((b) => (
+          <span
+            key={b}
+            className="rounded-lg border border-hair bg-ink-50 px-3 py-1.5 text-[12.5px] font-medium text-ink-700"
+          >
+            {prettyModel(b)}
+          </span>
+        ))}
+        {extra > 0 && (
+          <span className="rounded-lg border border-dashed border-hair px-3 py-1.5 text-[12.5px] font-medium text-ink-400">
+            +{extra} more
+          </span>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1636,10 +1701,9 @@ function Spin360Section({
             eyebrow="Every angle"
             title="Walk around the car — a 360°-style view"
           >
-            Customers often ask: do you have a 360° view? Yes and no — we deliver
-            all eight exterior angles (plus interior), and from them you can
-            build a smooth walk-around. It's not a true continuous 360°, but it
-            gives the same effect. Drag, use the arrows, or pull the slider.
+            “Do you have a 360° view?” Yes and no — we deliver all eight exterior
+            angles plus interior, and you can spin them into a smooth
+            walk-around. Not a true endless 360°, but the same effect.
           </SectionHead>
           <span className="shrink-0 rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
             {VIEW_LABEL[view] ?? view}
@@ -1746,7 +1810,7 @@ function ShowroomGrid({
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <SectionHead
-          n="06"
+          n="07"
           eyebrow="Any vehicle"
           title="Pick a car — it loads instantly"
         >
