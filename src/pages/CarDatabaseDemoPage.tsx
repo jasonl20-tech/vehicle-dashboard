@@ -1124,11 +1124,11 @@ function MirrorSection({
   const v = exterior.includes("front_left")
     ? "front_left"
     : exterior[0] ?? "front_left";
-  // „Ohne" = das Standardbild (mit Hintergrund), NICHT der Freisteller — der
-  // transparente Look ist oben schon zu sehen. „Mit" = Boden-Reflexion.
+  // Beide Seiten auf reinem Weiß: „ohne" = Auto auf Weiß, „mit" = Boden-
+  // Reflexion. (Die Reflexion braucht technisch die transparente Variante.)
   const normalUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, demoToken: dt },
+    { view: v, width: 480, transparent: true, demoToken: dt },
   );
   const mirrorUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
@@ -1179,10 +1179,7 @@ function CompareTile({
   useEffect(() => setFailed(false), [url]);
   return (
     <div>
-      <div
-        className="relative aspect-[4/3] overflow-hidden rounded-xl border border-hair"
-        style={SOFT_BG}
-      >
+      <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-hair bg-white">
         <div className="absolute inset-0 flex items-center justify-center p-6">
           {url && !failed ? (
             <img
@@ -1207,34 +1204,56 @@ function CompareTile({
   );
 }
 
-/** 06 · Marken-Übersicht — live aus der Kunden-API. */
+/** Ein Marken-Logo (von unserer Website /manufactures/{slug}_logo.svg) mit
+ *  Text-Fallback, falls für die Marke (noch) kein Logo existiert. */
+function BrandLogo({ brand }: { brand: string }) {
+  const [failed, setFailed] = useState(false);
+  const src = `https://vehicleimagery.com/manufactures/${brand.toLowerCase()}_logo.svg`;
+  return (
+    <div
+      className="flex h-16 items-center justify-center rounded-xl border border-hair bg-white p-3"
+      title={prettyModel(brand)}
+    >
+      {failed ? (
+        <span className="text-center text-[11.5px] font-medium leading-tight text-ink-600">
+          {prettyModel(brand)}
+        </span>
+      ) : (
+        <img
+          src={src}
+          alt={prettyModel(brand)}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="max-h-9 max-w-[82%] object-contain opacity-75 grayscale transition duration-200 hover:opacity-100 hover:grayscale-0"
+        />
+      )}
+    </div>
+  );
+}
+
+/** 06 · Coverage — Marken-Logo-Wall (live aus der Kunden-API, Logos von der Website). */
 function BrandsSection({ brands }: { brands: string[] }) {
-  const MAX = 60;
+  const MAX = 48;
   const shown = brands.slice(0, MAX);
   const extra = brands.length - shown.length;
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <SectionHead
         n="06"
-        eyebrow="Every brand"
+        eyebrow="Coverage"
         title={`${brands.length} brands — and counting`}
       >
-        From mainstream to premium: if it's on the road, we most likely cover it
-        — and we add new brands continuously.
+        From mainstream to premium and beyond — if it's on the road, we most
+        likely cover it. New brands are added continuously.
       </SectionHead>
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
         {shown.map((b) => (
-          <span
-            key={b}
-            className="rounded-lg border border-hair bg-ink-50 px-3 py-1.5 text-[12.5px] font-medium text-ink-700"
-          >
-            {prettyModel(b)}
-          </span>
+          <BrandLogo key={b} brand={b} />
         ))}
         {extra > 0 && (
-          <span className="rounded-lg border border-dashed border-hair px-3 py-1.5 text-[12.5px] font-medium text-ink-400">
+          <div className="flex h-16 items-center justify-center rounded-xl border border-dashed border-hair text-[12px] font-medium text-ink-400">
             +{extra} more
-          </span>
+          </div>
         )}
       </div>
     </section>
