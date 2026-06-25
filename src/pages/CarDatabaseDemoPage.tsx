@@ -1,5 +1,4 @@
 import {
-  Car,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -7,7 +6,6 @@ import {
   ImageIcon,
   Layers,
   Maximize2,
-  Minimize2,
   Palette,
   Rotate3d,
   Search,
@@ -17,6 +15,7 @@ import {
 import {
   createContext,
   type CSSProperties,
+  type ReactNode,
   useContext,
   useEffect,
   useMemo,
@@ -132,6 +131,39 @@ function prettyModel(s: string): string {
   return s.replace(/_/g, " ");
 }
 
+/**
+ * Einheitlicher Abschnitts-Kopf (Nummer · Eyebrow · Titel · Kundentext). Gibt der
+ * Demo den Charakter einer klaren, selbsterklärenden Präsentation statt einer
+ * überladenen Webseite.
+ */
+function SectionHead({
+  n,
+  eyebrow,
+  title,
+  children,
+}: {
+  n: string;
+  eyebrow: string;
+  title: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="mb-4 max-w-2xl">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">
+        {n} · {eyebrow}
+      </div>
+      <h3 className="mt-1 text-[19px] font-semibold tracking-tight text-ink-900 sm:text-[21px]">
+        {title}
+      </h3>
+      {children && (
+        <p className="mt-1.5 text-[13px] leading-relaxed text-ink-500">
+          {children}
+        </p>
+      )}
+    </div>
+  );
+}
+
 const CHECKER: CSSProperties = {
   backgroundColor: "#fff",
   backgroundImage:
@@ -196,7 +228,6 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
   // Schalter, der ausschließlich die Hero betrifft.
   const bg: BgMode = "showroom";
   const [transparent, setTransparent] = useState(false);
-  const [presenting, setPresenting] = useState(false);
   const [showApi, setShowApi] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -267,7 +298,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
       preloadImage(
         carThumbApiUrl(
           { ...car, farbe: SPIN.includes(v) ? color : "default" },
-          { view: v, width: 900, demoToken },
+          { view: v, width: 720, demoToken },
         ),
       ),
     );
@@ -278,7 +309,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
     if (!SPIN.includes(view)) return; // Innen-Ansichten sind farb-unabhängig
     colors.forEach((c) =>
       preloadImage(
-        carThumbApiUrl({ ...car, farbe: c }, { view, width: 900, demoToken }),
+        carThumbApiUrl({ ...car, farbe: c }, { view, width: 720, demoToken }),
       ),
     );
   }, [car, colors, view, demoToken]);
@@ -327,20 +358,14 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
   const out: OutOptions = {
     format: "png",
     transparent,
-    width: 900,
+    width: 720,
     height: null,
     resolution: "default",
   };
 
   return (
     <DemoTokenCtx.Provider value={demoToken}>
-    <div
-      className={
-        presenting
-          ? "fixed inset-0 z-50 overflow-y-auto bg-white"
-          : "overflow-hidden rounded-xl border border-hair"
-      }
-    >
+    <div className="overflow-hidden rounded-2xl border border-hair bg-white">
       {/* Demo-Header (Vehicleimagery, kein fiktiver Händler) */}
       <header className="flex items-center justify-between gap-3 border-b border-hair bg-white px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2.5">
@@ -358,6 +383,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* „Choose vehicle" nur intern (eingeloggt) — im Kunden-Link ausgeblendet. */}
           {!isDemo && (
             <button
               type="button"
@@ -368,34 +394,24 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
               Choose vehicle
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setPresenting((p) => !p)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1.5 text-[12px] text-ink-600 hover:bg-ink-50"
-            title={presenting ? "Exit presentation" : "Presentation mode"}
-          >
-            {presenting ? (
-              <Minimize2 className="h-3.5 w-3.5" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
-            )}
-            <span className="hidden sm:inline">
-              {presenting ? "Exit" : "Present"}
-            </span>
-          </button>
         </div>
       </header>
 
       <div className="bg-paper px-4 py-5 sm:px-6">
-        {/* Demo-Intro statt Händler-Breadcrumb */}
-        <div className="mb-5">
-          <h2 className="font-display text-[22px] font-semibold leading-tight tracking-tight text-ink-900 sm:text-[26px]">
-            Every vehicle. Every color. Every angle.
+        {/* Intro — selbsterklärender Einstieg für Kunden */}
+        <div className="mb-6">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">
+            What Vehicleimagery does
+          </div>
+          <h2 className="mt-1 font-display text-[24px] font-semibold leading-tight tracking-tight text-ink-900 sm:text-[28px]">
+            Every vehicle. Every color. Every angle — from one API.
           </h2>
-          <p className="mt-1.5 max-w-2xl text-[13px] leading-relaxed text-ink-500">
-            Every image is loaded live from a single API — in studio quality,
-            color-accurate and ready to cut out. Pick a vehicle, color, view and
-            background and watch the image arrive in real time.
+          <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-ink-600">
+            Studio-quality car images on demand — no photo shoot, no studio, no
+            manual editing. Wherever you need vehicle images — listings,
+            configurators, ads, marketplaces — you request a car and get a clean,
+            color-accurate image in seconds. Scroll through to see what it can
+            do; you can try every part yourself.
           </p>
         </div>
 
@@ -510,14 +526,17 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
         {/* Weitere API-Bildoptionen (Werbung) — direkt unter dem ersten Fahrzeug */}
         <OutputOptionsSection />
 
-        {/* 360°-Rundumblick (eigener Abschnitt) — immer Standardfarbe */}
+        {/* 01 · Alle Ansichten / 360 */}
         <Spin360Section car={car} exterior={exterior} bg={bg} />
 
-        {/* Shadow & Ground (eigener Abschnitt) */}
-        <ShadowGroundSection car={car} exterior={exterior} />
-
-        {/* Transparent-Vergleich (Regler) */}
+        {/* 02 · Transparenter Freisteller (Regler) */}
         <TransparentCompare car={car} />
+
+        {/* 03 · Schatten — alle Ansichten, umschaltbar */}
+        <ShadowSection car={car} exterior={exterior} />
+
+        {/* 04 · Ground — mit/ohne, umschaltbar */}
+        <GroundSection car={car} exterior={exterior} />
 
         {/* Aus dem Katalog wählen */}
         <ShowroomGrid
@@ -749,7 +768,7 @@ function ThumbStrip({
     const farbe = SPIN.includes(v) ? color : "default";
     const url = carThumbApiUrl(
       { ...car, farbe },
-      { view: v, width: 150, demoToken: dt },
+      { view: v, width: 110, demoToken: dt },
     );
     return (
       <button
@@ -823,21 +842,23 @@ function TransparentCompare({ car }: { car: CarId }) {
   // Gleiche Ansicht/Farbe; links mit Hintergrund, rechts echtes Freisteller-PNG.
   const bgUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 760, demoToken: dt },
+    { view: "front_left", width: 560, demoToken: dt },
   );
   const trpUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 760, transparent: true, demoToken: dt },
+    { view: "front_left", width: 560, transparent: true, demoToken: dt },
   );
 
   return (
-    <div className="mt-8">
-      <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-[13px] font-semibold text-ink-900">Transparent</h3>
-        <span className="text-[11px] text-ink-400">
-          With background ↔ transparent cut-out · drag the slider
-        </span>
-      </div>
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <SectionHead
+        n="02"
+        eyebrow="Transparent cut-out"
+        title="A real transparent PNG — background removed"
+      >
+        Need the car without a background? The API returns a true cut-out you can
+        drop onto any layout or color. Drag the slider to compare.
+      </SectionHead>
       <div
         ref={ref}
         className="relative aspect-[16/9] w-full select-none overflow-hidden rounded-xl border border-hair"
@@ -887,12 +908,50 @@ function TransparentCompare({ car }: { car: CarId }) {
           </span>
         </div>
       </div>
+    </section>
+  );
+}
+
+/** Umschalter (An/Aus) als segmentierte Pille — für die Shadow/Ground-Abschnitte. */
+function Switch({
+  on,
+  onToggle,
+  labelOn,
+  labelOff,
+}: {
+  on: boolean;
+  onToggle: () => void;
+  labelOn: string;
+  labelOff: string;
+}) {
+  const base = "rounded-md px-3 py-1.5 text-[12px] font-medium transition";
+  return (
+    <div className="inline-flex shrink-0 rounded-lg border border-hair bg-white p-0.5">
+      <button
+        type="button"
+        onClick={() => !on && onToggle()}
+        className={`${base} ${on ? "bg-ink-900 text-white" : "text-ink-500 hover:text-ink-900"}`}
+      >
+        {labelOn}
+      </button>
+      <button
+        type="button"
+        onClick={() => on && onToggle()}
+        className={`${base} ${!on ? "bg-ink-900 text-white" : "text-ink-500 hover:text-ink-900"}`}
+      >
+        {labelOff}
+      </button>
     </div>
   );
 }
 
-/** Eigener Abschnitt: zwei Bilder nebeneinander — links mit Schatten, rechts mit Ground. */
-function ShadowGroundSection({
+const SOFT_BG: CSSProperties = {
+  background:
+    "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 55%, #e6eaf0 100%)",
+};
+
+/** 03 · Schatten — alle Ansichten, per Schalter mit/ohne Schatten. */
+function ShadowSection({
   car,
   exterior,
 }: {
@@ -900,81 +959,133 @@ function ShadowGroundSection({
   exterior: string[];
 }) {
   const dt = useContext(DemoTokenCtx);
-  const v = exterior.includes("front_left")
-    ? "front_left"
-    : exterior[0] ?? "front_left";
-  const shadowUrl = carThumbApiUrl(
-    { ...car, farbe: "default" },
-    { view: v, width: 760, shadow: true, demoToken: dt },
-  );
-  const groundUrl = carThumbApiUrl(
-    { ...car, farbe: "default" },
-    { view: v, width: 760, ground: true, demoToken: dt },
-  );
-
+  const [on, setOn] = useState(true);
+  const views = exterior.length ? exterior : SPIN;
   return (
-    <section className="mt-10 border-t border-hair pt-8">
-      <div className="rounded-2xl border border-hair bg-ink-50/60 p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-ink-900 text-white">
-            <Sparkles className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <h3 className="text-[17px] font-semibold tracking-tight text-ink-900">
-              Shadow &amp; ground
-            </h3>
-            <p className="truncate text-[12px] text-ink-500">
-              Two API options side by side — drop shadow vs. anchored to the
-              ground.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <SgCard
-            label="Shadow"
-            param="shadow=true"
-            url={shadowUrl}
-            alt={`${car.marke} ${prettyModel(car.modell)} with shadow`}
-          />
-          <SgCard
-            label="Ground"
-            param="ground=true"
-            url={groundUrl}
-            alt={`${car.marke} ${prettyModel(car.modell)} on the ground`}
-          />
-        </div>
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionHead
+          n="03"
+          eyebrow="Realistic shadow"
+          title="A soft drop shadow on every angle"
+        >
+          Add a natural, photographed-looking shadow under the car — across all
+          angles at once. Flip it off to see the difference.
+        </SectionHead>
+        <Switch
+          on={on}
+          onToggle={() => setOn((v) => !v)}
+          labelOn="Shadow on"
+          labelOff="Shadow off"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {views.map((v) => (
+          <ShadowTile key={v} car={car} view={v} shadow={on} dt={dt} />
+        ))}
       </div>
     </section>
   );
 }
 
-function SgCard({
-  label,
-  param,
-  url,
-  alt,
+function ShadowTile({
+  car,
+  view,
+  shadow,
+  dt,
 }: {
-  label: string;
-  param: string;
-  url: string | null;
-  alt: string;
+  car: CarId;
+  view: string;
+  shadow: boolean;
+  dt: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const url = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view, width: 300, shadow, demoToken: dt },
+  );
   useEffect(() => setFailed(false), [url]);
   return (
-    <div>
+    <div
+      className="relative aspect-[4/3] overflow-hidden rounded-lg border border-hair"
+      style={SOFT_BG}
+    >
+      <div className="absolute inset-0 flex items-center justify-center p-3">
+        {url && !failed ? (
+          <img
+            src={url}
+            alt={`${prettyModel(car.modell)} ${VIEW_LABEL[view] ?? view}`}
+            loading="lazy"
+            draggable={false}
+            onError={() => setFailed(true)}
+            className="max-h-full max-w-full object-contain"
+          />
+        ) : (
+          <ImageIcon className="h-6 w-6 text-ink-300" />
+        )}
+      </div>
+      <span className="absolute left-2 top-2 rounded bg-ink-900/70 px-1.5 py-0.5 text-[9.5px] font-medium text-white">
+        {VIEW_LABEL[view] ?? view}
+      </span>
+    </div>
+  );
+}
+
+/** 04 · Ground — dasselbe Bild mit/ohne Boden-Verankerung (Schalter). */
+function GroundSection({
+  car,
+  exterior,
+}: {
+  car: CarId;
+  exterior: string[];
+}) {
+  const dt = useContext(DemoTokenCtx);
+  const [on, setOn] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const v = exterior.includes("front_left")
+    ? "front_left"
+    : exterior[0] ?? "front_left";
+  const url = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: v, width: 600, ground: on, demoToken: dt },
+  );
+  useEffect(() => setFailed(false), [url]);
+  // Gegenzustand vorladen → Umschalten ist sofort sichtbar.
+  useEffect(() => {
+    preloadImage(
+      carThumbApiUrl(
+        { ...car, farbe: "default" },
+        { view: v, width: 600, ground: !on, demoToken: dt },
+      ),
+    );
+  }, [car, v, on, dt]);
+  return (
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionHead
+          n="04"
+          eyebrow="Grounded, not floating"
+          title="Every car sits firmly on the ground"
+        >
+          With grounding on, the wheels sit cleanly on the floor — no floating,
+          no odd perspective. Toggle it to watch the car settle.
+        </SectionHead>
+        <Switch
+          on={on}
+          onToggle={() => setOn((v) => !v)}
+          labelOn="Ground on"
+          labelOff="Ground off"
+        />
+      </div>
       <div
-        className="relative aspect-[4/3] overflow-hidden rounded-xl border border-hair"
-        style={{
-          background:
-            "radial-gradient(120% 90% at 50% 15%, #ffffff 0%, #f3f5f8 55%, #e6eaf0 100%)",
-        }}
+        className="relative mx-auto aspect-[16/10] w-full max-w-2xl overflow-hidden rounded-xl border border-hair"
+        style={SOFT_BG}
       >
-        <div className="absolute inset-0 flex select-none items-center justify-center p-6">
+        <div className="absolute inset-0 flex items-center justify-center p-6">
           {url && !failed ? (
             <img
               src={url}
-              alt={alt}
+              alt={`${prettyModel(car.modell)} ${on ? "on the ground" : "floating"}`}
               draggable={false}
               onError={() => setFailed(true)}
               className="max-h-full max-w-full object-contain"
@@ -983,14 +1094,11 @@ function SgCard({
             <ImageIcon className="h-10 w-10 text-ink-300" />
           )}
         </div>
-        <span className="absolute left-3 top-3 rounded-full bg-ink-900/80 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur">
-          {label}
+        <span className="absolute left-3 top-3 rounded-full bg-ink-900/80 px-2.5 py-0.5 text-[11px] font-medium text-white">
+          {on ? "With ground" : "Without ground"}
         </span>
       </div>
-      <div className="mt-1.5 text-center font-mono text-[11px] text-ink-400">
-        {param}
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -1410,7 +1518,7 @@ function Spin360Section({
       preloadImage(
         carThumbApiUrl(
           { ...car, farbe: "default" },
-          { view: v, width: 1100, demoToken: dt },
+          { view: v, width: 720, demoToken: dt },
         ),
       ),
     );
@@ -1422,7 +1530,7 @@ function Spin360Section({
   const url = view
     ? carThumbApiUrl(
         { ...car, farbe: "default" },
-        { view, width: 1100, demoToken: dt },
+        { view, width: 720, demoToken: dt },
       )
     : null;
 
@@ -1448,22 +1556,17 @@ function Spin360Section({
   if (len < 2) return null;
 
   return (
-    <section className="mt-10 border-t border-hair pt-8">
-      <div className="rounded-2xl border border-hair bg-ink-50/60 p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-ink-900 text-white">
-            <Rotate3d className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <h3 className="text-[17px] font-semibold tracking-tight text-ink-900">
-              All angles
-            </h3>
-            <p className="truncate text-[12px] text-ink-500">
-              Drag, arrows or slider — turn {car.marke}{" "}
-              {prettyModel(car.modell)} through every angle.
-            </p>
-          </div>
-          <span className="ml-auto rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <SectionHead
+            n="01"
+            eyebrow="Every angle"
+            title="Walk around the car — every angle"
+          >
+            Eight studio angles plus interior, straight from the API. Drag, use
+            the arrows, or pull the slider below.
+          </SectionHead>
+          <span className="shrink-0 rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
             {VIEW_LABEL[view] ?? view}
           </span>
         </div>
@@ -1502,7 +1605,6 @@ function Spin360Section({
             onSpin={setSpin}
           />
         </div>
-      </div>
     </section>
   );
 }
@@ -1567,20 +1669,22 @@ function ShowroomGrid({
   loading: boolean;
 }) {
   return (
-    <section className="mt-8">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Car className="h-4 w-4 text-brand-600" />
-          <h3 className="text-[15px] font-semibold tracking-tight text-ink-900">
-            Overview · {cars.length} vehicles (model year 2010)
-          </h3>
-        </div>
-        <span className="text-[12px] text-ink-400">
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <SectionHead
+          n="05"
+          eyebrow="Any vehicle"
+          title="Pick a car — it loads instantly"
+        >
+          Any make, model and year your catalog needs. Choose one to load it
+          into the viewer above.
+        </SectionHead>
+        <span className="shrink-0 text-[12px] text-ink-400">
           {loading ? "loading…" : "tap to select"}
         </span>
       </div>
-      {/* Raster: 5 pro Reihe → 10 Fahrzeuge in zwei Reihen. */}
-      <div className="grid grid-cols-5 gap-3">
+      {/* Raster: 5 pro Reihe. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {cars.map((c) => (
           <ShowroomCard
             key={`${c.marke}-${c.modell}-${c.jahr}-${c.body}-${c.trim}`}
@@ -1607,7 +1711,7 @@ function ShowroomCard({
   const [failed, setFailed] = useState(false);
   const url = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 360, demoToken: dt },
+    { view: "front_left", width: 260, demoToken: dt },
   );
   return (
     <button
