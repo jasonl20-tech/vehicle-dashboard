@@ -24,18 +24,21 @@ export const STANDARD_FEATURED: DemoCar[] = [
   { marke: "BMW", modell: "iX", jahr: 2021, body: "Basis", trim: "base" },
 ];
 
-/** Showroom „Baujahr 2010" (fester Fallback-Satz). */
+/**
+ * Fester Satz von 10 Beispiel-Fahrzeugen — alle gegen die Kunden-API verifiziert
+ * (liefern ein Bild). Bewusst ohne Überschneidung mit STANDARD_FEATURED.
+ */
 export const STANDARD_SHOWROOM: DemoCar[] = [
   { marke: "Volkswagen", modell: "Golf", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "BMW", modell: "5er", jahr: 2010, body: "Basis", trim: "base" },
   { marke: "Audi", modell: "A4", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Mercedes-Benz", modell: "C_Klasse", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Ford", modell: "Focus", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Opel", modell: "Astra", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Toyota", modell: "Corolla", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Volkswagen", modell: "Passat", jahr: 2010, body: "Basis", trim: "base" },
   { marke: "Audi", modell: "A6", jahr: 2010, body: "Basis", trim: "base" },
   { marke: "BMW", modell: "X5", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Tesla", modell: "Model_3", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Tesla", modell: "Model_Y", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Volvo", modell: "XC60", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Volkswagen", modell: "Tiguan", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "BMW", modell: "X1", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Audi", modell: "Q3", jahr: 2021, body: "Basis", trim: "base" },
 ];
 
 /**

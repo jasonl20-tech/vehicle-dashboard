@@ -514,12 +514,12 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
           </aside>
         </div>
 
-        {/* Großer Trenner: ab hier werden die API-Funktionen gezeigt */}
-        <div className="mt-10">
+        {/* Großer Trenner (zentriert): ab hier werden die API-Funktionen gezeigt */}
+        <div className="mt-10 text-center">
           <h2 className="font-display text-[22px] font-bold tracking-tight text-ink-900 sm:text-[28px]">
             Our API features
           </h2>
-          <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-ink-600">
+          <p className="mx-auto mt-1 max-w-2xl text-[14px] leading-relaxed text-ink-600">
             Below you can try each feature of the API for yourself.
           </p>
         </div>
