@@ -59,7 +59,7 @@ export default function PublicDemoPage() {
 
   return (
     <div className="min-h-screen bg-paper">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         <CarDatabaseDemoPage demo={state.demo} />
         <p className="mt-4 text-center text-[11px] text-ink-400">
           Vehicleimagery · Demo-Zugang{state.name ? ` · ${state.name}` : ""}

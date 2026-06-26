@@ -305,7 +305,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
       preloadImage(
         carThumbApiUrl(
           { ...car, farbe: SPIN.includes(v) ? color : "default" },
-          { view: v, width: 720, demoToken },
+          { view: v, width: 720, demoToken, format: "webp" },
         ),
       ),
     );
@@ -316,7 +316,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
     if (!SPIN.includes(view)) return; // Innen-Ansichten sind farb-unabhängig
     colors.forEach((c) =>
       preloadImage(
-        carThumbApiUrl({ ...car, farbe: c }, { view, width: 720, demoToken }),
+        carThumbApiUrl({ ...car, farbe: c }, { view, width: 720, demoToken, format: "webp" }),
       ),
     );
   }, [car, colors, view, demoToken]);
@@ -345,9 +345,10 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
     setPickerOpen(false);
   };
 
-  // Hero nutzt feste Defaults (Transparenz-Schalter wurde entfernt).
+  // Hero nutzt feste Defaults. Demo liefert WebP (klein/schnell, optisch
+  // praktisch identisch) — PNG wird hier nicht gebraucht.
   const out: OutOptions = {
-    format: "png",
+    format: "webp",
     transparent: false,
     width: 720,
     height: null,
@@ -743,7 +744,7 @@ function ThumbStrip({
     const farbe = SPIN.includes(v) ? color : "default";
     const url = carThumbApiUrl(
       { ...car, farbe },
-      { view: v, width: 110, demoToken: dt },
+      { view: v, width: 110, demoToken: dt, format: "webp" },
     );
     return (
       <button
@@ -817,11 +818,11 @@ function TransparentCompare({ car }: { car: CarId }) {
   // Gleiche Ansicht/Farbe; links mit Hintergrund, rechts echtes Freisteller-PNG.
   const bgUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 560, demoToken: dt },
+    { view: "front_left", width: 560, demoToken: dt, format: "webp" },
   );
   const trpUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 560, transparent: true, demoToken: dt },
+    { view: "front_left", width: 560, transparent: true, demoToken: dt, format: "webp" },
   );
 
   return (
@@ -971,7 +972,7 @@ function ShadowTile({
   const [loaded, setLoaded] = useState(false);
   const url = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view, width: 380, shadow, demoToken: dt },
+    { view, width: 380, shadow, demoToken: dt, format: "webp" },
   );
   useEffect(() => {
     setFailed(false);
@@ -1016,11 +1017,11 @@ function GroundSection({
     : exterior[0] ?? "front_left";
   const withUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, ground: true, transparent: true, demoToken: dt },
+    { view: v, width: 480, ground: true, transparent: true, demoToken: dt, format: "webp" },
   );
   const withoutUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, transparent: true, demoToken: dt },
+    { view: v, width: 480, transparent: true, demoToken: dt, format: "webp" },
   );
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
@@ -1063,11 +1064,11 @@ function MirrorSection({
   // Reflexion. (Die Reflexion braucht technisch die transparente Variante.)
   const normalUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, transparent: true, demoToken: dt },
+    { view: v, width: 480, transparent: true, demoToken: dt, format: "webp" },
   );
   const mirrorUrl = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: v, width: 480, transparent: true, mirroring: true, demoToken: dt },
+    { view: v, width: 480, transparent: true, mirroring: true, demoToken: dt, format: "webp" },
   );
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
@@ -1627,7 +1628,7 @@ function Spin360Section({
       preloadImage(
         carThumbApiUrl(
           { ...car, farbe: "default" },
-          { view: v, width: 720, transparent: true, demoToken: dt },
+          { view: v, width: 720, transparent: true, demoToken: dt, format: "webp" },
         ),
       ),
     );
@@ -1639,7 +1640,7 @@ function Spin360Section({
   const url = view
     ? carThumbApiUrl(
         { ...car, farbe: "default" },
-        { view, width: 720, transparent: true, demoToken: dt },
+        { view, width: 720, transparent: true, demoToken: dt, format: "webp" },
       )
     : null;
 
@@ -1792,7 +1793,7 @@ function ShowroomCard({ car }: { car: CarId }) {
   const [loaded, setLoaded] = useState(false);
   const url = carThumbApiUrl(
     { ...car, farbe: "default" },
-    { view: "front_left", width: 260, demoToken: dt },
+    { view: "front_left", width: 260, demoToken: dt, format: "webp" },
   );
   return (
     <div className="overflow-hidden rounded-xl border border-hair bg-white">

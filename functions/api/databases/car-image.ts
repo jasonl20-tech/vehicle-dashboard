@@ -197,7 +197,12 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   // Für Demo-Anfragen die Parameter-Oberfläche begrenzen (Kostenschutz): festes
   // Format/Auflösung, keine freie Höhe, eingerastete Breite. Schatten/Ground/
   // Transparenz/Mirroring sind erlaubt — Teil der Demo, je nur ~2 Zustände.
-  const effFormat = isDemo ? "png" : format;
+  // Demo liefert immer WebP: ~15–20× kleiner als PNG, optisch praktisch
+  // identisch (PNG wird im Showcase nicht gebraucht).
+  const effFormat = isDemo ? "webp" : format;
+  // WebP wird bewusst niedrig komprimiert (klein/schnell). PNG ist verlustfrei,
+  // dort bleibt der höhere Standardwert.
+  const imgQuality = effFormat === "webp" ? 40 : 55;
   const effResolution = isDemo ? "default" : resolution;
   const effHeight = isDemo ? null : height;
   // Demo: Breite auf eine feste Whitelist einrasten (verhindert Cache-Umgehung
@@ -303,7 +308,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
         image: {
           width: effWidth,
           ...(effHeight ? { height: effHeight } : {}),
-          quality: 55,
+          quality: imgQuality,
           fit: "contain",
           // Liefert das gewünschte Format aus (auch wenn die Quelle PNG ist).
           format: effFormat,
