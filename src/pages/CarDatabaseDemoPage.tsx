@@ -28,14 +28,12 @@ import {
   CAR_BRANDS_API,
   CAR_STATS_API,
   carDatabaseDetailUrl,
-  carDatabaseGalleryUrl,
   carDatabaseListUrl,
   carThumbApiUrl,
   type BrandsResponse,
   type CarDetailResponse,
   type CarListResponse,
   type CarRow,
-  type GalleryResponse,
   type StatsResponse,
 } from "../lib/carDatabaseApi";
 import {
@@ -66,16 +64,6 @@ export type DemoMode = {
 
 /** Liefert das Demo-Token an alle Bild-bauenden Unterkomponenten (oder "" normal). */
 const DemoTokenCtx = createContext<string>("");
-
-function sameCarId(a: CarId, b: CarId): boolean {
-  return (
-    a.marke === b.marke &&
-    a.modell === b.modell &&
-    a.jahr === b.jahr &&
-    a.body === b.body &&
-    a.trim === b.trim
-  );
-}
 
 /** 360°-Reihenfolge der 8 Außen-Ansichten (im Uhrzeigersinn). */
 const SPIN = [
@@ -335,32 +323,16 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
 
   const title = `${car.marke} ${prettyModel(car.modell)}`;
 
-  // Beispiel-Fahrzeuge: bei jedem Neuladen andere 10 Autos. Live aus der
-  // Galerie-API (random + Seed gegen Caching); fehlt die DB, mischen wir den
-  // festen Beispiel-Satz und nehmen 10 davon.
-  const [galSeed] = useState(() => Math.floor(Math.random() * 1e9));
-  const showroomApi = useApi<GalleryResponse>(
-    isDemo
-      ? null
-      : carDatabaseGalleryUrl({ random: true, limit: 30, seed: galSeed }),
-  );
+  // Beispiel-Fahrzeuge: ein FESTER Satz von 10 (bleibt bei jedem Aufruf gleich,
+  // kein Random mehr). Demo-Link: die im Link gespeicherten Showroom-Fahrzeuge
+  // (= derselbe Satz wie auf der Haupt-Demo).
   const showroom2010 = useMemo<CarId[]>(() => {
     if (isDemo) {
-      const all = [...(demo?.featured ?? []), ...(demo?.showroom ?? [])];
-      const out: CarId[] = [];
-      for (const c of all) if (!out.some((o) => sameCarId(o, c))) out.push(c);
-      return out;
+      const s = demo?.showroom?.length ? demo.showroom : (demo?.featured ?? []);
+      return s.slice(0, 10);
     }
-    const rows = (showroomApi.data?.rows ?? []).map((r) => ({
-      marke: r.marke,
-      modell: r.modell,
-      jahr: r.jahr,
-      body: r.body,
-      trim: r.trim,
-    }));
-    const pool = rows.length >= 10 ? rows : [...FEATURED, ...SHOWROOM_2010];
-    return [...pool].sort(() => Math.random() - 0.5).slice(0, 10);
-  }, [showroomApi.data, isDemo, demo]);
+    return SHOWROOM_2010.slice(0, 10);
+  }, [isDemo, demo]);
 
   // Angebotene Marken + Eckdaten (live, öffentlich gecacht — auch im Demo-Link).
   const brandsApi = useApi<BrandsResponse>(CAR_BRANDS_API);

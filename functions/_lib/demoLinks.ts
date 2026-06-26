@@ -42,7 +42,7 @@ export const DEMO_DAILY_MISS_CAP = 500;
  * beliebige `w`-Werte den Cache umgehen und so massenhaft teure Voll-Key-
  * Renderings auslösen. (Entspricht den Breiten, die die Demo wirklich nutzt.)
  */
-export const DEMO_ALLOWED_WIDTHS = [150, 360, 760, 900, 1100, 1500];
+export const DEMO_ALLOWED_WIDTHS = [110, 260, 380, 480, 560, 720, 1100, 1500];
 
 export function snapDemoWidth(w: number): number {
   let best = DEMO_ALLOWED_WIDTHS[0];
