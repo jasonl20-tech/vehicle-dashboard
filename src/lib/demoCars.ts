@@ -26,19 +26,20 @@ export const STANDARD_FEATURED: DemoCar[] = [
 
 /**
  * Fester Satz von 10 Beispiel-Fahrzeugen — alle gegen die Kunden-API verifiziert
- * (liefern ein Bild). Bewusst ohne Überschneidung mit STANDARD_FEATURED.
+ * (liefern ein Bild). Bewusst 10 VERSCHIEDENE Marken für maximale Vielfalt und
+ * ohne Überschneidung mit STANDARD_FEATURED.
  */
 export const STANDARD_SHOWROOM: DemoCar[] = [
   { marke: "Volkswagen", modell: "Golf", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Audi", modell: "A4", jahr: 2010, body: "Basis", trim: "base" },
-  { marke: "Audi", modell: "A6", jahr: 2010, body: "Basis", trim: "base" },
   { marke: "BMW", modell: "X5", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Audi", modell: "A6", jahr: 2010, body: "Basis", trim: "base" },
+  { marke: "Mercedes-Benz", modell: "GLA", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Porsche", modell: "Macan", jahr: 2021, body: "Basis", trim: "base" },
   { marke: "Tesla", modell: "Model_3", jahr: 2021, body: "Basis", trim: "base" },
-  { marke: "Tesla", modell: "Model_Y", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Ford", modell: "Kuga", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Hyundai", modell: "Tucson", jahr: 2021, body: "Basis", trim: "base" },
+  { marke: "Kia", modell: "Sportage", jahr: 2021, body: "Basis", trim: "base" },
   { marke: "Volvo", modell: "XC60", jahr: 2021, body: "Basis", trim: "base" },
-  { marke: "Volkswagen", modell: "Tiguan", jahr: 2021, body: "Basis", trim: "base" },
-  { marke: "BMW", modell: "X1", jahr: 2021, body: "Basis", trim: "base" },
-  { marke: "Audi", modell: "Q3", jahr: 2021, body: "Basis", trim: "base" },
 ];
 
 /**

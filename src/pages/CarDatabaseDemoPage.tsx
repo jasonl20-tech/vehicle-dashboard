@@ -515,12 +515,13 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
           </aside>
         </div>
 
-        {/* Großer Trenner (zentriert): ab hier werden die API-Funktionen gezeigt */}
-        <div className="mt-10 text-center">
-          <h2 className="font-display text-[22px] font-bold tracking-tight text-ink-900 sm:text-[28px]">
+        {/* Großer Trenner (zentriert): ab hier werden die API-Funktionen gezeigt.
+            Bewusst großer Abstand zum Viewer darüber + große Überschrift. */}
+        <div className="mt-20 text-center sm:mt-28">
+          <h2 className="font-display text-[30px] font-bold tracking-tight text-ink-900 sm:text-[44px]">
             Our API features
           </h2>
-          <p className="mx-auto mt-1 max-w-2xl text-[14px] leading-relaxed text-ink-600">
+          <p className="mx-auto mt-2.5 max-w-2xl text-[15px] leading-relaxed text-ink-600 sm:text-[16px]">
             Below you can try each feature of the API for yourself.
           </p>
         </div>
@@ -1218,19 +1219,16 @@ function OutputOptionsSection() {
     {
       icon: ImageIcon,
       title: "File formats",
-      desc: "Pick whatever your stack needs.",
       tags: ["PNG", "JPEG", "WebP", "AVIF"],
     },
     {
       icon: Sparkles,
       title: "Resolution",
-      desc: "Size & quality presets, or exact pixels.",
       tags: ["thumb", "small", "medium", "large", "full"],
     },
     {
       icon: Maximize2,
       title: "Custom size",
-      desc: "Request exact pixels, any ratio.",
       tags: ["Width", "Height", "Any ratio"],
     },
   ];
@@ -1258,18 +1256,15 @@ function OutputOptionsSection() {
                 {it.title}
               </div>
             </div>
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <div className="mt-3 flex flex-wrap gap-2">
               {it.tags.map((t) => (
                 <span
                   key={t}
-                  className="rounded-md border border-hair bg-white px-2 py-0.5 text-[11px] font-medium text-ink-700"
+                  className="rounded-lg border border-hair bg-white px-3 py-1.5 text-[14px] font-semibold text-ink-800"
                 >
                   {t}
                 </span>
               ))}
-            </div>
-            <div className="mt-2 text-[11.5px] leading-relaxed text-ink-500">
-              {it.desc}
             </div>
           </div>
         ))}

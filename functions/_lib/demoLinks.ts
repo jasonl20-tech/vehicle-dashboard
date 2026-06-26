@@ -322,6 +322,247 @@ export function demoCarAllowed(
   return false;
 }
 
+// ============================================================================
+// Bild-URL-Cache + Vorwärmen
+// ============================================================================
+//
+// Messung: Die Kunden-API braucht ~2,5 s, um eine signierte CDN-Bild-URL zu
+// liefern — und dieser Aufruf fällt im Bild-Proxy bei JEDEM Cache-MISS an (der
+// Edge-Cache ist pro Rechenzentrum getrennt). Die URL ist aber 7 Tage gültig
+// und für alle identisch. Darum cachen wir sie GLOBAL in D1 (`demo_image_urls`):
+// Der Proxy liest sie dort und spart den langsamen API-Aufruf — über alle
+// Standorte und über die Lebensdauer des Edge-Caches hinaus.
+//
+// Beim Erstellen eines Links werden zusätzlich die wichtigsten „Cover"-Bilder
+// vorgewärmt (URL geholt + gespeichert + CDN-Objekt erzeugt: CDN-Erstabruf
+// ~4,4 s → danach ~0,9 s), damit schon der ERSTE Besuch des Kunden schnell ist.
+
+const CAR_API_BASE = "https://api.vehicleimagery.com";
+
+/**
+ * Größen-UNabhängiger Varianten-Schlüssel für den URL-Cache (die CDN-URL hängt
+ * NICHT von der Breite ab — das Verkleinern macht cf.image im Proxy). MUSS in
+ * Proxy (Lesen/Schreiben) und Vorwärmen identisch gebildet werden, sonst
+ * verfehlen sich die Zugriffe. `transparency` ist effektiv (transparent ODER
+ * ground ODER mirroring brauchen die transparente Variante).
+ */
+export function imageVariantKey(
+  v: {
+    marke: string;
+    modell: string;
+    jahr: number | string;
+    body: string;
+    trim: string;
+    view: string;
+    farbe: string;
+    format: string;
+    shadow?: boolean;
+    transparent?: boolean;
+    ground?: boolean;
+    mirroring?: boolean;
+  },
+  hasMirroringKey: boolean,
+): string {
+  const transparency = !!(v.transparent || v.ground || v.mirroring);
+  return [
+    v.marke,
+    v.modell,
+    v.jahr,
+    v.body,
+    v.trim,
+    v.view,
+    v.farbe,
+    v.format,
+    v.shadow ? "sh" : "",
+    transparency ? "tr" : "",
+    v.ground ? "gr" : "",
+    v.mirroring ? "mi" : "",
+    v.mirroring && hasMirroringKey ? "mk" : "",
+  ]
+    .map((x) => String(x ?? "").trim().toLowerCase())
+    .join("|");
+}
+
+/** Liest den `expire`-Zeitstempel (Unix-Sekunden) aus einer signierten CDN-URL. */
+export function parseCdnExpire(url: string): number {
+  try {
+    const q = new URL(url).searchParams;
+    const e = Number(q.get("expire") || q.get("expires") || 0);
+    return Number.isFinite(e) && e > 0 ? Math.floor(e) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function ensureImageUrlTable(d: D1Database): Promise<void> {
+  await d
+    .prepare(
+      `CREATE TABLE IF NOT EXISTS demo_image_urls (
+        vkey TEXT PRIMARY KEY,
+        image_url TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      )`,
+    )
+    .run();
+}
+
+/** Gecachte signierte Bild-URL (oder null, wenn fehlend/fast abgelaufen). */
+export async function getCachedImageUrl(
+  env: AuthEnv,
+  vkey: string,
+): Promise<string | null> {
+  try {
+    const row = await db(env)
+      .prepare(`SELECT image_url, expires_at FROM demo_image_urls WHERE vkey = ?1`)
+      .bind(vkey)
+      .first<{ image_url: string; expires_at: number }>();
+    if (!row) return null;
+    // Puffer: fast abgelaufene Links (≤ 10 Min Restlaufzeit) nicht mehr ausliefern.
+    if ((Number(row.expires_at) || 0) < Math.floor(Date.now() / 1000) + 600) {
+      return null;
+    }
+    return row.image_url || null;
+  } catch {
+    // Tabelle evtl. noch nicht angelegt → wie „nicht gefunden" (Proxy fragt API).
+    return null;
+  }
+}
+
+/** Speichert eine signierte Bild-URL global (best effort). */
+export async function putCachedImageUrl(
+  env: AuthEnv,
+  vkey: string,
+  imageUrl: string,
+  expiresAt: number,
+): Promise<void> {
+  try {
+    const d = db(env);
+    await ensureImageUrlTable(d);
+    const exp = expiresAt > 0 ? expiresAt : Math.floor(Date.now() / 1000) + 6 * 86400;
+    await d
+      .prepare(
+        `INSERT INTO demo_image_urls (vkey, image_url, expires_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(vkey) DO UPDATE SET image_url = excluded.image_url, expires_at = excluded.expires_at`,
+      )
+      .bind(vkey, imageUrl, exp)
+      .run();
+  } catch {
+    /* best effort — Vorwärmen/Cachen darf nie eine Anfrage scheitern lassen. */
+  }
+}
+
+/** Führt `fn` über `items` mit begrenzter Nebenläufigkeit aus (best effort). */
+async function runLimited<T>(
+  items: T[],
+  limit: number,
+  fn: (t: T) => Promise<void>,
+): Promise<void> {
+  let i = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (i < items.length) {
+        const idx = i++;
+        try {
+          await fn(items[idx]);
+        } catch {
+          /* best effort */
+        }
+      }
+    },
+  );
+  await Promise.all(workers);
+}
+
+/** Ansichten für die Hero-Rotation (8 Außen + 2 Innen). */
+const WARM_VIEWS = [
+  "front_left",
+  "front",
+  "front_right",
+  "right",
+  "rear_right",
+  "rear",
+  "rear_left",
+  "left",
+  "dashboard",
+  "center_console",
+];
+
+/**
+ * Wärmt die wichtigsten „Cover"-Bilder eines neuen Links vor: holt die signierte
+ * CDN-URL (spart später den ~2,5 s-API-Aufruf), legt sie in den D1-Cache und
+ * fordert das CDN-Bild einmal an (erzeugt das Objekt). Best effort, läuft im
+ * Hintergrund (waitUntil) bis zum Zeit-/Subrequest-Budget — alles WebP/Default.
+ */
+export async function warmDemoLink(env: AuthEnv, cfg: DemoLinkConfig): Promise<void> {
+  const apiKey = env.CAR_DB_API_KEY;
+  if (!apiKey) return;
+  const hasMk = !!env.CAR_DB_MIRRORING_KEY;
+  const fmt = "webp";
+
+  type Job = { car: DemoCar; view: string; farbe: string };
+  const jobs: Job[] = [];
+  const featured = cfg.featured ?? [];
+  const showroom = cfg.showroom ?? [];
+
+  // 1) Erstes Hero-Auto: alle Ansichten (Default-Farbe) → Hero-Rotation + Thumbs.
+  if (featured[0]) {
+    for (const view of WARM_VIEWS) {
+      jobs.push({ car: featured[0], view, farbe: "default" });
+    }
+  }
+  // 2) Weitere Hero-Autos: Titelansicht (Default) → Auto-Wechsel ist sofort da.
+  for (const car of featured.slice(1)) {
+    jobs.push({ car, view: "front_left", farbe: "default" });
+  }
+  // 3) Showroom: Titelansicht jedes Beispiel-Autos.
+  for (const car of showroom) {
+    jobs.push({ car, view: "front_left", farbe: "default" });
+  }
+
+  // Deckel gegen Subrequest-/Zeitbudget im waitUntil.
+  const capped = jobs.slice(0, 26);
+  const seg = (s: string | number) => encodeURIComponent(String(s));
+
+  await runLimited(capped, 8, async (j) => {
+    const apiUrl =
+      `${CAR_API_BASE}/api/${seg(j.car.marke)}/${seg(j.car.modell)}/${seg(j.car.jahr)}/${seg(j.car.body)}/${seg(j.car.trim)}/${seg(j.view)}` +
+      `?format=${fmt}&resolution=default&color=${seg(j.farbe)}`;
+    let imageUrl = "";
+    const r = await fetch(apiUrl, { headers: { "x-api-key": apiKey } });
+    if (!r.ok) return;
+    const data = (await r.json()) as unknown;
+    const o = (Array.isArray(data) ? data[0] : data) as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    const iu = o?.image_url;
+    if (typeof iu === "string" && iu) imageUrl = iu;
+    if (!imageUrl) return;
+
+    const vkey = imageVariantKey(
+      {
+        marke: j.car.marke,
+        modell: j.car.modell,
+        jahr: j.car.jahr,
+        body: j.car.body,
+        trim: j.car.trim,
+        view: j.view,
+        farbe: j.farbe,
+        format: fmt,
+      },
+      hasMk,
+    );
+    await putCachedImageUrl(env, vkey, imageUrl, parseCdnExpire(imageUrl));
+    // CDN-Objekt erzeugen (warm). Body nicht lesen; Fehler/Timeout egal.
+    try {
+      await fetch(imageUrl, { cf: { cacheTtl: 86400 } } as RequestInit);
+    } catch {
+      /* egal — Vorwärmen ist best effort */
+    }
+  });
+}
+
 /**
  * Zählt einen echten Bild-Abruf (Cache-MISS) gegen das Tageslimit.
  * @returns false, wenn das Tageslimit überschritten ist (→ Aufrufer: 429).

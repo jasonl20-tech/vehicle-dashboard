@@ -14,6 +14,7 @@ import {
   createDemoLink,
   listDemoLinks,
   revokeDemoLink,
+  warmDemoLink,
 } from "../../_lib/demoLinks";
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({ request, env }) => {
@@ -30,7 +31,11 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({ request, env }) => 
   }
 };
 
-export const onRequestPost: PagesFunction<AuthEnv> = async ({ request, env }) => {
+export const onRequestPost: PagesFunction<AuthEnv> = async ({
+  request,
+  env,
+  waitUntil,
+}) => {
   const user = await getCurrentUser(env, request);
   if (!user) return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
 
@@ -51,6 +56,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({ request, env }) =>
       createdBy: user.id,
     });
     if (!res.ok) return jsonResponse({ error: res.error }, { status: 400 });
+    // Wichtigste „Cover"-Bilder im Hintergrund vorwärmen (URL-Cache + CDN) →
+    // schon der erste Kundenbesuch ist schnell. Best effort, blockiert die
+    // Antwort nicht.
+    waitUntil(warmDemoLink(env, res.link));
     return jsonResponse({ link: res.link });
   } catch (e) {
     return jsonResponse(

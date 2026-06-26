@@ -24,7 +24,11 @@ import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 import {
   demoCarAllowed,
   demoColorAllowed,
+  getCachedImageUrl,
   getValidDemoLink,
+  imageVariantKey,
+  parseCdnExpire,
+  putCachedImageUrl,
   recordDemoHit,
   snapDemoWidth,
   type DemoLinkConfig,
@@ -272,21 +276,53 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const fetchKey =
     mirroring && env.CAR_DB_MIRRORING_KEY ? env.CAR_DB_MIRRORING_KEY : apiKey;
 
-  // 1) Kunden-API fragen → signierte image_url holen.
-  let imageUrl: string | null = null;
-  try {
-    const r = await fetch(apiUrl, { headers: { "x-api-key": fetchKey } });
-    if (r.ok) {
-      const data = (await r.json()) as unknown;
-      const o = (Array.isArray(data) ? data[0] : data) as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const iu = o?.image_url;
-      if (typeof iu === "string" && iu) imageUrl = iu;
+  // Größen-unabhängiger Varianten-Key für den globalen URL-Cache (nur Demo —
+  // dort lohnt es sich, im Dashboard sind die Anfragen zu vielfältig).
+  const vkey = isDemo
+    ? imageVariantKey(
+        {
+          marke,
+          modell,
+          jahr,
+          body,
+          trim,
+          view,
+          farbe,
+          format: effFormat,
+          shadow,
+          transparent,
+          ground,
+          mirroring,
+        },
+        !!env.CAR_DB_MIRRORING_KEY,
+      )
+    : "";
+
+  // 1) Signierte image_url holen. Demo zuerst aus dem globalen D1-Cache (spart
+  //    den ~2,5 s-Aufruf der Kunden-API); sonst frisch holen und cachen.
+  let imageUrl: string | null = vkey ? await getCachedImageUrl(env, vkey) : null;
+  if (!imageUrl) {
+    try {
+      const r = await fetch(apiUrl, { headers: { "x-api-key": fetchKey } });
+      if (r.ok) {
+        const data = (await r.json()) as unknown;
+        const o = (Array.isArray(data) ? data[0] : data) as
+          | Record<string, unknown>
+          | null
+          | undefined;
+        const iu = o?.image_url;
+        if (typeof iu === "string" && iu) imageUrl = iu;
+      }
+    } catch {
+      /* unten als 404 behandelt */
     }
-  } catch {
-    /* unten als 404 behandelt */
+    // Frisch geholte URL global cachen → nächster Miss (anderes Rechenzentrum
+    // oder nach Edge-Cache-Ablauf) überspringt den langsamen API-Aufruf.
+    if (imageUrl && vkey) {
+      waitUntil(
+        putCachedImageUrl(env, vkey, imageUrl, parseCdnExpire(imageUrl)),
+      );
+    }
   }
   if (!imageUrl) {
     // Fehlendes Bild kurz cachen → kein erneuter Kunden-API-Aufruf je Render.
