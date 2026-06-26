@@ -221,6 +221,15 @@ function preloadImage(url: string | null) {
   img.src = url;
 }
 
+/** Dezente „Geist"-Lade-Animation, solange ein Auto-Bild noch lädt. */
+function Spinner() {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <span className="h-7 w-7 animate-spin rounded-full border-2 border-ink-200 border-t-ink-500" />
+    </div>
+  );
+}
+
 export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
   const isDemo = !!demo;
   const demoToken = demo?.token ?? "";
@@ -413,19 +422,18 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
       </header>
 
       <div className="bg-paper px-4 py-5 sm:px-6">
-        {/* Intro — schlicht, sachlich */}
+        {/* Intro — große Demo-Überschrift + Überblick */}
         <div className="mb-7">
           <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-brand-600">
-            Vehicleimagery · live demo
+            Vehicleimagery
           </div>
-          <h2 className="mt-1.5 font-display text-[24px] font-bold leading-[1.1] tracking-tight text-ink-900 sm:text-[30px]">
-            Car image API
+          <h2 className="mt-1 font-display text-[30px] font-bold leading-[1.05] tracking-tight text-ink-900 sm:text-[40px]">
+            Demo
           </h2>
           <p className="mt-2.5 max-w-2xl text-[14.5px] leading-relaxed text-ink-600">
-            This is a live demo of our car image API. You request a vehicle,
-            color, angle and a few options, and the image is generated on demand
-            — no photo shoot, no editing. The sections below show each feature
-            and how it works; everything is live and interactive.
+            This website gives you an overview of our car image API. Start with
+            the viewer below — switch the view and the color — then scroll down
+            to see each feature in detail.
           </p>
         </div>
 
@@ -540,7 +548,17 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
           </aside>
         </div>
 
-        {/* Weitere API-Bildoptionen (Werbung) — direkt unter dem ersten Fahrzeug */}
+        {/* Großer Trenner: ab hier werden die API-Funktionen gezeigt */}
+        <div className="mt-10">
+          <h2 className="font-display text-[22px] font-bold tracking-tight text-ink-900 sm:text-[28px]">
+            Our API features
+          </h2>
+          <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-ink-600">
+            The sections below show what our API can do — try each one.
+          </p>
+        </div>
+
+        {/* Weitere API-Bildoptionen */}
         <OutputOptionsSection />
 
         {/* 01 · Alle Ansichten / 360 */}
@@ -628,6 +646,7 @@ function Stage({
 }) {
   const dt = useContext(DemoTokenCtx);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   // Innenraum-Bilder sind farb-unabhängig → über „default" laden.
   const imgFarbe = SPIN.includes(view) ? color : "default";
   const url = carThumbApiUrl(
@@ -643,7 +662,10 @@ function Stage({
     },
   );
 
-  useEffect(() => setFailed(false), [url]);
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(false);
+  }, [url]);
 
   const stepView = (dir: number) => {
     if (views.length < 2) return;
@@ -665,8 +687,9 @@ function Stage({
               src={url}
               alt={`${car.marke} ${prettyModel(car.modell)} ${VIEW_LABEL[view] ?? view}`}
               draggable={false}
+              onLoad={() => setLoaded(true)}
               onError={() => setFailed(true)}
-              className="max-h-full max-w-full object-contain"
+              className={`max-h-full max-w-full object-contain transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
               style={{ filter: "drop-shadow(0 26px 24px rgba(0,0,0,0.22))" }}
             />
           ) : (
@@ -674,7 +697,7 @@ function Stage({
           )}
         </div>
 
-        {loading && (
+        {(loading || (!!url && !loaded && !failed)) && (
           <div className="absolute inset-0 grid place-items-center bg-white/40 backdrop-blur-[1px]">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-ink-300 border-t-ink-700" />
           </div>
@@ -1004,11 +1027,15 @@ function ShadowTile({
   dt: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const url = carThumbApiUrl(
     { ...car, farbe: "default" },
     { view, width: 380, shadow, demoToken: dt },
   );
-  useEffect(() => setFailed(false), [url]);
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(false);
+  }, [url]);
   return (
     <div
       className="relative aspect-[4/3] overflow-hidden rounded-lg border border-hair"
@@ -1021,13 +1048,15 @@ function ShadowTile({
             alt={`${prettyModel(car.modell)} ${VIEW_LABEL[view] ?? view}`}
             loading="lazy"
             draggable={false}
+            onLoad={() => setLoaded(true)}
             onError={() => setFailed(true)}
-            className="max-h-full max-w-full object-contain"
+            className={`max-h-full max-w-full object-contain transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
           />
         ) : (
           <ImageIcon className="h-6 w-6 text-ink-300" />
         )}
       </div>
+      {!!url && !loaded && !failed && <Spinner />}
     </div>
   );
 }
@@ -1137,7 +1166,11 @@ function CompareTile({
   alt: string;
 }) {
   const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [url]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(false);
+  }, [url]);
   return (
     <div>
       <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-hair bg-white">
@@ -1147,13 +1180,15 @@ function CompareTile({
               src={url}
               alt={alt}
               draggable={false}
+              onLoad={() => setLoaded(true)}
               onError={() => setFailed(true)}
-              className="max-h-full max-w-full object-contain"
+              className={`max-h-full max-w-full object-contain transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
             />
           ) : (
             <ImageIcon className="h-10 w-10 text-ink-300" />
           )}
         </div>
+        {!!url && !loaded && !failed && <Spinner />}
         <span className="absolute left-3 top-3 rounded-full bg-ink-900/80 px-2.5 py-0.5 text-[11px] font-medium text-white">
           {label}
         </span>
@@ -1358,12 +1393,11 @@ function DocsSection() {
       ],
     },
     {
-      label: "Delivery & limits",
+      label: "Delivery",
       items: [
         "Served via global CDN, long cache",
         "Documented HTTP status codes",
         "Error notes (fallback codes)",
-        "Rate limits per key",
       ],
     },
   ];
@@ -1644,6 +1678,7 @@ function Spin360Section({
   const dt = useContext(DemoTokenCtx);
   const [idx, setIdx] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const drag = useRef<{ x: number; idx: number } | null>(null);
 
   // Bei Fahrzeugwechsel zurück auf die erste Ansicht.
@@ -1673,7 +1708,10 @@ function Spin360Section({
       )
     : null;
 
-  useEffect(() => setFailed(false), [url]);
+  useEffect(() => {
+    setFailed(false);
+    setLoaded(false);
+  }, [url]);
 
   const setSpin = (n: number) => {
     if (!len) return;
@@ -1698,10 +1736,9 @@ function Spin360Section({
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <SectionHead n="01" title="360° view">
-            We render all eight exterior angles (plus interior). From them you
-            build a 360°-style view like the one below — drag it, use the arrows
-            or the slider. It is not a true continuous 360°, but it gives the
-            same effect.
+            We don't offer a real 360° view like most people know it. But you can
+            create a kind of 360° view from our eight views — drag, use the
+            arrows or the slider below.
           </SectionHead>
           <span className="shrink-0 rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
             {VIEW_LABEL[view] ?? view}
@@ -1723,14 +1760,16 @@ function Spin360Section({
                   src={url}
                   alt={`${car.marke} ${prettyModel(car.modell)} ${VIEW_LABEL[view] ?? view}`}
                   draggable={false}
+                  onLoad={() => setLoaded(true)}
                   onError={() => setFailed(true)}
-                  className="max-h-full max-w-full object-contain"
+                  className={`max-h-full max-w-full object-contain transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
                   style={{ filter: "drop-shadow(0 26px 24px rgba(0,0,0,0.22))" }}
                 />
               ) : (
                 <ImageIcon className="h-10 w-10 text-ink-300" />
               )}
             </div>
+            {!!url && !loaded && !failed && <Spinner />}
           </div>
           <ArrowBtn side="left" onClick={() => setSpin(safeIdx - 1)} />
           <ArrowBtn side="right" onClick={() => setSpin(safeIdx + 1)} />
@@ -1816,6 +1855,7 @@ function ShowroomGrid({ cars }: { cars: CarId[] }) {
 function ShowroomCard({ car }: { car: CarId }) {
   const dt = useContext(DemoTokenCtx);
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const url = carThumbApiUrl(
     { ...car, farbe: "default" },
     { view: "front_left", width: 260, demoToken: dt },
@@ -1828,12 +1868,14 @@ function ShowroomCard({ car }: { car: CarId }) {
             src={url}
             alt={`${car.marke} ${prettyModel(car.modell)}`}
             loading="lazy"
+            onLoad={() => setLoaded(true)}
             onError={() => setFailed(true)}
-            className="max-h-full max-w-full object-contain"
+            className={`max-h-full max-w-full object-contain transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
           />
         ) : (
           <ImageIcon className="h-7 w-7 text-ink-300" />
         )}
+        {!!url && !loaded && !failed && <Spinner />}
       </div>
       <div className="border-t border-hair px-2.5 py-1.5">
         <div className="truncate text-[12px] font-semibold text-ink-900">
