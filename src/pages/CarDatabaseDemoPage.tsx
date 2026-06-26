@@ -6,7 +6,6 @@ import {
   ChevronUp,
   Code2,
   ImageIcon,
-  Layers,
   Maximize2,
   Palette,
   Rotate3d,
@@ -27,6 +26,7 @@ import {
 import { useApi } from "../lib/customerApi";
 import {
   CAR_BRANDS_API,
+  CAR_STATS_API,
   carDatabaseDetailUrl,
   carDatabaseGalleryUrl,
   carDatabaseListUrl,
@@ -36,6 +36,7 @@ import {
   type CarListResponse,
   type CarRow,
   type GalleryResponse,
+  type StatsResponse,
 } from "../lib/carDatabaseApi";
 import {
   STANDARD_FEATURED as FEATURED,
@@ -244,10 +245,9 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
   const [car, setCar] = useState<CarId>(() => featuredCars[0] ?? FEATURED[0]);
   const [color, setColor] = useState(() => demo?.allowedColors?.[0] ?? "white");
   const [view, setView] = useState("front_left");
-  // Fester heller Studio-Hintergrund (Showroom). Transparent ist ein eigener
-  // Schalter, der ausschließlich die Hero betrifft.
+  // Fester heller Studio-Hintergrund (Showroom). Transparenz wird in der Hero
+  // nicht mehr umgeschaltet (eigener Abschnitt 02 zeigt das Feature).
   const bg: BgMode = "showroom";
-  const [transparent, setTransparent] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -335,53 +335,48 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
 
   const title = `${car.marke} ${prettyModel(car.modell)}`;
 
-  // Showroom „Baujahr 2010": 10 zufällige Autos live aus der Galerie-API,
-  // mit fester Fallback-Liste, falls die DB (noch) nichts liefert.
+  // Beispiel-Fahrzeuge: bei jedem Neuladen andere 10 Autos. Live aus der
+  // Galerie-API (random + Seed gegen Caching); fehlt die DB, mischen wir den
+  // festen Beispiel-Satz und nehmen 10 davon.
+  const [galSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const showroomApi = useApi<GalleryResponse>(
     isDemo
       ? null
-      : carDatabaseGalleryUrl({
-          jahrMin: 2010,
-          jahrMax: 2010,
-          random: true,
-          limit: 10,
-        }),
+      : carDatabaseGalleryUrl({ random: true, limit: 30, seed: galSeed }),
   );
   const showroom2010 = useMemo<CarId[]>(() => {
-    // Demo-Modus: genau die im Link erlaubten Fahrzeuge (Hero + Showroom),
-    // dedupliziert — so ist jedes erlaubte Auto auswählbar und im Scope.
     if (isDemo) {
       const all = [...(demo?.featured ?? []), ...(demo?.showroom ?? [])];
       const out: CarId[] = [];
       for (const c of all) if (!out.some((o) => sameCarId(o, c))) out.push(c);
       return out;
     }
-    const rows = showroomApi.data?.rows ?? [];
-    if (!rows.length) return SHOWROOM_2010;
-    return rows.slice(0, 10).map((r) => ({
+    const rows = (showroomApi.data?.rows ?? []).map((r) => ({
       marke: r.marke,
       modell: r.modell,
       jahr: r.jahr,
       body: r.body,
       trim: r.trim,
     }));
+    const pool = rows.length >= 10 ? rows : [...FEATURED, ...SHOWROOM_2010];
+    return [...pool].sort(() => Math.random() - 0.5).slice(0, 10);
   }, [showroomApi.data, isDemo, demo]);
 
-  // Angebotene Marken (live aus der Kunden-API, öffentlich gecacht) — auch im
-  // Demo-Link verfügbar.
+  // Angebotene Marken + Eckdaten (live, öffentlich gecacht — auch im Demo-Link).
   const brandsApi = useApi<BrandsResponse>(CAR_BRANDS_API);
   const brands = brandsApi.data?.brands ?? [];
+  const statsApi = useApi<StatsResponse>(CAR_STATS_API);
+  const totalImages = statsApi.data?.images ?? 0;
 
   const pick = (c: CarId) => {
     setCar(c);
     setPickerOpen(false);
   };
 
-  // Format/Größe/Auflösung sind in der Demo NICHT auswählbar (nur Werbung) —
-  // die Hero nutzt feste Defaults. Variabel ist nur Transparent.
+  // Hero nutzt feste Defaults (Transparenz-Schalter wurde entfernt).
   const out: OutOptions = {
     format: "png",
-    transparent,
+    transparent: false,
     width: 720,
     height: null,
     resolution: "default",
@@ -431,9 +426,8 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
             Demo
           </h2>
           <p className="mt-2.5 max-w-2xl text-[14.5px] leading-relaxed text-ink-600">
-            This website gives you an overview of our car image API. Start with
-            the viewer below — switch the view and the color — then scroll down
-            to see each feature in detail.
+            This is a quick demo of our car image API. Pick a view and a color in
+            the viewer below, then scroll down to see each feature on its own.
           </p>
         </div>
 
@@ -445,10 +439,9 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
               color={color}
               view={view}
               views={[...exterior, ...interior]}
-              bg={transparent ? "transparent" : bg}
+              bg={bg}
               out={out}
               onZoom={() => setZoom(true)}
-              onToggleTransparent={() => setTransparent((t) => !t)}
               onPick={setView}
               loading={detailApi.loading && !detail}
             />
@@ -515,35 +508,36 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
                   );
                 })}
               </div>
-              <p className="mt-2 text-[11px] text-ink-400">
-                We add new colors continuously.
+              <p className="mt-2.5">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-600/10 px-2.5 py-1 text-[11.5px] font-medium text-brand-600">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  We keep adding new colors
+                </span>
               </p>
             </div>
 
-            {/* Echte Verfügbarkeits-Infos aus der Datenbank/API */}
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <Spec label="Colors" value={String(colors.length || 1)} />
-              <Spec
-                label="Views"
-                value={String(exterior.length + interior.length)}
-              />
-              <Spec
-                label="Exterior / Interior"
-                value={`${exterior.length} / ${interior.length}`}
-              />
-            </div>
-
-            {/* Erklär-Box: was man hier sieht */}
-            <div className="mt-5 rounded-lg border border-hair bg-white p-3">
-              <div className="flex items-center gap-1.5 text-[12px] font-medium text-ink-700">
-                <Sparkles className="h-3.5 w-3.5 text-brand-600" />
-                Live from the Vehicleimagery API
+            {/* Eckdaten der API (hervorgehoben) */}
+            <div className="mt-5 rounded-xl border border-hair bg-ink-50/60 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-700">
+                Our API in numbers
               </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-ink-500">
-                These shots come straight from our API — no photo shoot, no
-                hosting, no manual cut-out. Colors, angles and cut-outs in real
-                time.
-              </p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Spec label="Colors" value={String(colors.length || 1)} />
+                <Spec
+                  label="Views"
+                  value={String(exterior.length + interior.length)}
+                />
+                <Spec
+                  label="Exterior / interior"
+                  value={`${exterior.length} / ${interior.length}`}
+                />
+                <Spec
+                  label="Images total"
+                  value={
+                    totalImages > 0 ? totalImages.toLocaleString("en-US") : "…"
+                  }
+                />
+              </div>
             </div>
           </aside>
         </div>
@@ -554,7 +548,7 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
             Our API features
           </h2>
           <p className="mt-1 max-w-2xl text-[14px] leading-relaxed text-ink-600">
-            The sections below show what our API can do — try each one.
+            Below you can try each feature of the API for yourself.
           </p>
         </div>
 
@@ -629,7 +623,6 @@ function Stage({
   bg,
   out,
   onZoom,
-  onToggleTransparent,
   onPick,
   loading,
 }: {
@@ -640,7 +633,6 @@ function Stage({
   bg: BgMode;
   out: OutOptions;
   onZoom: () => void;
-  onToggleTransparent: () => void;
   onPick: (v: string) => void;
   loading: boolean;
 }) {
@@ -710,29 +702,6 @@ function Stage({
         >
           {VIEW_LABEL[view] ?? view}
         </div>
-
-        {/* Transparent-Schalter (echtes Freisteller-PNG) */}
-        <button
-          type="button"
-          onClick={onToggleTransparent}
-          aria-pressed={out.transparent}
-          disabled={out.format === "jpeg"}
-          title={
-            out.format === "jpeg"
-              ? "JPEG doesn't support transparency"
-              : "Show a real transparent PNG from the API"
-          }
-          className={`absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11px] font-medium shadow backdrop-blur transition ${
-            out.format === "jpeg"
-              ? "cursor-not-allowed bg-white/70 text-ink-300"
-              : out.transparent
-                ? "bg-ink-900 text-white"
-                : "bg-white/85 text-ink-700 hover:bg-white"
-          }`}
-        >
-          <Layers className="h-3.5 w-3.5" />
-          Transparent
-        </button>
 
         {/* Zoom */}
         <button
@@ -846,11 +815,11 @@ function ThumbStrip({
 
 function Spec({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-hair bg-white px-2.5 py-1.5">
+    <div className="rounded-lg border border-hair bg-white px-3 py-2">
       <div className="text-[10px] uppercase tracking-wider text-ink-400">
         {label}
       </div>
-      <div className="truncate text-[12.5px] font-medium text-ink-800">
+      <div className="truncate text-[17px] font-semibold leading-tight text-ink-900">
         {value}
       </div>
     </div>
@@ -886,9 +855,9 @@ function TransparentCompare({ car }: { car: CarId }) {
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <SectionHead n="02" title="Transparent background">
-        You can request the car as a cut-out with the background removed (a
-        transparent PNG), so it sits on any layout or color. Drag the slider to
-        compare with the studio background.
+        You can get the car as a cut-out with no background (a transparent PNG),
+        so it sits on any layout or color. Drag the slider to compare it with the
+        studio background.
       </SectionHead>
       <div
         ref={ref}
@@ -1131,9 +1100,9 @@ function MirrorSection({
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <SectionHead n="05" title="Reflection (mirroring)">
-        Mirroring adds a mirrored reflection of the car on the floor — a faded
-        copy of the car beneath itself, not a black shadow. Left without, right
-        with.
+        Mirroring adds a reflection of the car on the floor: a faded copy of the
+        car beneath itself, not a black shadow. On the left without it, on the
+        right with it.
       </SectionHead>
       <div className="grid gap-4 sm:grid-cols-2">
         <CompareTile
@@ -1236,8 +1205,8 @@ function BrandsSection({ brands }: { brands: string[] }) {
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <SectionHead n="06" title="Brands we cover">
-        The vehicle brands available through the API — {brands.length} in total,
-        with new ones added continuously.
+        These are the brands you can request through the API, {brands.length} in
+        total, and we keep adding more.
       </SectionHead>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 md:grid-cols-6">
         {shown.map((b) => (
@@ -1303,8 +1272,8 @@ function OutputOptionsSection() {
             More output options
           </h3>
           <p className="text-[12.5px] leading-snug text-ink-500">
-            Not visible in this small preview — available for every image via the
-            API.
+            These don't show in this small preview, but they work for every
+            image.
           </p>
         </div>
       </div>
@@ -1405,8 +1374,8 @@ function DocsSection() {
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SectionHead n="07" title="Documentation">
-          A plain overview of what the API offers. The full reference — every
-          endpoint, parameter and example — is in the documentation.
+          A short overview of what the API offers. The full reference, with every
+          endpoint and parameter, is in the documentation.
         </SectionHead>
         <a
           href="https://vehicleimagery.com/documentation"
@@ -1737,8 +1706,8 @@ function Spin360Section({
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <SectionHead n="01" title="360° view">
             We don't offer a real 360° view like most people know it. But you can
-            create a kind of 360° view from our eight views — drag, use the
-            arrows or the slider below.
+            create a kind of 360° view from our eight views. Drag it, or use the
+            arrows and the slider below.
           </SectionHead>
           <span className="shrink-0 rounded-full border border-hair bg-white px-2.5 py-1 text-[11px] font-medium text-ink-600">
             {VIEW_LABEL[view] ?? view}
@@ -1831,8 +1800,7 @@ function SpinSlider({
   );
 }
 
-/** Auswählbarer Showroom mit (zufälligen) Fahrzeugen — hier Baujahr 2010. */
-/** 07 · Beispiel-Fahrzeuge — reines Schaufenster (nicht klickbar). */
+/** 08 · Beispiel-Fahrzeuge — reines Schaufenster (nicht klickbar), zufällig. */
 function ShowroomGrid({ cars }: { cars: CarId[] }) {
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">

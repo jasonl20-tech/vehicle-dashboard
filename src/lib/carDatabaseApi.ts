@@ -11,6 +11,10 @@ export const CAR_IMAGE_PROXY = "/api/databases/car-image";
 export const CAR_BRANDS_API = "/api/databases/car-brands";
 export type BrandsResponse = { brands: string[] };
 
+/** Eckdaten der Bild-API (aktuell: Gesamt-Bildzahl), gecacht. */
+export const CAR_STATS_API = "/api/databases/car-stats";
+export type StatsResponse = { images: number };
+
 /**
  * Thumbnail-URL für ein Auto. Zeigt auf den Dashboard-Proxy
  * (`/api/databases/car-image`), der das Bild über die bestehende Kunden-API

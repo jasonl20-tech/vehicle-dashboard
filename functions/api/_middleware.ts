@@ -24,6 +24,8 @@ const PRE_SESSION_PATH = new Set<string>([
   "/api/databases/car-image",
   // Reine Marketing-Daten (Markenliste) — auch im öffentlichen Demo-Link.
   "/api/databases/car-brands",
+  // Reine Eckdaten (Gesamt-Bildzahl) — auch im öffentlichen Demo-Link.
+  "/api/databases/car-stats",
 ]);
 
 /** Nur Session, keine Routen-Pflicht (lädt u. a. erlaubte Pfade fürs Frontend). */
