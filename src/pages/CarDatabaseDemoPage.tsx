@@ -1256,11 +1256,11 @@ function OutputOptionsSection() {
                 {it.title}
               </div>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
               {it.tags.map((t) => (
                 <span
                   key={t}
-                  className="rounded-lg border border-hair bg-white px-3 py-1.5 text-[14px] font-semibold text-ink-800"
+                  className="rounded-md border border-hair bg-white px-2 py-0.5 text-[11px] font-medium text-ink-700"
                 >
                   {t}
                 </span>
