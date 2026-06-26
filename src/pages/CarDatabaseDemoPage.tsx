@@ -1239,15 +1239,9 @@ function OutputOptionsSection() {
         <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-600/10 text-brand-600">
           <Code2 className="h-5 w-5" />
         </span>
-        <div className="min-w-0">
-          <h3 className="font-display text-[17px] font-semibold tracking-tight text-ink-900">
-            More output options
-          </h3>
-          <p className="text-[12.5px] leading-snug text-ink-500">
-            These don't show in this small preview, but they work for every
-            image.
-          </p>
-        </div>
+        <h3 className="font-display text-[17px] font-semibold tracking-tight text-ink-900">
+          A general overview of our API
+        </h3>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         {items.map((it) => (
