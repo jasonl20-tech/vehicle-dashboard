@@ -188,6 +188,13 @@ export interface AuthEnv {
    */
   controllbucket?: R2Bucket;
   /**
+   * R2-Bucket `vehicleimages` (NEUES System): hier liegen die ID-basierten
+   * Bilder (`source/<id>`, `scaled/<id>`, `shadow/<id>`). Binding-Name im
+   * Pages-Dashboard: `vehicleimages` → `env.vehicleimages`. Wird vom
+   * Control-Image-Proxy genutzt, um Quell-/Ergebnis-Bilder anzuzeigen.
+   */
+  vehicleimages?: R2Bucket;
+  /**
    * Optional: Basis-URL für öffentliche Asset-Links. Standard:
    * `https://assets.vehicleimagery.com`. Wird vom API zurückgegeben,
    * damit der Browser den Public-Link direkt verwendet.

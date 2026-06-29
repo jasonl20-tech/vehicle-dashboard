@@ -27,6 +27,7 @@ import CmsScheduledPage from "./pages/cms/CmsScheduledPage";
 import CmsSettingsPage from "./pages/cms/CmsSettingsPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControlPlatformPage from "./pages/ControlPlatformPage";
+import ControlPlatformNewPage from "./pages/ControlPlatformNewPage";
 import DeveloperOverviewPage from "./pages/DeveloperOverviewPage";
 import EmailLogDetailPage from "./pages/EmailLogDetailPage";
 import EmailLogsPage from "./pages/EmailLogsPage";
@@ -121,6 +122,12 @@ export default function App() {
               element={<ControlPlatformPage />}
             />
           </Route>
+          {/* Neue Kontroll-Ansicht (neues ID-System) — eigene Hülle, nicht das
+              alte ControlPlatformLayout. Zugriff via /control-platform/* . */}
+          <Route
+            path="/control-platform/neu"
+            element={<ControlPlatformNewPage />}
+          />
 
           <Route element={<CarDatabaseLayout />}>
             <Route path="/car-database" element={<CarDatabasePage />} />

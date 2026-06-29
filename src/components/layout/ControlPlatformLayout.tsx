@@ -224,6 +224,20 @@ function ControlChrome() {
           <Logo className="h-[16px] w-auto text-ink-900" />
         </Link>
 
+        {/* Umschalter alt/neu */}
+        <div className="inline-flex shrink-0 overflow-hidden rounded border border-hair text-[11px]">
+          <span className="bg-brand-500/10 px-1.5 py-0.5 font-medium text-brand-700">
+            Alt
+          </span>
+          <Link
+            to="/control-platform/neu"
+            className="px-1.5 py-0.5 text-ink-600 hover:bg-ink-50"
+            title="Zur neuen Kontroll-Ansicht (neues System)"
+          >
+            Neu
+          </Link>
+        </div>
+
         <label className="sr-only" htmlFor="control-platform-views-mode">
           Modus
         </label>
