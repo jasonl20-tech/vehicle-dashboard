@@ -141,6 +141,12 @@ export interface AuthEnv {
    */
   CAR_DB_MIRRORING_KEY?: string;
   /**
+   * kie.ai API-Key für die Bild-Generierung („Auto erstellen", nano-banana-2 /
+   * nano-banana-edit). Pages-Env-Variable `KIE_API_KEY` (secret) → `env.KIE_API_KEY`.
+   * Ersetzt den toten Google-AI-Gateway-Weg.
+   */
+  KIE_API_KEY?: string;
+  /**
    * D1: Konfiguration (`settings`-Tabelle, u. a. `controll_buttons`). Binding `configs` → `env.configs`.
    */
   configs?: D1Database;

@@ -3,7 +3,6 @@ import {
   ImageIcon,
   Info,
   Loader2,
-  Lock,
   Sparkles,
   Upload,
   X,
@@ -119,7 +118,67 @@ function TabBtn({
   );
 }
 
-/* ---------- Tab A: Auto erstellen (Text → Bild) — NUR VISUELL ---------- */
+/* ---------- Tab A: Auto erstellen (Text → Bild) über kie.ai ---------- */
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+type ViewResult = {
+  state: "waiting" | "done" | "error";
+  imageUrl?: string;
+  error?: string;
+};
+
+/** Erzeugt EINE Ansicht über kie.ai (createTask → pollen). Liefert die Bild-URL. */
+async function generateView(
+  car: {
+    marke: string;
+    modell: string;
+    jahr: string;
+    body?: string;
+    trim?: string;
+    view: string;
+  },
+  refImages: string[],
+): Promise<{ imageUrl: string | null; error: string | null }> {
+  const res = await fetch("/api/databases/car-generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ ...car, images: refImages }),
+  });
+  const j = (await res.json().catch(() => ({}))) as {
+    taskId?: string;
+    error?: string;
+  };
+  if (!res.ok || !j.taskId) {
+    return { imageUrl: null, error: j.error || `HTTP ${res.status}` };
+  }
+  // Status pollen, bis fertig — Wall-Clock-Budget ~180 s (nano-banana kann bei
+  // Bild→Bild deutlich über 90 s brauchen; sonst gingen langsame Bilder verloren).
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    await sleep(3000);
+    const pr = await fetch(
+      `/api/databases/car-generate?taskId=${encodeURIComponent(j.taskId)}`,
+      { credentials: "include" },
+    );
+    const pj = (await pr.json().catch(() => ({}))) as {
+      state?: string;
+      imageUrl?: string | null;
+      error?: string | null;
+    };
+    if (pj.state === "success") {
+      return {
+        imageUrl: pj.imageUrl || null,
+        error: pj.imageUrl ? null : "Kein Bild erhalten.",
+      };
+    }
+    if (pj.state === "fail") {
+      return { imageUrl: null, error: pj.error || "Generierung fehlgeschlagen." };
+    }
+  }
+  return { imageUrl: null, error: "Zeitüberschreitung (>3 Min)." };
+}
 
 function TextCreate() {
   const [marke, setMarke] = useState("");
@@ -131,7 +190,15 @@ function TextCreate() {
   const [views, setViews] = useState<Set<string>>(
     () => new Set<string>(EXTERIOR_VIEWS),
   );
+  const [busy, setBusy] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, ViewResult>>({});
   const yearsParsed = useMemo(() => parseYears(jahr), [jahr]);
+
+  const orderedViews = useMemo(
+    () => [...EXTERIOR_VIEWS, ...INTERIOR_VIEWS].filter((v) => views.has(v)),
+    [views],
+  );
 
   const toggleView = (v: string) =>
     setViews((prev) => {
@@ -141,14 +208,73 @@ function TextCreate() {
       return next;
     });
 
+  const generate = async () => {
+    if (busy) return;
+    if (!marke.trim() || !modell.trim()) {
+      setGenError("Marke und Modell sind erforderlich.");
+      return;
+    }
+    if (orderedViews.length === 0) {
+      setGenError("Mindestens eine Ansicht wählen.");
+      return;
+    }
+    setBusy(true);
+    setGenError(null);
+    const jahrForGen =
+      promptJahr.trim() ||
+      String(yearsParsed.years[0] || "") ||
+      jahr.trim();
+    const car = {
+      marke: marke.trim(),
+      modell: modell.trim(),
+      jahr: jahrForGen,
+      body: body.trim(),
+      trim: trim.trim(),
+    };
+    setResults(
+      Object.fromEntries(
+        orderedViews.map((v) => [v, { state: "waiting" } as ViewResult]),
+      ),
+    );
+    try {
+      // 1) Erste Ansicht (Text→Bild) — dient als Referenz für die übrigen.
+      const first = orderedViews[0];
+      const r0 = await generateView({ ...car, view: first }, []);
+      setResults((prev) => ({
+        ...prev,
+        [first]: r0.imageUrl
+          ? { state: "done", imageUrl: r0.imageUrl }
+          : { state: "error", error: r0.error || "" },
+      }));
+      const refUrl = r0.imageUrl;
+      // 2) Übrige Ansichten parallel (Bild→Bild mit Referenz = konsistent).
+      await Promise.all(
+        orderedViews.slice(1).map(async (v) => {
+          const r = await generateView({ ...car, view: v }, refUrl ? [refUrl] : []);
+          setResults((prev) => ({
+            ...prev,
+            [v]: r.imageUrl
+              ? { state: "done", imageUrl: r.imageUrl }
+              : { state: "error", error: r.error || "" },
+          }));
+        }),
+      );
+    } catch (e) {
+      setGenError(e instanceof Error ? e.message : "Fehler bei der Generierung.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="max-w-3xl">
-      <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-[12.5px] text-amber-700">
-        <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-hair bg-ink-50/60 px-4 py-3 text-[12.5px] text-ink-600">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          <strong>Noch nicht aktiv.</strong> Die Generierung wird angeschlossen,
-          sobald die neue Kontrolle und Pipeline stehen. Die Eingaben sind hier
-          schon einmal vorbereitet, lösen aber noch nichts aus.
+          Generierung läuft über <strong>kie.ai (nano-banana)</strong>. Die erste
+          Ansicht entsteht aus Text, die übrigen werden für ein konsistentes Auto
+          daraus abgeleitet. <strong>Nur Vorschau</strong> — es wird noch nichts
+          in der Datenbank gespeichert.
         </span>
       </div>
 
@@ -278,19 +404,77 @@ function TextCreate() {
         <div className="mt-5">
           <button
             type="button"
-            disabled
-            title="Wird später angeschlossen"
-            className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-ink-900/40 px-4 py-2 text-[13px] font-medium text-white"
+            disabled={busy}
+            onClick={() => void generate()}
+            className="inline-flex items-center gap-1.5 rounded-md bg-ink-900 px-4 py-2 text-[13px] font-medium text-white hover:bg-ink-800 disabled:opacity-50"
           >
-            <Sparkles className="h-4 w-4" />
-            {`${yearsParsed.years.length || 1} Auto${
-              (yearsParsed.years.length || 1) === 1 ? "" : "s"
-            } anlegen · ${views.size} Ansicht${views.size === 1 ? "" : "en"}`}
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {busy
+              ? "Generiere…"
+              : `Generieren · ${orderedViews.length} Ansicht${
+                  orderedViews.length === 1 ? "" : "en"
+                }`}
           </button>
+          {genError && (
+            <p className="mt-2 text-[11.5px] text-accent-rose">{genError}</p>
+          )}
           <p className="mt-2 text-[11px] text-ink-400">
-            Button bewusst deaktiviert — Anbindung folgt mit der neuen Kontrolle.
+            Kann 1–3 Min dauern (erste Ansicht, dann übrige parallel) · nur
+            Vorschau, nichts wird gespeichert.
           </p>
         </div>
+
+        {orderedViews.some((v) => results[v]) && (
+          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {orderedViews.map((v) => {
+              const r = results[v];
+              if (!r) return null;
+              return (
+                <div
+                  key={v}
+                  className="overflow-hidden rounded-md border border-hair bg-white"
+                >
+                  <div className="relative grid aspect-[4/3] w-full place-items-center bg-ink-50">
+                    {r.state === "done" && r.imageUrl ? (
+                      <img
+                        src={r.imageUrl}
+                        alt={v}
+                        loading="lazy"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : r.state === "error" ? (
+                      <div className="px-2 text-center text-[10px] text-accent-rose">
+                        Fehler
+                        {r.error ? `: ${r.error}` : ""}
+                      </div>
+                    ) : (
+                      <Loader2 className="h-5 w-5 animate-spin text-ink-300" />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-1 px-2 py-1">
+                    <span className="truncate text-[11px] font-medium text-ink-700">
+                      {VIEW_LABEL[v] || v}
+                    </span>
+                    {r.state === "done" && r.imageUrl && (
+                      <a
+                        href={r.imageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 text-[10px] text-brand-600 hover:underline"
+                      >
+                        öffnen
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );
