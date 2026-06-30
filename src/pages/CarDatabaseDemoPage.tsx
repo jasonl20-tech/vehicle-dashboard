@@ -361,10 +361,6 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
       {/* Demo-Header (Vehicleimagery, kein fiktiver Händler) */}
       <header className="flex items-center justify-between gap-3 border-b border-hair bg-white px-4 py-3 sm:px-6">
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-white">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Live demo
-          </span>
           <div className="leading-tight">
             <div className="text-[14px] font-semibold tracking-tight text-ink-900">
               Vehicleimagery
@@ -1229,7 +1225,7 @@ function OutputOptionsSection() {
     {
       icon: Maximize2,
       title: "Custom size",
-      tags: ["Width", "Height", "Any ratio"],
+      tags: ["Width", "Height"],
     },
   ];
   return (

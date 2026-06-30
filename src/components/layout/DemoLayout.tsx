@@ -1,4 +1,4 @@
-import { ArrowLeft, LogOut, Sparkles } from "lucide-react";
+import { ArrowLeft, LogOut } from "lucide-react";
 import { Link, Outlet } from "react-router-dom";
 import { Logo } from "../brand/Logo";
 import { useAuth } from "../../lib/auth";
@@ -30,10 +30,6 @@ export default function DemoLayout() {
             <Link to="/demo" className="inline-flex items-center" aria-label="Demo">
               <Logo className="h-[16px] w-auto text-ink-900/80" />
             </Link>
-            <span className="hidden items-center gap-1.5 text-[11px] uppercase tracking-[0.2em] text-ink-400 sm:inline-flex">
-              <Sparkles className="h-3 w-3" />
-              Demo
-            </span>
           </div>
           {user && (
             <div className="flex items-center gap-3">
