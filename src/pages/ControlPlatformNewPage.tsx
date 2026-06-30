@@ -132,6 +132,14 @@ export default function ControlPlatformNewPage() {
           </span>
         </div>
 
+        <Link
+          to="/control-platform/neu/unvollstaendig"
+          className="shrink-0 rounded border border-hair px-2.5 py-1 text-[12px] text-ink-600 hover:bg-ink-50"
+          title="Autos mit fehlenden Außen-Ansichten suchen + nachgenerieren"
+        >
+          Unvollständig
+        </Link>
+
         <div className="ml-auto flex items-center gap-2">
           <span className="text-[12px] tabular-nums text-ink-500">
             {data

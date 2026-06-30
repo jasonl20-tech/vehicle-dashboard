@@ -29,6 +29,7 @@ import ControllJobsPage from "./pages/ControllJobsPage";
 import ControlPlatformPage from "./pages/ControlPlatformPage";
 import ControlPlatformNewPage from "./pages/ControlPlatformNewPage";
 import IncompleteVehiclesPage from "./pages/IncompleteVehiclesPage";
+import IncompleteVehiclesNewPage from "./pages/IncompleteVehiclesNewPage";
 import DeveloperOverviewPage from "./pages/DeveloperOverviewPage";
 import EmailLogDetailPage from "./pages/EmailLogDetailPage";
 import EmailLogsPage from "./pages/EmailLogsPage";
@@ -133,6 +134,12 @@ export default function App() {
           <Route
             path="/control-platform/unvollstaendig"
             element={<IncompleteVehiclesPage />}
+          />
+          {/* Finder im NEUEN System: fahrzeugliste-Autos mit fehlenden Außen-
+              Ansichten → über kie.ai nachgenerieren → neue Kontrolle. */}
+          <Route
+            path="/control-platform/neu/unvollstaendig"
+            element={<IncompleteVehiclesNewPage />}
           />
 
           <Route element={<CarDatabaseLayout />}>

@@ -193,7 +193,51 @@ function TextCreate() {
   const [busy, setBusy] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ViewResult>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const yearsParsed = useMemo(() => parseYears(jahr), [jahr]);
+
+  // Generierte Ansichten ins NEUE System übernehmen (R2 + fahrzeugliste,
+  // kontrolliert=0) → erscheinen dann in der neuen Kontroll-Ansicht.
+  const saveToControl = async () => {
+    if (saving) return;
+    const items = orderedViews
+      .filter((v) => results[v]?.state === "done" && results[v]?.imageUrl)
+      .map((v) => ({ view: v, imageUrl: results[v].imageUrl as string }));
+    if (items.length === 0) return;
+    setSaving(true);
+    setSaveMsg(null);
+    const jahrForGen =
+      promptJahr.trim() || String(yearsParsed.years[0] || "") || jahr.trim();
+    try {
+      const res = await fetch("/api/databases/car-generate-save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          marke: marke.trim(),
+          modell: modell.trim(),
+          jahr: jahrForGen,
+          body: body.trim(),
+          trim: trim.trim(),
+          farbe: "default",
+          items,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        saved?: number;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      setSaveMsg(
+        `${j.saved ?? 0} Ansicht(en) ins neue System übernommen — jetzt in „Kontrolle (neu)" zur Freigabe.`,
+      );
+    } catch (e) {
+      setSaveMsg(e instanceof Error ? e.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const orderedViews = useMemo(
     () => [...EXTERIOR_VIEWS, ...INTERIOR_VIEWS].filter((v) => views.has(v)),
@@ -314,9 +358,11 @@ function TextCreate() {
               >
                 {yearsParsed.error
                   ? yearsParsed.error
-                  : `→ ${yearsParsed.years.length} Auto${
-                      yearsParsed.years.length === 1 ? "" : "s"
-                    }: ${yearsParsed.years.join(", ")}`}
+                  : `→ generiert für ${yearsParsed.years[0] ?? ""}${
+                      yearsParsed.years.length > 1
+                        ? ` (mehrere Jahre folgen später)`
+                        : ""
+                    }`}
               </p>
             ) : (
               <p className="mt-0.5 text-[10.5px] text-ink-400">
@@ -423,8 +469,8 @@ function TextCreate() {
             <p className="mt-2 text-[11.5px] text-accent-rose">{genError}</p>
           )}
           <p className="mt-2 text-[11px] text-ink-400">
-            Kann 1–3 Min dauern (erste Ansicht, dann übrige parallel) · nur
-            Vorschau, nichts wird gespeichert.
+            Kann 1–3 Min dauern (erste Ansicht, dann übrige parallel). Erst
+            Vorschau — mit „In Kontrolle übernehmen" gehen sie ins neue System.
           </p>
         </div>
 
@@ -473,6 +519,27 @@ function TextCreate() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {orderedViews.some((v) => results[v]?.state === "done") && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={saving || busy}
+              onClick={() => void saveToControl()}
+              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-[13px] font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {saving ? "Übernehme…" : "In Kontrolle übernehmen (neues System)"}
+            </button>
+            {saveMsg && (
+              <span className="text-[12px] text-ink-600">{saveMsg}</span>
+            )}
           </div>
         )}
       </section>
