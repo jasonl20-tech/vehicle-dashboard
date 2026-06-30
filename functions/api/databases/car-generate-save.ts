@@ -133,9 +133,11 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const marke = String(body.marke || "").trim();
   const modell = String(body.modell || "").trim();
   const jahr = Number(body.jahr) || 0;
-  const carBody = String(body.body || "Basis").trim() || "Basis";
-  const trim = String(body.trim || "base").trim() || "base";
-  const farbe = String(body.farbe || "default").trim() || "default";
+  // Identität wörtlich übernehmen (KEINE Basis/base/default-Defaults) — sonst
+  // entstünde beim Nachgenerieren eine andere Variante als die Detail-Zeile.
+  const carBody = String(body.body ?? "").trim();
+  const trim = String(body.trim ?? "").trim();
+  const farbe = String(body.farbe ?? "").trim();
   if (!marke || !modell || !jahr) {
     return jsonResponse(
       { error: "marke, modell und jahr erforderlich." },
@@ -147,9 +149,11 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const items = itemsRaw
     .map((it) => {
       const o = (it || {}) as Record<string, unknown>;
+      const rid = Number(o.replaceId);
       return {
         view: String(o.view || "").trim().toLowerCase(),
         imageUrl: String(o.imageUrl || "").trim(),
+        replaceId: Number.isInteger(rid) && rid > 0 ? rid : 0,
       };
     })
     .filter(
@@ -171,6 +175,28 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
      skaliert, fehler, hold, innen)
     VALUES (?,?,?,?,?,?,?, 0, 0, 0, 'png', 'default', ?, ?, 0, 1, 0, 0, 0, ?)`;
 
+  // Wird ein R2-Schlüssel noch von irgendeiner Zeile referenziert?
+  const stillReferenced = async (k: string): Promise<boolean> => {
+    const r = await db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM fahrzeugliste WHERE r2_key = ?1 OR original_r2_key = ?1`,
+      )
+      .bind(k)
+      .first<{ n: number }>();
+    return Number(r?.n ?? 0) > 0;
+  };
+  const dropOldKey = async (k: unknown, newKey: string) => {
+    const ks = k ? String(k) : "";
+    if (
+      ks &&
+      ks !== newKey &&
+      /^(source|scaled|shadow)\//.test(ks) &&
+      !(await stillReferenced(ks))
+    ) {
+      await bucket.delete(ks).catch(() => {});
+    }
+  };
+
   const saved: { view: string; key: string }[] = [];
   const errors: { view: string; error: string }[] = [];
   for (const it of items) {
@@ -185,19 +211,58 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       await bucket.put(key, img.bytes, {
         httpMetadata: { contentType: img.contentType || "image/png" },
       });
-      const innen = INTERIOR.has(it.view) ? 1 : 0;
-      const res = await db
-        .prepare(INSERT)
-        .bind(marke, modell, jahr, carBody, trim, farbe, it.view, key, key, innen)
-        .run();
-      const changed =
-        (res as { meta?: { changes?: number } })?.meta?.changes ?? 0;
-      if (changed > 0) {
-        saved.push({ view: it.view, key });
+
+      if (it.replaceId) {
+        // ERSETZEN: neues Bild ist schon gespeichert → bestehende Zeile in-place
+        // auf den neuen Schlüssel umstellen (kontrolliert/fehler/hold zurück auf
+        // offen). Erst danach das alte Objekt wegräumen (kein Datenverlust).
+        const old = await db
+          .prepare(
+            `SELECT r2_key, original_r2_key FROM fahrzeugliste
+             WHERE id = ? AND transparent = 0 AND shadow = 0`,
+          )
+          .bind(it.replaceId)
+          .first<Record<string, unknown>>();
+        if (!old) {
+          await bucket.delete(key).catch(() => {});
+          errors.push({ view: it.view, error: "Zeile nicht gefunden." });
+          continue;
+        }
+        const upd = await db
+          .prepare(
+            `UPDATE fahrzeugliste
+               SET r2_key = ?, original_r2_key = ?, kontrolliert = 0,
+                   fehler = 0, hold = 0, last_updated = CURRENT_TIMESTAMP
+             WHERE id = ? AND transparent = 0 AND shadow = 0`,
+          )
+          .bind(key, key, it.replaceId)
+          .run();
+        const changed =
+          (upd as { meta?: { changes?: number } })?.meta?.changes ?? 0;
+        if (changed > 0) {
+          saved.push({ view: it.view, key });
+          await dropOldKey(old.r2_key, key);
+          await dropOldKey(old.original_r2_key, key);
+        } else {
+          await bucket.delete(key).catch(() => {});
+          errors.push({ view: it.view, error: "Ersetzen fehlgeschlagen." });
+        }
       } else {
-        // Zeile existierte schon (INSERT OR IGNORE) → R2-Objekt wieder löschen.
-        await bucket.delete(key).catch(() => {});
-        errors.push({ view: it.view, error: "Ansicht existiert bereits." });
+        // NEU einfügen.
+        const innen = INTERIOR.has(it.view) ? 1 : 0;
+        const res = await db
+          .prepare(INSERT)
+          .bind(marke, modell, jahr, carBody, trim, farbe, it.view, key, key, innen)
+          .run();
+        const changed =
+          (res as { meta?: { changes?: number } })?.meta?.changes ?? 0;
+        if (changed > 0) {
+          saved.push({ view: it.view, key });
+        } else {
+          // Zeile existierte schon (INSERT OR IGNORE) → R2-Objekt wieder löschen.
+          await bucket.delete(key).catch(() => {});
+          errors.push({ view: it.view, error: "Ansicht existiert bereits." });
+        }
       }
     } catch {
       if (key) await bucket.delete(key).catch(() => {});

@@ -371,7 +371,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
         .bind(...delIds)
         .run();
       const changed = (res as { meta?: { changes?: number } })?.meta?.changes ?? 0;
-      // R2-Objekte best effort löschen (nur wenn nicht von anderer Zeile geteilt).
+      // R2-Objekte löschen — aber NUR wenn keine andere (z. B. abgeleitete
+      // transparent/shadow-)Zeile denselben Schlüssel via original_r2_key noch
+      // referenziert (sonst würden diese zu Waisen mit 404). Zeilen sind oben
+      // schon gelöscht; verbleibende Referenzen = andere Zeilen.
       const bucket = env.vehicleimages;
       if (bucket) {
         const keys = new Set<string>();
@@ -381,9 +384,16 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
               keys.add(String(k));
           }
         }
-        await Promise.all(
-          [...keys].map((k) => bucket.delete(k).catch(() => {})),
-        );
+        for (const k of keys) {
+          const ref = await db
+            .prepare(
+              `SELECT COUNT(*) AS n FROM fahrzeugliste
+               WHERE r2_key = ?1 OR original_r2_key = ?1`,
+            )
+            .bind(k)
+            .first<{ n: number }>();
+          if (Number(ref?.n ?? 0) === 0) await bucket.delete(k).catch(() => {});
+        }
       }
       return jsonResponse({ ok: true, action, changed });
     } catch (err) {

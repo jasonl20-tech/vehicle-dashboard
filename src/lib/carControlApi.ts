@@ -162,6 +162,97 @@ export function carControlDetailUrl(id: CarVariantIdentity | null): string | nul
 export const variantKey = (v: CarVariantIdentity): string =>
   `${v.marke}|${v.modell}|${v.jahr}|${v.body}|${v.trim}|${v.farbe}`;
 
+/* ── Nachgenerieren (kie.ai) je Ansicht ── */
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Eine Ansicht über kie.ai generieren (Auftrag + pollen) → Bild-URL. */
+export async function generateOneView(
+  id: CarVariantIdentity,
+  view: string,
+): Promise<string | null> {
+  const res = await fetch("/api/databases/car-generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      marke: id.marke,
+      modell: id.modell,
+      jahr: id.jahr,
+      body: id.body,
+      trim: id.trim,
+      farbe: id.farbe,
+      view,
+    }),
+  });
+  const j = (await res.json().catch(() => ({}))) as { taskId?: string };
+  if (!res.ok || !j.taskId) return null;
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    await sleep(3000);
+    const pr = await fetch(
+      `/api/databases/car-generate?taskId=${encodeURIComponent(j.taskId)}`,
+      { credentials: "include" },
+    );
+    const pj = (await pr.json().catch(() => ({}))) as {
+      state?: string;
+      imageUrl?: string | null;
+    };
+    if (pj.state === "success") return pj.imageUrl || null;
+    if (pj.state === "fail") return null;
+  }
+  return null;
+}
+
+/** Generierte Ansichten ins neue System speichern (kontrolliert=0).
+ *  Mit `replaceId` wird die bestehende Zeile in-place ersetzt (atomar im
+ *  Backend: neu speichern → Zeile umstellen → altes Objekt aufräumen). */
+export async function saveGeneratedViews(
+  id: CarVariantIdentity,
+  items: { view: string; imageUrl: string; replaceId?: number }[],
+): Promise<number> {
+  const res = await fetch("/api/databases/car-generate-save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      marke: id.marke,
+      modell: id.modell,
+      jahr: id.jahr,
+      body: id.body,
+      trim: id.trim,
+      farbe: id.farbe,
+      items,
+    }),
+  });
+  const j = (await res.json().catch(() => ({}))) as {
+    saved?: number;
+    error?: string;
+  };
+  if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+  return j.saved ?? 0;
+}
+
+/**
+ * Eine Ansicht (neu) generieren und ins neue System übernehmen.
+ * - Fehlende Ansicht (replaceId leer): einfach einfügen.
+ * - Bestehende Ansicht ersetzen (replaceId): das Backend speichert ZUERST das
+ *   neue Bild und stellt die Zeile dann in-place um — das alte Bild bleibt bei
+ *   jedem Fehler erhalten (kein Datenverlust). Liefert true bei Erfolg.
+ */
+export async function regenerateView(
+  id: CarVariantIdentity,
+  view: string,
+  replaceId?: number,
+): Promise<boolean> {
+  const url = await generateOneView(id, view);
+  if (!url) return false;
+  const saved = await saveGeneratedViews(id, [
+    { view, imageUrl: url, replaceId: replaceId && replaceId > 0 ? replaceId : undefined },
+  ]);
+  return saved > 0;
+}
+
 /** Bild-URL für einen ID-Schlüssel (z. B. `source/01K…`). Null, wenn leer. */
 export function carControlImageUrl(key: string | null | undefined): string | null {
   if (!key) return null;

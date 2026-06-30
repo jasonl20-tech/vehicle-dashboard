@@ -29,6 +29,7 @@ import {
   variantKey,
 } from "../lib/carControlApi";
 import { fmtNumber, useApi } from "../lib/customerApi";
+import ControlPlatformLightbox from "./ControlPlatformLightbox";
 
 const PAGE_SIZE = 50;
 
@@ -149,6 +150,7 @@ export default function ControlPlatformNewPage() {
   );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [lightboxView, setLightboxView] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 350);
@@ -464,6 +466,7 @@ export default function ControlPlatformNewPage() {
                         vo={vo}
                         busy={busy}
                         onAct={act}
+                        onOpen={setLightboxView}
                       />
                     );
                   })}
@@ -483,6 +486,7 @@ export default function ControlPlatformNewPage() {
                           vo={vo}
                           busy={busy}
                           onAct={act}
+                          onOpen={setLightboxView}
                         />
                       ))}
                       {detail.missingInt.map((view) => (
@@ -491,6 +495,7 @@ export default function ControlPlatformNewPage() {
                           view={view}
                           busy={busy}
                           onAct={act}
+                          onOpen={setLightboxView}
                         />
                       ))}
                     </div>
@@ -520,6 +525,20 @@ export default function ControlPlatformNewPage() {
         </section>
       </main>
 
+      {lightboxView && detail && (
+        <ControlPlatformLightbox
+          identity={detail.identity}
+          views={detail.views}
+          missingExt={detail.missingExt}
+          missingInt={detail.missingInt}
+          startView={lightboxView}
+          busy={busy}
+          onClose={() => setLightboxView(null)}
+          onAct={act}
+          onReload={reloadBoth}
+        />
+      )}
+
       {msg && (
         <div className="shrink-0 border-t border-hair bg-ink-900 px-3 py-1.5 text-[12px] text-white">
           {msg}
@@ -535,11 +554,13 @@ function ViewTile({
   vo,
   busy,
   onAct,
+  onOpen,
 }: {
   view: string;
   vo?: CarControlDetailView;
   busy: boolean;
   onAct: (action: CarControlAction, ids: number[]) => void;
+  onOpen?: (view: string) => void;
 }) {
   const tone: Tone = (vo?.status as Tone) ?? "open";
   const src = vo ? carControlImageUrl(vo.imageKey) : null;
@@ -549,7 +570,12 @@ function ViewTile({
     <div
       className={`overflow-hidden rounded-md bg-white ${STATUS_STYLE[tone].ring}`}
     >
-      <div className="relative grid aspect-[3/2] w-full place-items-center bg-ink-50">
+      <button
+        type="button"
+        onClick={() => onOpen?.(view)}
+        title="Groß öffnen"
+        className="relative grid aspect-[3/2] w-full cursor-zoom-in place-items-center bg-ink-50"
+      >
         {vo && src && !imgError ? (
           <img
             src={src}
@@ -571,7 +597,7 @@ function ViewTile({
             {STATUS_STYLE[tone].text}
           </span>
         )}
-      </div>
+      </button>
       <div className="flex items-center justify-between gap-1 px-1.5 py-1">
         <span className="truncate text-[11px] font-medium text-ink-700">
           {label(view)}

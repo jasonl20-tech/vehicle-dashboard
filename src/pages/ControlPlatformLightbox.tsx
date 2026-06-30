@@ -1,0 +1,384 @@
+import {
+  Check,
+  ImageIcon,
+  Loader2,
+  Pause,
+  RotateCcw,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type CarControlAction,
+  type CarControlDetailView,
+  type CarVariantIdentity,
+  carControlImageUrl,
+  regenerateView,
+} from "../lib/carControlApi";
+
+/** Reihenfolge im Streifen (wie alte Lightbox) + Innen + Zusatz. */
+const STRIP_ORDER = [
+  "front_left",
+  "front",
+  "front_right",
+  "right",
+  "rear_right",
+  "rear",
+  "rear_left",
+  "left",
+  "dashboard",
+  "center_console",
+];
+
+const VIEW_LABEL: Record<string, string> = {
+  front: "Front",
+  rear: "Heck",
+  left: "Links",
+  right: "Rechts",
+  front_left: "Vorne links",
+  front_right: "Vorne rechts",
+  rear_left: "Hinten links",
+  rear_right: "Hinten rechts",
+  dashboard: "Armaturenbrett",
+  center_console: "Mittelkonsole",
+};
+const label = (v: string) => VIEW_LABEL[v] || v;
+
+type Item = { view: string; vo?: CarControlDetailView; missing?: boolean };
+type Tone = "approved" | "error" | "hold" | "open";
+const TONE_RING: Record<Tone, string> = {
+  approved: "ring-2 ring-emerald-400",
+  error: "ring-2 ring-rose-400",
+  hold: "ring-2 ring-amber-400",
+  open: "ring-1 ring-white/20",
+};
+const TONE_DOT: Record<Tone, string> = {
+  approved: "bg-emerald-400",
+  error: "bg-rose-400",
+  hold: "bg-amber-400",
+  open: "bg-white/40",
+};
+
+export default function ControlPlatformLightbox({
+  identity,
+  views,
+  missingExt,
+  missingInt,
+  startView,
+  busy,
+  onClose,
+  onAct,
+  onReload,
+}: {
+  identity: CarVariantIdentity;
+  views: CarControlDetailView[];
+  missingExt: string[];
+  missingInt: string[];
+  startView: string;
+  busy: boolean;
+  onClose: () => void;
+  onAct: (action: CarControlAction, ids: number[]) => void | Promise<void>;
+  onReload: () => void;
+}) {
+  const items: Item[] = useMemo(() => {
+    const present = new Map(views.map((v) => [v.view, v]));
+    const out: Item[] = [];
+    for (const view of STRIP_ORDER) {
+      const vo = present.get(view);
+      if (vo) out.push({ view, vo });
+      else if (missingExt.includes(view) || missingInt.includes(view))
+        out.push({ view, missing: true });
+    }
+    for (const v of views)
+      if (!STRIP_ORDER.includes(v.view)) out.push({ view: v.view, vo: v });
+    return out;
+  }, [views, missingExt, missingInt]);
+
+  const [curView, setCurView] = useState(startView);
+  const [genView, setGenView] = useState<string | null>(null);
+  const [genMsg, setGenMsg] = useState<string | null>(null);
+
+  const idx = Math.max(
+    0,
+    items.findIndex((it) => it.view === curView),
+  );
+  const cur = items[idx];
+
+  const move = useCallback(
+    (delta: number) => {
+      if (items.length === 0) return;
+      const ni = (idx + delta + items.length) % items.length;
+      setCurView(items[ni].view);
+    },
+    [idx, items],
+  );
+
+  // Nächste bearbeitbare Ansicht (offen oder fehlend) — für Auto-Sprung.
+  const goNextWorkable = useCallback(() => {
+    if (items.length === 0) return;
+    for (let i = 1; i <= items.length; i++) {
+      const it = items[(idx + i) % items.length];
+      if (it.missing || it.vo?.status === "open") {
+        setCurView(it.view);
+        return;
+      }
+    }
+  }, [idx, items]);
+
+  const doRegen = useCallback(
+    async (view: string, replaceId?: number) => {
+      if (genView) return;
+      setGenView(view);
+      setGenMsg(`Generiere „${label(view)}" … (kann 1–3 Min dauern)`);
+      try {
+        const ok = await regenerateView(identity, view, replaceId);
+        setGenMsg(
+          ok
+            ? `„${label(view)}" generiert + übernommen.`
+            : `„${label(view)}": Generierung fehlgeschlagen.`,
+        );
+        if (ok) onReload();
+      } catch (e) {
+        setGenMsg(e instanceof Error ? e.message : "Fehler.");
+      } finally {
+        setGenView(null);
+      }
+    },
+    [genView, identity, onReload],
+  );
+
+  // Tastatur
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && /^(input|textarea|select)$/i.test(t.tagName)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (e.key === "Escape") return onClose();
+      if (e.key === "ArrowRight" || e.key === "ArrowDown")
+        return e.preventDefault(), move(1);
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp")
+        return e.preventDefault(), move(-1);
+      const vo = cur?.vo;
+      if (genView || busy) return;
+      if ((k === "1" || k === "r") && vo && !vo.approved) {
+        void onAct("approve", [vo.id]);
+        goNextWorkable();
+      } else if ((k === "2" || k === "g") && cur) {
+        void doRegen(cur.view, vo?.id);
+      } else if ((k === "3" || k === "h") && vo && !vo.hold) {
+        void onAct("hold", [vo.id]);
+      } else if ((k === "4" || k === "f") && vo && !vo.fehler) {
+        void onAct("error", [vo.id]);
+      } else if ((k === "0" || k === "u") && vo && vo.status !== "open") {
+        void onAct("reset", [vo.id]);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && vo) {
+        e.preventDefault();
+        void onAct("delete", [vo.id]);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cur, genView, busy, move, onAct, onClose, doRegen, goNextWorkable]);
+
+  const tone = (it: Item): Tone => (it.vo?.status as Tone) ?? "open";
+  const bigSrc = cur?.vo ? carControlImageUrl(cur.vo.imageKey) : null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[90] flex flex-col bg-black/95"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Kopf */}
+      <div className="flex h-11 shrink-0 items-center gap-3 border-b border-white/10 px-3 text-white">
+        <div className="min-w-0">
+          <span className="text-[13px] font-semibold">
+            {identity.marke} {identity.modell}
+          </span>{" "}
+          <span className="text-[12px] text-white/50">
+            {identity.jahr} · {identity.farbe} · {cur ? label(cur.view) : ""}
+          </span>
+        </div>
+        <div className="ml-auto flex items-center gap-2 text-[12px]">
+          {genMsg && (
+            <span className="max-w-[40vw] truncate text-white/70">{genMsg}</span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-white/10"
+            aria-label="Schließen"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        {/* Streifen */}
+        <aside className="w-[150px] shrink-0 overflow-y-auto border-r border-white/10 p-2">
+          {items.map((it) => {
+            const active = it.view === curView;
+            const src = it.vo ? carControlImageUrl(it.vo.imageKey) : null;
+            return (
+              <button
+                key={it.view}
+                type="button"
+                onClick={() => setCurView(it.view)}
+                className={`mb-2 block w-full overflow-hidden rounded ${
+                  active ? "ring-2 ring-brand-400" : "ring-1 ring-white/10"
+                }`}
+              >
+                <div className="relative grid aspect-[3/2] w-full place-items-center bg-white/5">
+                  {src ? (
+                    <img
+                      src={src}
+                      alt={it.view}
+                      loading="lazy"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-white/40">fehlt</span>
+                  )}
+                  {it.vo && (
+                    <span
+                      className={`absolute right-1 top-1 h-2 w-2 rounded-full ${TONE_DOT[tone(it)]}`}
+                    />
+                  )}
+                </div>
+                <div className="truncate px-1 py-0.5 text-left text-[10px] text-white/70">
+                  {label(it.view)}
+                </div>
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* Großbild */}
+        <div className="relative flex min-w-0 flex-1 items-center justify-center p-4">
+          {cur?.vo && bigSrc ? (
+            <img
+              src={bigSrc}
+              alt={cur.view}
+              className={`max-h-full max-w-full object-contain ${TONE_RING[tone(cur)]} rounded`}
+            />
+          ) : cur ? (
+            <div className="flex flex-col items-center gap-2 text-white/50">
+              <ImageIcon className="h-10 w-10" />
+              <span className="text-[13px]">
+                „{label(cur.view)}" fehlt — generieren mit dem Stern-Knopf.
+              </span>
+            </div>
+          ) : null}
+          {genView && (
+            <div className="absolute inset-0 grid place-items-center bg-black/50">
+              <Loader2 className="h-8 w-8 animate-spin text-white" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Aktions-Leiste */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-white/10 px-3 py-2">
+        {cur?.vo && (
+          <>
+            <BarBtn
+              label="Freigeben"
+              k="1"
+              disabled={busy || !!genView || cur.vo.approved}
+              onClick={() => {
+                void onAct("approve", [cur.vo!.id]);
+                goNextWorkable();
+              }}
+              cls="bg-emerald-600 hover:bg-emerald-700"
+            >
+              <Check className="h-4 w-4" />
+            </BarBtn>
+            <BarBtn
+              label="Hold"
+              k="3"
+              disabled={busy || !!genView || cur.vo.hold}
+              onClick={() => void onAct("hold", [cur.vo!.id])}
+              cls="bg-amber-600 hover:bg-amber-700"
+            >
+              <Pause className="h-4 w-4" />
+            </BarBtn>
+            <BarBtn
+              label="Fehler"
+              k="4"
+              disabled={busy || !!genView || cur.vo.fehler}
+              onClick={() => void onAct("error", [cur.vo!.id])}
+              cls="bg-rose-600 hover:bg-rose-700"
+            >
+              <X className="h-4 w-4" />
+            </BarBtn>
+            <BarBtn
+              label="Zurücksetzen"
+              k="0"
+              disabled={busy || !!genView || cur.vo.status === "open"}
+              onClick={() => void onAct("reset", [cur.vo!.id])}
+              cls="bg-white/10 hover:bg-white/20"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </BarBtn>
+          </>
+        )}
+        <BarBtn
+          label={cur?.vo ? "Neu generieren" : "Generieren"}
+          k="2"
+          disabled={busy || !!genView || !cur}
+          onClick={() => cur && void doRegen(cur.view, cur.vo?.id)}
+          cls="bg-brand-600 hover:bg-brand-700"
+        >
+          <Sparkles className="h-4 w-4" />
+        </BarBtn>
+        {cur?.vo && (
+          <BarBtn
+            label="Löschen"
+            k="Entf"
+            disabled={busy || !!genView}
+            onClick={() => void onAct("delete", [cur.vo!.id])}
+            cls="bg-white/10 hover:bg-rose-600/40"
+          >
+            <Trash2 className="h-4 w-4" />
+          </BarBtn>
+        )}
+        <span className="ml-auto text-[11px] text-white/40">
+          ESC schließen · ← → blättern · 1 Freigeben · 2 Generieren · 3 Hold · 4
+          Fehler · Entf Löschen
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function BarBtn({
+  label: lbl,
+  k,
+  disabled,
+  onClick,
+  cls,
+  children,
+}: {
+  label: string;
+  k: string;
+  disabled: boolean;
+  onClick: () => void;
+  cls: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium text-white disabled:opacity-30 ${cls}`}
+    >
+      {children}
+      {lbl}
+      <kbd className="rounded bg-black/20 px-1 text-[10px]">{k}</kbd>
+    </button>
+  );
+}
