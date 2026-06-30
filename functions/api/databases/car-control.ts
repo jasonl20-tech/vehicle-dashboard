@@ -19,9 +19,179 @@ import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 const OPEN_WHERE =
   "kontrolliert = 0 AND transparent = 0 AND shadow = 0";
 
+const EXTERIOR = [
+  "front",
+  "rear",
+  "left",
+  "right",
+  "front_left",
+  "front_right",
+  "rear_left",
+  "rear_right",
+];
+const INTERIOR = ["dashboard", "center_console"];
+
 function likePattern(raw: string): string | null {
   const v = raw.trim().replace(/[%_]/g, " ").replace(/\s+/g, " ").trim();
   return v ? `%${v}%` : null;
+}
+
+const num = (v: unknown): number => Number(v ?? 0) || 0;
+
+/** mode=list — eine Zeile je Variante (marke|modell|jahr|body|trim|farbe) mit
+ *  Zähl-Aggregaten (Quell-Ansichten: total/approved/open/error/hold) für die
+ *  Sidebar (Badge + Fortschrittsbalken). */
+async function listVariants(
+  db: D1Database,
+  p: URLSearchParams,
+): Promise<Response> {
+  const where = ["transparent = 0", "shadow = 0"];
+  const binds: (string | number)[] = [];
+  const q = likePattern(p.get("q") || "");
+  if (q) {
+    where.push("(marke LIKE ? OR modell LIKE ? OR (marke || ' ' || modell) LIKE ?)");
+    binds.push(q, q, q);
+  }
+  const marke = (p.get("marke") || "").trim();
+  if (marke) {
+    where.push("lower(marke) = ?");
+    binds.push(marke.toLowerCase());
+  }
+  const whereSql = `WHERE ${where.join(" AND ")}`;
+
+  const status = (p.get("status") || "open").toLowerCase();
+  const having =
+    status === "open"
+      ? "HAVING open > 0"
+      : status === "done"
+        ? "HAVING open = 0"
+        : status === "error"
+          ? "HAVING error > 0"
+          : status === "hold"
+            ? "HAVING hold > 0"
+            : ""; // all
+
+  const ORDER: Record<string, string> = {
+    open_desc: "open DESC, marke, modell, jahr",
+    updated_desc: "lastUpdated DESC",
+    marke: "marke, modell, jahr",
+    total_desc: "total DESC",
+    error_desc: "error DESC, open DESC",
+  };
+  const orderSql = `ORDER BY ${ORDER[p.get("sort") || "open_desc"] || ORDER.open_desc}`;
+  const limit = Math.min(200, Math.max(1, Number(p.get("limit") || 50)));
+  const offset = Math.max(0, Number(p.get("offset") || 0));
+
+  const AGG = `
+    SUM(CASE WHEN kontrolliert=1 THEN 1 ELSE 0 END) AS approved,
+    SUM(CASE WHEN fehler=1 THEN 1 ELSE 0 END) AS error,
+    SUM(CASE WHEN hold=1 THEN 1 ELSE 0 END) AS hold,
+    SUM(CASE WHEN kontrolliert=0 AND fehler=0 AND hold=0 THEN 1 ELSE 0 END) AS open`;
+  const group = "GROUP BY marke, modell, jahr, body, trim, farbe";
+  const sql = `SELECT marke, modell, jahr, body, trim, farbe,
+      COUNT(*) AS total, ${AGG}, MAX(last_updated) AS lastUpdated
+    FROM fahrzeugliste ${whereSql} ${group} ${having} ${orderSql} LIMIT ? OFFSET ?`;
+  const countSql = `SELECT COUNT(*) AS n FROM (
+    SELECT ${AGG} FROM fahrzeugliste ${whereSql} ${group} ${having})`;
+
+  const [countRow, res] = await Promise.all([
+    db.prepare(countSql).bind(...binds).first<{ n: number }>(),
+    db.prepare(sql).bind(...binds, limit, offset).all(),
+  ]);
+  const rows = (res.results ?? []).map((r) => {
+    const o = r as Record<string, unknown>;
+    return {
+      marke: String(o.marke ?? ""),
+      modell: String(o.modell ?? ""),
+      jahr: num(o.jahr),
+      body: String(o.body ?? ""),
+      trim: String(o.trim ?? ""),
+      farbe: String(o.farbe ?? ""),
+      total: num(o.total),
+      approved: num(o.approved),
+      open: num(o.open),
+      error: num(o.error),
+      hold: num(o.hold),
+      lastUpdated: o.lastUpdated ? String(o.lastUpdated) : null,
+    };
+  });
+  return jsonResponse({ total: num(countRow?.n), rows, limit, offset });
+}
+
+/** mode=detail — alle Quell-Ansichten EINER Variante fürs Raster + welche der
+ *  8 Außen-/2 Innen-Ansichten fehlen (für „+"-Nachgenerieren). */
+async function detailVariant(
+  db: D1Database,
+  p: URLSearchParams,
+): Promise<Response> {
+  const marke = (p.get("marke") || "").trim();
+  const modell = (p.get("modell") || "").trim();
+  const jahr = Number(p.get("jahr") || 0);
+  if (!marke || !modell || !jahr) {
+    return jsonResponse(
+      { error: "marke, modell, jahr erforderlich." },
+      { status: 400 },
+    );
+  }
+  const where = ["transparent = 0", "shadow = 0", "marke = ?", "modell = ?", "jahr = ?"];
+  const binds: (string | number)[] = [marke, modell, jahr];
+  for (const f of ["body", "trim", "farbe"] as const) {
+    const v = (p.get(f) || "").trim();
+    if (v) {
+      where.push(`${f} = ?`);
+      binds.push(v);
+    }
+  }
+  const res = await db
+    .prepare(
+      `SELECT id, "view" AS view, innen, kontrolliert, fehler, hold, hohe,
+         original_r2_key, r2_key, last_updated
+       FROM fahrzeugliste WHERE ${where.join(" AND ")} ORDER BY "view"`,
+    )
+    .bind(...binds)
+    .all();
+  const views = (res.results ?? []).map((r) => {
+    const o = r as Record<string, unknown>;
+    const imageKey =
+      (o.original_r2_key ? String(o.original_r2_key) : "") ||
+      (o.r2_key ? String(o.r2_key) : "");
+    const fehler = num(o.fehler) === 1;
+    const hold = num(o.hold) === 1;
+    const approved = num(o.kontrolliert) === 1;
+    const stateStatus = fehler
+      ? "error"
+      : hold
+        ? "hold"
+        : approved
+          ? "approved"
+          : "open";
+    return {
+      id: num(o.id),
+      view: String(o.view ?? ""),
+      innen: num(o.innen) === 1,
+      approved,
+      fehler,
+      hold,
+      status: stateStatus,
+      hohe: o.hohe == null ? null : Number(o.hohe),
+      imageKey,
+      lastUpdated: o.last_updated ? String(o.last_updated) : null,
+    };
+  });
+  const present = new Set(views.map((v) => v.view));
+  return jsonResponse({
+    identity: {
+      marke,
+      modell,
+      jahr,
+      body: (p.get("body") || "").trim(),
+      trim: (p.get("trim") || "").trim(),
+      farbe: (p.get("farbe") || "").trim(),
+    },
+    views,
+    missingExt: EXTERIOR.filter((v) => !present.has(v)),
+    missingInt: INTERIOR.filter((v) => !present.has(v)),
+  });
 }
 
 export const onRequestGet: PagesFunction<AuthEnv> = async ({
@@ -41,6 +211,22 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 
   const p = new URL(request.url).searchParams;
+  const mode = (p.get("mode") || "").toLowerCase();
+  try {
+    if (mode === "list") return await listVariants(db, p);
+    if (mode === "detail") return await detailVariant(db, p);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/no such table|no such column/i.test(msg)) {
+      return jsonResponse(
+        mode === "detail"
+          ? { views: [], missingExt: [], missingInt: [] }
+          : { total: 0, rows: [] },
+        { status: 200 },
+      );
+    }
+    return jsonResponse({ error: msg }, { status: 500 });
+  }
   const where = [OPEN_WHERE];
   const binds: (string | number)[] = [];
 
@@ -119,7 +305,7 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   }
 };
 
-const ACTIONS = new Set(["approve", "hold", "error", "reset"]);
+const ACTIONS = new Set(["approve", "hold", "error", "reset", "delete"]);
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
   request,
@@ -161,6 +347,51 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     );
   }
 
+  const placeholders = ids.map(() => "?").join(",");
+
+  // „delete": Quell-Zeile(n) + zugehörige R2-Objekte entfernen (schlechtes Bild
+  // wegräumen, danach neu generieren). Nur Quell-Zeilen (transparent=0,shadow=0).
+  if (action === "delete") {
+    try {
+      const sel = await db
+        .prepare(
+          `SELECT id, r2_key, original_r2_key FROM fahrzeugliste
+           WHERE id IN (${placeholders}) AND transparent = 0 AND shadow = 0`,
+        )
+        .bind(...ids)
+        .all();
+      const found = (sel.results ?? []).map((r) => r as Record<string, unknown>);
+      const delIds = found.map((o) => num(o.id)).filter((n) => n > 0);
+      if (delIds.length === 0) {
+        return jsonResponse({ ok: true, action, changed: 0 });
+      }
+      const ph = delIds.map(() => "?").join(",");
+      const res = await db
+        .prepare(`DELETE FROM fahrzeugliste WHERE id IN (${ph})`)
+        .bind(...delIds)
+        .run();
+      const changed = (res as { meta?: { changes?: number } })?.meta?.changes ?? 0;
+      // R2-Objekte best effort löschen (nur wenn nicht von anderer Zeile geteilt).
+      const bucket = env.vehicleimages;
+      if (bucket) {
+        const keys = new Set<string>();
+        for (const o of found) {
+          for (const k of [o.r2_key, o.original_r2_key]) {
+            if (k && /^(source|scaled|shadow)\//.test(String(k)))
+              keys.add(String(k));
+          }
+        }
+        await Promise.all(
+          [...keys].map((k) => bucket.delete(k).catch(() => {})),
+        );
+      }
+      return jsonResponse({ ok: true, action, changed });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return jsonResponse({ error: msg }, { status: 500 });
+    }
+  }
+
   // SET je nach Aktion. Nur auf noch offene Quell-Zeilen anwenden.
   let setSql: string;
   if (action === "approve") setSql = "kontrolliert = 1, fehler = 0, hold = 0";
@@ -168,7 +399,6 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   else if (action === "error") setSql = "fehler = 1";
   else setSql = "kontrolliert = 0, fehler = 0, hold = 0"; // reset
 
-  const placeholders = ids.map(() => "?").join(",");
   try {
     const res = await db
       .prepare(
