@@ -540,13 +540,16 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
         {/* 05 · Mirroring — normal vs. gespiegelt */}
         <MirrorSection car={car} exterior={exterior} />
 
-        {/* 06 · Marken-Übersicht (live) */}
+        {/* 06 · Schatten + Mirroring kombiniert (normal vs. beides aktiv) */}
+        <ShadowMirrorSection car={car} exterior={exterior} />
+
+        {/* 07 · Marken-Übersicht (live) */}
         {brands.length > 0 && <BrandsSection brands={brands} />}
 
-        {/* 07 · Dokumentation (vor den Beispiel-Bildern) */}
+        {/* 08 · Dokumentation (vor den Beispiel-Bildern) */}
         <DocsSection />
 
-        {/* 08 · Beispiel-Fahrzeuge (nur Schaufenster, nicht klickbar) */}
+        {/* 09 · Beispiel-Fahrzeuge (nur Schaufenster, nicht klickbar) */}
         <ShowroomGrid cars={showroom2010} />
       </div>
 
@@ -1092,6 +1095,59 @@ function MirrorSection({
   );
 }
 
+/** 06 · Schatten + Mirroring kombiniert: links normal, rechts beides aktiviert. */
+function ShadowMirrorSection({
+  car,
+  exterior,
+}: {
+  car: CarId;
+  exterior: string[];
+}) {
+  const dt = useContext(DemoTokenCtx);
+  const v = exterior.includes("front_left")
+    ? "front_left"
+    : exterior[0] ?? "front_left";
+  const normalUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    { view: v, width: 480, transparent: true, demoToken: dt, format: "webp" },
+  );
+  const bothUrl = carThumbApiUrl(
+    { ...car, farbe: "default" },
+    {
+      view: v,
+      width: 480,
+      transparent: true,
+      shadow: true,
+      mirroring: true,
+      demoToken: dt,
+      format: "webp",
+    },
+  );
+  return (
+    <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
+      <SectionHead n="06" title="Shadow and reflection combined">
+        Shadow and reflection can also be requested together in one image: a
+        grounded shadow plus the floor reflection beneath the car. On the left
+        the plain car, on the right with both enabled.
+      </SectionHead>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <CompareTile
+          label="Normal"
+          caption="no effects"
+          url={normalUrl}
+          alt={`${prettyModel(car.modell)} normal`}
+        />
+        <CompareTile
+          label="Shadow + mirroring"
+          caption="shadow=true & mirroring=true"
+          url={bothUrl}
+          alt={`${prettyModel(car.modell)} shadow + mirrored`}
+        />
+      </div>
+    </section>
+  );
+}
+
 /** Vergleichskachel: Bild mit Eck-Label + Mono-Caption (für Ground/Mirroring). */
 function CompareTile({
   label,
@@ -1174,7 +1230,7 @@ function BrandsSection({ brands }: { brands: string[] }) {
   const hasMore = brands.length > MAX;
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
-      <SectionHead n="06" title="Brands we cover">
+      <SectionHead n="07" title="Brands we cover">
         These are the brands you can request through the API, {brands.length} in
         total, and we keep adding more.
       </SectionHead>
@@ -1331,7 +1387,7 @@ function DocsSection() {
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <SectionHead n="07" title="Documentation">
+        <SectionHead n="08" title="Documentation">
           A short overview of what the API offers. The full reference, with every
           endpoint and parameter, is in the documentation.
         </SectionHead>
@@ -1762,7 +1818,7 @@ function SpinSlider({
 function ShowroomGrid({ cars }: { cars: CarId[] }) {
   return (
     <section className="mt-6 rounded-2xl border border-hair bg-white p-4 sm:p-5">
-      <SectionHead n="08" title="Example vehicles">
+      <SectionHead n="09" title="Example vehicles">
         A few example cars from the API. Any make, model and year is available on
         request.
       </SectionHead>
