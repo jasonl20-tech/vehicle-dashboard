@@ -477,12 +477,6 @@ export default function CarDatabaseDemoPage({ demo }: { demo?: DemoMode }) {
                   );
                 })}
               </div>
-              <p className="mt-2.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-600/10 px-2.5 py-1 text-[11.5px] font-medium text-brand-600">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  We keep adding new colors
-                </span>
-              </p>
             </div>
 
             {/* Eckdaten der API (hervorgehoben) */}

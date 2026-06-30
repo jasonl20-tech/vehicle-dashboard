@@ -377,7 +377,7 @@ export function imageVariantKey(
     transparency ? "tr" : "",
     v.ground ? "gr" : "",
     v.mirroring ? "mi" : "",
-    v.mirroring && hasMirroringKey ? "mk" : "",
+    v.mirroring && hasMirroringKey ? "mk2" : "",
   ]
     .map((x) => String(x ?? "").trim().toLowerCase())
     .join("|");

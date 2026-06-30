@@ -239,9 +239,10 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   if (ground) cp.set("ground", "1");
   if (mirroring) cp.set("mirroring", "1");
   // Mit dem Spezial-Key liefert Mirroring ein ANDERES Bild (echte Reflexion) als
-  // zuvor mit dem rechtelosen Key → eigener Cache-Key, sonst würde ein evtl. alt
-  // gecachtes Nicht-Reflexions-Bild den Effekt weiter verdecken.
-  if (mirroring && env.CAR_DB_MIRRORING_KEY) cp.set("mk", "1");
+  // zuvor mit dem rechtelosen Key → eigener Cache-Key. Version „2": seit der
+  // explizite Schatten bei Mirroring (clean vs. mit Schatten) gesetzt wird,
+  // sonst würden alt gecachte „mit Schatten"-Reflexionen Abschnitt 05 verdecken.
+  if (mirroring && env.CAR_DB_MIRRORING_KEY) cp.set("mk", "2");
   const cache = caches.default;
   const cacheKey = new Request(canon.toString(), { method: "GET" });
   const cached = await cache.match(cacheKey);
@@ -263,10 +264,17 @@ export const onRequestGet: PagesFunction<AuthEnv> = async ({
   const apiUrl =
     `${API_BASE}/api/${seg(marke)}/${seg(modell)}/${seg(jahr)}/${seg(body)}/${seg(trim)}/${seg(view)}` +
     `?format=${seg(effFormat)}&resolution=${seg(effResolution)}&color=${seg(farbe)}` +
-    (shadow ? `&shadow=true` : "") +
+    // Bei Mirroring den Schatten EXPLIZIT setzen: shadow=false = „clean"
+    // Reflexion ohne Unterboden-Schatten (Abschnitt 05), shadow=true = Reflexion
+    // MIT Schatten (Abschnitt 06). Ohne explizites shadow=false liefert die API
+    // die Reflexion sonst standardmäßig MIT Schatten.
+    (mirroring
+      ? `&mirroring=true&shadow=${shadow ? "true" : "false"}`
+      : shadow
+        ? `&shadow=true`
+        : "") +
     (transparency ? `&transparency=true` : "") +
     (ground ? `&ground=true` : "") +
-    (mirroring ? `&mirroring=true` : "") +
     // Explizite Maße nur senden, wenn eine Höhe angefragt wurde.
     (effHeight ? `&width=${effWidth}&height=${effHeight}` : "");
 
