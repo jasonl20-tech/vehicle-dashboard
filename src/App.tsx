@@ -28,6 +28,7 @@ import CmsSettingsPage from "./pages/cms/CmsSettingsPage";
 import ControllJobsPage from "./pages/ControllJobsPage";
 import ControlPlatformPage from "./pages/ControlPlatformPage";
 import ControlPlatformNewPage from "./pages/ControlPlatformNewPage";
+import IncompleteVehiclesPage from "./pages/IncompleteVehiclesPage";
 import DeveloperOverviewPage from "./pages/DeveloperOverviewPage";
 import EmailLogDetailPage from "./pages/EmailLogDetailPage";
 import EmailLogsPage from "./pages/EmailLogsPage";
@@ -127,6 +128,11 @@ export default function App() {
           <Route
             path="/control-platform/neu"
             element={<ControlPlatformNewPage />}
+          />
+          {/* Finder: Live-Autos mit fehlenden Außen-Ansichten → nachgenerieren. */}
+          <Route
+            path="/control-platform/unvollstaendig"
+            element={<IncompleteVehiclesPage />}
           />
 
           <Route element={<CarDatabaseLayout />}>

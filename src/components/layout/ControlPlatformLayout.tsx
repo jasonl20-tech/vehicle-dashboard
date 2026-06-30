@@ -238,6 +238,14 @@ function ControlChrome() {
           </Link>
         </div>
 
+        <Link
+          to="/control-platform/unvollstaendig"
+          className="shrink-0 rounded border border-hair px-1.5 py-0.5 text-[11px] text-ink-600 hover:bg-ink-50"
+          title="Live-Autos mit fehlenden Außen-Ansichten suchen + nachgenerieren"
+        >
+          Unvollständig
+        </Link>
+
         <label className="sr-only" htmlFor="control-platform-views-mode">
           Modus
         </label>
