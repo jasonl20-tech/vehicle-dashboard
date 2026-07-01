@@ -349,6 +349,7 @@ export default function ControlPlatformLightbox({
         judge("approve", vo.id);
       } else if ((k === "2" || k === "g") && cur && !vo?.approved) {
         void doRegen(cur.view, vo?.id);
+        goNextWorkable(); // Generierung läuft im Hintergrund → weiter
       } else if ((k === "3" || k === "h") && vo && !vo.hold && !vo.approved) {
         judge("hold", vo.id);
       } else if ((k === "4" || k === "f") && vo && !vo.fehler && !vo.approved) {
@@ -599,7 +600,11 @@ export default function ControlPlatformLightbox({
           label={cur?.vo ? "Neu generieren" : "Generieren"}
           k="2"
           disabled={busy || isGen(cur?.view) || !cur || !!cur?.vo?.approved}
-          onClick={() => cur && void doRegen(cur.view, cur.vo?.id)}
+          onClick={() => {
+            if (!cur) return;
+            void doRegen(cur.view, cur.vo?.id);
+            goNextWorkable(); // Generierung läuft im Hintergrund → weiter
+          }}
           cls="bg-brand-600 hover:bg-brand-700"
         >
           <Sparkles className="h-4 w-4" />
@@ -616,8 +621,8 @@ export default function ControlPlatformLightbox({
           </BarBtn>
         )}
         <span className="ml-auto text-[11px] text-white/40">
-          ESC schließen · ← → blättern · 1 Freigeben (→ nächste) · 2 Generieren ·
-          3 Hold · 4 Fehler · 0 Zurücksetzen · Entf Löschen
+          ESC schließen · ← → blättern · 1 Freigeben · 2 Generieren (beide →
+          nächste) · 3 Hold · 4 Fehler · 0 Zurücksetzen · Entf Löschen
         </span>
       </div>
     </div>
