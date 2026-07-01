@@ -183,6 +183,8 @@ export async function generateOneView(
       trim: id.trim,
       farbe: id.farbe,
       view,
+      // Vorhandene Ansichten desselben Autos als Referenz mitgeben (konsistent).
+      useDbRefs: true,
     }),
   });
   const j = (await res.json().catch(() => ({}))) as { taskId?: string };

@@ -16,7 +16,132 @@
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 const MODEL = "nano-banana-2";
+
+const INT_VIEWS = ["dashboard", "center_console"];
+// Reihenfolge, in der vorhandene Ansichten als Referenz bevorzugt werden
+// (Drei-Viertel + Front zeigen am meisten von Form/Farbe/Details).
+const EXT_PRIORITY = [
+  "front_left",
+  "front_right",
+  "front",
+  "rear_left",
+  "rear_right",
+  "left",
+  "right",
+  "rear",
+];
+const KEY_RE = /^(?:source|scaled|shadow)\/[A-Za-z0-9_-]{8,64}$/;
+const MAX_REFS = 4;
+
+/** ArrayBuffer → base64 (in Chunks, sonst Stack-Überlauf bei großen Bildern). */
+function toBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+/** Ein (gated) R2-Bild zu kie.ai hochladen → öffentliche URL für image_input. */
+async function uploadKeyToKie(
+  env: AuthEnv,
+  key: string,
+): Promise<string | null> {
+  const bucket = env.vehicleimages;
+  const apiKey = env.KIE_API_KEY;
+  if (!bucket || !apiKey || !KEY_RE.test(key)) return null;
+  const obj = await bucket.get(key);
+  if (!obj) return null;
+  const buf = await obj.arrayBuffer();
+  // Referenzbilder brauchen keine 30 MB; Deckel klein halten (Worker-Speicher).
+  if (buf.byteLength === 0 || buf.byteLength > 10_000_000) return null;
+  const ct = obj.httpMetadata?.contentType || "image/jpeg";
+  const r = await fetch(KIE_UPLOAD, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0",
+    },
+    body: JSON.stringify({
+      base64Data: `data:${ct};base64,${toBase64(buf)}`,
+      uploadPath: "vi-refs",
+      fileName: `${key.replace(/\//g, "_")}`,
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const j = (await r.json().catch(() => ({}))) as {
+    data?: { downloadUrl?: string; fileUrl?: string };
+  };
+  return j?.data?.downloadUrl || j?.data?.fileUrl || null;
+}
+
+/**
+ * Vorhandene Ansichten desselben Autos (gleiche Farbe) als Referenz-URLs holen:
+ * DB nach gerenderten Quell-Ansichten (≠ Ziel, gleiche Innen/Außen-Klasse)
+ * abfragen → nach Priorität wählen → zu kie.ai hochladen. Best effort.
+ */
+async function resolveDbRefs(
+  env: AuthEnv,
+  id: {
+    marke: string;
+    modell: string;
+    jahr: number;
+    body: string;
+    trim: string;
+    farbe: string;
+  },
+  targetView: string,
+): Promise<string[]> {
+  const db = env.cardb;
+  if (!db || !env.vehicleimages) return [];
+  const interior = INT_VIEWS.includes(targetView);
+  let rows: { results?: unknown[] };
+  try {
+    rows = await db
+      .prepare(
+        `SELECT "view" AS view, original_r2_key, r2_key
+         FROM fahrzeugliste
+         WHERE marke = ? AND modell = ? AND jahr = ? AND body = ? AND trim = ?
+           AND farbe = ? AND transparent = 0 AND shadow = 0 AND "view" <> ?
+           AND r2_key IS NOT NULL AND r2_key <> ''`,
+      )
+      .bind(id.marke, id.modell, id.jahr, id.body, id.trim, id.farbe, targetView)
+      .all();
+  } catch {
+    return [];
+  }
+  const present = new Map<string, string>();
+  for (const r of rows.results ?? []) {
+    const o = r as Record<string, unknown>;
+    const v = String(o.view ?? "");
+    if (INT_VIEWS.includes(v) !== interior) continue; // Klasse muss passen
+    const key =
+      (o.original_r2_key ? String(o.original_r2_key) : "") ||
+      (o.r2_key ? String(o.r2_key) : "");
+    if (key && !present.has(v)) present.set(v, key);
+  }
+  const order = interior ? INT_VIEWS : EXT_PRIORITY;
+  const keys: string[] = [];
+  for (const v of order) {
+    const k = present.get(v);
+    if (k) keys.push(k);
+    if (keys.length >= MAX_REFS) break;
+  }
+  // Uploads mit kleiner Nebenläufigkeit (2) — begrenzt Spitzen-Speicher. Best effort.
+  const urls: string[] = [];
+  for (let i = 0; i < keys.length; i += 2) {
+    const batch = await Promise.all(
+      keys.slice(i, i + 2).map((k) => uploadKeyToKie(env, k).catch(() => null)),
+    );
+    for (const u of batch) if (u) urls.push(u);
+  }
+  return urls;
+}
 
 const VIEW_DESC: Record<string, string> = {
   front: "directly from the front",
@@ -35,24 +160,28 @@ function buildPrompt(
   carName: string,
   view: string,
   hasRef: boolean,
+  color: string,
 ): string {
   const viewDesc = VIEW_DESC[view] || VIEW_DESC.front_left;
   const interior = view === "dashboard" || view === "center_console";
   const bg = interior
     ? "Sharp, well-lit interior photograph. "
     : "Plain pure white seamless background, even soft studio lighting, no drop shadow, the whole vehicle fully in frame and centered. ";
+  const paint = color ? ` finished in ${color} paint` : "";
   if (hasRef) {
     return (
-      `Use the reference image(s) to recreate the SAME exact vehicle ` +
-      `(${carName || "this car"}) as a clean studio product photo, viewed ${viewDesc}. ` +
+      `Use the reference image(s) — they are other angles of the SAME car — to ` +
+      `recreate that exact same vehicle (${carName || "this car"})${paint} as a ` +
+      `clean studio product photo, viewed ${viewDesc}. ` +
       bg +
-      "Photorealistic automotive catalog style. Keep the exact body shape, proportions, " +
-      "wheels, lights and details of the reference car. Do not invent a different car."
+      "Photorealistic automotive catalog style. Keep the EXACT same body shape, " +
+      "proportions, wheels, rims, lights, paint color and all details of the " +
+      "reference car — only change the camera angle. Do not invent a different car."
     );
   }
   return (
-    `Professional studio product photograph of a ${carName || "modern car"}, ` +
-    `viewed ${viewDesc}. ` +
+    `Professional studio product photograph of a ${carName || "modern car"}` +
+    `${paint}, viewed ${viewDesc}. ` +
     bg +
     "Photorealistic, automotive catalog style, accurate to the real vehicle."
   );
@@ -81,19 +210,26 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   }
 
   const marke = String(body.marke || "").trim();
-  const modell = String(body.modell || "")
-    .trim()
-    .replace(/_/g, " ");
+  // Wörtlicher Modellname (wie in der DB gespeichert) für den DB-Match; die
+  // `_`→Leerzeichen-Umwandlung ist NUR Prompt-Formatierung.
+  const modellRaw = String(body.modell || "").trim();
+  const modell = modellRaw.replace(/_/g, " ");
   const jahr = String(body.jahr || "").trim();
   // Body/Trim nur einbauen, wenn nicht der generische Standard (Basis/base).
   const carBody = String(body.body || "").trim();
   const carTrim = String(body.trim || "").trim();
+  const farbe = String(body.farbe || "").trim();
   const extras = [carBody, carTrim].filter(
     (x) => x && !/^(basis|base)$/i.test(x),
   );
   const carName = [[marke, modell, jahr].filter(Boolean).join(" "), ...extras]
     .filter(Boolean)
     .join(", ");
+  // Echte Farbe (nicht der generische Default) für den Prompt.
+  const color =
+    farbe && !/^(default|standard|na|none)$/i.test(farbe)
+      ? farbe.replace(/_/g, " ")
+      : "";
   const view = String(body.view || "front_left")
     .toLowerCase()
     .trim();
@@ -106,14 +242,34 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
         .slice(0, 6)
     : [];
 
+  // useDbRefs=true (Nachgenerieren): vorhandene Ansichten desselben Autos aus
+  // der DB als Referenz laden → konsistentes Ergebnis (gleiches Auto/Farbe).
+  const useDbRefs = body.useDbRefs === true;
+  let dbRefs: string[] = [];
+  if (useDbRefs && marke && modellRaw && jahr) {
+    dbRefs = await resolveDbRefs(
+      env,
+      {
+        marke,
+        modell: modellRaw, // wörtlich für den DB-Match (Unterstriche erhalten)
+        jahr: Number(jahr),
+        body: carBody,
+        trim: carTrim,
+        farbe,
+      },
+      view,
+    );
+  }
+  const refImages = [...new Set([...images, ...dbRefs])].slice(0, 6);
+
   const interior = view === "dashboard" || view === "center_console";
   const input: Record<string, unknown> = {
-    prompt: buildPrompt(carName, view, images.length > 0),
+    prompt: buildPrompt(carName, view, refImages.length > 0, color),
     aspect_ratio: interior ? "4:3" : "16:9",
     resolution: "1K",
     output_format: "jpg",
   };
-  if (images.length > 0) input.image_input = images;
+  if (refImages.length > 0) input.image_input = refImages;
 
   try {
     const r = await fetch(`${KIE_BASE}/createTask`, {

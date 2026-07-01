@@ -39,7 +39,7 @@ async function generateView(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ ...car, view }),
+    body: JSON.stringify({ ...car, view, useDbRefs: true }),
   });
   const j = (await res.json().catch(() => ({}))) as { taskId?: string };
   if (!res.ok || !j.taskId) return null;
