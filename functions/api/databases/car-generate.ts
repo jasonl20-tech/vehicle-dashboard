@@ -104,11 +104,14 @@ async function resolveDbRefs(
   try {
     rows = await db
       .prepare(
+        // NUR freigegebene (kontrolliert=1) Ansichten als Referenz — sonst
+        // würden falsch generierte, noch offene Ansichten als Vorlage dienen
+        // und den Fehler weitertragen.
         `SELECT "view" AS view, original_r2_key, r2_key
          FROM fahrzeugliste
          WHERE marke = ? AND modell = ? AND jahr = ? AND body = ? AND trim = ?
            AND farbe = ? AND transparent = 0 AND shadow = 0 AND "view" <> ?
-           AND r2_key IS NOT NULL AND r2_key <> ''`,
+           AND kontrolliert = 1 AND r2_key IS NOT NULL AND r2_key <> ''`,
       )
       .bind(id.marke, id.modell, id.jahr, id.body, id.trim, id.farbe, targetView)
       .all();
