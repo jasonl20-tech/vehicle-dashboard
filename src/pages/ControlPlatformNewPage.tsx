@@ -4,10 +4,10 @@ import {
   ChevronRight,
   ImageIcon,
   Loader2,
-  Pause,
   Radio,
   RefreshCw,
   RotateCcw,
+  Sparkles,
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -544,6 +544,7 @@ export default function ControlPlatformNewPage() {
                         busy={busy}
                         generating={isRegenView(view)}
                         onAct={act}
+                        onRegen={(v, rid) => regenerate(detail.identity, v, rid)}
                         onOpen={setLightboxView}
                       />
                     );
@@ -565,6 +566,7 @@ export default function ControlPlatformNewPage() {
                           busy={busy}
                           generating={isRegenView(vo.view)}
                           onAct={act}
+                          onRegen={(v, rid) => regenerate(detail.identity, v, rid)}
                           onOpen={setLightboxView}
                         />
                       ))}
@@ -575,6 +577,7 @@ export default function ControlPlatformNewPage() {
                           busy={busy}
                           generating={isRegenView(view)}
                           onAct={act}
+                          onRegen={(v, rid) => regenerate(detail.identity, v, rid)}
                           onOpen={setLightboxView}
                         />
                       ))}
@@ -650,6 +653,7 @@ function ViewTile({
   busy,
   generating,
   onAct,
+  onRegen,
   onOpen,
 }: {
   view: string;
@@ -657,6 +661,7 @@ function ViewTile({
   busy: boolean;
   generating?: boolean;
   onAct: (action: CarControlAction, ids: number[]) => void;
+  onRegen?: (view: string, replaceId?: number) => void;
   onOpen?: (view: string) => void;
 }) {
   const tone: Tone = (vo?.status as Tone) ?? "open";
@@ -716,12 +721,12 @@ function ViewTile({
               <Check className="h-3.5 w-3.5" />
             </TileBtn>
             <TileBtn
-              title="Auf Hold"
-              disabled={busy || vo.hold || vo.approved}
-              onClick={() => onAct("hold", [vo.id])}
-              cls="text-amber-600 hover:bg-amber-50"
+              title="Neu generieren"
+              disabled={busy || vo.approved}
+              onClick={() => onRegen?.(view, vo.id)}
+              cls="text-brand-600 hover:bg-brand-50"
             >
-              <Pause className="h-3.5 w-3.5" />
+              <Sparkles className="h-3.5 w-3.5" />
             </TileBtn>
             <TileBtn
               title="Fehler markieren"
