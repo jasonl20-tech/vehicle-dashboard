@@ -63,20 +63,26 @@ async function listVariants(
   const having =
     status === "open"
       ? "HAVING open > 0"
-      : status === "done"
-        ? "HAVING open = 0"
-        : status === "error"
-          ? "HAVING error > 0"
-          : status === "hold"
-            ? "HAVING hold > 0"
-            : ""; // all
+      : status === "open_ext"
+        ? "HAVING open_ext > 0"
+        : status === "open_int"
+          ? "HAVING open_int > 0"
+          : status === "done"
+            ? "HAVING open = 0"
+            : status === "error"
+              ? "HAVING error > 0"
+              : status === "hold"
+                ? "HAVING hold > 0"
+                : ""; // all
 
   const ORDER: Record<string, string> = {
     open_desc: "open DESC, marke, modell, jahr",
     updated_desc: "lastUpdated DESC",
-    marke: "marke, modell, jahr",
-    total_desc: "total DESC",
+    approved_desc: "approved DESC, marke, modell",
+    hold_desc: "hold DESC, open DESC",
     error_desc: "error DESC, open DESC",
+    total_desc: "total DESC",
+    marke: "marke, modell, jahr",
   };
   const orderSql = `ORDER BY ${ORDER[p.get("sort") || "open_desc"] || ORDER.open_desc}`;
   const limit = Math.min(200, Math.max(1, Number(p.get("limit") || 50)));
@@ -86,16 +92,22 @@ async function listVariants(
     SUM(CASE WHEN kontrolliert=1 THEN 1 ELSE 0 END) AS approved,
     SUM(CASE WHEN fehler=1 THEN 1 ELSE 0 END) AS error,
     SUM(CASE WHEN hold=1 THEN 1 ELSE 0 END) AS hold,
-    SUM(CASE WHEN kontrolliert=0 AND fehler=0 AND hold=0 THEN 1 ELSE 0 END) AS open`;
+    SUM(CASE WHEN kontrolliert=0 AND fehler=0 AND hold=0 THEN 1 ELSE 0 END) AS open,
+    SUM(CASE WHEN innen=0 AND kontrolliert=0 AND fehler=0 AND hold=0 THEN 1 ELSE 0 END) AS open_ext,
+    SUM(CASE WHEN innen=1 AND kontrolliert=0 AND fehler=0 AND hold=0 THEN 1 ELSE 0 END) AS open_int`;
   const group = "GROUP BY marke, modell, jahr, body, trim, farbe";
   const sql = `SELECT marke, modell, jahr, body, trim, farbe,
       COUNT(*) AS total, ${AGG}, MAX(last_updated) AS lastUpdated
     FROM fahrzeugliste ${whereSql} ${group} ${having} ${orderSql} LIMIT ? OFFSET ?`;
   const countSql = `SELECT COUNT(*) AS n FROM (
     SELECT ${AGG} FROM fahrzeugliste ${whereSql} ${group} ${having})`;
+  // „Übrig": Varianten mit noch offenen Ansichten (unabhängig vom Status-Filter).
+  const remainingSql = `SELECT COUNT(*) AS n FROM (
+    SELECT ${AGG} FROM fahrzeugliste ${whereSql} ${group} HAVING open > 0)`;
 
-  const [countRow, res] = await Promise.all([
+  const [countRow, remRow, res] = await Promise.all([
     db.prepare(countSql).bind(...binds).first<{ n: number }>(),
+    db.prepare(remainingSql).bind(...binds).first<{ n: number }>(),
     db.prepare(sql).bind(...binds, limit, offset).all(),
   ]);
   const rows = (res.results ?? []).map((r) => {
@@ -115,7 +127,13 @@ async function listVariants(
       lastUpdated: o.lastUpdated ? String(o.lastUpdated) : null,
     };
   });
-  return jsonResponse({ total: num(countRow?.n), rows, limit, offset });
+  return jsonResponse({
+    total: num(countRow?.n),
+    remaining: num(remRow?.n),
+    rows,
+    limit,
+    offset,
+  });
 }
 
 /** mode=detail — alle Quell-Ansichten EINER Variante fürs Raster + welche der

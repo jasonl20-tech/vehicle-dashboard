@@ -83,12 +83,16 @@ const STATUS_STYLE: Record<Tone, { ring: string; tag: string; text: string }> = 
 const SORTS: { v: CarVariantSort; label: string }[] = [
   { v: "open_desc", label: "Offen zuerst" },
   { v: "updated_desc", label: "Zuletzt geändert" },
+  { v: "approved_desc", label: "Freigegeben zuerst" },
+  { v: "hold_desc", label: "Hold zuerst" },
   { v: "error_desc", label: "Fehler zuerst" },
   { v: "total_desc", label: "Meiste Ansichten" },
   { v: "marke", label: "Marke A–Z" },
 ];
 const STATUS_FILTERS: { v: CarVariantStatusFilter; label: string }[] = [
   { v: "open", label: "Offen" },
+  { v: "open_ext", label: "Nur außen offen" },
+  { v: "open_int", label: "Innen offen" },
   { v: "error", label: "Fehler" },
   { v: "hold", label: "Hold" },
   { v: "done", label: "Fertig" },
@@ -191,6 +195,7 @@ export default function ControlPlatformNewPage() {
   const listApi = useApi<CarControlVariantsResponse>(listUrl, { pollMs });
   const rows = listApi.data?.rows ?? [];
   const total = listApi.data?.total ?? 0;
+  const remaining = listApi.data?.remaining ?? 0;
 
   // Erste Variante automatisch wählen.
   useEffect(() => {
@@ -343,11 +348,13 @@ export default function ControlPlatformNewPage() {
             <div className="flex items-center justify-between text-[11px] text-ink-500">
               <span className="tabular-nums">
                 {listApi.data
-                  ? total > 0
-                    ? `${fmtNumber(offset + 1)}–${fmtNumber(
-                        Math.min(offset + PAGE_SIZE, total),
-                      )} / ${fmtNumber(total)}`
-                    : "0"
+                  ? `${
+                      total > 0
+                        ? `${fmtNumber(offset + 1)}–${fmtNumber(
+                            Math.min(offset + PAGE_SIZE, total),
+                          )} / ${fmtNumber(total)}`
+                        : "0"
+                    }${remaining > 0 ? ` · offen ${fmtNumber(remaining)}` : ""}`
                   : "…"}
               </span>
               <span className="flex gap-1">
@@ -390,6 +397,7 @@ export default function ControlPlatformNewPage() {
                     <button
                       type="button"
                       onClick={() => setSelected(v)}
+                      title={`${v.approved} freigegeben · ${v.open} offen · ${v.error} Fehler · ${v.hold} Hold · gesamt ${v.total}`}
                       className={`block w-full border-b border-hair px-2.5 py-2 text-left hover:bg-ink-50 ${
                         active ? "bg-ink-50" : ""
                       }`}
@@ -400,8 +408,9 @@ export default function ControlPlatformNewPage() {
                         </span>
                         <span
                           className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${STATUS_STYLE[tone].tag}`}
+                          title={STATUS_STYLE[tone].text}
                         >
-                          {v.approved}/{v.total}
+                          {STATUS_STYLE[tone].text} · {v.approved}/{v.total}
                         </span>
                       </div>
                       <div className="truncate text-[11px] text-ink-500">

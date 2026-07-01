@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   type ReactNode,
+  type Ref,
   useCallback,
   useEffect,
   useMemo,
@@ -77,6 +78,18 @@ const TONE_DOT: Record<Tone, string> = {
   error: "bg-rose-400",
   hold: "bg-amber-400",
   open: "bg-white/40",
+};
+const STATUS_TEXT: Record<string, string> = {
+  approved: "freigegeben",
+  open: "offen",
+  error: "Fehler",
+  hold: "Hold",
+};
+const STATUS_CHIP: Record<string, string> = {
+  approved: "bg-emerald-500/20 text-emerald-300",
+  open: "bg-white/10 text-white/70",
+  error: "bg-rose-500/20 text-rose-300",
+  hold: "bg-amber-500/20 text-amber-300",
 };
 
 export default function ControlPlatformLightbox({
@@ -183,6 +196,22 @@ export default function ControlPlatformLightbox({
     switchToNextVariant();
   }, [idx, items, switchToNextVariant]);
 
+  // Markieren + automatisch zur nächsten Ansicht springen
+  // (nach approve/hold/error/delete — nicht bei reset).
+  const judge = useCallback(
+    (action: CarControlAction, id: number) => {
+      void onAct(action, [id]);
+      goNextWorkable();
+    },
+    [onAct, goNextWorkable],
+  );
+
+  // Aktives Thumbnail im Streifen in den sichtbaren Bereich scrollen.
+  const activeThumbRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    activeThumbRef.current?.scrollIntoView({ block: "nearest" });
+  }, [curView]);
+
   const doRegen = useCallback(
     async (view: string, replaceId?: number) => {
       if (genView) return;
@@ -283,27 +312,30 @@ export default function ControlPlatformLightbox({
       const vo = cur?.vo;
       if (genView || busy) return;
       if ((k === "1" || k === "r") && vo && !vo.approved) {
-        void onAct("approve", [vo.id]);
-        goNextWorkable();
+        judge("approve", vo.id);
       } else if ((k === "2" || k === "g") && cur) {
         void doRegen(cur.view, vo?.id);
       } else if ((k === "3" || k === "h") && vo && !vo.hold) {
-        void onAct("hold", [vo.id]);
+        judge("hold", vo.id);
       } else if ((k === "4" || k === "f") && vo && !vo.fehler) {
-        void onAct("error", [vo.id]);
+        judge("error", vo.id);
       } else if ((k === "0" || k === "u") && vo && vo.status !== "open") {
         void onAct("reset", [vo.id]);
       } else if ((e.key === "Delete" || e.key === "Backspace") && vo) {
         e.preventDefault();
-        void onAct("delete", [vo.id]);
+        judge("delete", vo.id);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cur, genView, busy, move, onAct, onClose, doRegen, goNextWorkable]);
+  }, [cur, genView, busy, move, onAct, onClose, doRegen, goNextWorkable, judge]);
 
   const tone = (it: Item): Tone => (it.vo?.status as Tone) ?? "open";
   const bigSrc = cur?.vo ? carControlImageUrl(cur.vo.imageKey) : null;
+  const [bigErr, setBigErr] = useState(false);
+  useEffect(() => {
+    setBigErr(false);
+  }, [bigSrc]);
 
   const HeadBtn = ({
     onClick,
@@ -393,41 +425,15 @@ export default function ControlPlatformLightbox({
           className="shrink-0 overflow-y-auto border-r border-white/10 p-2"
           style={{ width: stripW }}
         >
-          {items.map((it) => {
-            const active = it.view === curView;
-            const src = it.vo ? carControlImageUrl(it.vo.imageKey) : null;
-            return (
-              <button
-                key={it.view}
-                type="button"
-                onClick={() => setCurView(it.view)}
-                className={`mb-2 block w-full overflow-hidden rounded ${
-                  active ? "ring-2 ring-brand-400" : "ring-1 ring-white/10"
-                }`}
-              >
-                <div className="relative grid aspect-[3/2] w-full place-items-center bg-white/5">
-                  {src ? (
-                    <img
-                      src={src}
-                      alt={it.view}
-                      loading="lazy"
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <span className="text-[10px] text-white/40">fehlt</span>
-                  )}
-                  {it.vo && (
-                    <span
-                      className={`absolute right-1 top-1 h-2 w-2 rounded-full ${TONE_DOT[tone(it)]}`}
-                    />
-                  )}
-                </div>
-                <div className="truncate px-1 py-0.5 text-left text-[10px] text-white/70">
-                  {label(it.view)}
-                </div>
-              </button>
-            );
-          })}
+          {items.map((it) => (
+            <StripThumb
+              key={it.view}
+              it={it}
+              active={it.view === curView}
+              buttonRef={it.view === curView ? activeThumbRef : undefined}
+              onClick={() => setCurView(it.view)}
+            />
+          ))}
         </aside>
 
         {/* Zieh-Trenner (Streifenbreite) */}
@@ -449,17 +455,20 @@ export default function ControlPlatformLightbox({
 
         {/* Großbild */}
         <div className="relative flex min-w-0 flex-1 items-center justify-center p-4">
-          {cur?.vo && bigSrc ? (
+          {cur?.vo && bigSrc && !bigErr ? (
             <img
               src={bigSrc}
               alt={cur.view}
+              onError={() => setBigErr(true)}
               className={`max-h-full max-w-full rounded object-contain ${TONE_RING[tone(cur)]}`}
             />
           ) : cur ? (
             <div className="flex flex-col items-center gap-2 text-white/50">
               <ImageIcon className="h-10 w-10" />
               <span className="text-[13px]">
-                „{label(cur.view)}" fehlt — generieren mit dem Stern-Knopf.
+                {cur.vo
+                  ? `„${label(cur.view)}" konnte nicht geladen werden.`
+                  : `„${label(cur.view)}" fehlt — generieren mit dem Stern-Knopf.`}
               </span>
             </div>
           ) : null}
@@ -486,15 +495,20 @@ export default function ControlPlatformLightbox({
       {/* Aktions-Leiste */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-white/10 px-3 py-2">
         {cur?.vo && (
+          <span
+            className={`rounded px-2 py-1 text-[11px] font-medium ${STATUS_CHIP[cur.vo.status] ?? "bg-white/10 text-white/70"}`}
+            title="Status dieser Ansicht"
+          >
+            {STATUS_TEXT[cur.vo.status] ?? cur.vo.status}
+          </span>
+        )}
+        {cur?.vo && (
           <>
             <BarBtn
               label="Freigeben"
               k="1"
               disabled={busy || !!genView || cur.vo.approved}
-              onClick={() => {
-                void onAct("approve", [cur.vo!.id]);
-                goNextWorkable();
-              }}
+              onClick={() => judge("approve", cur.vo!.id)}
               cls="bg-emerald-600 hover:bg-emerald-700"
             >
               <Check className="h-4 w-4" />
@@ -503,7 +517,7 @@ export default function ControlPlatformLightbox({
               label="Hold"
               k="3"
               disabled={busy || !!genView || cur.vo.hold}
-              onClick={() => void onAct("hold", [cur.vo!.id])}
+              onClick={() => judge("hold", cur.vo!.id)}
               cls="bg-amber-600 hover:bg-amber-700"
             >
               <Pause className="h-4 w-4" />
@@ -512,7 +526,7 @@ export default function ControlPlatformLightbox({
               label="Fehler"
               k="4"
               disabled={busy || !!genView || cur.vo.fehler}
-              onClick={() => void onAct("error", [cur.vo!.id])}
+              onClick={() => judge("error", cur.vo!.id)}
               cls="bg-rose-600 hover:bg-rose-700"
             >
               <X className="h-4 w-4" />
@@ -542,18 +556,73 @@ export default function ControlPlatformLightbox({
             label="Löschen"
             k="Entf"
             disabled={busy || !!genView}
-            onClick={() => void onAct("delete", [cur.vo!.id])}
+            onClick={() => judge("delete", cur.vo!.id)}
             cls="bg-white/10 hover:bg-rose-600/40"
           >
             <Trash2 className="h-4 w-4" />
           </BarBtn>
         )}
         <span className="ml-auto text-[11px] text-white/40">
-          ESC schließen · ← → blättern · 1 Freigeben · 2 Generieren · 3 Hold · 4
-          Fehler · Entf Löschen
+          ESC schließen · ← → blättern · 1 Freigeben (→ nächste) · 2 Generieren ·
+          3 Hold · 4 Fehler · 0 Zurücksetzen · Entf Löschen
         </span>
       </div>
     </div>
+  );
+}
+
+/* Ein Thumbnail im Streifen (eigener Bild-Fehler-Fallback + Ref fürs Auto-Scroll). */
+function StripThumb({
+  it,
+  active,
+  buttonRef,
+  onClick,
+}: {
+  it: Item;
+  active: boolean;
+  buttonRef?: Ref<HTMLButtonElement>;
+  onClick: () => void;
+}) {
+  const [err, setErr] = useState(false);
+  const src = it.vo ? carControlImageUrl(it.vo.imageKey) : null;
+  const t: Tone = (it.vo?.status as Tone) ?? "open";
+  // Fehlerstatus zurücksetzen, wenn sich das Bild ändert (z. B. nach Neu-Generieren).
+  useEffect(() => {
+    setErr(false);
+  }, [src]);
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      onClick={onClick}
+      className={`mb-2 block w-full overflow-hidden rounded ${
+        active ? "ring-2 ring-brand-400" : "ring-1 ring-white/10"
+      }`}
+    >
+      <div className="relative grid aspect-[3/2] w-full place-items-center bg-white/5">
+        {src && !err ? (
+          <img
+            src={src}
+            alt={it.view}
+            loading="lazy"
+            onError={() => setErr(true)}
+            className="h-full w-full object-contain"
+          />
+        ) : it.vo ? (
+          <ImageIcon className="h-4 w-4 text-white/30" />
+        ) : (
+          <span className="text-[10px] text-white/40">fehlt</span>
+        )}
+        {it.vo && (
+          <span
+            className={`absolute right-1 top-1 h-2 w-2 rounded-full ${TONE_DOT[t]}`}
+          />
+        )}
+      </div>
+      <div className="truncate px-1 py-0.5 text-left text-[10px] text-white/70">
+        {label(it.view)}
+      </div>
+    </button>
   );
 }
 

@@ -83,6 +83,7 @@ export type CarControlVariant = CarVariantIdentity & {
 
 export type CarControlVariantsResponse = {
   total: number;
+  remaining?: number;
   rows: CarControlVariant[];
   limit?: number;
   offset?: number;
@@ -118,11 +119,20 @@ export type CarControlDetailResponse = {
 export type CarVariantSort =
   | "open_desc"
   | "updated_desc"
-  | "marke"
+  | "approved_desc"
+  | "hold_desc"
+  | "error_desc"
   | "total_desc"
-  | "error_desc";
+  | "marke";
 
-export type CarVariantStatusFilter = "open" | "all" | "done" | "error" | "hold";
+export type CarVariantStatusFilter =
+  | "open"
+  | "open_ext"
+  | "open_int"
+  | "error"
+  | "hold"
+  | "done"
+  | "all";
 
 export function carControlVariantsUrl(params: {
   q?: string;
