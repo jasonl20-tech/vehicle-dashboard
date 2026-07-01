@@ -231,10 +231,12 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
         }
         const upd = await db
           .prepare(
+            // Freigegebene (kontrolliert=1) nicht ersetzen — erst zurücksetzen.
             `UPDATE fahrzeugliste
                SET r2_key = ?, original_r2_key = ?, kontrolliert = 0,
                    fehler = 0, hold = 0, last_updated = CURRENT_TIMESTAMP
-             WHERE id = ? AND transparent = 0 AND shadow = 0`,
+             WHERE id = ? AND transparent = 0 AND shadow = 0
+               AND kontrolliert = 0`,
           )
           .bind(key, key, it.replaceId)
           .run();

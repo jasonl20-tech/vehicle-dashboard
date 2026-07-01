@@ -295,6 +295,24 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
       { status: 409 },
     );
   }
+  // Freigegebene Ansicht nicht neu generieren — erst zurücksetzen.
+  if (useDbRefs && env.cardb) {
+    const row = await env.cardb
+      .prepare(
+        `SELECT kontrolliert FROM fahrzeugliste
+         WHERE marke = ? AND modell = ? AND jahr = ? AND body = ? AND trim = ?
+           AND farbe = ? AND "view" = ? AND transparent = 0 AND shadow = 0`,
+      )
+      .bind(marke, modellRaw, Number(jahr), carBody, carTrim, farbe, view)
+      .first<{ kontrolliert: number }>()
+      .catch(() => null);
+    if (row && Number(row.kontrolliert) === 1) {
+      return jsonResponse(
+        { error: "Freigegebene Ansicht — erst zurücksetzen.", approved: true },
+        { status: 403 },
+      );
+    }
+  }
   let dbRefs: string[] = [];
   if (useDbRefs && marke && modellRaw && jahr) {
     dbRefs = await resolveDbRefs(

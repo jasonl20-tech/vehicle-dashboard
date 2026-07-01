@@ -343,17 +343,23 @@ export default function ControlPlatformLightbox({
         return e.preventDefault(), move(-1);
       const vo = cur?.vo;
       if (busy || isGen(cur?.view)) return;
+      // Freigegeben = eingefroren: nur „1" (bereits freigegeben, no-op) und „0"
+      // (Zurücksetzen) sind erlaubt; alles andere gesperrt.
       if ((k === "1" || k === "r") && vo && !vo.approved) {
         judge("approve", vo.id);
-      } else if ((k === "2" || k === "g") && cur) {
+      } else if ((k === "2" || k === "g") && cur && !vo?.approved) {
         void doRegen(cur.view, vo?.id);
-      } else if ((k === "3" || k === "h") && vo && !vo.hold) {
+      } else if ((k === "3" || k === "h") && vo && !vo.hold && !vo.approved) {
         judge("hold", vo.id);
-      } else if ((k === "4" || k === "f") && vo && !vo.fehler) {
+      } else if ((k === "4" || k === "f") && vo && !vo.fehler && !vo.approved) {
         judge("error", vo.id);
       } else if ((k === "0" || k === "u") && vo && vo.status !== "open") {
         void onAct("reset", [vo.id]);
-      } else if ((e.key === "Delete" || e.key === "Backspace") && vo) {
+      } else if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        vo &&
+        !vo.approved
+      ) {
         e.preventDefault();
         judge("delete", vo.id);
       }
@@ -563,7 +569,7 @@ export default function ControlPlatformLightbox({
             <BarBtn
               label="Hold"
               k="3"
-              disabled={busy || isGen(cur?.view) || cur.vo.hold}
+              disabled={busy || isGen(cur?.view) || cur.vo.hold || cur.vo.approved}
               onClick={() => judge("hold", cur.vo!.id)}
               cls="bg-amber-600 hover:bg-amber-700"
             >
@@ -572,7 +578,7 @@ export default function ControlPlatformLightbox({
             <BarBtn
               label="Fehler"
               k="4"
-              disabled={busy || isGen(cur?.view) || cur.vo.fehler}
+              disabled={busy || isGen(cur?.view) || cur.vo.fehler || cur.vo.approved}
               onClick={() => judge("error", cur.vo!.id)}
               cls="bg-rose-600 hover:bg-rose-700"
             >
@@ -592,7 +598,7 @@ export default function ControlPlatformLightbox({
         <BarBtn
           label={cur?.vo ? "Neu generieren" : "Generieren"}
           k="2"
-          disabled={busy || isGen(cur?.view) || !cur}
+          disabled={busy || isGen(cur?.view) || !cur || !!cur?.vo?.approved}
           onClick={() => cur && void doRegen(cur.view, cur.vo?.id)}
           cls="bg-brand-600 hover:bg-brand-700"
         >
@@ -602,7 +608,7 @@ export default function ControlPlatformLightbox({
           <BarBtn
             label="Löschen"
             k="Entf"
-            disabled={busy || isGen(cur?.view)}
+            disabled={busy || isGen(cur?.view) || cur.vo.approved}
             onClick={() => judge("delete", cur.vo!.id)}
             cls="bg-white/10 hover:bg-rose-600/40"
           >

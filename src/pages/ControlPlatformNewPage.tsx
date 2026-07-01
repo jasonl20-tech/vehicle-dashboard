@@ -717,7 +717,7 @@ function ViewTile({
             </TileBtn>
             <TileBtn
               title="Auf Hold"
-              disabled={busy || vo.hold}
+              disabled={busy || vo.hold || vo.approved}
               onClick={() => onAct("hold", [vo.id])}
               cls="text-amber-600 hover:bg-amber-50"
             >
@@ -725,7 +725,7 @@ function ViewTile({
             </TileBtn>
             <TileBtn
               title="Fehler markieren"
-              disabled={busy || vo.fehler}
+              disabled={busy || vo.fehler || vo.approved}
               onClick={() => onAct("error", [vo.id])}
               cls="text-rose-600 hover:bg-rose-50"
             >

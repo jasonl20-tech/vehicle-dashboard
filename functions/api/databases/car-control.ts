@@ -381,8 +381,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     try {
       const sel = await db
         .prepare(
+          // Freigegebene (kontrolliert=1) nicht löschbar — erst zurücksetzen.
           `SELECT id, r2_key, original_r2_key FROM fahrzeugliste
-           WHERE id IN (${placeholders}) AND transparent = 0 AND shadow = 0`,
+           WHERE id IN (${placeholders}) AND transparent = 0 AND shadow = 0
+             AND kontrolliert = 0`,
         )
         .bind(...ids)
         .all();
@@ -435,13 +437,18 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   else if (action === "error") setSql = "fehler = 1";
   else setSql = "kontrolliert = 0, fehler = 0, hold = 0"; // reset
 
+  // Freigegebene (kontrolliert=1) Zeilen sind eingefroren: Hold/Fehler treffen
+  // sie nicht (nur Reset macht sie wieder änderbar).
+  const freezeGuard =
+    action === "hold" || action === "error" ? " AND kontrolliert = 0" : "";
+
   try {
     const res = await db
       .prepare(
         `UPDATE fahrzeugliste
            SET ${setSql}, last_updated = CURRENT_TIMESTAMP
          WHERE id IN (${placeholders})
-           AND transparent = 0 AND shadow = 0`,
+           AND transparent = 0 AND shadow = 0${freezeGuard}`,
       )
       .bind(...ids)
       .run();
