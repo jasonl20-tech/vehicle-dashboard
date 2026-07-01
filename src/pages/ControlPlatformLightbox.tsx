@@ -1,6 +1,7 @@
 import {
   Check,
   ExternalLink,
+  Eye,
   ImageIcon,
   Loader2,
   Pause,
@@ -28,6 +29,12 @@ import {
   regenerateView,
   variantKey,
 } from "../lib/carControlApi";
+import { useApi } from "../lib/customerApi";
+import {
+  PREVIEW_IMAGES_SETTINGS_PATH,
+  type PreviewImagesSettingsApiResponse,
+  previewImageForSlug,
+} from "../lib/previewImagesConfig";
 
 /** Reihenfolge im Streifen (wie alte Lightbox) + Innen + Zusatz. */
 const STRIP_ORDER = [
@@ -240,6 +247,27 @@ export default function ControlPlatformLightbox({
     return `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`;
   }, [identity, cur]);
 
+  // Preview-Referenzbild-Overlay (Config lazy erst beim Einschalten laden).
+  const [previewOn, setPreviewOn] = useState(
+    () => localStorage.getItem("cpNeu.preview") === "1",
+  );
+  const previewApi = useApi<PreviewImagesSettingsApiResponse>(
+    previewOn ? PREVIEW_IMAGES_SETTINGS_PATH : null,
+  );
+  const previewSrc = previewOn
+    ? previewImageForSlug(previewApi.data?.images ?? null, cur?.view)
+    : null;
+  const togglePreview = () =>
+    setPreviewOn((s) => {
+      const n = !s;
+      try {
+        localStorage.setItem("cpNeu.preview", n ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return n;
+    });
+
   // Tastatur
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -324,6 +352,13 @@ export default function ControlPlatformLightbox({
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
+          <HeadBtn
+            onClick={togglePreview}
+            title="Referenzbild der Ansicht einblenden"
+            active={previewOn}
+          >
+            <Eye className="h-4 w-4" /> Preview
+          </HeadBtn>
           <HeadBtn onClick={onToggleEasy} title="Fertige Autos überspringen" active={easyMode}>
             <Zap className="h-4 w-4" /> Easy
           </HeadBtn>
@@ -428,6 +463,18 @@ export default function ControlPlatformLightbox({
               </span>
             </div>
           ) : null}
+          {previewSrc && (
+            <div className="absolute right-3 top-3 w-1/3 max-w-[280px] overflow-hidden rounded border border-white/30 bg-black/40 shadow-lg">
+              <div className="bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white/80">
+                Referenz
+              </div>
+              <img
+                src={previewSrc}
+                alt="Referenz"
+                className="w-full object-contain"
+              />
+            </div>
+          )}
           {genView && (
             <div className="absolute inset-0 grid place-items-center bg-black/50">
               <Loader2 className="h-8 w-8 animate-spin text-white" />
