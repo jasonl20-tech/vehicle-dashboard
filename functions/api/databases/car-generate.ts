@@ -20,18 +20,29 @@ const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
 const MODEL = "nano-banana-2";
 
 const INT_VIEWS = ["dashboard", "center_console"];
-// Reihenfolge, in der vorhandene Ansichten als Referenz bevorzugt werden
-// (Drei-Viertel + Front zeigen am meisten von Form/Farbe/Details).
-const EXT_PRIORITY = [
-  "front_left",
-  "front_right",
-  "front",
-  "rear_left",
-  "rear_right",
-  "left",
-  "right",
-  "rear",
-];
+// Winkel der 8 Außen-Ansichten (Grad rund ums Auto). Referenzen werden nach
+// Winkel-NÄHE zum Ziel gewählt — sonst würde z. B. fürs Heck aus Front-Ansichten
+// generiert (die KI müsste das Heck erraten → falsch).
+const VIEW_ANGLE: Record<string, number> = {
+  front: 0,
+  front_right: 45,
+  right: 90,
+  rear_right: 135,
+  rear: 180,
+  rear_left: 225,
+  left: 270,
+  front_left: 315,
+};
+/** Vorhandene Außen-Ansichten nach Winkel-Nähe zum Ziel sortieren (nächste zuerst). */
+function extRefOrder(target: string, available: string[]): string[] {
+  const ta = VIEW_ANGLE[target];
+  if (ta === undefined) return available;
+  const dist = (v: string) => {
+    const d = Math.abs((VIEW_ANGLE[v] ?? 0) - ta);
+    return Math.min(d, 360 - d);
+  };
+  return [...available].sort((a, b) => dist(a) - dist(b));
+}
 const KEY_RE = /^(?:source|scaled|shadow)\/[A-Za-z0-9_-]{8,64}$/;
 const MAX_REFS = 4;
 
@@ -128,9 +139,11 @@ async function resolveDbRefs(
       (o.r2_key ? String(o.r2_key) : "");
     if (key && !present.has(v)) present.set(v, key);
   }
-  const order = interior ? INT_VIEWS : EXT_PRIORITY;
+  const orderedViews = interior
+    ? INT_VIEWS.filter((v) => present.has(v))
+    : extRefOrder(targetView, [...present.keys()]);
   const keys: string[] = [];
-  for (const v of order) {
+  for (const v of orderedViews) {
     const k = present.get(v);
     if (k) keys.push(k);
     if (keys.length >= MAX_REFS) break;
