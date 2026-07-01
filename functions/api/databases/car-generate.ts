@@ -50,7 +50,47 @@ function extRefOrder(target: string, available: string[]): string[] {
   return [...available].sort((a, b) => dist(a) - dist(b));
 }
 const KEY_RE = /^(?:source|scaled|shadow)\/[A-Za-z0-9_-]{8,64}$/;
-const MAX_REFS = 4;
+// Alle freigegebenen Ansichten des Autos als Referenz mitgeben (nach Winkel-
+// Nähe geordnet, die nächsten zuerst). nano-banana-2 erlaubt bis 14.
+const MAX_REFS = 8;
+
+/** Pro-Ansicht-Prompt-Config aus KV `prompts` (vom Dashboard `/systeme/prompts`). */
+type PromptConfig = {
+  prompt: string;
+  aspect_ratio: string;
+  resolution: string;
+  output_format: string;
+};
+async function loadPromptConfig(
+  env: AuthEnv,
+  view: string,
+): Promise<PromptConfig | null> {
+  if (!env.prompts) return null;
+  try {
+    const raw = await env.prompts.get(view, "text");
+    if (!raw) return null;
+    const o = JSON.parse(raw) as Record<string, unknown>;
+    const prompt = typeof o.prompt === "string" ? o.prompt.trim() : "";
+    if (!prompt) return null;
+    return {
+      prompt,
+      aspect_ratio:
+        typeof o.aspect_ratio === "string" && o.aspect_ratio ? o.aspect_ratio : "3:2",
+      resolution:
+        typeof o.resolution === "string" && o.resolution ? o.resolution : "2K",
+      output_format:
+        typeof o.output_format === "string" && o.output_format
+          ? o.output_format
+          : "png",
+    };
+  } catch {
+    return null;
+  }
+}
+/** {{platzhalter}} ersetzen (marke, model, jahrgang, bodytyp, trim). */
+function renderPrompt(tpl: string, vars: Record<string, string>): string {
+  return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, n: string) => vars[n] ?? "");
+}
 
 /** ArrayBuffer → base64 (in Chunks, sonst Stack-Überlauf bei großen Bildern). */
 function toBase64(buf: ArrayBuffer): string {
@@ -331,14 +371,29 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const refImages = [...new Set([...images, ...dbRefs])].slice(0, 6);
 
   const interior = view === "dashboard" || view === "center_console";
-  const input: Record<string, unknown> = {
-    prompt: buildPrompt(carName, view, refImages.length > 0, color),
-    // Wie die Original-Bibliothek: 3:2 außen (Auto füllt das Bild), hohe
-    // Auflösung (2K) und verlustfreies PNG statt niedrig aufgelöstem JPG.
-    aspect_ratio: interior ? "4:3" : "3:2",
-    resolution: "2K",
-    output_format: "png",
-  };
+  // Bevorzugt den vom Dashboard gepflegten Prompt aus KV `prompts`
+  // (/systeme/prompts) inkl. dessen Auflösung/Format/Seitenverhältnis; sonst
+  // den eingebauten Fallback-Prompt (2K/3:2).
+  const cfg = await loadPromptConfig(env, view);
+  const input: Record<string, unknown> = cfg
+    ? {
+        prompt: renderPrompt(cfg.prompt, {
+          jahrgang: jahr,
+          marke,
+          model: modell,
+          bodytyp: carBody,
+          trim: carTrim,
+        }),
+        aspect_ratio: cfg.aspect_ratio,
+        resolution: cfg.resolution,
+        output_format: cfg.output_format,
+      }
+    : {
+        prompt: buildPrompt(carName, view, refImages.length > 0, color),
+        aspect_ratio: interior ? "4:3" : "3:2",
+        resolution: "2K",
+        output_format: "png",
+      };
   if (refImages.length > 0) input.image_input = refImages;
 
   try {
