@@ -27,7 +27,6 @@ import {
   type CarControlVariant,
   type CarVariantIdentity,
   carControlImageUrl,
-  regenerateView,
   variantKey,
 } from "../lib/carControlApi";
 import { useApi } from "../lib/customerApi";
@@ -116,11 +115,13 @@ export default function ControlPlatformLightbox({
   busy,
   variants,
   easyMode,
+  regenerating,
+  genMsg,
   onToggleEasy,
   onSwitchVariant,
+  onRegen,
   onClose,
   onAct,
-  onReload,
 }: {
   identity: CarVariantIdentity;
   views: CarControlDetailView[];
@@ -130,11 +131,13 @@ export default function ControlPlatformLightbox({
   busy: boolean;
   variants: CarControlVariant[];
   easyMode: boolean;
+  regenerating: Set<string>;
+  genMsg: string | null;
   onToggleEasy: () => void;
   onSwitchVariant: (id: CarVariantIdentity) => void;
+  onRegen: (id: CarVariantIdentity, view: string, replaceId?: number) => void;
   onClose: () => void;
   onAct: (action: CarControlAction, ids: number[]) => void | Promise<void>;
-  onReload: () => void;
 }) {
   const items: Item[] = useMemo(() => {
     const present = new Map(views.map((v) => [v.view, v]));
@@ -151,10 +154,9 @@ export default function ControlPlatformLightbox({
   }, [views, missingExt, missingInt]);
 
   const [curView, setCurView] = useState(startView);
-  // Ansichten, die gerade neu generiert werden → gesperrt bis fertig.
-  const [genViews, setGenViews] = useState<Set<string>>(() => new Set());
-  const [genMsg, setGenMsg] = useState<string | null>(null);
-  const isGen = (v: string | undefined) => !!v && genViews.has(v);
+  // Sperr-Status kommt von der Seite (überlebt Lightbox-Öffnen/-Schließen).
+  const isGen = (v: string | undefined) =>
+    !!v && regenerating.has(`${variantKey(identity)}|${v}`);
 
   // Reihenfolge fürs Weitergehen: ADVANCE_ORDER + evtl. Zusatz-Ansichten.
   const advanceSeq = useMemo(
@@ -222,7 +224,7 @@ export default function ControlPlatformLightbox({
     const start = Math.max(0, advanceSeq.indexOf(curView));
     for (let i = 1; i <= advanceSeq.length; i++) {
       const v = advanceSeq[(start + i) % advanceSeq.length];
-      if (v === curView || genViews.has(v)) continue; // gesperrte überspringen
+      if (v === curView || isGen(v)) continue; // gesperrte überspringen
       const it = by.get(v);
       if (it && (it.missing || it.vo?.status === "open")) {
         setCurView(v);
@@ -230,7 +232,7 @@ export default function ControlPlatformLightbox({
       }
     }
     switchToNextVariant();
-  }, [items, advanceSeq, curView, genViews, switchToNextVariant]);
+  }, [items, advanceSeq, curView, regenerating, switchToNextVariant]);
 
   // Markieren + automatisch zur nächsten Ansicht springen
   // (nach approve/hold/error/delete — nicht bei reset).
@@ -248,31 +250,9 @@ export default function ControlPlatformLightbox({
     activeThumbRef.current?.scrollIntoView({ block: "nearest" });
   }, [curView]);
 
-  const doRegen = useCallback(
-    async (view: string, replaceId?: number) => {
-      if (genViews.has(view)) return; // schon in Arbeit
-      setGenViews((s) => new Set(s).add(view));
-      setGenMsg(`Generiere „${label(view)}" … (kann 1–3 Min dauern)`);
-      try {
-        const ok = await regenerateView(identity, view, replaceId);
-        setGenMsg(
-          ok
-            ? `„${label(view)}" generiert + übernommen.`
-            : `„${label(view)}": Generierung fehlgeschlagen.`,
-        );
-        if (ok) onReload();
-      } catch (e) {
-        setGenMsg(e instanceof Error ? e.message : "Fehler.");
-      } finally {
-        setGenViews((s) => {
-          const n = new Set(s);
-          n.delete(view);
-          return n;
-        });
-      }
-    },
-    [genViews, identity, onReload],
-  );
+  // Neu-Generieren an die Seite delegieren (Sperr-Status lebt dort).
+  const doRegen = (view: string, replaceId?: number) =>
+    onRegen(identity, view, replaceId);
 
   // Verstellbarer Thumbnail-Streifen (Breite gemerkt).
   const [stripW, setStripW] = useState(() => {
@@ -368,7 +348,17 @@ export default function ControlPlatformLightbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cur, genViews, busy, move, onAct, onClose, doRegen, goNextWorkable, judge]);
+  }, [
+    cur,
+    regenerating,
+    busy,
+    move,
+    onAct,
+    onClose,
+    doRegen,
+    goNextWorkable,
+    judge,
+  ]);
 
   const tone = (it: Item): Tone => (it.vo?.status as Tone) ?? "open";
   const bigSrc = cur?.vo ? carControlImageUrl(cur.vo.imageKey) : null;

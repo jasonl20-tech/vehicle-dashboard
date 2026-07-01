@@ -26,6 +26,7 @@ import {
   carControlDetailUrl,
   carControlImageUrl,
   carControlVariantsUrl,
+  regenerateView,
   variantKey,
 } from "../lib/carControlApi";
 import { fmtNumber, useApi } from "../lib/customerApi";
@@ -165,6 +166,12 @@ export default function ControlPlatformNewPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [lightboxView, setLightboxView] = useState<string | null>(null);
+  // Welche Ansichten gerade neu generiert werden (Schlüssel = variantKey|view).
+  // Auf Seiten-Ebene, damit die Sperre Lightbox-Öffnen/-Schließen überlebt.
+  const [regenerating, setRegenerating] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [genMsg, setGenMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 350);
@@ -228,6 +235,34 @@ export default function ControlPlatformNewPage() {
       setBusy(false);
     }
   };
+
+  // Neu-Generieren einer Ansicht — auf Seiten-Ebene, damit die Sperre bestehen
+  // bleibt, auch wenn die Lightbox zwischendurch geschlossen/geöffnet wird.
+  const regenerate = async (
+    id: CarVariantIdentity,
+    view: string,
+    replaceId?: number,
+  ) => {
+    const key = `${variantKey(id)}|${view}`;
+    if (regenerating.has(key)) return; // schon in Arbeit → gesperrt
+    setRegenerating((s) => new Set(s).add(key));
+    setGenMsg(`Generiere „${view}" für ${id.marke} ${id.modell} …`);
+    try {
+      const ok = await regenerateView(id, view, replaceId);
+      setGenMsg(ok ? `„${view}" fertig.` : `„${view}": fehlgeschlagen.`);
+      if (ok) reloadBoth();
+    } catch (e) {
+      setGenMsg(e instanceof Error ? e.message : "Fehler.");
+    } finally {
+      setRegenerating((s) => {
+        const n = new Set(s);
+        n.delete(key);
+        return n;
+      });
+    }
+  };
+  const isRegenView = (view: string) =>
+    !!selected && regenerating.has(`${variantKey(selected)}|${view}`);
 
   // Detail-Raster aufbauen.
   const viewMap = useMemo(() => {
@@ -502,6 +537,7 @@ export default function ControlPlatformNewPage() {
                         view={view}
                         vo={vo}
                         busy={busy}
+                        generating={isRegenView(view)}
                         onAct={act}
                         onOpen={setLightboxView}
                       />
@@ -522,6 +558,7 @@ export default function ControlPlatformNewPage() {
                           view={vo.view}
                           vo={vo}
                           busy={busy}
+                          generating={isRegenView(vo.view)}
                           onAct={act}
                           onOpen={setLightboxView}
                         />
@@ -531,6 +568,7 @@ export default function ControlPlatformNewPage() {
                           key={view}
                           view={view}
                           busy={busy}
+                          generating={isRegenView(view)}
                           onAct={act}
                           onOpen={setLightboxView}
                         />
@@ -572,17 +610,27 @@ export default function ControlPlatformNewPage() {
           busy={busy}
           variants={rows}
           easyMode={easyMode}
+          regenerating={regenerating}
+          genMsg={genMsg}
           onToggleEasy={() => setEasyMode((s) => !s)}
           onSwitchVariant={(id) => setSelected(id)}
+          onRegen={regenerate}
           onClose={() => setLightboxView(null)}
           onAct={act}
-          onReload={reloadBoth}
         />
       )}
 
-      {msg && (
-        <div className="shrink-0 border-t border-hair bg-ink-900 px-3 py-1.5 text-[12px] text-white">
-          {msg}
+      {(regenerating.size > 0 || msg || genMsg) && (
+        <div className="flex shrink-0 items-center gap-2 border-t border-hair bg-ink-900 px-3 py-1.5 text-[12px] text-white">
+          {regenerating.size > 0 && (
+            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          )}
+          <span className="truncate">
+            {regenerating.size > 0
+              ? (genMsg ??
+                `${regenerating.size} Ansicht(en) werden generiert…`)
+              : (msg ?? genMsg)}
+          </span>
         </div>
       )}
     </div>
@@ -594,12 +642,14 @@ function ViewTile({
   view,
   vo,
   busy,
+  generating,
   onAct,
   onOpen,
 }: {
   view: string;
   vo?: CarControlDetailView;
   busy: boolean;
+  generating?: boolean;
   onAct: (action: CarControlAction, ids: number[]) => void;
   onOpen?: (view: string) => void;
 }) {
@@ -638,12 +688,18 @@ function ViewTile({
             {STATUS_STYLE[tone].text}
           </span>
         )}
+        {generating && (
+          <span className="absolute inset-0 grid place-items-center gap-1 bg-white/75 text-[10px] text-ink-500">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            wird generiert
+          </span>
+        )}
       </button>
       <div className="flex items-center justify-between gap-1 px-1.5 py-1">
         <span className="truncate text-[11px] font-medium text-ink-700">
           {label(view)}
         </span>
-        {vo && (
+        {vo && !generating && (
           <div className="flex shrink-0 items-center gap-0.5">
             <TileBtn
               title="Freigeben"
