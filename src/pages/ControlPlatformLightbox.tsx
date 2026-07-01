@@ -116,6 +116,7 @@ export default function ControlPlatformLightbox({
   variants,
   easyMode,
   regenerating,
+  generatingViews,
   genMsg,
   onToggleEasy,
   onSwitchVariant,
@@ -132,6 +133,7 @@ export default function ControlPlatformLightbox({
   variants: CarControlVariant[];
   easyMode: boolean;
   regenerating: Set<string>;
+  generatingViews: string[];
   genMsg: string | null;
   onToggleEasy: () => void;
   onSwitchVariant: (id: CarVariantIdentity) => void;
@@ -154,9 +156,12 @@ export default function ControlPlatformLightbox({
   }, [views, missingExt, missingInt]);
 
   const [curView, setCurView] = useState(startView);
-  // Sperr-Status kommt von der Seite (überlebt Lightbox-Öffnen/-Schließen).
+  // Sperr-Status: Browser-Status (sofort) ODER DB-Sperre (überlebt Neuladen,
+  // gilt für alle Tabs/Nutzer).
   const isGen = (v: string | undefined) =>
-    !!v && regenerating.has(`${variantKey(identity)}|${v}`);
+    !!v &&
+    (regenerating.has(`${variantKey(identity)}|${v}`) ||
+      generatingViews.includes(v));
 
   // Reihenfolge fürs Weitergehen: ADVANCE_ORDER + evtl. Zusatz-Ansichten.
   const advanceSeq = useMemo(
@@ -232,7 +237,14 @@ export default function ControlPlatformLightbox({
       }
     }
     switchToNextVariant();
-  }, [items, advanceSeq, curView, regenerating, switchToNextVariant]);
+  }, [
+    items,
+    advanceSeq,
+    curView,
+    regenerating,
+    generatingViews,
+    switchToNextVariant,
+  ]);
 
   // Markieren + automatisch zur nächsten Ansicht springen
   // (nach approve/hold/error/delete — nicht bei reset).
@@ -351,6 +363,7 @@ export default function ControlPlatformLightbox({
   }, [
     cur,
     regenerating,
+    generatingViews,
     busy,
     move,
     onAct,

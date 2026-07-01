@@ -244,13 +244,16 @@ export default function ControlPlatformNewPage() {
     replaceId?: number,
   ) => {
     const key = `${variantKey(id)}|${view}`;
-    if (regenerating.has(key)) return; // schon in Arbeit → gesperrt
+    // schon in Arbeit (lokal ODER laut DB) → gesperrt
+    if (regenerating.has(key) || (detail?.generatingViews ?? []).includes(view))
+      return;
     setRegenerating((s) => new Set(s).add(key));
     setGenMsg(`Generiere „${view}" für ${id.marke} ${id.modell} …`);
     try {
       const ok = await regenerateView(id, view, replaceId);
       setGenMsg(ok ? `„${view}" fertig.` : `„${view}": fehlgeschlagen.`);
-      if (ok) reloadBoth();
+      reloadBoth(); // immer: bei Erfolg neues Bild, bei Fehler gelöste Sperre
+
     } catch (e) {
       setGenMsg(e instanceof Error ? e.message : "Fehler.");
     } finally {
@@ -261,8 +264,10 @@ export default function ControlPlatformNewPage() {
       });
     }
   };
+  const dbGenerating = detail?.generatingViews ?? [];
   const isRegenView = (view: string) =>
-    !!selected && regenerating.has(`${variantKey(selected)}|${view}`);
+    (!!selected && regenerating.has(`${variantKey(selected)}|${view}`)) ||
+    dbGenerating.includes(view);
 
   // Detail-Raster aufbauen.
   const viewMap = useMemo(() => {
@@ -611,6 +616,7 @@ export default function ControlPlatformNewPage() {
           variants={rows}
           easyMode={easyMode}
           regenerating={regenerating}
+          generatingViews={detail.generatingViews ?? []}
           genMsg={genMsg}
           onToggleEasy={() => setEasyMode((s) => !s)}
           onSwitchVariant={(id) => setSelected(id)}

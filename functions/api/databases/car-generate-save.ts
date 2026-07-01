@@ -13,6 +13,7 @@
  */
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import { clearRegenLock, regenLockKey } from "../../_lib/regenLock";
 
 const EXTERIOR = new Set([
   "front",
@@ -267,6 +268,13 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     } catch {
       if (key) await bucket.delete(key).catch(() => {});
       errors.push({ view: it.view, error: "Speichern fehlgeschlagen." });
+    } finally {
+      // Sperre IMMER lösen (auch bei den continue-Pfaden oben), sonst bliebe
+      // die Ansicht bis zum TTL-Ablauf gesperrt.
+      await clearRegenLock(
+        db,
+        regenLockKey({ marke, modell, jahr, body: carBody, trim, farbe }, it.view),
+      );
     }
   }
 

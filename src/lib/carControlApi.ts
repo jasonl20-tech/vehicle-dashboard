@@ -114,6 +114,8 @@ export type CarControlDetailResponse = {
   views: CarControlDetailView[];
   missingExt: string[];
   missingInt: string[];
+  /** Ansichten, die aktuell (DB-gestützt) neu generiert werden. */
+  generatingViews?: string[];
 };
 
 export type CarVariantSort =
@@ -252,13 +254,41 @@ export async function saveGeneratedViews(
  *   neue Bild und stellt die Zeile dann in-place um — das alte Bild bleibt bei
  *   jedem Fehler erhalten (kein Datenverlust). Liefert true bei Erfolg.
  */
+/** DB-Sperre einer Ansicht lösen (z. B. wenn die Generierung fehlschlug). */
+async function unlockView(id: CarVariantIdentity, view: string): Promise<void> {
+  try {
+    await fetch("/api/databases/car-generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        unlock: true,
+        marke: id.marke,
+        modell: id.modell,
+        jahr: id.jahr,
+        body: id.body,
+        trim: id.trim,
+        farbe: id.farbe,
+        view,
+      }),
+    });
+  } catch {
+    /* best effort */
+  }
+}
+
 export async function regenerateView(
   id: CarVariantIdentity,
   view: string,
   replaceId?: number,
 ): Promise<boolean> {
   const url = await generateOneView(id, view);
-  if (!url) return false;
+  if (!url) {
+    // Generierung fehlgeschlagen/timeout → Sperre lösen (Speichern lief nie).
+    await unlockView(id, view);
+    return false;
+  }
+  // Bei Erfolg löst car-generate-save die Sperre selbst (finally je Ansicht).
   const saved = await saveGeneratedViews(id, [
     { view, imageUrl: url, replaceId: replaceId && replaceId > 0 ? replaceId : undefined },
   ]);

@@ -14,6 +14,7 @@
  */
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import { activeRegenViews, regenVariantPrefix } from "../../_lib/regenLock";
 
 /** „Offen zur Kontrolle": Quell-Bild, noch nicht freigegeben. */
 const OPEN_WHERE =
@@ -197,18 +198,25 @@ async function detailVariant(
     };
   });
   const present = new Set(views.map((v) => v.view));
+  const identity = {
+    marke,
+    modell,
+    jahr,
+    body: (p.get("body") || "").trim(),
+    trim: (p.get("trim") || "").trim(),
+    farbe: (p.get("farbe") || "").trim(),
+  };
+  // Aktuell (DB-gestützt) neu generierende Ansichten dieser Variante.
+  const generatingViews = await activeRegenViews(
+    db,
+    regenVariantPrefix(identity),
+  );
   return jsonResponse({
-    identity: {
-      marke,
-      modell,
-      jahr,
-      body: (p.get("body") || "").trim(),
-      trim: (p.get("trim") || "").trim(),
-      farbe: (p.get("farbe") || "").trim(),
-    },
+    identity,
     views,
     missingExt: EXTERIOR.filter((v) => !present.has(v)),
     missingInt: INTERIOR.filter((v) => !present.has(v)),
+    generatingViews,
   });
 }
 

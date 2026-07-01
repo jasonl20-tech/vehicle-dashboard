@@ -14,6 +14,12 @@
  */
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
+import {
+  clearRegenLock,
+  isRegenLocked,
+  regenLockKey,
+  setRegenLock,
+} from "../../_lib/regenLock";
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
@@ -250,6 +256,21 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     .toLowerCase()
     .trim();
 
+  // Sperre lösen — z. B. wenn die Generierung im Client fehlschlug/timeoutete,
+  // damit die Ansicht nicht bis zum TTL-Ablauf blockiert bleibt.
+  if (body.unlock === true) {
+    if (env.cardb && view) {
+      await clearRegenLock(
+        env.cardb,
+        regenLockKey(
+          { marke, modell: modellRaw, jahr, body: carBody, trim: carTrim, farbe },
+          view,
+        ),
+      );
+    }
+    return jsonResponse({ ok: true, unlocked: true });
+  }
+
   // Optionale Referenz-Bild-URLs (für konsistente Folge-Ansichten). Nur http(s).
   const images = Array.isArray(body.images)
     ? (body.images as unknown[])
@@ -261,6 +282,19 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   // useDbRefs=true (Nachgenerieren): vorhandene Ansichten desselben Autos aus
   // der DB als Referenz laden → konsistentes Ergebnis (gleiches Auto/Farbe).
   const useDbRefs = body.useDbRefs === true;
+  const lockKey = useDbRefs
+    ? regenLockKey(
+        { marke, modell: modellRaw, jahr, body: carBody, trim: carTrim, farbe },
+        view,
+      )
+    : "";
+  // Doppel-Start verhindern: läuft für diese Ansicht schon eine Generierung?
+  if (useDbRefs && env.cardb && (await isRegenLocked(env.cardb, lockKey))) {
+    return jsonResponse(
+      { error: "Diese Ansicht wird bereits neu generiert.", locked: true },
+      { status: 409 },
+    );
+  }
   let dbRefs: string[] = [];
   if (useDbRefs && marke && modellRaw && jahr) {
     dbRefs = await resolveDbRefs(
@@ -281,9 +315,11 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
   const interior = view === "dashboard" || view === "center_console";
   const input: Record<string, unknown> = {
     prompt: buildPrompt(carName, view, refImages.length > 0, color),
-    aspect_ratio: interior ? "4:3" : "16:9",
-    resolution: "1K",
-    output_format: "jpg",
+    // Wie die Original-Bibliothek: 3:2 außen (Auto füllt das Bild), hohe
+    // Auflösung (2K) und verlustfreies PNG statt niedrig aufgelöstem JPG.
+    aspect_ratio: interior ? "4:3" : "3:2",
+    resolution: "2K",
+    output_format: "png",
   };
   if (refImages.length > 0) input.image_input = refImages;
 
@@ -308,6 +344,8 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
         { status: 502 },
       );
     }
+    // Ansicht sperren (in Bearbeitung) — bis car-generate-save die Sperre löst.
+    if (useDbRefs && env.cardb) await setRegenLock(env.cardb, lockKey);
     return jsonResponse({ ok: true, taskId, view });
   } catch (e) {
     return jsonResponse(
