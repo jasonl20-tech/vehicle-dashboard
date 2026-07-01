@@ -1,20 +1,32 @@
 import {
   Check,
+  ExternalLink,
   ImageIcon,
   Loader2,
   Pause,
   RotateCcw,
+  Search,
   Sparkles,
   Trash2,
   X,
+  Zap,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   type CarControlAction,
   type CarControlDetailView,
+  type CarControlVariant,
   type CarVariantIdentity,
   carControlImageUrl,
   regenerateView,
+  variantKey,
 } from "../lib/carControlApi";
 
 /** Reihenfolge im Streifen (wie alte Lightbox) + Innen + Zusatz. */
@@ -67,6 +79,10 @@ export default function ControlPlatformLightbox({
   missingInt,
   startView,
   busy,
+  variants,
+  easyMode,
+  onToggleEasy,
+  onSwitchVariant,
   onClose,
   onAct,
   onReload,
@@ -77,6 +93,10 @@ export default function ControlPlatformLightbox({
   missingInt: string[];
   startView: string;
   busy: boolean;
+  variants: CarControlVariant[];
+  easyMode: boolean;
+  onToggleEasy: () => void;
+  onSwitchVariant: (id: CarVariantIdentity) => void;
   onClose: () => void;
   onAct: (action: CarControlAction, ids: number[]) => void | Promise<void>;
   onReload: () => void;
@@ -99,6 +119,17 @@ export default function ControlPlatformLightbox({
   const [genView, setGenView] = useState<string | null>(null);
   const [genMsg, setGenMsg] = useState<string | null>(null);
 
+  // Beim Wechsel auf ein anderes Auto auf dessen erste bearbeitbare Ansicht.
+  const idKey = variantKey(identity);
+  const prevId = useRef(idKey);
+  useEffect(() => {
+    if (prevId.current !== idKey) {
+      prevId.current = idKey;
+      const fw = items.find((it) => it.missing || it.vo?.status === "open");
+      setCurView(fw ? fw.view : (items[0]?.view ?? startView));
+    }
+  }, [idKey, items, startView]);
+
   const idx = Math.max(
     0,
     items.findIndex((it) => it.view === curView),
@@ -114,17 +145,36 @@ export default function ControlPlatformLightbox({
     [idx, items],
   );
 
-  // Nächste bearbeitbare Ansicht (offen oder fehlend) — für Auto-Sprung.
-  const goNextWorkable = useCallback(() => {
-    if (items.length === 0) return;
-    for (let i = 1; i <= items.length; i++) {
-      const it = items[(idx + i) % items.length];
-      if (it.missing || it.vo?.status === "open") {
-        setCurView(it.view);
-        return;
+  // Zum nächsten Auto springen (Easy-Mode: nur Autos mit offenen Ansichten).
+  const switchToNextVariant = useCallback(() => {
+    if (!variants || variants.length === 0) return false;
+    const curKey = variantKey(identity);
+    const i = variants.findIndex((v) => variantKey(v) === curKey);
+    if (i < 0) return false;
+    for (let j = 1; j <= variants.length; j++) {
+      const v = variants[(i + j) % variants.length];
+      if (variantKey(v) === curKey) break;
+      if (!easyMode || v.open > 0) {
+        onSwitchVariant(v);
+        return true;
       }
     }
-  }, [idx, items]);
+    return false;
+  }, [variants, identity, easyMode, onSwitchVariant]);
+
+  // Nächste bearbeitbare Ansicht (offen/fehlend); sonst → nächstes Auto.
+  const goNextWorkable = useCallback(() => {
+    if (items.length > 0) {
+      for (let i = 1; i <= items.length; i++) {
+        const it = items[(idx + i) % items.length];
+        if (it.missing || it.vo?.status === "open") {
+          setCurView(it.view);
+          return;
+        }
+      }
+    }
+    switchToNextVariant();
+  }, [idx, items, switchToNextVariant]);
 
   const doRegen = useCallback(
     async (view: string, replaceId?: number) => {
@@ -147,6 +197,48 @@ export default function ControlPlatformLightbox({
     },
     [genView, identity, onReload],
   );
+
+  // Verstellbarer Thumbnail-Streifen (Breite gemerkt).
+  const [stripW, setStripW] = useState(() => {
+    const v = Number(localStorage.getItem("cpNeu.stripW"));
+    return v >= 90 && v <= 420 ? v : 150;
+  });
+  const dragging = useRef(false);
+  const stripWRef = useRef(stripW);
+  stripWRef.current = stripW;
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (dragging.current) setStripW(Math.min(420, Math.max(90, e.clientX)));
+    };
+    const onUp = () => {
+      if (dragging.current) {
+        dragging.current = false;
+        try {
+          localStorage.setItem("cpNeu.stripW", String(stripWRef.current));
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, []);
+
+  const googleUrl = useMemo(() => {
+    const q = [
+      identity.marke,
+      identity.modell.replace(/_/g, " "),
+      identity.jahr,
+      cur ? label(cur.view) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(q)}`;
+  }, [identity, cur]);
 
   // Tastatur
   useEffect(() => {
@@ -185,6 +277,31 @@ export default function ControlPlatformLightbox({
   const tone = (it: Item): Tone => (it.vo?.status as Tone) ?? "open";
   const bigSrc = cur?.vo ? carControlImageUrl(cur.vo.imageKey) : null;
 
+  const HeadBtn = ({
+    onClick,
+    title,
+    active,
+    children,
+  }: {
+    onClick: () => void;
+    title: string;
+    active?: boolean;
+    children: ReactNode;
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`inline-flex h-8 items-center gap-1 rounded px-2 text-[12px] ${
+        active
+          ? "bg-brand-500/30 text-white"
+          : "text-white/70 hover:bg-white/10"
+      }`}
+    >
+      {children}
+    </button>
+  );
+
   return (
     <div
       className="fixed inset-0 z-[90] flex flex-col bg-black/95"
@@ -192,7 +309,7 @@ export default function ControlPlatformLightbox({
       aria-modal="true"
     >
       {/* Kopf */}
-      <div className="flex h-11 shrink-0 items-center gap-3 border-b border-white/10 px-3 text-white">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-white/10 px-3 text-white">
         <div className="min-w-0">
           <span className="text-[13px] font-semibold">
             {identity.marke} {identity.modell}
@@ -201,14 +318,33 @@ export default function ControlPlatformLightbox({
             {identity.jahr} · {identity.farbe} · {cur ? label(cur.view) : ""}
           </span>
         </div>
-        <div className="ml-auto flex items-center gap-2 text-[12px]">
-          {genMsg && (
-            <span className="max-w-[40vw] truncate text-white/70">{genMsg}</span>
-          )}
+        {genMsg && (
+          <span className="ml-2 max-w-[30vw] truncate text-[12px] text-white/70">
+            {genMsg}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1">
+          <HeadBtn onClick={onToggleEasy} title="Fertige Autos überspringen" active={easyMode}>
+            <Zap className="h-4 w-4" /> Easy
+          </HeadBtn>
+          <HeadBtn
+            onClick={() => window.open(googleUrl, "_blank", "noopener")}
+            title="Google-Bildersuche (mit echten Fotos vergleichen)"
+          >
+            <Search className="h-4 w-4" /> Google
+          </HeadBtn>
+          <HeadBtn
+            onClick={() =>
+              bigSrc && window.open(bigSrc, "_blank", "noopener")
+            }
+            title="Bild in neuem Tab öffnen"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </HeadBtn>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-white/10"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-white hover:bg-white/10"
             aria-label="Schließen"
           >
             <X className="h-5 w-5" />
@@ -218,7 +354,10 @@ export default function ControlPlatformLightbox({
 
       <div className="flex min-h-0 flex-1">
         {/* Streifen */}
-        <aside className="w-[150px] shrink-0 overflow-y-auto border-r border-white/10 p-2">
+        <aside
+          className="shrink-0 overflow-y-auto border-r border-white/10 p-2"
+          style={{ width: stripW }}
+        >
           {items.map((it) => {
             const active = it.view === curView;
             const src = it.vo ? carControlImageUrl(it.vo.imageKey) : null;
@@ -256,13 +395,30 @@ export default function ControlPlatformLightbox({
           })}
         </aside>
 
+        {/* Zieh-Trenner (Streifenbreite) */}
+        <div
+          onPointerDown={() => {
+            dragging.current = true;
+          }}
+          onDoubleClick={() => {
+            setStripW(150);
+            try {
+              localStorage.setItem("cpNeu.stripW", "150");
+            } catch {
+              /* ignore */
+            }
+          }}
+          title="Ziehen zum Verstellen · Doppelklick = Standard"
+          className="w-1 shrink-0 cursor-col-resize bg-white/10 hover:bg-brand-400/60"
+        />
+
         {/* Großbild */}
         <div className="relative flex min-w-0 flex-1 items-center justify-center p-4">
           {cur?.vo && bigSrc ? (
             <img
               src={bigSrc}
               alt={cur.view}
-              className={`max-h-full max-w-full object-contain ${TONE_RING[tone(cur)]} rounded`}
+              className={`max-h-full max-w-full rounded object-contain ${TONE_RING[tone(cur)]}`}
             />
           ) : cur ? (
             <div className="flex flex-col items-center gap-2 text-white/50">

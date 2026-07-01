@@ -139,15 +139,25 @@ function variantTone(v: CarControlVariant): Tone {
 export default function ControlPlatformNewPage() {
   const [qIn, setQIn] = useState("");
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<CarVariantStatusFilter>("open");
-  const [sort, setSort] = useState<CarVariantSort>("open_desc");
+  const [status, setStatus] = useState<CarVariantStatusFilter>(() => {
+    const v = lsGet("cpNeu.status", "open");
+    return STATUS_FILTERS.some((s) => s.v === v)
+      ? (v as CarVariantStatusFilter)
+      : "open";
+  });
+  const [sort, setSort] = useState<CarVariantSort>(() => {
+    const v = lsGet("cpNeu.sort", "open_desc");
+    return SORTS.some((s) => s.v === v) ? (v as CarVariantSort) : "open_desc";
+  });
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState<CarVariantIdentity | null>(null);
 
   const [liveOn, setLiveOn] = useState(() => lsGet("cpNeu.live.on", "0") === "1");
-  const [liveMs, setLiveMs] = useState(() =>
-    Number(lsGet("cpNeu.live.ms", "5000")),
-  );
+  const [liveMs, setLiveMs] = useState(() => {
+    const v = Number(lsGet("cpNeu.live.ms", "5000"));
+    return LIVE_MS.includes(v) ? v : 5000;
+  });
+  const [easyMode, setEasyMode] = useState(() => lsGet("cpNeu.easy", "0") === "1");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [lightboxView, setLightboxView] = useState<string | null>(null);
@@ -164,10 +174,13 @@ export default function ControlPlatformNewPage() {
     try {
       localStorage.setItem("cpNeu.live.on", liveOn ? "1" : "0");
       localStorage.setItem("cpNeu.live.ms", String(liveMs));
+      localStorage.setItem("cpNeu.status", status);
+      localStorage.setItem("cpNeu.sort", sort);
+      localStorage.setItem("cpNeu.easy", easyMode ? "1" : "0");
     } catch {
       /* ignore */
     }
-  }, [liveOn, liveMs]);
+  }, [liveOn, liveMs, status, sort, easyMode]);
 
   const pollMs = liveOn ? liveMs : 0;
 
@@ -407,8 +420,23 @@ export default function ControlPlatformNewPage() {
         <section className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-3 border-b border-hair px-3 py-2">
             <div className="min-w-0">
-              <div className="truncate text-[14px] font-semibold text-ink-900">
-                {selectedTitle}
+              <div className="flex items-center gap-2">
+                <div className="truncate text-[14px] font-semibold text-ink-900">
+                  {selectedTitle}
+                </div>
+                {selected && (
+                  <a
+                    href={`/car-database/eintraege?marke=${encodeURIComponent(
+                      selected.marke,
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 text-[11px] text-brand-600 hover:underline"
+                    title="In der Car-Database öffnen"
+                  >
+                    DB ↗
+                  </a>
+                )}
               </div>
               {selected && (
                 <div className="truncate text-[11px] text-ink-500">
@@ -533,6 +561,10 @@ export default function ControlPlatformNewPage() {
           missingInt={detail.missingInt}
           startView={lightboxView}
           busy={busy}
+          variants={rows}
+          easyMode={easyMode}
+          onToggleEasy={() => setEasyMode((s) => !s)}
+          onSwitchVariant={(id) => setSelected(id)}
           onClose={() => setLightboxView(null)}
           onAct={act}
           onReload={reloadBoth}
