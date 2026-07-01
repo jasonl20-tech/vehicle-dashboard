@@ -51,6 +51,21 @@ const STRIP_ORDER = [
   "center_console",
 ];
 
+/** Reihenfolge fürs Auto-Weitergehen: front, rear, left, right, dann die 4
+ *  Diagonalen, dann Innen. */
+const ADVANCE_ORDER = [
+  "front",
+  "rear",
+  "left",
+  "right",
+  "front_left",
+  "front_right",
+  "rear_left",
+  "rear_right",
+  "dashboard",
+  "center_console",
+];
+
 const VIEW_LABEL: Record<string, string> = {
   front: "Front",
   rear: "Heck",
@@ -136,8 +151,28 @@ export default function ControlPlatformLightbox({
   }, [views, missingExt, missingInt]);
 
   const [curView, setCurView] = useState(startView);
-  const [genView, setGenView] = useState<string | null>(null);
+  // Ansichten, die gerade neu generiert werden → gesperrt bis fertig.
+  const [genViews, setGenViews] = useState<Set<string>>(() => new Set());
   const [genMsg, setGenMsg] = useState<string | null>(null);
+  const isGen = (v: string | undefined) => !!v && genViews.has(v);
+
+  // Reihenfolge fürs Weitergehen: ADVANCE_ORDER + evtl. Zusatz-Ansichten.
+  const advanceSeq = useMemo(
+    () => [
+      ...ADVANCE_ORDER,
+      ...items.map((i) => i.view).filter((v) => !ADVANCE_ORDER.includes(v)),
+    ],
+    [items],
+  );
+  // Erste bearbeitbare Ansicht in ADVANCE_ORDER (offen/fehlend).
+  const firstWorkable = useCallback((): string => {
+    const by = new Map(items.map((it) => [it.view, it]));
+    for (const v of advanceSeq) {
+      const it = by.get(v);
+      if (it && (it.missing || it.vo?.status === "open")) return v;
+    }
+    return items[0]?.view ?? startView;
+  }, [items, advanceSeq, startView]);
 
   // Beim Wechsel auf ein anderes Auto auf dessen erste bearbeitbare Ansicht.
   const idKey = variantKey(identity);
@@ -145,10 +180,9 @@ export default function ControlPlatformLightbox({
   useEffect(() => {
     if (prevId.current !== idKey) {
       prevId.current = idKey;
-      const fw = items.find((it) => it.missing || it.vo?.status === "open");
-      setCurView(fw ? fw.view : (items[0]?.view ?? startView));
+      setCurView(firstWorkable());
     }
-  }, [idKey, items, startView]);
+  }, [idKey, firstWorkable]);
 
   const idx = Math.max(
     0,
@@ -182,19 +216,21 @@ export default function ControlPlatformLightbox({
     return false;
   }, [variants, identity, easyMode, onSwitchVariant]);
 
-  // Nächste bearbeitbare Ansicht (offen/fehlend); sonst → nächstes Auto.
+  // Nächste bearbeitbare Ansicht in ADVANCE_ORDER (offen/fehlend); sonst → nächstes Auto.
   const goNextWorkable = useCallback(() => {
-    if (items.length > 0) {
-      for (let i = 1; i <= items.length; i++) {
-        const it = items[(idx + i) % items.length];
-        if (it.missing || it.vo?.status === "open") {
-          setCurView(it.view);
-          return;
-        }
+    const by = new Map(items.map((it) => [it.view, it]));
+    const start = Math.max(0, advanceSeq.indexOf(curView));
+    for (let i = 1; i <= advanceSeq.length; i++) {
+      const v = advanceSeq[(start + i) % advanceSeq.length];
+      if (v === curView || genViews.has(v)) continue; // gesperrte überspringen
+      const it = by.get(v);
+      if (it && (it.missing || it.vo?.status === "open")) {
+        setCurView(v);
+        return;
       }
     }
     switchToNextVariant();
-  }, [idx, items, switchToNextVariant]);
+  }, [items, advanceSeq, curView, genViews, switchToNextVariant]);
 
   // Markieren + automatisch zur nächsten Ansicht springen
   // (nach approve/hold/error/delete — nicht bei reset).
@@ -214,8 +250,8 @@ export default function ControlPlatformLightbox({
 
   const doRegen = useCallback(
     async (view: string, replaceId?: number) => {
-      if (genView) return;
-      setGenView(view);
+      if (genViews.has(view)) return; // schon in Arbeit
+      setGenViews((s) => new Set(s).add(view));
       setGenMsg(`Generiere „${label(view)}" … (kann 1–3 Min dauern)`);
       try {
         const ok = await regenerateView(identity, view, replaceId);
@@ -228,10 +264,14 @@ export default function ControlPlatformLightbox({
       } catch (e) {
         setGenMsg(e instanceof Error ? e.message : "Fehler.");
       } finally {
-        setGenView(null);
+        setGenViews((s) => {
+          const n = new Set(s);
+          n.delete(view);
+          return n;
+        });
       }
     },
-    [genView, identity, onReload],
+    [genViews, identity, onReload],
   );
 
   // Verstellbarer Thumbnail-Streifen (Breite gemerkt).
@@ -310,7 +350,7 @@ export default function ControlPlatformLightbox({
       if (e.key === "ArrowLeft" || e.key === "ArrowUp")
         return e.preventDefault(), move(-1);
       const vo = cur?.vo;
-      if (genView || busy) return;
+      if (busy || isGen(cur?.view)) return;
       if ((k === "1" || k === "r") && vo && !vo.approved) {
         judge("approve", vo.id);
       } else if ((k === "2" || k === "g") && cur) {
@@ -328,7 +368,7 @@ export default function ControlPlatformLightbox({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cur, genView, busy, move, onAct, onClose, doRegen, goNextWorkable, judge]);
+  }, [cur, genViews, busy, move, onAct, onClose, doRegen, goNextWorkable, judge]);
 
   const tone = (it: Item): Tone => (it.vo?.status as Tone) ?? "open";
   const bigSrc = cur?.vo ? carControlImageUrl(cur.vo.imageKey) : null;
@@ -430,6 +470,7 @@ export default function ControlPlatformLightbox({
               key={it.view}
               it={it}
               active={it.view === curView}
+              generating={isGen(it.view)}
               buttonRef={it.view === curView ? activeThumbRef : undefined}
               onClick={() => setCurView(it.view)}
             />
@@ -484,9 +525,12 @@ export default function ControlPlatformLightbox({
               />
             </div>
           )}
-          {genView && (
-            <div className="absolute inset-0 grid place-items-center bg-black/50">
+          {isGen(cur?.view) && (
+            <div className="absolute inset-0 grid place-items-center gap-2 bg-black/60">
               <Loader2 className="h-8 w-8 animate-spin text-white" />
+              <span className="text-[12px] text-white/80">
+                wird neu generiert … (gesperrt bis fertig)
+              </span>
             </div>
           )}
         </div>
@@ -507,7 +551,7 @@ export default function ControlPlatformLightbox({
             <BarBtn
               label="Freigeben"
               k="1"
-              disabled={busy || !!genView || cur.vo.approved}
+              disabled={busy || isGen(cur?.view) || cur.vo.approved}
               onClick={() => judge("approve", cur.vo!.id)}
               cls="bg-emerald-600 hover:bg-emerald-700"
             >
@@ -516,7 +560,7 @@ export default function ControlPlatformLightbox({
             <BarBtn
               label="Hold"
               k="3"
-              disabled={busy || !!genView || cur.vo.hold}
+              disabled={busy || isGen(cur?.view) || cur.vo.hold}
               onClick={() => judge("hold", cur.vo!.id)}
               cls="bg-amber-600 hover:bg-amber-700"
             >
@@ -525,7 +569,7 @@ export default function ControlPlatformLightbox({
             <BarBtn
               label="Fehler"
               k="4"
-              disabled={busy || !!genView || cur.vo.fehler}
+              disabled={busy || isGen(cur?.view) || cur.vo.fehler}
               onClick={() => judge("error", cur.vo!.id)}
               cls="bg-rose-600 hover:bg-rose-700"
             >
@@ -534,7 +578,7 @@ export default function ControlPlatformLightbox({
             <BarBtn
               label="Zurücksetzen"
               k="0"
-              disabled={busy || !!genView || cur.vo.status === "open"}
+              disabled={busy || isGen(cur?.view) || cur.vo.status === "open"}
               onClick={() => void onAct("reset", [cur.vo!.id])}
               cls="bg-white/10 hover:bg-white/20"
             >
@@ -545,7 +589,7 @@ export default function ControlPlatformLightbox({
         <BarBtn
           label={cur?.vo ? "Neu generieren" : "Generieren"}
           k="2"
-          disabled={busy || !!genView || !cur}
+          disabled={busy || isGen(cur?.view) || !cur}
           onClick={() => cur && void doRegen(cur.view, cur.vo?.id)}
           cls="bg-brand-600 hover:bg-brand-700"
         >
@@ -555,7 +599,7 @@ export default function ControlPlatformLightbox({
           <BarBtn
             label="Löschen"
             k="Entf"
-            disabled={busy || !!genView}
+            disabled={busy || isGen(cur?.view)}
             onClick={() => judge("delete", cur.vo!.id)}
             cls="bg-white/10 hover:bg-rose-600/40"
           >
@@ -575,11 +619,13 @@ export default function ControlPlatformLightbox({
 function StripThumb({
   it,
   active,
+  generating,
   buttonRef,
   onClick,
 }: {
   it: Item;
   active: boolean;
+  generating?: boolean;
   buttonRef?: Ref<HTMLButtonElement>;
   onClick: () => void;
 }) {
@@ -617,6 +663,11 @@ function StripThumb({
           <span
             className={`absolute right-1 top-1 h-2 w-2 rounded-full ${TONE_DOT[t]}`}
           />
+        )}
+        {generating && (
+          <div className="absolute inset-0 grid place-items-center bg-black/60">
+            <Loader2 className="h-4 w-4 animate-spin text-white" />
+          </div>
         )}
       </div>
       <div className="truncate px-1 py-0.5 text-left text-[10px] text-white/70">
