@@ -1,19 +1,23 @@
 /**
  * POST /api/databases/car-generate-test
  *
- * TEST-Endpoint: Bild→Bild-Generierung. Nimmt hochgeladene Referenzfotos eines
- * Autos (Base64) + eine Ziel-Ansicht und versucht über Workers AI
- * (google/nano-banana-2, AI-Gateway „default") unsere Studio-Ansicht zu
- * erzeugen. Gedacht für ältere Modelle, die die KI nicht kennt.
+ * TEST-Endpoint: Bild→Bild-Generierung über kie.ai (nano-banana-2) — derselbe
+ * funktionierende Weg wie „Auto erstellen" (der tote Workers-AI-Gateway-Weg
+ * wurde ersetzt). Nimmt hochgeladene Referenzfotos (Data-URL/Base64) + eine
+ * Ziel-Ansicht, lädt sie temporär zu kie.ai hoch und startet die Generierung.
+ * Gibt eine `taskId` zurück; der Fortschritt wird über
+ * `GET /api/databases/car-generate?taskId=…` gepollt (gleiche kie.ai-Task).
  *
- * WICHTIG: Es wird NICHTS gespeichert (kein R2, keine DB) — das Ergebnis wird
- * nur temporär als Data-URL zurückgegeben und im Frontend angezeigt.
+ * WICHTIG: Es wird bei UNS NICHTS gespeichert (kein R2, keine DB, kein Cache).
+ * Das Ergebnis ist eine temporäre kie.ai-URL, die im Frontend nur ANGEZEIGT
+ * wird. (Die Referenzfotos liegen für die Generierung kurzzeitig bei kie.ai.)
  */
 
 import { getCurrentUser, jsonResponse, type AuthEnv } from "../../_lib/auth";
-import { getWorkersAiBinding } from "../../_lib/workersAiBinding";
 
-const MODEL = "google/nano-banana-2";
+const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+const KIE_UPLOAD = "https://kieai.redpandaai.co/api/file-base64-upload";
+const MODEL = "nano-banana-2";
 
 const VIEW_DESC: Record<string, string> = {
   front: "directly from the front",
@@ -28,8 +32,38 @@ const VIEW_DESC: Record<string, string> = {
   center_console: "interior center console as a close-up",
 };
 
-function stripB64(s: string): string {
-  return String(s).replace(/^data:[^,]+,/, "").trim();
+/** Data-URL/Base64 zu kie.ai hochladen → öffentliche URL für image_input.
+ *  Rein temporär bei kie.ai; bei uns wird nichts gespeichert. */
+async function uploadToKie(
+  apiKey: string,
+  dataUrl: string,
+  idx: number,
+): Promise<string | null> {
+  const b64 = dataUrl.startsWith("data:")
+    ? dataUrl
+    : `data:image/png;base64,${dataUrl}`;
+  try {
+    const r = await fetch(KIE_UPLOAD, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0",
+      },
+      body: JSON.stringify({
+        base64Data: b64,
+        uploadPath: "vi-test-refs",
+        fileName: `ref_${idx}.png`,
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const j = (await r.json().catch(() => ({}))) as {
+      data?: { downloadUrl?: string; fileUrl?: string };
+    };
+    return j?.data?.downloadUrl || j?.data?.fileUrl || null;
+  } catch {
+    return null;
+  }
 }
 
 export const onRequestPost: PagesFunction<AuthEnv> = async ({
@@ -41,10 +75,10 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "Nicht angemeldet" }, { status: 401 });
   }
 
-  const ai = getWorkersAiBinding(env);
-  if (!ai) {
+  const apiKey = env.KIE_API_KEY;
+  if (!apiKey) {
     return jsonResponse(
-      { error: "Workers-AI-Bindung (`workersai`/`AI`) fehlt (Pages → Settings)." },
+      { error: "KIE_API_KEY fehlt (Pages → Settings → Environment, secret)." },
       { status: 503 },
     );
   }
@@ -56,11 +90,12 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     return jsonResponse({ error: "Ungültiger Request-Body." }, { status: 400 });
   }
 
+  // Referenzfotos (Data-URL/Base64). Für den Test bis zu 6 nutzen.
   const images = Array.isArray(body.images)
     ? (body.images as unknown[])
-        .map((s) => stripB64(String(s)))
+        .map((s) => String(s).trim())
         .filter(Boolean)
-        .slice(0, 8)
+        .slice(0, 6)
     : [];
   if (images.length === 0) {
     return jsonResponse(
@@ -86,63 +121,54 @@ export const onRequestPost: PagesFunction<AuthEnv> = async ({
     "Photorealistic, automotive catalog style. Keep the exact body shape, proportions, wheels, lights and details of the reference car. " +
     "Do not invent a different car.";
 
-  const aiInput = {
-    prompt,
-    image_input: images,
-    aspect_ratio: "4:3",
-    output_format: "png",
-    resolution: "1K",
-  };
-
-  try {
-    const resp = (await ai.run(MODEL, aiInput, {
-      gateway: { id: "default" },
-    })) as unknown;
-
-    // Generiertes Bild defensiv extrahieren (Antwortform kann variieren).
-    let b64 = "";
-    if (typeof resp === "string") {
-      b64 = resp;
-    } else if (resp && typeof resp === "object") {
-      const r = resp as Record<string, unknown>;
-      const strKeys = ["image", "image_b64", "b64_json", "data"];
-      for (const k of strKeys) {
-        if (typeof r[k] === "string" && r[k]) {
-          b64 = r[k] as string;
-          break;
-        }
-      }
-      if (!b64 && Array.isArray(r.images) && typeof r.images[0] === "string") {
-        b64 = r.images[0] as string;
-      }
-      if (!b64 && Array.isArray(r.data) && r.data[0]) {
-        const d0 = r.data[0] as Record<string, unknown>;
-        if (typeof d0.b64_json === "string") b64 = d0.b64_json;
-      }
-    }
-
-    if (b64) {
-      return jsonResponse({
-        ok: true,
-        view,
-        image: `data:image/png;base64,${stripB64(b64)}`,
-      });
-    }
-
-    // Kein Bild gefunden → Rohantwort (gekürzt) zum Einordnen zurückgeben.
+  // 1) Referenzfotos zu kie.ai hochladen (image_input braucht URLs). Kleine
+  //    Nebenläufigkeit (2) begrenzt den Spitzen-Speicher. Bei uns nichts gespeichert.
+  const refUrls: string[] = [];
+  for (let i = 0; i < images.length; i += 2) {
+    const batch = await Promise.all(
+      images.slice(i, i + 2).map((img, k) => uploadToKie(apiKey, img, i + k)),
+    );
+    for (const u of batch) if (u) refUrls.push(u);
+  }
+  if (refUrls.length === 0) {
     return jsonResponse(
-      {
-        ok: false,
-        view,
-        error: "Kein Bild in der KI-Antwort gefunden.",
-        rawKeys:
-          resp && typeof resp === "object"
-            ? Object.keys(resp as Record<string, unknown>)
-            : typeof resp,
-        raw: JSON.stringify(resp).slice(0, 800),
-      },
+      { ok: false, view, error: "Referenzfotos konnten nicht verarbeitet werden." },
       { status: 502 },
     );
+  }
+
+  // 2) Generier-Auftrag starten → taskId zurück (Fortschritt pollt das Frontend
+  //    über car-generate?taskId=…). NICHTS wird bei uns gespeichert.
+  try {
+    const r = await fetch(`${KIE_BASE}/createTask`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        input: {
+          prompt,
+          image_input: refUrls,
+          aspect_ratio: interior ? "4:3" : "3:2",
+          resolution: "1K",
+          output_format: "png",
+        },
+      }),
+    });
+    const j = (await r.json().catch(() => ({}))) as {
+      msg?: string;
+      data?: { taskId?: string };
+    };
+    const taskId = j?.data?.taskId;
+    if (!taskId) {
+      return jsonResponse(
+        { ok: false, view, error: j?.msg || "kie.ai: createTask fehlgeschlagen." },
+        { status: 502 },
+      );
+    }
+    return jsonResponse({ ok: true, taskId, view });
   } catch (e) {
     return jsonResponse(
       { ok: false, view, error: e instanceof Error ? e.message : String(e) },

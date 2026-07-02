@@ -661,6 +661,7 @@ function ImageCreate() {
     setResults(selectedViews.map((v) => ({ view: v, status: "loading" })));
     for (const v of selectedViews) {
       try {
+        // 1) Auftrag starten: Referenzfotos zu kie.ai hochladen + createTask.
         const res = await fetch("/api/databases/car-generate-test", {
           method: "POST",
           credentials: "include",
@@ -675,29 +676,75 @@ function ImageCreate() {
         });
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
-          image?: string;
+          taskId?: string;
           error?: string;
         };
-        const msg =
-          data.error ||
-          (res.status === 502
-            ? "KI aktuell offline (502) — AI-Gateway/Google-Credentials"
-            : `HTTP ${res.status}`);
-        setResults((prev) =>
-          prev.map((r) =>
-            r.view === v
-              ? data.ok && data.image
-                ? { view: v, status: "done", image: data.image }
-                : { view: v, status: "error", error: msg }
-              : r,
-          ),
-        );
+        if (!res.ok || !data.taskId) {
+          const msg = data.error || `HTTP ${res.status}`;
+          setResults((prev) =>
+            prev.map((r) =>
+              r.view === v ? { view: v, status: "error", error: msg } : r,
+            ),
+          );
+          continue;
+        }
+        // 2) Auf das Ergebnis warten (Poll, ~180 s) — dieselbe kie.ai-Task wie
+        //    „Auto erstellen". Ergebnis wird nur ANGEZEIGT, nichts gespeichert.
+        const deadline = Date.now() + 180_000;
+        let settled = false;
+        while (Date.now() < deadline) {
+          await sleep(3000);
+          const pr = await fetch(
+            `/api/databases/car-generate?taskId=${encodeURIComponent(data.taskId)}`,
+            { credentials: "include" },
+          );
+          const pj = (await pr.json().catch(() => ({}))) as {
+            state?: string;
+            imageUrl?: string | null;
+            error?: string | null;
+          };
+          if (pj.state === "success") {
+            setResults((prev) =>
+              prev.map((r) =>
+                r.view === v
+                  ? pj.imageUrl
+                    ? { view: v, status: "done", image: pj.imageUrl }
+                    : { view: v, status: "error", error: "Kein Bild erhalten." }
+                  : r,
+              ),
+            );
+            settled = true;
+            break;
+          }
+          if (pj.state === "fail") {
+            setResults((prev) =>
+              prev.map((r) =>
+                r.view === v
+                  ? {
+                      view: v,
+                      status: "error",
+                      error: pj.error || "Generierung fehlgeschlagen.",
+                    }
+                  : r,
+              ),
+            );
+            settled = true;
+            break;
+          }
+        }
+        if (!settled) {
+          setResults((prev) =>
+            prev.map((r) =>
+              r.view === v
+                ? { view: v, status: "error", error: "Zeitüberschreitung (>3 Min)." }
+                : r,
+            ),
+          );
+        }
       } catch (e) {
         setResults((prev) =>
           prev.map((r) =>
-            r.view === v
-              ? { view: v, status: "error", error: String(e) }
-              : r,
+            r.view === v ? { view: v, status: "error", error: String(e) } : r,
           ),
         );
       }
