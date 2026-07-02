@@ -10,7 +10,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Logo } from "../components/brand/Logo";
 import {
@@ -172,6 +172,10 @@ export default function ControlPlatformNewPage() {
     () => new Set(),
   );
   const [genMsg, setGenMsg] = useState<string | null>(null);
+  // Für Pfeiltasten-Navigation: aktives Listen-Element (Scroll-in-Sicht) +
+  // ausstehende Auswahl nach Seitenwechsel ("first"/"last" der neuen Seite).
+  const activeItemRef = useRef<HTMLLIElement | null>(null);
+  const pendingSelectRef = useRef<null | "first" | "last">(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(qIn), 350);
@@ -208,6 +212,60 @@ export default function ControlPlatformNewPage() {
   useEffect(() => {
     if (!selected && rows.length > 0) setSelected(rows[0]);
   }, [rows, selected]);
+
+  // Nach Seitenwechsel per Pfeiltaste: erste bzw. letzte Variante der neuen Seite wählen.
+  useEffect(() => {
+    if (!pendingSelectRef.current || rows.length === 0) return;
+    setSelected(pendingSelectRef.current === "first" ? rows[0] : rows[rows.length - 1]);
+    pendingSelectRef.current = null;
+  }, [rows]);
+
+  // Aktives Listen-Element in Sicht scrollen (bei Pfeiltasten-Wechsel).
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
+
+  // Pfeiltasten: zwischen den (gefilterten) Autos der Liste wechseln.
+  // Hoch/Links = voriges, Runter/Rechts = nächstes. Bei Seitenende automatisch
+  // Seite wechseln. Inaktiv wenn Lightbox offen oder Fokus in einem Eingabefeld.
+  useEffect(() => {
+    if (lightboxView) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      const dir =
+        e.key === "ArrowDown" || e.key === "ArrowRight"
+          ? 1
+          : e.key === "ArrowUp" || e.key === "ArrowLeft"
+            ? -1
+            : 0;
+      if (dir === 0 || rows.length === 0) return;
+      e.preventDefault();
+      const idx = selected
+        ? rows.findIndex((r) => variantKey(r) === variantKey(selected))
+        : -1;
+      const next = idx + dir;
+      if (next >= 0 && next < rows.length) {
+        setSelected(rows[next]);
+      } else if (dir === 1 && offset + PAGE_SIZE < total) {
+        pendingSelectRef.current = "first";
+        setOffset((o) => o + PAGE_SIZE);
+      } else if (dir === -1 && offset > 0) {
+        pendingSelectRef.current = "last";
+        setOffset((o) => Math.max(0, o - PAGE_SIZE));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rows, selected, offset, total, lightboxView]);
 
   const detailUrl = useMemo(() => carControlDetailUrl(selected), [selected]);
   const detailApi = useApi<CarControlDetailResponse>(detailUrl, { pollMs });
@@ -433,7 +491,7 @@ export default function ControlPlatformNewPage() {
                 const active = selected && variantKey(selected) === k;
                 const tone = variantTone(v);
                 return (
-                  <li key={k}>
+                  <li key={k} ref={active ? activeItemRef : undefined}>
                     <button
                       type="button"
                       onClick={() => setSelected(v)}
