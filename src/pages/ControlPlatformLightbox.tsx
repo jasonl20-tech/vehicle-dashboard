@@ -337,6 +337,9 @@ export default function ControlPlatformLightbox({
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const k = e.key.toLowerCase();
       if (e.key === "Escape") return onClose();
+      // „q" schließt die Ansicht, OHNE das Browser-Vollbild zu verlassen
+      // (Esc kann eine Webseite nicht am Vollbild-Verlassen hindern).
+      if (k === "q") return onClose();
       if (e.key === "ArrowRight" || e.key === "ArrowDown")
         return e.preventDefault(), move(1);
       if (e.key === "ArrowLeft" || e.key === "ArrowUp")
@@ -463,6 +466,7 @@ export default function ControlPlatformLightbox({
             onClick={onClose}
             className="inline-flex h-8 w-8 items-center justify-center rounded text-white hover:bg-white/10"
             aria-label="Schließen"
+            title="Schließen — Taste „q" (bleibt im Vollbild) oder Esc"
           >
             <X className="h-5 w-5" />
           </button>

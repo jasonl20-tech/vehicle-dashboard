@@ -1,4 +1,5 @@
 import {
+  Armchair,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -163,6 +164,10 @@ export default function ControlPlatformNewPage() {
     return LIVE_MS.includes(v) ? v : 5000;
   });
   const [easyMode, setEasyMode] = useState(() => lsGet("cpNeu.easy", "0") === "1");
+  // Innenansichten anzeigen? Aus = Außenansichten größer.
+  const [showInterior, setShowInterior] = useState(
+    () => lsGet("cpNeu.showInterior", "1") === "1",
+  );
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [lightboxView, setLightboxView] = useState<string | null>(null);
@@ -192,10 +197,11 @@ export default function ControlPlatformNewPage() {
       localStorage.setItem("cpNeu.status", status);
       localStorage.setItem("cpNeu.sort", sort);
       localStorage.setItem("cpNeu.easy", easyMode ? "1" : "0");
+      localStorage.setItem("cpNeu.showInterior", showInterior ? "1" : "0");
     } catch {
       /* ignore */
     }
-  }, [liveOn, liveMs, status, sort, easyMode]);
+  }, [liveOn, liveMs, status, sort, easyMode, showInterior]);
 
   const pollMs = liveOn ? liveMs : 0;
 
@@ -554,6 +560,23 @@ export default function ControlPlatformNewPage() {
             </div>
             {detail && (
               <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowInterior((s) => !s)}
+                  title={
+                    showInterior
+                      ? "Innenansichten ausblenden — Außenansichten größer"
+                      : "Innenansichten einblenden"
+                  }
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12.5px] font-medium ${
+                    showInterior
+                      ? "bg-violet-100 text-violet-700 hover:bg-violet-200"
+                      : "bg-ink-100 text-ink-600 hover:bg-ink-200"
+                  }`}
+                >
+                  <Armchair className="h-4 w-4" />
+                  Innen {showInterior ? "an" : "aus"}
+                </button>
                 <span className="text-[12px] text-ink-500">
                   {detail.views.filter((v) => v.approved).length}/
                   {detail.views.length} freigegeben
@@ -587,7 +610,11 @@ export default function ControlPlatformNewPage() {
             ) : detail ? (
               <>
                 {/* Außen-Umriss */}
-                <div className="mx-auto grid max-w-3xl grid-cols-3 gap-2.5">
+                <div
+                  className={`mx-auto grid grid-cols-3 gap-2.5 ${
+                    showInterior ? "max-w-3xl" : "max-w-5xl"
+                  }`}
+                >
                   {OUTLINE.flat().map((view, i) => {
                     if (view === null)
                       return (
@@ -610,7 +637,8 @@ export default function ControlPlatformNewPage() {
                 </div>
 
                 {/* Innen + Zusatz */}
-                {(supplemental.length > 0 || detail.missingInt.length > 0) && (
+                {showInterior &&
+                  (supplemental.length > 0 || detail.missingInt.length > 0) && (
                   <>
                     <div className="mx-auto mt-5 max-w-3xl text-[11px] font-medium uppercase tracking-[0.1em] text-ink-400">
                       Innen / Zusatz
